@@ -16,20 +16,20 @@ import argparse
 
 
 # Identifiant du modèle dans la BDAP
-model_id = 'ANTILOPEQJP1'
+#model_id = 'ANTILOPEQJP1'
 #model_id = 'ANTILOPEQ'
 # Identifiant de la grille
-grid = 'FRANXL1S100'
+#grid = 'FRANXL1S100'
 # Indentifiant du paramètre
-parameter = 'PRECIP'
+#parameter = 'PRECIP'
 # Identifiant du niveau
-level = 'SOL'
+#level = 'SOL'
 # Identifiant du reseau
-leadtime = 6
+#leadtime = 6
 # Echeance
 ech = 24
 # Format
-fmt = 'GRIB2_C_MAX'
+#fmt = 'GRIB2_C_MAX'
 
 
 
@@ -54,6 +54,8 @@ def parse_command_line():
 #    parser.add_argument('-o', '--output', help='Output name of generated files')
     parser.add_argument('-m', '--model', help='Model from which the data must be extracted', choices=['ANTILOPEQ', 'ANTILOPEQJP1'], default='ANTILOPEQ')
     parser.add_argument('-g', '--grid', help='BDAP grid name from which to extract data', default='FRANXL1S100')
+    parser.add_argument('-p', '--parameter', help='Parameter to extract', default='PRECIP')
+    parser.add_argument('-l', '--level', help='Level to extract', default='SOL')
     parser.add_argument('-v', '--vortex', action='store_true', help='Store generated files on a vortex archive store')
 #    parser.add_argument('-r', '--replace', action = 'store_true', help='Replace existing files')
 #    parser.add_argument('-t', '--tar', action='store_true', help='Tar generated files (for reanalaysis applications')
@@ -126,10 +128,10 @@ class ExtractGrib(object):
         self.gribname       = '{0:s}_{1:s}.grib'.format(self.model, self.date.strftime('%Y%m%d%H'))
         self.extractedfiles = list()
         
-    def requete(self, parameters, level_type):
+    def requete(self, parameter, level):
         
-        self.rqst = 'requete'.format(level_type)
-        extractfile = '{0:s}_{1:s}.grib'.format(self.model, level_type)
+        self.rqst = 'requete'.format(level)
+        extractfile = '{0:s}_{1:s}.grib'.format(self.model, level)
         f = open(self.rqst, "w")
         f.write('#RQST\n')
         f.write('#NFIC {0:s}\n'.format(extractfile))
@@ -144,8 +146,8 @@ class ExtractGrib(object):
         
         return extractfile
                 
-    def extract(self, parameters, level, cmd='dap3_dev'):
-        extractfile = self.requete(parameters, level)
+    def extract(self, parameter, level, cmd='dap3_dev'):
+        extractfile = self.requete(parameter, level)
         os.environ["DMT_DATE_PIVOT"] = self.date.strftime('%Y%m%d%H%M%S')
         print(os.environ["DMT_DATE_PIVOT"])
         os.system("{0:s} {1:d} {2:s}".format(cmd, ech, self.rqst))
@@ -159,7 +161,7 @@ class ExtractGrib(object):
     def concatenate(self):
         os.system('cat ' + ' '.join(self.extractedfiles) + ' > {0:s}'.format(self.gribname))
         
-    def run(self):
+    def run(self, parameter, level):
         if os.path.exists(self.gribname):
             print('File {0:s} already exists'.format(self.gribname))
             return None
@@ -187,7 +189,7 @@ if __name__ == "__main__":
         goto(workdir)
         for date in extract_period:
             grib = ExtractGrib(args.model, args.grid, domain, date)
-            result = grib.run()
+            result = grib.run(args.parameter, args.level)
             if result is not None:
                 missing_grib.append(result)
 
