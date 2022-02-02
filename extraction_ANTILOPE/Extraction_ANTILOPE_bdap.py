@@ -1,19 +1,26 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 # Auteur: Matthieu Vernay
-# Date : 07/03/2019
+# Date : 25/01/2022
 
 import os
 import datetime
 from datetime import datetime, timedelta
+import pandas as pd
+import numpy as np
 
 import argparse
 
-#RQST/#NFIC ${FILEOUT}/#MOD ANTILOPEJP1/#PARAM PRECIP/#Z_REF FRANXL1S100/#Z_AXE HORIZONTAL
-#D_LST ${dateheure}/#T_LST 60
-#L_TYP SOL/#FORM GRIB2_C_MAX
+import epygram
 
-
+##############################################################################################
+# Ce script sert à extraire les données ANTILOPE de la BDAP correspondant aux postes nivometeo
+# dans le but d'évaluer le biais d'ANTILOPE avec l'altitude.
+# A priori on ne peut extraire les données de la BDAP que sous forme de grille, on fait donc 
+# une extraction pour chaque sous domaine d'intéret (alp, pyr, cor) avant de selectionner les
+# pixels correspondant aux coordonnées des points des postes nivometeo. 
+# TODO : vérifier si ce n'est pas plus rapide d'extraire un grib complet (peu probable).
+##############################################################################################
 
 # Identifiant du modèle dans la BDAP
 #model_id = 'ANTILOPEQJP1'
@@ -116,6 +123,18 @@ def goto(path):
         os.makedirs(path)
     os.chdir(path)
 
+def is_in(latmin, latmax, lonmin, lonmax, lat, lon):
+    if (lat <= latmaw and lat >= latmin and lon >= lonmin and lon <= lonmax):
+        return True
+    else:
+        return False
+
+def read_nivometeo_coords(domain):
+    metadata = pd.read_csv('postes_nivometeo.csv', sep=';')
+    latmin, latmax, lonmin, lonmax = coords[domain]
+    subdata = metadata[metadata['lat'].isin(range(int(latmin), int(latmax))) & metadata['lon'].isin(range(int(lonmin), int(lonmax)))]
+    return zip(np.array(subdata['lat']), np.array(subdata['lon']))
+
 class ExtractGrib(object):
 
     def __init__(self, model, grid, domain, rundate):
@@ -131,7 +150,7 @@ class ExtractGrib(object):
     def requete(self, parameter, level):
         
         self.rqst = 'requete'.format(level)
-        extractfile = '{0:s}_{1:s}.grib'.format(self.model, level)
+        extractfile = '{0:s}_{1:s}_{2:s}.grib'.format(self.model, level, self.date.strftime('%Y%m%d%H'))
         f = open(self.rqst, "w")
         f.write('#RQST\n')
         f.write('#NFIC {0:s}\n'.format(extractfile))
@@ -171,7 +190,7 @@ class ExtractGrib(object):
                 fileok = False
             
             if fileok:
-                #self.concatenate()
+                self.concatenate()
                 return None
             else:
                 if os.path.isfile(self.gribname):
@@ -183,7 +202,10 @@ if __name__ == "__main__":
     args = parse_command_line()
 
     extract_period = date_range(args.datebegin, args.dateend)
+
     for domain in args.domain:
+        goto(args.workdir)
+        nivometeo = read_nivometeo_coords(domain)
         missing_grib = list()
         workdir = os.path.join(args.workdir, domain)
         goto(workdir)
@@ -197,6 +219,9 @@ if __name__ == "__main__":
             with open('missing_grib', 'w') as f:
                 for m in missing_grib:
                     f.write('{0:s}\n'.format(m))
+
+        data = epygram.formats.resource(grib.gribname, openmode='r', fmt='GRIB')
+        # TODO : read grib files with epygram to extract values on nivometeo stations (see Clotilde's script)
 
 
 
