@@ -44,7 +44,7 @@ ech = 24
 coords = dict(
     alp = ['46875', '43125', '4500', '8500'],
     pyr = ['43500', '42000', '-2000', '3500'],
-    cor = ['43000', '40750', '8000', '11500'],
+    cor = ['43000', '41000', '8000', '10500'],
 )
 
 # Pas en lat/lon de la grille cible : 0.375 / 0.5
@@ -99,10 +99,10 @@ def get_date(a_string):
                 date = datetime.strptime(a_string, '%Y%m%d%H%M').replace(second=0, microsecond=0)
             except ValueError:
                 try:
-                    date = datetime.strptime(a_string, '%Y%m%d').replace(hour=0, minute=0, second=0, microsecond=0)
+                    date = datetime.strptime(a_string, '%Y%m%d').replace(hour=6, minute=0, second=0, microsecond=0)
                 except ValueError:
                     try:
-                        date = datetime.strptime(a_string, '%y%m%d').replace(hour=0, minute=0, second=0, microsecond=0)
+                        date = datetime.strptime(a_string, '%y%m%d').replace(hour=6, minute=0, second=0, microsecond=0)
                     except ValueError:
                         print('The start date provided is not in a good format (YYYYMMDDHH or YYMMDDHH or YYYYMMDDHHMM or YYMMDD or YYYYMMDD)')
                         raise
@@ -131,9 +131,9 @@ def is_in(latmin, latmax, lonmin, lonmax, lat, lon):
 
 def read_nivometeo_coords(domain):
     metadata = pd.read_csv('postes_nivometeo.csv', sep=';')
-    latmin, latmax, lonmin, lonmax = coords[domain]
+    latmax, latmin, lonmin, lonmax = coords[domain]
     subdata = metadata[metadata['lat'].isin(range(int(latmin), int(latmax))) & metadata['lon'].isin(range(int(lonmin), int(lonmax)))]
-    return zip(np.array(subdata['lat']), np.array(subdata['lon']))
+    return dict(zip(np.array(subdata['num_poste']), zip(np.array(subdata['lat']), np.array(subdata['lon']))))
 
 class ExtractGrib(object):
 
@@ -145,15 +145,13 @@ class ExtractGrib(object):
         self.coords         = coords[domain]
         self.date           = rundate
         self.gribname       = '{0:s}_{1:s}.grib'.format(self.model, self.date.strftime('%Y%m%d%H'))
-        self.extractedfiles = list()
         
     def requete(self, parameter, level):
         
         self.rqst = 'requete'.format(level)
-        extractfile = '{0:s}_{1:s}_{2:s}.grib'.format(self.model, level, self.date.strftime('%Y%m%d%H'))
         f = open(self.rqst, "w")
         f.write('#RQST\n')
-        f.write('#NFIC {0:s}\n'.format(extractfile))
+        f.write('#NFIC {0:s}\n'.format(self.gribname))
         f.write('#MOD {0:s}\n'.format(self.model))
         f.write('#PARAM {0:s}\n'.format(parameter))
         f.write('#Z_REF {0:s}\n'.format(self.grid))
@@ -163,65 +161,61 @@ class ExtractGrib(object):
             f.write('#Z_STP ' + ' '.join(dl) + '\n')
         f.write('#L_TYP {0:s}\n'.format(level))
         
-        return extractfile
+        return True
                 
     def extract(self, parameter, level, cmd='dap3_dev'):
-        extractfile = self.requete(parameter, level)
+        self.requete(parameter, level)
         os.environ["DMT_DATE_PIVOT"] = self.date.strftime('%Y%m%d%H%M%S')
         print(os.environ["DMT_DATE_PIVOT"])
         os.system("{0:s} {1:d} {2:s}".format(cmd, ech, self.rqst))
-        self.extractedfiles.append(extractfile)
-        
-        if os.path.exists(extractfile) and os.path.getsize(extractfile) > 0:
-            return True
-        else:
-            return False
-        
-    def concatenate(self):
-        os.system('cat ' + ' '.join(self.extractedfiles) + ' > {0:s}'.format(self.gribname))
         
     def run(self, parameter, level):
         if os.path.exists(self.gribname):
             print('File {0:s} already exists'.format(self.gribname))
-            return None
+            return True
         else:
-            fileok = True
-            if not self.extract(parameter, level):
-                fileok = False
-            
-            if fileok:
-                self.concatenate()
-                return None
+            self.extract(parameter, level)
+            if os.path.isfile(self.gribname):
+                return True
             else:
-                if os.path.isfile(self.gribname):
-                    os.remove(self.gribname)
-                    return self.gribname
-            
+                return False
         
 if __name__ == "__main__":
     args = parse_command_line()
 
     extract_period = date_range(args.datebegin, args.dateend)
 
+    antilope = pd.DataFrame(columns=['date', 'num_poste', 'rr_antilope'])
     for domain in args.domain:
+        print(domain)
         goto(args.workdir)
         nivometeo = read_nivometeo_coords(domain)
         missing_grib = list()
         workdir = os.path.join(args.workdir, domain)
         goto(workdir)
         for date in extract_period:
-            grib = ExtractGrib(args.model, args.grid, domain, date)
-            result = grib.run(args.parameter, args.level)
-            if result is not None:
-                missing_grib.append(result)
+            if date.month in [1,2,3,4,12]: # Consider only month with nivometeo observations
+                grib = ExtractGrib(args.model, args.grid, domain, date)
+                result = grib.run(args.parameter, args.level)
+                if result:
+                    data = epygram.formats.resource(grib.gribname, openmode='r', fmt='GRIB')
+                    rr_field = data.readfield({'indicatorOfTypeOfLevel':1, 'paramId': 0, 'indicatorOfParameter': 61}, getdata= True)
+                    metadata = data.get_message_at_position(0).asfield(getdata=False)
+                    geometry = metadata.geometry
+                    for num_poste, (lat, lon) in nivometeo.iteritems():
+                        nearest = geometry.nearest_points(lon/1000., lat/1000., {'n':'1'}) # returns indices of the point in "data"
+                        antilope = antilope.append({
+                            'date': date,
+                            'num_poste':  num_poste,
+                            'rr_antilope': rr_field.data[nearest[1]][nearest[0]]
+                        }, ignore_index=True)
+                else:
+                    print('Missing date {0:s}'.format(self.date.strftime("%Y%m%d%H")))
 
-        if len(missing_grib) > 0:
-            with open('missing_grib', 'w') as f:
-                for m in missing_grib:
-                    f.write('{0:s}\n'.format(m))
-
-        data = epygram.formats.resource(grib.gribname, openmode='r', fmt='GRIB')
-        # TODO : read grib files with epygram to extract values on nivometeo stations (see Clotilde's script)
+    antilope.set_index('date')
+    goto(args.workdir)
+    outname = 'ANTILOPE_{0:s}_{1:s}.csv'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))
+    antilope.to_csv(outname, index=False, sep=';')
 
 
 
