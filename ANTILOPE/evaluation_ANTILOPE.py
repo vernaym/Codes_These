@@ -18,15 +18,15 @@ import matplotlib.pyplot as plt
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_squared_error, r2_score
 
+from snowtools.plots.maps import cartopy
+
+
 ##############################################################################################
 # Ce script sert permet de comparer les données ANTILOPE extraites de la BDAP par le script
 # "Extraction_ANTILOPE_bdap.py aux observations des postes du réseau nivométéo correspondants 
 # extraites par le script "extract_obs_nivometeo.py" de snowtools dans le but d'évaluer le 
 # biais d'ANTILOPE avec l'altitude.
 ##############################################################################################
-
-ANTILOPE_data = 'ANTILOPE_2015120106_2020031506.csv'
-nivometeo_data = 'obs_nivometeo_daily_RR_20151201_20200315.csv'
 
 def parse_command_line():
     description = "BDAP extraction of ANTILOPE data."
@@ -191,10 +191,27 @@ def elevation_scatterplot(workdf, datebegin, dateend):
     fig1.savefig('scatterplot_by_elevation_{0:s}_{1:s}.png'.format(datebegin.strftime('%Y%m%d'), dateend.strftime('%Y%m%d')), bbox_inches='tight', format='png')
     fig2.savefig('ratio_scatterplot_by_elevation_{0:s}_{1:s}.png'.format(datebegin.strftime('%Y%m%d'), dateend.strftime('%Y%m%d')), bbox_inches='tight', format='png')
 
+def plot_map(domain, lat, lon):
+    class_ = getattr(cartopy, f'Map_{domain}')
+    fig = class_()
+    # Creation du fond de carte
+    fig.init_massifs()
+    print(lon, lat)
+    fig.addpoints(lon, lat, marker='+')
+
+    plt.tight_layout()
+    #plt.colorbar(sc)
+    fig.save(f'obs_{domain}.svg', formatout='svg')
+    fig.close()
+
+
 if __name__ == "__main__":
     args = parse_command_line()
 
     extract_period = date_range(args.datebegin, args.dateend)
+    ANTILOPE_data = 'ANTILOPE_{0:s}_{1:s}.csv'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))
+    nivometeo_data = 'obs_nivometeo_daily_RR_{0:s}_{1:s}.csv'.format(args.datebegin.strftime('%Y%m%d'), args.dateend.strftime('%Y%m%d'))
+
     #antilope = pd.read_csv(ANTILOPE_data, sep=';', index_col='date')
     #nivometeo = pd.read_csv(nivometeo_data, sep=';', index_col='dat')
     antilope = pd.read_csv(ANTILOPE_data, sep=';', parse_dates=['date'])
@@ -204,21 +221,35 @@ if __name__ == "__main__":
     #antilope = antilope.set_index('date')
     #nivometeo = nivometeo.set_index('dat')
     nivometeo["num_poste"] = nivometeo["Q.num_poste"]
+    nivometeo["lat"] = nivometeo["poste_nivo.lat"]
+    nivometeo["lon"] = nivometeo["poste_nivo.lon"]
     df = pd.merge(antilope, nivometeo, on=["date", "num_poste"])
     df = df.loc[df["date"]>=datetime.date(args.datebegin)].loc[df["date"]<=datetime.date(args.dateend)]
     df = df.rename(columns={'poste_nivo.alti':'alti'})
-    df = df.loc[~df['rr'].isna()].loc[~df['rr_antilope'].isna()][['date', 'num_poste', 'rr_antilope', 'rr', 'alti']]
+    df = df.loc[~df['rr'].isna()].loc[~df['rr_antilope'].isna()][['date', 'num_poste', 'rr_antilope', 'rr', 'alti', 'lat', 'lon']]
     df['diff'] = df['rr_antilope'] - df['rr']
     df['diff'].describe()
     rr_nivometeo = df.groupby(['num_poste']).rr.sum()
     rr_antilope  = df.groupby(['num_poste']).rr_antilope.sum()
     nb_values    = df.groupby(['num_poste']).date.count()
     elevations   = df.groupby(['num_poste']).alti.mean()
+    lats         = df.groupby(['num_poste']).lat.mean()
+    lons         = df.groupby(['num_poste']).lon.mean()
 
-    #raw_scatterplot(rr_nivometeo.to_numpy(), rr_antilope.to_numpy(), elevations.to_numpy(), args.datebegin, args.dateend)
-    workdict = {'elevation':elevations, 'rr_nivometeo':rr_nivometeo, 'rr_antilope':rr_antilope, 'nb_values':nb_values}
-    workdf   = pd.DataFrame(workdict)
-    #workdf = workdf.loc[~workdf['rr_nivometeo'].isnull()].loc[~workdf['rr_antilope'].isnull()] 
-    elevation_scatterplot(workdf, args.datebegin, args.dateend)
+    # 1. PLOT RAW SCATTER PLOT
+#    raw_scatterplot(rr_nivometeo.to_numpy(), rr_antilope.to_numpy(), elevations.to_numpy(), args.datebegin, args.dateend)
+
+    # 2. PLOT ELEVATION SCATTER PLOT
+#    workdict = {'elevation':elevations, 'rr_nivometeo':rr_nivometeo, 'rr_antilope':rr_antilope, 'nb_values':nb_values}
+#    workdf   = pd.DataFrame(workdict)
+#    #workdf = workdf.loc[~workdf['rr_nivometeo'].isnull()].loc[~workdf['rr_antilope'].isnull()] 
+#    elevation_scatterplot(workdf, args.datebegin, args.dateend)
+
+    # 3. PLOT MAP
+    liste_postes = np.unique(df['num_poste']).astype(int)
+    for domain in ['alpes', 'pyrenees', 'corse']:
+        plot_map(domain, lats.to_numpy()/1000., lons.to_numpy()/1000.)
+
+
 
 
