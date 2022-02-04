@@ -123,17 +123,11 @@ def goto(path):
         os.makedirs(path)
     os.chdir(path)
 
-def is_in(latmin, latmax, lonmin, lonmax, lat, lon):
-    if (lat <= latmaw and lat >= latmin and lon >= lonmin and lon <= lonmax):
-        return True
-    else:
-        return False
-
 def read_nivometeo_coords(domain):
     metadata = pd.read_csv('postes_nivometeo.csv', sep=';')
-    latmax, latmin, lonmin, lonmax = coords[domain]
-    subdata = metadata[metadata['lat'].isin(range(int(latmin), int(latmax))) & metadata['lon'].isin(range(int(lonmin), int(lonmax)))]
-    return dict(zip(np.array(subdata['num_poste']), zip(np.array(subdata['lat']), np.array(subdata['lon']))))
+    latmax, latmin, lonmin, lonmax = np.array(coords[domain]).astype(float)/1000.
+    subdata = metadata[(metadata['lat_dg']>=latmin) & (metadata['lat_dg']<=latmax) & (metadata['lon_dg']>=lonmin) & (metadata['lon_dg']<=lonmax)]
+    return dict(zip(np.array(subdata['num_poste']), zip(np.array(subdata['lat_dg']), np.array(subdata['lon_dg']))))
 
 class ExtractGrib(object):
 
@@ -194,7 +188,7 @@ if __name__ == "__main__":
         workdir = os.path.join(args.workdir, domain)
         goto(workdir)
         for date in extract_period:
-            if date.month in [1,2,3,4,12]: # Consider only month with nivometeo observations
+            if date.month in [1,2,3,4,11,12]: # Consider only month with nivometeo observations
                 grib = ExtractGrib(args.model, args.grid, domain, date)
                 result = grib.run(args.parameter, args.level)
                 if result:
@@ -203,7 +197,7 @@ if __name__ == "__main__":
                     metadata = data.get_message_at_position(0).asfield(getdata=False)
                     geometry = metadata.geometry
                     for num_poste, (lat, lon) in nivometeo.iteritems():
-                        nearest = geometry.nearest_points(lon/1000., lat/1000., {'n':'1'}) # returns indices of the point in "data"
+                        nearest = geometry.nearest_points(lon, lat, {'n':'1'}) # returns indices of the point in "data"
                         antilope = antilope.append({
                             'date': date,
                             'num_poste':  num_poste,
