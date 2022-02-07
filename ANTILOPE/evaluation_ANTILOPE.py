@@ -14,6 +14,8 @@ import argparse
 import matplotlib
 #matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap
+import seaborn as sns
 
 from sklearn.linear_model import LinearRegression, RANSACRegressor
 from sklearn.datasets import make_regression
@@ -208,16 +210,69 @@ def elevation_scatterplot(workdf, datebegin, dateend):
     fig1.savefig('scatterplot_by_elevation_{0:s}_{1:s}.png'.format(datebegin.strftime('%Y%m%d'), dateend.strftime('%Y%m%d')), bbox_inches='tight', format='png')
     fig2.savefig('ratio_scatterplot_by_elevation_{0:s}_{1:s}.png'.format(datebegin.strftime('%Y%m%d'), dateend.strftime('%Y%m%d')), bbox_inches='tight', format='png')
 
-def plot_map(domain, lat, lon, df):
-    # First plot stations on the map
+def plot_massif(df, massif_number):
+    df = df.loc[~df['rr'].isna()].loc[~df['rr_antilope'].isna()]
+    df['ratio'] = df['rr_antilope'] / df['rr']
+    df.replace([np.inf, -np.inf], np.nan, inplace=True)
+    df = df.loc[~df['ratio'].isna()]
+
+    #colorbar = sns.diverging_palette(240, 10, n=9)
+    fig = cartopy.Zoom_massif(massif_number)
+    #fig = cartopy.Zoom_massif(massif_number, bgimage=True)
+    fig.init_massifs()
+    #fig.highlight_massif(massif_number)
+
+    cmap = ListedColormap(sns.diverging_palette(240, 10, n=9).as_hex())
+    thresholds = [0.25, 0.5, 0.75, 0.95, 1.05, 1.5, 2, 4]
+    norm = matplotlib.colors.BoundaryNorm(thresholds, cmap.N)
+
+    mean_ratio = list()
+    lats = list()
+    lons = list()
+    color = list()
+    for station in np.unique(df['num_poste']):
+        tmp = df[df['num_poste']==station]
+        if len(tmp) > 100:
+            ratio = tmp['ratio'].mean()
+            mean_ratio.append(ratio)
+            #color.append(colorbar[np.searchsorted(thresholds, ratio)])
+            lats.append(tmp['lat'].mean())
+            lons.append(tmp['lon'].mean())
+            model, r2, det = linear_regression(tmp['rr'].to_numpy(), tmp['rr_antilope'].to_numpy())
+            text = f'{ratio.round(2)} ; {r2.round(2)} ; {len(tmp)}'
+            fig.map.annotate(text, # this is the text
+                 (tmp['lon'].mean(), tmp['lat'].mean()), # these are the coordinates to position the label
+                 textcoords="offset points", # how to position the text
+                 xytext=(0,10), # distance from text to points (x,y)
+                 ha='center')
+            #fig.map.text(tmp['lon'].mean(), tmp['lat'].mean(), tmp['ratio'].mean().round(3), horizontalalignment='right', verticalalignment='top', color='red')
+
+    sc = fig.map.scatter(lons, lats, c=mean_ratio, cmap=cmap, norm=norm, marker="^", s=150)
+    fig.fig.colorbar(sc, label='Radar/Rain-gauge ratio')
+    #fig.addpoints(lons, lats, color=color, marker="^")
+    fig.save(f'ratio_{massif_number}.svg', formatout='svg')
+    fig.close()
+
+def plot_obs(domain, lat, lon, df):
+    # Plot stations on the map
     class_ = getattr(cartopy, f'Map_{domain}')
     fig = class_()
     fig.init_massifs()
     fig.addpoints(lon, lat, marker='+')
     fig.save(f'obs_{domain}.svg', formatout='svg')
     fig.close()
-    
-    # The fill the massifs with the corresponding R2 
+
+def plot_full_domain(domain, lat, lon, df):
+   
+    fill_all_massifs(domain, lat, lon, df)
+    point_stations_info(domain, lat, lon, df)
+
+def point_stations_info(domain, lat, lon, df):
+    pass
+
+def fill_all_massifs(domain, lat, lon, df):
+
+    class_ = getattr(cartopy, f'Map_{domain}')
     r2_by_massif = dict()
     bias = dict()
     nb_stations = dict()
@@ -288,7 +343,8 @@ if __name__ == "__main__":
     df = pd.merge(antilope, nivometeo, on=["date", "num_poste"])
     df = df.loc[df["date"]>=datetime.date(args.datebegin)].loc[df["date"]<=datetime.date(args.dateend)]
     df = df.rename(columns={'poste_nivo.alti':'alti'})
-    df = df.loc[~df['rr'].isna()].loc[~df['rr_antilope'].isna()][['date', 'num_poste', 'rr_antilope', 'rr', 'alti', 'lat', 'lon', 'name', 'massif_number']]
+    #df = df.loc[~df['rr'].isna()].loc[~df['rr_antilope'].isna()][['date', 'num_poste', 'rr_antilope', 'rr', 'alti', 'lat', 'lon', 'name', 'massif_number']]
+    df = df.loc[~df['rr'].isna()].loc[~df['rr_antilope'].isna()]
     df = df.loc[df['massif_number']<99] # Remove Stations not associated to 1 massif
     df = df.loc[~df['name'].str.contains('EDFNIVO')] # Remove EDFNIVO stations
     df['diff'] = df['rr_antilope'] - df['rr']
@@ -300,24 +356,26 @@ if __name__ == "__main__":
     lats          = df.groupby(['num_poste']).lat.mean()
     lons          = df.groupby(['num_poste']).lon.mean()
     massif_number = df.groupby(['num_poste']).massif_number.mean() 
-    workdict = {'elevation':elevations, 'rr_nivometeo':rr_nivometeo, 'rr_antilope':rr_antilope, 'ndays':nb_values, 'massif_number':massif_number}
+    workdict = {'elevation':elevations, 'rr_nivometeo':rr_nivometeo, 'rr_antilope':rr_antilope, 'ndays':nb_values, 'massif_number':massif_number, 'lats':lats, 'lons':lons}
     workdf   = pd.DataFrame(workdict)
     workdf = workdf.loc[workdf['ndays']>100] # Consider only points with at least 100 observations
 
     if args.massif is not None:
-        workdf = workdf.loc[workdf['massif_number'] == args.massif]
+        workdf = df.loc[df['massif_number'] == args.massif]
+        plot_massif(workdf, args.massif)
+        
+    else:
+        # 1. PLOT RAW SCATTER PLOT
+        raw_scatterplot(workdf['rr_nivometeo'].to_numpy(), workdf['rr_antilope'].to_numpy(), workdf['elevation'].to_numpy(), args.datebegin, args.dateend)
 
-    # 1. PLOT RAW SCATTER PLOT
-    raw_scatterplot(workdf['rr_nivometeo'].to_numpy(), workdf['rr_antilope'].to_numpy(), workdf['elevation'].to_numpy(), args.datebegin, args.dateend)
+        # 2. PLOT ELEVATION SCATTER PLOT
+        #workdf = workdf.loc[~workdf['rr_nivometeo'].isnull()].loc[~workdf['rr_antilope'].isnull()] 
+        elevation_scatterplot(workdf, args.datebegin, args.dateend)
 
-    # 2. PLOT ELEVATION SCATTER PLOT
-    #workdf = workdf.loc[~workdf['rr_nivometeo'].isnull()].loc[~workdf['rr_antilope'].isnull()] 
-    elevation_scatterplot(workdf, args.datebegin, args.dateend)
-
-    # 3. PLOT MAP
-    liste_postes = np.unique(df['num_poste']).astype(int)
-    for domain in ['alpes', 'pyrenees', 'corse']:
-        plot_map(domain, lats.to_numpy(), lons.to_numpy(), workdf)
+        # 3. PLOT MAP
+        liste_postes = np.unique(df['num_poste']).astype(int)
+        for domain in ['alpes', 'pyrenees', 'corse']:
+            plot_full_domain(domain, lats.to_numpy(), lons.to_numpy(), workdf)
 
 
 
