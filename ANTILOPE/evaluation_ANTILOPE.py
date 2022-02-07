@@ -15,7 +15,8 @@ import matplotlib
 #matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import LinearRegression, RANSACRegressor
+from sklearn.datasets import make_regression
 from sklearn.metrics import mean_squared_error, r2_score
 
 from snowtools.plots.maps import cartopy
@@ -28,6 +29,12 @@ from snowtools.plots.maps import cartopy
 # biais d'ANTILOPE avec l'altitude.
 ##############################################################################################
 
+map_massifs = dict(
+    alpes = [*range(1, 24)],
+    pyrenees = [*range(64, 75), *range(80, 92)],
+    corse = [40, 41],
+    )
+
 def parse_command_line():
     description = "BDAP extraction of ANTILOPE data."
     parser = argparse.ArgumentParser(description=description)
@@ -35,6 +42,7 @@ def parse_command_line():
     parser.add_argument('-b', '--datebegin', help='Begining date of extraction, format YYYYMMDDHH or YYMMDDHH', required=True)
     parser.add_argument('-e', '--dateend', help = 'Final date of extraction (default=datebegin)')
     parser.add_argument('-w', '--workdir', help='Runing directory (default for guppy)', default='/home/mrns/vernaym/workdir/extraction_antilope')
+    parser.add_argument('-m', '--massif', help='PLot for a specific massif', default=None, type=int)
 
     args = parser.parse_args()
 
@@ -59,22 +67,19 @@ def nivologyseason(date):
 
 def get_date(a_string):
     try:
-        date = datetime.strptime(a_string, '%Y%m%d%H').replace(minute=0, second=0, microsecond=0)
+        date = datetime.strptime(a_string, '%Y%m%d').replace(hour=6, minute=0, second=0, microsecond=0)
     except ValueError:
         try:
-            date = datetime.strptime(a_string, '%y%m%d%H').replace(minute=0, second=0, microsecond=0)
+            date = datetime.strptime(a_string, '%y%m%d').replace(hour=6, minute=0, second=0, microsecond=0)
         except ValueError:
             try:
-                date = datetime.strptime(a_string, '%Y%m%d%H%M').replace(second=0, microsecond=0)
+                date = datetime.strptime(a_string, '%Y%m%d%H').replace(minute=0, second=0, microsecond=0)
             except ValueError:
                 try:
-                    date = datetime.strptime(a_string, '%Y%m%d').replace(hour=6, minute=0, second=0, microsecond=0)
+                    date = datetime.strptime(a_string, '%y%m%d%H').replace(minute=0, second=0, microsecond=0)
                 except ValueError:
-                    try:
-                        date = datetime.strptime(a_string, '%y%m%d').replace(hour=6, minute=0, second=0, microsecond=0)
-                    except ValueError:
-                        print('The start date provided is not in a good format (YYYYMMDDHH or YYMMDDHH or YYYYMMDDHHMM or YYMMDD or YYYYMMDD)')
-                        raise
+                    print('The start date provided is not in a good format (YYYYMMDDHH or YYMMDDHH or YYYYMMDDHHMM or YYMMDD or YYYYMMDD)')
+                    raise
     finally:
         return date 
 
@@ -92,19 +97,15 @@ def goto(path):
         os.makedirs(path)
     os.chdir(path)
 
-def read_nivometeo_coords(domain):
-    metadata = pd.read_csv('postes_nivometeo.csv', sep=';')
-    latmax, latmin, lonmin, lonmax = coords[domain]
-    subdata = metadata[metadata['lat'].isin(range(int(latmin), int(latmax))) & metadata['lon'].isin(range(int(lonmin), int(lonmax)))]
-    return dict(zip(np.array(subdata['num_poste']), zip(np.array(subdata['lat']), np.array(subdata['lon']))))
-
 def predict(x):
    return slope * x + intercept       
 
 def raw_scatterplot(rr_nivometeo, rr_antilope, elevations, datebegin, dateend):
+    nbpoint = len(rr_nivometeo)
     fig = plt.figure(figsize=(10,6))
     #plt.scatter(rr_nivometeo.to_numpy(), rr_antilope.to_numpy(), s=nb_values.to_numpy(), marker='o')
     sc = plt.scatter(rr_nivometeo, rr_antilope, marker='D', s=10, c=elevations)
+    plt.text(1000, 6000, f'{nbpoint} stations', fontsize=18, color='black')
     plt.colorbar(sc, label='Elevation')
     xpoints = ypoints = plt.xlim()
     plt.grid(visible=True, linestyle=':', linewidth=0.5)
@@ -125,6 +126,19 @@ def raw_scatterplot(rr_nivometeo, rr_antilope, elevations, datebegin, dateend):
     #fig.savefig('raw_scatterplot_{0:s}_{1:s}.pdf'.format(datebegin.strftime('%Y%m%d'), dateend.strftime('%Y%m%d')), bbox_inches='tight', format='pdf')
     fig.savefig('raw_scatterplot_{0:s}_{1:s}.png'.format(datebegin.strftime('%Y%m%d'), dateend.strftime('%Y%m%d')), bbox_inches='tight', format='png')
 
+def linear_regression(x, y):
+    reg = LinearRegression().fit(x.reshape((-1, 1)), y)
+    model = reg.predict(x.reshape((-1,1)))
+    r2 = reg.score(x.reshape((-1, 1)), y)
+    det = " R²={0:.4f}".format(r2)
+    return model, r2, det 
+
+def RANSAC(x, y):
+    reg = RANSACRegressor(random_state=0).fit(x, y)
+    model = reg.predict(x.reshape((-1,1)))
+    score = reg.score(x, y)
+    return score, model
+
 def elevation_scatterplot(workdf, datebegin, dateend):
 
     fig1, ax1 = plt.subplots(figsize=(12,9))
@@ -134,6 +148,7 @@ def elevation_scatterplot(workdf, datebegin, dateend):
     workdf['ratio'] = workdf['rr_antilope'] / workdf['rr_nivometeo']
     workdf.replace([np.inf, -np.inf], np.nan, inplace=True)
     workdf = workdf.loc[~workdf['ratio'].isna()]
+    nbpoint = len(workdf['elevation'].to_numpy())
 
     elevation_thresholds = [1450, 1725, 2000, 4000] # Based on the main "jumps"
     elevation_thresholds = [1530, 1739, 1967, 4000] # Based on the quantiles
@@ -142,21 +157,23 @@ def elevation_scatterplot(workdf, datebegin, dateend):
 
     reg = LinearRegression().fit(workdf['elevation'].to_numpy().reshape((-1, 1)), workdf['ratio'].to_numpy())
     model = reg.predict(workdf['elevation'].to_numpy().reshape((-1,1)))
-    r2 = r2_score(workdf['elevation'].to_numpy().reshape((-1, 1)),workdf['ratio'].to_numpy())
+    r2 = reg.score(workdf['elevation'].to_numpy().reshape((-1, 1)),workdf['ratio'].to_numpy())
     ax2.plot(workdf['elevation'].to_numpy(), model, color='black', linewidth=2)
-    ax2.text(750, 0.5, f'R²={r2:.4}', fontsize=18, color='black')
+    ax2.text(1000, 2, f'R²={r2:.4}', fontsize=18, color='black')
+    ax2.text(1000, 2.2, f'{nbpoint} stations', fontsize=18, color='black')
+    ax1.text(500, 5500, f'{nbpoint} stations', fontsize=18, color='black')
+#    score, ransac = RANSAC(workdf['elevation'].to_numpy().reshape((-1, 1)), workdf['ratio'].to_numpy())
+#    ax2.plot(workdf['elevation'].to_numpy().reshape((-1, 1)), ransac, color = 'red', linewidth=2)
+#    ax2.text(1000, 2.2, f'RANSAC score={score}', fontsize=18, color='red')
 
     for i, threshold in enumerate(elevation_thresholds):
         index_names = workdf[workdf['elevation'] < threshold].index
         tmp = workdf.loc[workdf.index.isin(index_names)]
         workdf.drop(index_names, inplace = True)
-        
+
         def plot(x, y, ax, regression=True):
             if regression:
-                reg = LinearRegression().fit(x.reshape((-1, 1)), y)
-                model = reg.predict(x.reshape((-1,1)))
-                r2 = r2_score(x.reshape((-1, 1)), y)
-                det = " R²={0:.4f}".format(r2)
+                model, r2, det = linear_regression(x.reshape((-1, 1)), y)
             else:
                 det = ""
             if i == 0:
@@ -174,36 +191,78 @@ def elevation_scatterplot(workdf, datebegin, dateend):
 
     def layout(ax):
         ax.legend(fontsize=14)
-        xpoints = ypoints = ax.get_xlim()
         ax.grid(visible=True, linestyle=':', linewidth=0.5)
-        ax.plot(xpoints, ypoints, linestyle='--', color='grey', lw=1, scalex=False, scaley=False)
 
+    xpoints = ypoints = ax1.get_xlim()
+    ax1.plot(xpoints, ypoints, linestyle='--', color='grey', lw=1, scalex=False, scaley=False)
     ax1.set_xlim(left=0)
     ax1.set_ylim(bottom=0)
     layout(ax1)
     layout(ax2)
     ax1.set_ylabel('Total ANTILOPE precipitation estimate (mm)', fontsize=12)
     ax1.set_xlabel('Total rain-gauges observed precipitation (mm)', fontsize=12)
-    ax2.set_ylabel('Total ANTILOPE/rain-gauges ratios', fontsize=12)
-    ax2.set_xlabel('Rain-gauges elevations (m)', fontsize=12)
+    ax2.set_ylabel('Total ANTILOPE/rain-gauges ratio', fontsize=12)
+    ax2.set_xlabel('Rain-gauge elevation (m)', fontsize=12)
     #plt.tight_layout()
     #fig.savefig('scatterplot_{0:s}_{1:s}.pdf'.format(datebegin.strftime('%Y%m%d'), dateend.strftime('%Y%m%d')), bbox_inches='tight', format='pdf')
     fig1.savefig('scatterplot_by_elevation_{0:s}_{1:s}.png'.format(datebegin.strftime('%Y%m%d'), dateend.strftime('%Y%m%d')), bbox_inches='tight', format='png')
     fig2.savefig('ratio_scatterplot_by_elevation_{0:s}_{1:s}.png'.format(datebegin.strftime('%Y%m%d'), dateend.strftime('%Y%m%d')), bbox_inches='tight', format='png')
 
-def plot_map(domain, lat, lon):
+def plot_map(domain, lat, lon, df):
+    # First plot stations on the map
     class_ = getattr(cartopy, f'Map_{domain}')
     fig = class_()
-    # Creation du fond de carte
     fig.init_massifs()
-    print(lon, lat)
     fig.addpoints(lon, lat, marker='+')
-
-    plt.tight_layout()
-    #plt.colorbar(sc)
     fig.save(f'obs_{domain}.svg', formatout='svg')
     fig.close()
+    
+    # The fill the massifs with the corresponding R2 
+    r2_by_massif = dict()
+    bias = dict()
+    nb_stations = dict()
+    rmse = dict()
+    ratio = dict()
+    for massif in map_massifs[domain]:
+        tmp = df.loc[df["massif_number"]==massif]
+        nb_stations[massif] = len(tmp)
+        if len(tmp) > 3:
+            model,r2,det = linear_regression(tmp['rr_nivometeo'].to_numpy().reshape((-1,1)), tmp['rr_antilope'].to_numpy())
+            r2_by_massif[massif] = r2
+            model,r2,det = linear_regression((tmp['rr_antilope'] / tmp['rr_nivometeo']).to_numpy().reshape((-1,1)), tmp['elevation'].to_numpy())
+            ratio[massif] = r2
+        bias[massif] = ((tmp['rr_antilope'] - tmp['rr_nivometeo']) / tmp['ndays']).mean()
+        rmse[massif] = np.sqrt((np.square((tmp['rr_antilope'] - tmp['rr_nivometeo']) / tmp['ndays'])).mean())
 
+    massif_numbers = np.fromiter(nb_stations.keys(), dtype=int)
+    attributes = dict(palette='YlGnBu', forcemin=0., forcemax=1., seuiltext=50., label="R² of the linear regression ANTILOPE / rain gauges")
+    fig = class_()
+    fig.draw_massifs(np.fromiter(r2_by_massif.keys(), dtype=int), np.fromiter(r2_by_massif.values(), dtype=float), **attributes)
+    fig.plot_center_massif(massif_numbers, np.fromiter(nb_stations.values(), dtype=int), **attributes)
+    fig.save(f'R2_by_massif_{domain}.svg', formatout='svg')
+    fig.close()
+
+    attributes = dict(palette='YlGnBu', forcemin=0., forcemax=np.max(np.fromiter(ratio.values(), dtype=float)), seuiltext=50., label="R² linear regression of the ratio ANTILOPE / rain gauges function of elevation")
+    fig = class_()
+    fig.draw_massifs(np.fromiter(ratio.keys(), dtype=int), np.fromiter(ratio.values(), dtype=float), **attributes)
+    fig.plot_center_massif(massif_numbers, np.fromiter(nb_stations.values(), dtype=int), **attributes)
+    fig.save(f'Ratio_by_massif_{domain}.svg', formatout='svg')
+    fig.close()
+
+    extreme_value = np.nanmax(np.abs(np.fromiter(bias.values(), dtype=float)))
+    attributes = dict(palette='seismic', forcemin=-extreme_value, forcemax=extreme_value, seuiltext=50., label='Mean daily bias ANTILOPE / rain gauges (mm)')
+    fig = class_()
+    fig.draw_massifs(np.fromiter(bias.keys(), dtype=int), np.fromiter(bias.values(), dtype=float), **attributes)
+    fig.plot_center_massif(massif_numbers, np.fromiter(nb_stations.values(), dtype=int), **attributes)
+    fig.save(f'Bias_by_massif_{domain}.svg', formatout='svg')
+    fig.close()
+
+    attributes = dict(palette='YlGnBu', forcemin=0., forcemax=np.nanmax(np.fromiter(rmse.values(), dtype=float)), seuiltext=50., label='Mean daily RMSE ANTILOPE/rain gauges (mm)')
+    fig = class_()
+    fig.draw_massifs(np.fromiter(rmse.keys(), dtype=int), np.fromiter(rmse.values(), dtype=float), **attributes)
+    fig.plot_center_massif(massif_numbers, np.fromiter(nb_stations.values(), dtype=int), **attributes)
+    fig.save(f'RMSE_by_massif_{domain}.svg', formatout='svg')
+    fig.close()
 
 if __name__ == "__main__":
     args = parse_command_line()
@@ -214,41 +273,52 @@ if __name__ == "__main__":
 
     #antilope = pd.read_csv(ANTILOPE_data, sep=';', index_col='date')
     #nivometeo = pd.read_csv(nivometeo_data, sep=';', index_col='dat')
-    antilope = pd.read_csv(ANTILOPE_data, sep=';', parse_dates=['date'])
-    nivometeo = pd.read_csv(nivometeo_data, sep=';', parse_dates=['dat'])
+    antilope = pd.read_csv(ANTILOPE_data, sep=';', parse_dates=['date'], dtype={'rr_antilope': float, 'num_poste': int}, na_values=['--'])
+    nivometeo = pd.read_csv(nivometeo_data, sep=';', parse_dates=['dat'], 
+            dtype={'Q.num_poste':int, 'poste_nivo.nom_usuel':str, 'poste_nivo.alti':int, 'poste_nivo.lat_dg':float, 'poste_nivo.lon_dg':float, 'rr':float, 'poste_nivo.massif_nivo':int})
     antilope['date'] = antilope['date'].dt.date
     nivometeo['date'] = nivometeo['dat'].dt.date
     #antilope = antilope.set_index('date')
     #nivometeo = nivometeo.set_index('dat')
     nivometeo["num_poste"] = nivometeo["Q.num_poste"]
-    nivometeo["lat"] = nivometeo["poste_nivo.lat"]
-    nivometeo["lon"] = nivometeo["poste_nivo.lon"]
+    nivometeo["lat"] = nivometeo["poste_nivo.lat_dg"]
+    nivometeo["lon"] = nivometeo["poste_nivo.lon_dg"]
+    nivometeo["name"] = nivometeo["poste_nivo.nom_usuel"]
+    nivometeo["massif_number"] = nivometeo["poste_nivo.massif_nivo"]
     df = pd.merge(antilope, nivometeo, on=["date", "num_poste"])
     df = df.loc[df["date"]>=datetime.date(args.datebegin)].loc[df["date"]<=datetime.date(args.dateend)]
     df = df.rename(columns={'poste_nivo.alti':'alti'})
-    df = df.loc[~df['rr'].isna()].loc[~df['rr_antilope'].isna()][['date', 'num_poste', 'rr_antilope', 'rr', 'alti', 'lat', 'lon']]
+    df = df.loc[~df['rr'].isna()].loc[~df['rr_antilope'].isna()][['date', 'num_poste', 'rr_antilope', 'rr', 'alti', 'lat', 'lon', 'name', 'massif_number']]
+    df = df.loc[df['massif_number']<99] # Remove Stations not associated to 1 massif
+    df = df.loc[~df['name'].str.contains('EDFNIVO')] # Remove EDFNIVO stations
     df['diff'] = df['rr_antilope'] - df['rr']
     df['diff'].describe()
-    rr_nivometeo = df.groupby(['num_poste']).rr.sum()
-    rr_antilope  = df.groupby(['num_poste']).rr_antilope.sum()
-    nb_values    = df.groupby(['num_poste']).date.count()
-    elevations   = df.groupby(['num_poste']).alti.mean()
-    lats         = df.groupby(['num_poste']).lat.mean()
-    lons         = df.groupby(['num_poste']).lon.mean()
+    rr_nivometeo  = df.groupby(['num_poste']).rr.sum()
+    rr_antilope   = df.groupby(['num_poste']).rr_antilope.sum()
+    nb_values     = df.groupby(['num_poste']).date.count()
+    elevations    = df.groupby(['num_poste']).alti.mean()
+    lats          = df.groupby(['num_poste']).lat.mean()
+    lons          = df.groupby(['num_poste']).lon.mean()
+    massif_number = df.groupby(['num_poste']).massif_number.mean() 
+    workdict = {'elevation':elevations, 'rr_nivometeo':rr_nivometeo, 'rr_antilope':rr_antilope, 'ndays':nb_values, 'massif_number':massif_number}
+    workdf   = pd.DataFrame(workdict)
+    workdf = workdf.loc[workdf['ndays']>100] # Consider only points with at least 100 observations
+
+    if args.massif is not None:
+        workdf = workdf.loc[workdf['massif_number'] == args.massif]
 
     # 1. PLOT RAW SCATTER PLOT
-#    raw_scatterplot(rr_nivometeo.to_numpy(), rr_antilope.to_numpy(), elevations.to_numpy(), args.datebegin, args.dateend)
+    raw_scatterplot(workdf['rr_nivometeo'].to_numpy(), workdf['rr_antilope'].to_numpy(), workdf['elevation'].to_numpy(), args.datebegin, args.dateend)
 
     # 2. PLOT ELEVATION SCATTER PLOT
-#    workdict = {'elevation':elevations, 'rr_nivometeo':rr_nivometeo, 'rr_antilope':rr_antilope, 'nb_values':nb_values}
-#    workdf   = pd.DataFrame(workdict)
-#    #workdf = workdf.loc[~workdf['rr_nivometeo'].isnull()].loc[~workdf['rr_antilope'].isnull()] 
-#    elevation_scatterplot(workdf, args.datebegin, args.dateend)
+    #workdf = workdf.loc[~workdf['rr_nivometeo'].isnull()].loc[~workdf['rr_antilope'].isnull()] 
+    elevation_scatterplot(workdf, args.datebegin, args.dateend)
 
     # 3. PLOT MAP
     liste_postes = np.unique(df['num_poste']).astype(int)
     for domain in ['alpes', 'pyrenees', 'corse']:
-        plot_map(domain, lats.to_numpy()/1000., lons.to_numpy()/1000.)
+        plot_map(domain, lats.to_numpy(), lons.to_numpy(), workdf)
+
 
 
 
