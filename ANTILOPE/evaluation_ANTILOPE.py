@@ -211,14 +211,14 @@ def elevation_scatterplot(workdf, datebegin, dateend):
     fig2.savefig('ratio_scatterplot_by_elevation_{0:s}_{1:s}.png'.format(datebegin.strftime('%Y%m%d'), dateend.strftime('%Y%m%d')), bbox_inches='tight', format='png')
 
 def plot_massif(df, massif_number):
-    df = df.loc[~df['rr'].isna()].loc[~df['rr_antilope'].isna()]
+    #df = df.loc[~df['rr'].isna()].loc[~df['rr_antilope'].isna()]
     df['ratio'] = df['rr_antilope'] / df['rr']
     df.replace([np.inf, -np.inf], np.nan, inplace=True)
     df = df.loc[~df['ratio'].isna()]
 
     #colorbar = sns.diverging_palette(240, 10, n=9)
-    fig = cartopy.Zoom_massif(massif_number)
     #fig = cartopy.Zoom_massif(massif_number, bgimage=True)
+    fig = cartopy.Zoom_massif(massif_number)
     fig.init_massifs()
     #fig.highlight_massif(massif_number)
 
@@ -326,29 +326,25 @@ if __name__ == "__main__":
     ANTILOPE_data = 'ANTILOPE_{0:s}_{1:s}.csv'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))
     nivometeo_data = 'obs_nivometeo_daily_RR_{0:s}_{1:s}.csv'.format(args.datebegin.strftime('%Y%m%d'), args.dateend.strftime('%Y%m%d'))
 
-    #antilope = pd.read_csv(ANTILOPE_data, sep=';', index_col='date')
-    #nivometeo = pd.read_csv(nivometeo_data, sep=';', index_col='dat')
+    # I- Lecture et mise en forme des données
+    #########################################
     antilope = pd.read_csv(ANTILOPE_data, sep=';', parse_dates=['date'], dtype={'rr_antilope': float, 'num_poste': int}, na_values=['--'])
     nivometeo = pd.read_csv(nivometeo_data, sep=';', parse_dates=['dat'], 
             dtype={'Q.num_poste':int, 'poste_nivo.nom_usuel':str, 'poste_nivo.alti':int, 'poste_nivo.lat_dg':float, 'poste_nivo.lon_dg':float, 'rr':float, 'poste_nivo.massif_nivo':int})
     antilope['date'] = antilope['date'].dt.date
-    nivometeo['date'] = nivometeo['dat'].dt.date
-    #antilope = antilope.set_index('date')
-    #nivometeo = nivometeo.set_index('dat')
-    nivometeo["num_poste"] = nivometeo["Q.num_poste"]
-    nivometeo["lat"] = nivometeo["poste_nivo.lat_dg"]
-    nivometeo["lon"] = nivometeo["poste_nivo.lon_dg"]
-    nivometeo["name"] = nivometeo["poste_nivo.nom_usuel"]
-    nivometeo["massif_number"] = nivometeo["poste_nivo.massif_nivo"]
+    # Renomage de certaines colonnes (pour le merge des DF et pour faciliter la manipulation)
+    nivometeo['date'] = nivometeo['dat'].dt.date # Necessaire (changement de type)
+    nivometeo = nivometeo.rename(columns={'Q.num_poste':'num_poste', 'poste_nivo.lat_dg':'lat', 'poste_nivo.lon_dg':'lon', 
+        'poste_nivo.nom_usuel':'name', 'poste_nivo.massif_nivo':'massif_number', 'poste_nivo.alti':'alti'}) # facultatif
+    # merge des DF
     df = pd.merge(antilope, nivometeo, on=["date", "num_poste"])
+    # Selection de la période 
     df = df.loc[df["date"]>=datetime.date(args.datebegin)].loc[df["date"]<=datetime.date(args.dateend)]
-    df = df.rename(columns={'poste_nivo.alti':'alti'})
-    #df = df.loc[~df['rr'].isna()].loc[~df['rr_antilope'].isna()][['date', 'num_poste', 'rr_antilope', 'rr', 'alti', 'lat', 'lon', 'name', 'massif_number']]
-    df = df.loc[~df['rr'].isna()].loc[~df['rr_antilope'].isna()]
+    # Retrait des données non exploitables
+    df = df.loc[~df['rr'].isna()].loc[~df['rr_antilope'].isna()] # Remove lines with missing value
     df = df.loc[df['massif_number']<99] # Remove Stations not associated to 1 massif
     df = df.loc[~df['name'].str.contains('EDFNIVO')] # Remove EDFNIVO stations
-    df['diff'] = df['rr_antilope'] - df['rr']
-    df['diff'].describe()
+    # Calcul des valeurs agrégées par station
     rr_nivometeo  = df.groupby(['num_poste']).rr.sum()
     rr_antilope   = df.groupby(['num_poste']).rr_antilope.sum()
     nb_values     = df.groupby(['num_poste']).date.count()
@@ -356,23 +352,26 @@ if __name__ == "__main__":
     lats          = df.groupby(['num_poste']).lat.mean()
     lons          = df.groupby(['num_poste']).lon.mean()
     massif_number = df.groupby(['num_poste']).massif_number.mean() 
+    # Regroupement dans une nouvelle dataframe (il est surement possible d'extraire directement cette DF depuis 'df' pour simplifier le code)
     workdict = {'elevation':elevations, 'rr_nivometeo':rr_nivometeo, 'rr_antilope':rr_antilope, 'ndays':nb_values, 'massif_number':massif_number, 'lats':lats, 'lons':lons}
     workdf   = pd.DataFrame(workdict)
     workdf = workdf.loc[workdf['ndays']>100] # Consider only points with at least 100 observations
 
+    # I- Visualisations des données
+    ###############################
     if args.massif is not None:
+        # Focus sur un unique massif (carte)
         workdf = df.loc[df['massif_number'] == args.massif]
         plot_massif(workdf, args.massif)
         
     else:
-        # 1. PLOT RAW SCATTER PLOT
+        # 1. Raw sactter plot of all availbale stations
         raw_scatterplot(workdf['rr_nivometeo'].to_numpy(), workdf['rr_antilope'].to_numpy(), workdf['elevation'].to_numpy(), args.datebegin, args.dateend)
 
-        # 2. PLOT ELEVATION SCATTER PLOT
-        #workdf = workdf.loc[~workdf['rr_nivometeo'].isnull()].loc[~workdf['rr_antilope'].isnull()] 
+        # 2. Scatter plot with stations sorted by elevation range
         elevation_scatterplot(workdf, args.datebegin, args.dateend)
 
-        # 3. PLOT MAP
+        # 3. Maps
         liste_postes = np.unique(df['num_poste']).astype(int)
         for domain in ['alpes', 'pyrenees', 'corse']:
             plot_full_domain(domain, lats.to_numpy(), lons.to_numpy(), workdf)
