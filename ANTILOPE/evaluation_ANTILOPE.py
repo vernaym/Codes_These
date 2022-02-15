@@ -107,26 +107,26 @@ def raw_scatterplot(rr_nivometeo, rr_antilope, elevations, datebegin, dateend):
     fig = plt.figure(figsize=(10,6))
     #plt.scatter(rr_nivometeo.to_numpy(), rr_antilope.to_numpy(), s=nb_values.to_numpy(), marker='o')
     sc = plt.scatter(rr_nivometeo, rr_antilope, marker='D', s=10, c=elevations)
-    plt.text(1000, 6000, f'{nbpoint} stations', fontsize=18, color='black')
+    plt.text(1300, 6000, f'{nbpoint} stations', fontsize=18, color='black')
     plt.colorbar(sc, label='Elevation')
     xpoints = ypoints = plt.xlim()
     plt.grid(visible=True, linestyle=':', linewidth=0.5)
     plt.xlim(xmin=0)
     plt.ylim(ymin=0)
     plt.plot(xpoints, ypoints, linestyle='--', color='grey', lw=1, scalex=False, scaley=False)
-    plt.ylabel('Total ANTILOPE precipitation estimate (mm)', fontsize=12)
-    plt.xlabel('Total rain-gauges observed precipitation (mm)', fontsize=12)
+    plt.ylabel('Mean daily ANTILOPE precipitation estimate (mm)', fontsize=12)
+    plt.xlabel('Mean daily rain-gauges observed precipitation (mm)', fontsize=12)
 
     # Regression linéaire
     reg = LinearRegression().fit(rr_nivometeo.reshape((-1, 1)), rr_antilope)
     y = reg.predict(rr_nivometeo.reshape((-1,1)))
     r2 = r2_score(rr_nivometeo.reshape((-1, 1)), rr_antilope)
     plt.plot(rr_nivometeo, y, color="red", linewidth=1)
-    plt.text(3500, 2100, f'R²={r2:.4}', fontsize=18, color='red')
+    plt.text(1, 5, f'R²={r2:.4}', fontsize=18, color='red')
 
-    plt.tight_layout()
-    #fig.savefig('raw_scatterplot_{0:s}_{1:s}.pdf'.format(datebegin.strftime('%Y%m%d'), dateend.strftime('%Y%m%d')), bbox_inches='tight', format='pdf')
-    fig.savefig('raw_scatterplot_{0:s}_{1:s}.png'.format(datebegin.strftime('%Y%m%d'), dateend.strftime('%Y%m%d')), bbox_inches='tight', format='png')
+    #plt.tight_layout()
+    #fig.savefig('raw_scatterplot_{0:s}_{1:s}.svg'.format(datebegin.strftime('%Y%m%d'), dateend.strftime('%Y%m%d')), bbox_inches='tight', format='svg')
+    fig.savefig('raw_scatterplot_{0:s}_{1:s}.svg'.format(datebegin.strftime('%Y%m%d'), dateend.strftime('%Y%m%d')), format='svg')
 
 def linear_regression(x, y):
     reg = LinearRegression().fit(x.reshape((-1, 1)), y)
@@ -142,7 +142,6 @@ def RANSAC(x, y):
     return score, model
 
 def massif_scatterplot(workdf, datebegin, dateend, massif):
-    fig, ax = plt.subplots(figsize=(12,9))
     stations = np.unique(workdf['num_poste'])
     if len(stations) > 10:
         cm = plt.cm.get_cmap('tab20')
@@ -152,6 +151,64 @@ def massif_scatterplot(workdf, datebegin, dateend, massif):
     elevations = np.unique(workdf['alti'])
     elevations = workdf.groupby(['num_poste']).alti.first().to_numpy()
     names = workdf.groupby(['num_poste']).name.first().to_numpy()
+    x = workdf['rr_nivometeo'].to_numpy()
+    y = workdf['rr_antilope'].to_numpy()
+    model, r2, det = linear_regression(x.reshape((-1, 1)), y)
+
+    fig, ax = plt.subplots(figsize=(12,9))
+    ax.plot(x, model, color='black', linewidth=2)
+    ax.text(10, 50, f'R²={r2:.4}', fontsize=18, color='black')
+    mean_rr_nivometeo = dict()
+    mean_rr_antilope = dict()
+    for i,station in enumerate(stations):
+        tmp = workdf.loc[workdf['num_poste']==station]
+        ndays = len(tmp)
+        x = tmp['rr_nivometeo'].to_numpy()
+        y = tmp['rr_antilope'].to_numpy()
+        model, r2, det = linear_regression(x.reshape((-1, 1)), y)
+        ax.scatter(x, y, marker='D', s=10, c=cm.colors[i], label=f'{names[i]}, {elevations[i]} m, {ndays} obs, {det}')
+        mean_rr_nivometeo[station] = x.mean()
+        mean_rr_antilope[station] = y.mean()
+
+    ax.legend(fontsize=14)
+    ax.grid(visible=True, linestyle=':', linewidth=0.5)
+    xpoints = ypoints = ax.get_xlim()
+    ax.plot(xpoints, ypoints, linestyle='--', color='grey', lw=1, scalex=False, scaley=False)
+    ax.set_xlim(left=0)
+    ax.set_ylim(bottom=0)
+    ax.set_ylabel('Daily ANTILOPE precipitation estimate (mm)', fontsize=12)
+    ax.set_xlabel('Daily rain-gauges observed precipitation (mm)', fontsize=12)
+    #fig.savefig(f'scatterplot_massif_{massif}.svg', bbox_inches='tight', format='svg')
+    fig.savefig(f'scatterplot_massif_{massif}.svg', format='svg')
+
+    fig, ax = plt.subplots(figsize=(12,9))
+    #ax.set_xlim(left=700, right=np.max(elevations) * 1.1)
+    ax.set_ylim(bottom=0, top=np.max(np.fromiter(mean_rr_nivometeo.values(), dtype=float)) * 1.1)
+    ax.scatter(elevations, np.fromiter(mean_rr_nivometeo.values(), dtype=float), marker='D', s=10, color='blue', label='Rain gauges')
+    ax.scatter(elevations, np.fromiter(mean_rr_antilope.values(), dtype=float), marker='D', s=10, color='red', label='ANTILOPE') 
+    #fig.savefig(f'scatterplot_alti_massif_{massif}.svg', bbox_inches='tight', format='svg')
+    fig.savefig(f'scatterplot_alti_massif_{massif}.svg', format='svg')
+
+def massif_scatterplot_by_elevation(workdf, datebegin, dateend, massif):
+    """ Plot average daily precipitation amount """
+    workdf['nb_obs_per_day']=workdf.date.map(workdf.date.value_counts())
+    stations = np.unique(workdf['num_poste'])
+    #workdf = workdf[workdf['nb_obs_per_day']==len(stations)] # Keep only dates for which all stations gave observations
+    if len(stations) > 10:
+        cm = plt.cm.get_cmap('tab20')
+    else:
+        cm = plt.cm.get_cmap('tab10')
+
+    elevations = np.unique(workdf['alti'])
+    elevations = workdf.groupby(['num_poste']).alti.first().to_numpy()
+    names = workdf.groupby(['num_poste']).name.first().to_numpy()
+    x = workdf['rr_nivometeo'].to_numpy()
+    y = workdf['rr_antilope'].to_numpy()
+    model, r2, det = linear_regression(x.reshape((-1, 1)), y)
+
+    fig, ax = plt.subplots(figsize=(12,9))
+    ax.plot(x, model, color='black', linewidth=2)
+    ax.text(10, 50, f'R²={r2:.4}', fontsize=18, color='black')
     for i,station in enumerate(stations):
         tmp = workdf.loc[workdf['num_poste']==station]
         ndays = len(tmp)
@@ -166,9 +223,10 @@ def massif_scatterplot(workdf, datebegin, dateend, massif):
     ax.plot(xpoints, ypoints, linestyle='--', color='grey', lw=1, scalex=False, scaley=False)
     ax.set_xlim(left=0)
     ax.set_ylim(bottom=0)
-    ax.set_ylabel('Total ANTILOPE precipitation estimate (mm)', fontsize=12)
-    ax.set_xlabel('Total rain-gauges observed precipitation (mm)', fontsize=12)
-    fig.savefig(f'scatterplot_massif_{massif}.svg', bbox_inches='tight', format='svg')
+    ax.set_ylabel('Daily ANTILOPE precipitation estimate (mm)', fontsize=12)
+    ax.set_xlabel('Daily rain-gauges observed precipitation (mm)', fontsize=12)
+    #fig.savefig(f'scatterplot_massif_{massif}.svg', bbox_inches='tight', format='svg')
+    fig.savefig(f'scatterplot_massif_{massif}.svg', format='svg')
 
 def elevation_scatterplot(workdf, datebegin, dateend):
 
@@ -190,9 +248,9 @@ def elevation_scatterplot(workdf, datebegin, dateend):
     model = reg.predict(workdf['elevation'].to_numpy().reshape((-1,1)))
     r2 = reg.score(workdf['elevation'].to_numpy().reshape((-1, 1)),workdf['ratio'].to_numpy())
     ax2.plot(workdf['elevation'].to_numpy(), model, color='black', linewidth=2)
-    ax2.text(1000, 2, f'R²={r2:.4}', fontsize=18, color='black')
-    ax2.text(1000, 2.2, f'{nbpoint} stations', fontsize=18, color='black')
-    ax1.text(500, 5500, f'{nbpoint} stations', fontsize=18, color='black')
+    ax2.text(1000, 1.5, f'R²={r2:.4}', fontsize=18, color='black')
+    ax2.text(1000, 1.75, f'{nbpoint} stations', fontsize=18, color='black')
+    ax1.text(1, 4, f'{nbpoint} stations', fontsize=18, color='black')
 #    score, ransac = RANSAC(workdf['elevation'].to_numpy().reshape((-1, 1)), workdf['ratio'].to_numpy())
 #    ax2.plot(workdf['elevation'].to_numpy().reshape((-1, 1)), ransac, color = 'red', linewidth=2)
 #    ax2.text(1000, 2.2, f'RANSAC score={score}', fontsize=18, color='red')
@@ -230,14 +288,15 @@ def elevation_scatterplot(workdf, datebegin, dateend):
     ax1.set_ylim(bottom=0)
     layout(ax1)
     layout(ax2)
-    ax1.set_ylabel('Total ANTILOPE precipitation estimate (mm)', fontsize=12)
-    ax1.set_xlabel('Total rain-gauges observed precipitation (mm)', fontsize=12)
-    ax2.set_ylabel('Total ANTILOPE/rain-gauges ratio', fontsize=12)
+    ax1.set_ylabel('Mean daily ANTILOPE precipitation estimate (mm)', fontsize=12)
+    ax1.set_xlabel('Mean daily rain-gauges observed precipitation (mm)', fontsize=12)
+    ax2.set_ylabel('ANTILOPE/rain-gauges ratio', fontsize=12)
     ax2.set_xlabel('Rain-gauge elevation (m)', fontsize=12)
     #plt.tight_layout()
-    #fig.savefig('scatterplot_{0:s}_{1:s}.pdf'.format(datebegin.strftime('%Y%m%d'), dateend.strftime('%Y%m%d')), bbox_inches='tight', format='pdf')
-    fig1.savefig('scatterplot_by_elevation_{0:s}_{1:s}.png'.format(datebegin.strftime('%Y%m%d'), dateend.strftime('%Y%m%d')), bbox_inches='tight', format='png')
-    fig2.savefig('ratio_scatterplot_by_elevation_{0:s}_{1:s}.png'.format(datebegin.strftime('%Y%m%d'), dateend.strftime('%Y%m%d')), bbox_inches='tight', format='png')
+    #fig1.savefig('scatterplot_by_elevation_{0:s}_{1:s}.svg'.format(datebegin.strftime('%Y%m%d'), dateend.strftime('%Y%m%d')), bbox_inches='tight', format='svg')
+    fig1.savefig('scatterplot_by_elevation_{0:s}_{1:s}.svg'.format(datebegin.strftime('%Y%m%d'), dateend.strftime('%Y%m%d')), format='svg')
+    #fig2.savefig('ratio_scatterplot_by_elevation_{0:s}_{1:s}.svg'.format(datebegin.strftime('%Y%m%d'), dateend.strftime('%Y%m%d')), bbox_inches='tight', format='svg')
+    fig2.savefig('ratio_scatterplot_by_elevation_{0:s}_{1:s}.svg'.format(datebegin.strftime('%Y%m%d'), dateend.strftime('%Y%m%d')), format='svg')
 
 def plot_massif(df, massif_number):
     #df = df.loc[~df['rr'].isna()].loc[~df['rr_antilope'].isna()]
@@ -278,8 +337,9 @@ def plot_massif(df, massif_number):
 
     sc = fig.map.scatter(lons, lats, c=mean_ratio, cmap=cmap, norm=norm, marker="^", s=150)
     fig.fig.colorbar(sc, label='Radar/Rain-gauge ratio')
+    plt.tight_layout()
     #fig.addpoints(lons, lats, color=color, marker="^")
-    fig.save(f'ratio_{massif_number}.svg', formatout='svg')
+    fig.save(f'map_ratio_{massif_number}.svg', formatout='svg')
     fig.close()
 
 def plot_obs(domain, lat, lon, alt):
@@ -317,7 +377,7 @@ def fill_all_massifs(domain, lat, lon, df):
     for massif in map_massifs[domain]:
         tmp = df.loc[df["massif_number"]==massif]
         nb_stations[massif] = len(tmp)
-        if len(tmp) > 3:
+        if len(tmp) >= 3:
             model,r2,det = linear_regression(tmp['rr_nivometeo'].to_numpy().reshape((-1,1)), tmp['rr_antilope'].to_numpy())
             r2_by_massif[massif] = r2
             model,r2,det = linear_regression((tmp['rr_antilope'] / tmp['rr_nivometeo']).to_numpy().reshape((-1,1)), tmp['elevation'].to_numpy())
@@ -366,7 +426,8 @@ if __name__ == "__main__":
     #########################################
     antilope = pd.read_csv(ANTILOPE_data, sep=';', parse_dates=['date'], dtype={'rr_antilope': float, 'num_poste': int}, na_values=['--'])
     nivometeo = pd.read_csv(nivometeo_data, sep=';', parse_dates=['dat'], 
-            dtype={'Q.num_poste':int, 'poste_nivo.nom_usuel':str, 'poste_nivo.alti':int, 'poste_nivo.lat_dg':float, 'poste_nivo.lon_dg':float, 'rr':float, 'poste_nivo.massif_nivo':int})
+            dtype={'Q.num_poste':int, 'poste_nivo.nom_usuel':str, 'poste_nivo.alti':int, 'poste_nivo.lat_dg':float, 'poste_nivo.lon_dg':float, 'rr':float, 
+                'poste_nivo.massif_nivo':int, 'hist_reseau_poste.reseau_poste':int})
     antilope['date'] = antilope['date'].dt.date
     # Renomage de certaines colonnes (pour le merge des DF et pour faciliter la manipulation)
     nivometeo['date'] = nivometeo['dat'].dt.date # Necessaire (changement de type)
@@ -381,8 +442,8 @@ if __name__ == "__main__":
     df = df.loc[df['massif_number']<99] # Remove Stations not associated to 1 massif
     df = df.loc[~df['name'].str.contains('EDFNIVO')] # Remove EDFNIVO stations
     # Calcul des valeurs agrégées par station
-    rr_nivometeo  = df.groupby(['num_poste']).rr_nivometeo.sum()
-    rr_antilope   = df.groupby(['num_poste']).rr_antilope.sum()
+    rr_nivometeo  = df.groupby(['num_poste']).rr_nivometeo.mean()
+    rr_antilope   = df.groupby(['num_poste']).rr_antilope.mean()
     nb_values     = df.groupby(['num_poste']).date.count()
     elevations    = df.groupby(['num_poste']).alti.mean()
     lats          = df.groupby(['num_poste']).lat.mean()
@@ -410,8 +471,10 @@ if __name__ == "__main__":
 
         # 3. Maps
         liste_postes = np.unique(df['num_poste']).astype(int)
-        for domain in ['alpes', 'pyrenees', 'corse']:
-            plot_obs(domain, lats.to_numpy(), lons.to_numpy(), elevations.to_numpy())
+        #for domain in ['alpes', 'pyrenees', 'corse']:
+        for domain in ['alpes', 'pyrenees']:
+            print(domain)
+            #plot_obs(domain, lats.to_numpy(), lons.to_numpy(), elevations.to_numpy())
             plot_full_domain(domain, lats.to_numpy(), lons.to_numpy(), workdf)
 
 
