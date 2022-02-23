@@ -123,7 +123,7 @@ def goto(path):
 def predict(x):
    return slope * x + intercept       
 
-def raw_scatterplot(rr_nivometeo, rr_antilope, elevations, datebegin, dateend, **kw):
+def raw_scatterplot(rr_nivometeo, rr_antilope, elevations, datebegin, dateend, suffix=None, **kw):
     nbpoint = len(rr_nivometeo)
     fig = plt.figure(figsize=(10,6))
     #plt.scatter(rr_nivometeo.to_numpy(), rr_antilope.to_numpy(), s=nb_values.to_numpy(), marker='o')
@@ -148,8 +148,7 @@ def raw_scatterplot(rr_nivometeo, rr_antilope, elevations, datebegin, dateend, *
     #plt.tight_layout()
     #fig.savefig('raw_scatterplot_{0:s}_{1:s}.svg'.format(datebegin.strftime('%Y%m%d'), dateend.strftime('%Y%m%d')), bbox_inches='tight', format='svg')
     filename = 'raw_scatterplot_{0:s}_{1:s}'.format(datebegin.strftime('%Y%m%d'), dateend.strftime('%Y%m%d'))
-    if 'suffix' in kw.keys():
-        suffix = kw['suffix']
+    if suffix is not None:
         filename = f'{filename}_{suffix}'
 
     fig.savefig(f'{filename}.svg', format='svg')
@@ -167,15 +166,14 @@ def RANSAC(x, y):
     score = reg.score(x, y)
     return score, model
 
-def massif_scatterplot(workdf, datebegin, dateend, massif=None, subdomain=None, **kw):
+def massif_scatterplot(workdf, datebegin, dateend, massif=None, subdomain=None, suffix=None, **kw):
     if massif is not None:
         filename1 = f'scatterplot_massif_{massif}'
         filename2 = f'scatterplot_alti_massif_{massif}'
     elif subdomain is not None:
         filename1 = f'scatterplot_subdomain_{subdomain}'
         filename2 = f'scatterplot_alti_subdomain_{subdomain}'
-    if 'suffix' in kw.keys():
-        suffix = kw['suffix']
+    if suffix is not None:
         filename1 = f'{filename1}_{suffix}'
         filename2 = f'{filename2}_{suffix}'
 
@@ -248,7 +246,7 @@ def massif_scatterplot(workdf, datebegin, dateend, massif=None, subdomain=None, 
     ax.set_xlabel('Elevation (m)', fontsize=12)
     fig.savefig(f'{filename2}.svg', format='svg')
 
-def elevation_scatterplot(workdf, datebegin, dateend, **kw):
+def elevation_scatterplot(workdf, datebegin, dateend, suffix=None, **kw):
 
     fig1, ax1 = plt.subplots(figsize=(12,9))
     fig2, ax2 = plt.subplots(figsize=(12,9))
@@ -316,8 +314,7 @@ def elevation_scatterplot(workdf, datebegin, dateend, **kw):
     #fig1.savefig('scatterplot_by_elevation_{0:s}_{1:s}.svg'.format(datebegin.strftime('%Y%m%d'), dateend.strftime('%Y%m%d')), bbox_inches='tight', format='svg')
     filename1 = 'scatterplot_by_elevation_{0:s}_{1:s}'.format(datebegin.strftime('%Y%m%d'), dateend.strftime('%Y%m%d'))
     filename2 = 'ratio_scatterplot_by_elevation_{0:s}_{1:s}.svg'.format(datebegin.strftime('%Y%m%d'), dateend.strftime('%Y%m%d'))
-    if 'suffix' in kw.keys():
-        suffix = kw['suffix']
+    if suffix is not None:
         filename1 = f'{filename1}_{suffix}'
         filename2 = f'{filename2}_{suffix}'
     fig1.savefig(f'{filename1}.svg', format='svg')
@@ -342,8 +339,7 @@ def plot_massif(df, massif, subdomain=None, **kw):
     else:
         fig = cartopy.Zoom_massif(massif)
         filename = f'map_ratio_{massif}'
-    if 'suffix' in kw.keys():
-        suffix = kw['suffix']
+    if suffix is not None:
         filename = f'{filename}_{suffix}' 
     fig.init_massifs()
     #fig.highlight_massif(massif_number)
@@ -404,7 +400,7 @@ def plot_full_domain(domain, lat, lon, df, **kw):
 def point_stations_info(domain, lat, lon, df):
     pass
 
-def fill_all_massifs(domain, lat, lon, df, **kw):
+def fill_all_massifs(domain, lat, lon, df, suffix=None, **kw):
 
     class_ = getattr(cartopy, f'Map_{domain}')
     r2_by_massif = dict()
@@ -424,13 +420,12 @@ def fill_all_massifs(domain, lat, lon, df, **kw):
         rmse[massif] = np.sqrt((np.square((tmp['rr_antilope'] - tmp['rr_nivometeo']) / tmp['ndays'])).mean())
 
     massif_numbers = np.fromiter(nb_stations.keys(), dtype=int)
-    attributes = dict(palette='YlGnBu', forcemin=0., forcemax=1., seuiltext=50., label="R² of the linear regression ANTILOPE / rain gauges")
+    attributes = dict(palette='YlGnBu', forcemin=0., forcemax=1., seuiltext=50., label="R² of the linear regression ANTILOPE / rain gauges", transparency=np.fromiter(nb_stations.values(), dtype=int))
     fig = class_()
     fig.draw_massifs(np.fromiter(r2_by_massif.keys(), dtype=int), np.fromiter(r2_by_massif.values(), dtype=float), **attributes)
     fig.plot_center_massif(massif_numbers, np.fromiter(nb_stations.values(), dtype=int), **attributes)
     filename = f'R2_by_massif_{domain}'
-    if 'suffix' in kw.keys():
-        suffix = kw['suffix']
+    if suffix is not None:
         filename = f'{filename}_{suffix}'
     fig.save(f'{filename}.svg', formatout='svg')
     fig.close()
@@ -440,8 +435,7 @@ def fill_all_massifs(domain, lat, lon, df, **kw):
     fig.draw_massifs(np.fromiter(ratio.keys(), dtype=int), np.fromiter(ratio.values(), dtype=float), **attributes)
     fig.plot_center_massif(massif_numbers, np.fromiter(nb_stations.values(), dtype=int), **attributes)
     filename = f'Ratio_by_massif_{domain}'
-    if 'suffix' in kw.keys():
-        suffix = kw['suffix']
+    if suffix is not None:
         filename = f'{filename}_{suffix}'
     fig.save(f'{filename}.svg', formatout='svg')
     fig.close()
@@ -452,8 +446,7 @@ def fill_all_massifs(domain, lat, lon, df, **kw):
     fig.draw_massifs(np.fromiter(bias.keys(), dtype=int), np.fromiter(bias.values(), dtype=float), **attributes)
     fig.plot_center_massif(massif_numbers, np.fromiter(nb_stations.values(), dtype=int), **attributes)
     filename = f'Bias_by_massif_{domain}'
-    if 'suffix' in kw.keys():
-        suffix = kw['suffix']
+    if suffix is not None:
         filename = f'{filename}_{suffix}'
     fig.save(f'{filename}.svg', formatout='svg')
     fig.close()
@@ -463,8 +456,7 @@ def fill_all_massifs(domain, lat, lon, df, **kw):
     fig.draw_massifs(np.fromiter(rmse.keys(), dtype=int), np.fromiter(rmse.values(), dtype=float), **attributes)
     fig.plot_center_massif(massif_numbers, np.fromiter(nb_stations.values(), dtype=int), **attributes)
     filename = f'RMSE_by_massif_{domain}'
-    if 'suffix' in kw.keys():
-        suffix = kw['suffix']
+    if suffix is not None:
         filename = f'{filename}_{suffix}'
     fig.save(f'{filename}.svg', formatout='svg')
     fig.close()
@@ -496,6 +488,7 @@ if __name__ == "__main__":
     df = df.loc[df['massif_number']<99] # Remove Stations not associated to 1 massif
     df = df.loc[~df['name'].str.contains('EDFNIVO')] # Remove EDFNIVO stations
     nb_obs_min = 100
+    suffix = None
     if args.threshold is not None:
         df = df.loc[df['rr_nivometeo']>args.threshold] # If a threshold is given, filter data above
         suffix = f'>{args.threshold}mm'
@@ -518,7 +511,7 @@ if __name__ == "__main__":
     if args.massif is not None:
         # Focus sur un unique massif (carte)
         workdf = df.loc[df['massif_number'] == args.massif]
-        plot_massif(workdf, massif, suffix=suffix)
+        plot_massif(workdf, args.massif, suffix=suffix)
         massif_scatterplot(workdf, args.datebegin, args.dateend, massif=args.massif, suffix=suffix)
     elif args.subdomain is not None:
         massifs   = subdomain_map[args.subdomain]
