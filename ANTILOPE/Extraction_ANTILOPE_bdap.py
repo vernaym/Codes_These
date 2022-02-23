@@ -204,7 +204,7 @@ if __name__ == "__main__":
                             'rr_antilope': rr_field.data[nearest[1]][nearest[0]]
                         }, ignore_index=True)
                 else:
-                    print('Missing date {0:s}'.format(self.date.strftime("%Y%m%d%H")))
+                    print('Missing date {0:s}'.format(date.strftime("%Y%m%d%H")))
 
     antilope.set_index('date')
     goto(args.workdir)
