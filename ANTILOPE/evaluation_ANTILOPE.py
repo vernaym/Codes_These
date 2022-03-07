@@ -170,8 +170,8 @@ def RANSAC(x, y):
 
 def massif_scatterplot(workdf, datebegin, dateend, massif=None, subdomain=None, suffix=None, **kw):
     if massif is not None:
-        filename1 = f'scatterplot_massif_{massif}'
-        filename2 = f'scatterplot_alti_massif_{massif}'
+        filename1 = f'scatterplot_massif{massif}'
+        filename2 = f'scatterplot_alti_massif{massif}'
     elif subdomain is not None:
         filename1 = f'scatterplot_subdomain_{subdomain}'
         filename2 = f'scatterplot_alti_subdomain_{subdomain}'
@@ -179,7 +179,7 @@ def massif_scatterplot(workdf, datebegin, dateend, massif=None, subdomain=None, 
         filename1 = f'{filename1}_{suffix}'
         filename2 = f'{filename2}_{suffix}'
 
-    workdf['nb_obs_per_day']=workdf.date.map(workdf.date.value_counts())
+    #workdf['nb_obs_per_day'] = workdf.date.map(workdf.date.value_counts())
     stations = np.unique(workdf['num_poste'])
     print(len(stations))
     cm = plt.cm.get_cmap('tab10')
@@ -220,7 +220,7 @@ def massif_scatterplot(workdf, datebegin, dateend, massif=None, subdomain=None, 
     ax.set_ylim(bottom=0)
     ax.set_ylabel(f'Daily {kw["product"]} precipitation estimate (mm)', fontsize=12)
     ax.set_xlabel('Daily rain-gauges observed precipitation (mm)', fontsize=12)
-    plt.tight_layout()
+    #plt.tight_layout()
     #fig.savefig(f'scatterplot_massif_{massif}.svg', bbox_inches='tight', format='svg')
     fig.savefig(f'{filename1}.svg', format='svg')
 
@@ -341,7 +341,7 @@ def plot_massif(df, massif, subdomain=None, **kw):
         filename = f'map_ratio_{subdomain}'
     else:
         fig = cartopy.Zoom_massif(massif)
-        filename = f'map_ratio_{massif}'
+        filename = f'map_ratio_massif{massif}'
     if suffix is not None:
         filename = f'{filename}_{suffix}' 
     fig.init_massifs()
@@ -374,7 +374,7 @@ def plot_massif(df, massif, subdomain=None, **kw):
 
     sc = fig.map.scatter(lons, lats, c=mean_ratio, cmap=cmap, norm=norm, marker="^", s=150)
     fig.fig.colorbar(sc, label='Radar/Rain-gauge ratio')
-    plt.tight_layout()
+    #plt.tight_layout()
     #fig.addpoints(lons, lats, color=color, marker="^")
     fig.save(f'{filename}.svg', formatout='svg')
     fig.close()
@@ -447,26 +447,32 @@ def fill_all_massifs(domain, lat, lon, df, suffix=None, **kw):
 #    fig.save(f'{filename}.svg', formatout='svg')
 #    fig.close()
 
-    extreme_value = np.nanmax(np.abs(np.fromiter(bias.values(), dtype=float)))
+    #extreme_value = np.nanmax(np.abs(np.fromiter(bias.values(), dtype=float)))
+    filename = f'Bias_by_massif_{domain}'
+    if suffix is not None:
+        extreme_value = 10 # The scale must be larger when considering precipitation above a 10mm threshold
+        filename = f'{filename}_{suffix}'
+    else:
+        extreme_value = 3 # To have the same scale for all figures
     attributes = dict(palette='seismic', forcemin=-extreme_value, forcemax=extreme_value, seuiltext=50., label=f'Mean daily bias {kw["product"]} / rain gauges (mm)')
     fig = class_()
     fig.draw_massifs(np.fromiter(bias.keys(), dtype=int), np.fromiter(bias.values(), dtype=float), **attributes)
     fig.plot_center_massif(massif_numbers, np.fromiter(nb_stations.values(), dtype=int), **attributes)
-    filename = f'Bias_by_massif_{domain}'
-    if suffix is not None:
-        filename = f'{filename}_{suffix}'
-    plt.tight_layout()
+    #plt.tight_layout()
     fig.save(f'{filename}.svg', formatout='svg')
     fig.close()
 
+    filename = f'RMSE_by_massif_{domain}'
+    if suffix is not None:
+        extreme_value = 12 # The scale must be larger when considering precipitation above a 10mm threshold
+        filename = f'{filename}_{suffix}'
+    else:
+        extreme_value = 3
     attributes = dict(palette='YlGnBu', forcemin=0., forcemax=np.nanmax(np.fromiter(rmse.values(), dtype=float)), seuiltext=50., label=f'Mean daily RMSE {kw["product"]}/rain-gauges (mm)')
     fig = class_()
     fig.draw_massifs(np.fromiter(rmse.keys(), dtype=int), np.fromiter(rmse.values(), dtype=float), **attributes)
     fig.plot_center_massif(massif_numbers, np.fromiter(nb_stations.values(), dtype=int), **attributes)
-    filename = f'RMSE_by_massif_{domain}'
-    if suffix is not None:
-        filename = f'{filename}_{suffix}'
-    plt.tight_layout()
+    #plt.tight_layout()
     fig.save(f'{filename}.svg', formatout='svg')
     fig.close()
 
