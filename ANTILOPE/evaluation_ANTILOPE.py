@@ -145,9 +145,9 @@ def raw_scatterplot(rr_nivometeo, rr_antilope, elevations, datebegin, dateend, s
     y = reg.predict(rr_nivometeo.reshape((-1,1)))
     r2 = r2_score(rr_nivometeo.reshape((-1, 1)), rr_antilope)
     plt.plot(rr_nivometeo, y, color="red", linewidth=1)
-    plt.text(1, 5, f'R²={r2:.4}', fontsize=18, color='red')
+    plt.text(1, 4, f'R²={r2:.4}', fontsize=18, color='red')
 
-    #plt.tight_layout()
+    plt.tight_layout()
     #fig.savefig('raw_scatterplot_{0:s}_{1:s}.svg'.format(datebegin.strftime('%Y%m%d'), dateend.strftime('%Y%m%d')), bbox_inches='tight', format='svg')
     filename = 'raw_scatterplot_{0:s}_{1:s}'.format(datebegin.strftime('%Y%m%d'), dateend.strftime('%Y%m%d'))
     if suffix is not None:
@@ -220,6 +220,7 @@ def massif_scatterplot(workdf, datebegin, dateend, massif=None, subdomain=None, 
     ax.set_ylim(bottom=0)
     ax.set_ylabel(f'Daily {kw["product"]} precipitation estimate (mm)', fontsize=12)
     ax.set_xlabel('Daily rain-gauges observed precipitation (mm)', fontsize=12)
+    plt.tight_layout()
     #fig.savefig(f'scatterplot_massif_{massif}.svg', bbox_inches='tight', format='svg')
     fig.savefig(f'{filename1}.svg', format='svg')
 
@@ -246,6 +247,7 @@ def massif_scatterplot(workdf, datebegin, dateend, massif=None, subdomain=None, 
     ax.set_ylim(bottom=0, top=np.max([np.max(y1), np.max(y2)]) * 1.1)
     ax.set_ylabel('Mean daily precipitation (mm)', fontsize=12)
     ax.set_xlabel('Elevation (m)', fontsize=12)
+    plt.tight_layout()
     fig.savefig(f'{filename2}.svg', format='svg')
 
 def elevation_scatterplot(workdf, datebegin, dateend, suffix=None, **kw):
@@ -281,7 +283,7 @@ def elevation_scatterplot(workdf, datebegin, dateend, suffix=None, **kw):
         workdf.drop(index_names, inplace = True)
 
         def plot(x, y, ax, regression=True):
-            if regression:
+            if regression and len(x) > 1:
                 model, r2, det = linear_regression(x.reshape((-1, 1)), y)
             else:
                 det = ""
@@ -292,9 +294,8 @@ def elevation_scatterplot(workdf, datebegin, dateend, suffix=None, **kw):
             else:
                 label = ','.join(['[{0:d} m - {1:d} m]'.format(int(elevation_thresholds[i-1]), int(elevation_thresholds[i])), det])
             ax.scatter(x, y, marker='D', s=10, c=colors[i], label=label)
-            if regression:
+            if regression and len(x) > 1:
                 ax.plot(x, model, color=colors[i], linewidth=1)
-
         plot(tmp['rr_nivometeo'].to_numpy(), tmp[f'rr_{kw["product"]}'].to_numpy(), ax1, regression=True)
         plot(tmp['elevation'].to_numpy(), tmp['ratio'].to_numpy(), ax2, regression=False)
 
@@ -312,7 +313,7 @@ def elevation_scatterplot(workdf, datebegin, dateend, suffix=None, **kw):
     ax1.set_xlabel('Mean daily rain-gauges observed precipitation (mm)', fontsize=12)
     ax2.set_ylabel(f'{kw["product"]}/rain-gauges ratio', fontsize=12)
     ax2.set_xlabel('Rain-gauge elevation (m)', fontsize=12)
-    #plt.tight_layout()
+    plt.tight_layout()
     #fig1.savefig('scatterplot_by_elevation_{0:s}_{1:s}.svg'.format(datebegin.strftime('%Y%m%d'), dateend.strftime('%Y%m%d')), bbox_inches='tight', format='svg')
     filename1 = 'scatterplot_by_elevation_{0:s}_{1:s}'.format(datebegin.strftime('%Y%m%d'), dateend.strftime('%Y%m%d'))
     filename2 = 'ratio_scatterplot_by_elevation_{0:s}_{1:s}'.format(datebegin.strftime('%Y%m%d'), dateend.strftime('%Y%m%d'))
@@ -384,6 +385,7 @@ def plot_obs(domain, lat, lon, alt):
     fig = class_()
     fig.init_massifs()
     fig.addpoints(lon, lat, marker='+')
+    plt.tight_layout()
     fig.save(f'obs_{domain}.svg', formatout='svg')
     fig.close()
     for massif in map_massifs[domain]:
@@ -418,29 +420,32 @@ def fill_all_massifs(domain, lat, lon, df, suffix=None, **kw):
             r2_by_massif[massif] = r2
             model,r2,det = linear_regression((tmp[f'rr_{kw["product"]}'] / tmp['rr_nivometeo']).to_numpy().reshape((-1,1)), tmp['elevation'].to_numpy())
             ratio[massif] = r2
-        bias[massif] = ((tmp[f'rr_{kw["product"]}'] - tmp['rr_nivometeo']) / tmp['ndays']).mean()
-        rmse[massif] = np.sqrt((np.square((tmp[f'rr_{kw["product"]}'] - tmp['rr_nivometeo']) / tmp['ndays'])).mean())
+        bias[massif] = (tmp[f'rr_{kw["product"]}'] - tmp['rr_nivometeo']).mean()
+        rmse[massif] = np.sqrt(np.square(tmp[f'rr_{kw["product"]}'] - tmp['rr_nivometeo']).mean())
 
     massif_numbers = np.fromiter(nb_stations.keys(), dtype=int)
-    attributes = dict(palette='YlGnBu', forcemin=0., forcemax=1., seuiltext=50., label=f'R² of the linear regression {kw["product"]} / rain gauges', transparency=np.fromiter(nb_stations.values(), dtype=int))
-    fig = class_()
-    fig.draw_massifs(np.fromiter(r2_by_massif.keys(), dtype=int), np.fromiter(r2_by_massif.values(), dtype=float), **attributes)
-    fig.plot_center_massif(massif_numbers, np.fromiter(nb_stations.values(), dtype=int), **attributes)
-    filename = f'R2_by_massif_{domain}'
-    if suffix is not None:
-        filename = f'{filename}_{suffix}'
-    fig.save(f'{filename}.svg', formatout='svg')
-    fig.close()
-    
-    attributes = dict(palette='YlGnBu', forcemin=0., forcemax=np.max(np.fromiter(ratio.values(), dtype=float)), seuiltext=50., label=f'R² linear regression of the ratio {kw["product"]} / rain gauges function of elevation')
-    fig = class_()
-    fig.draw_massifs(np.fromiter(ratio.keys(), dtype=int), np.fromiter(ratio.values(), dtype=float), **attributes)
-    fig.plot_center_massif(massif_numbers, np.fromiter(nb_stations.values(), dtype=int), **attributes)
-    filename = f'Ratio_by_massif_{domain}'
-    if suffix is not None:
-        filename = f'{filename}_{suffix}'
-    fig.save(f'{filename}.svg', formatout='svg')
-    fig.close()
+
+#    attributes = dict(palette='YlGnBu', forcemin=0., forcemax=1., seuiltext=50., label=f'R² of the linear regression {kw["product"]} / rain gauges', transparency=np.fromiter(nb_stations.values(), dtype=int))
+#    fig = class_()
+#    fig.draw_massifs(np.fromiter(r2_by_massif.keys(), dtype=int), np.fromiter(r2_by_massif.values(), dtype=float), **attributes)
+#    fig.plot_center_massif(massif_numbers, np.fromiter(nb_stations.values(), dtype=int), **attributes)
+#    filename = f'R2_by_massif_{domain}'
+#    if suffix is not None:
+#        filename = f'{filename}_{suffix}'
+#    plt.tight_layout()
+#    fig.save(f'{filename}.svg', formatout='svg')
+#    fig.close()
+#    
+#    attributes = dict(palette='YlGnBu', forcemin=0., forcemax=np.max(np.fromiter(ratio.values(), dtype=float)), seuiltext=50., label=f'R² linear regression of the ratio {kw["product"]} / rain gauges function of elevation')
+#    fig = class_()
+#    fig.draw_massifs(np.fromiter(ratio.keys(), dtype=int), np.fromiter(ratio.values(), dtype=float), **attributes)
+#    fig.plot_center_massif(massif_numbers, np.fromiter(nb_stations.values(), dtype=int), **attributes)
+#    filename = f'Ratio_by_massif_{domain}'
+#    if suffix is not None:
+#        filename = f'{filename}_{suffix}'
+#    plt.tight_layout()
+#    fig.save(f'{filename}.svg', formatout='svg')
+#    fig.close()
 
     extreme_value = np.nanmax(np.abs(np.fromiter(bias.values(), dtype=float)))
     attributes = dict(palette='seismic', forcemin=-extreme_value, forcemax=extreme_value, seuiltext=50., label=f'Mean daily bias {kw["product"]} / rain gauges (mm)')
@@ -450,6 +455,7 @@ def fill_all_massifs(domain, lat, lon, df, suffix=None, **kw):
     filename = f'Bias_by_massif_{domain}'
     if suffix is not None:
         filename = f'{filename}_{suffix}'
+    plt.tight_layout()
     fig.save(f'{filename}.svg', formatout='svg')
     fig.close()
 
@@ -460,6 +466,7 @@ def fill_all_massifs(domain, lat, lon, df, suffix=None, **kw):
     filename = f'RMSE_by_massif_{domain}'
     if suffix is not None:
         filename = f'{filename}_{suffix}'
+    plt.tight_layout()
     fig.save(f'{filename}.svg', formatout='svg')
     fig.close()
 
@@ -497,7 +504,7 @@ if __name__ == "__main__":
     suffix = None
     if args.threshold is not None:
         df = df.loc[df['rr_nivometeo']>args.threshold] # If a threshold is given, filter data above
-        suffix = f'>{args.threshold}mm'
+        suffix = f'{args.threshold}mm'
         nb_obs_min = 20
     # Calcul des valeurs agrégées par station
     rr_nivometeo  = df.groupby(['num_poste']).rr_nivometeo.mean()
@@ -520,7 +527,7 @@ if __name__ == "__main__":
     if args.massif is not None:
         # Focus sur un unique massif (carte)
         workdf = df.loc[df['massif_number'] == args.massif]
-        plot_massif(workdf, args.massif, suffix=suffix)
+        plot_massif(workdf, args.massif, suffix=suffix, product=args.product)
         massif_scatterplot(workdf, args.datebegin, args.dateend, massif=args.massif, suffix=suffix, product=args.product)
     elif args.subdomain is not None:
         massifs   = subdomain_map[args.subdomain]
