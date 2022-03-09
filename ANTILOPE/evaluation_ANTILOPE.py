@@ -199,7 +199,7 @@ def massif_scatterplot(workdf, datebegin, dateend, massif=None, subdomain=None, 
 
     fig, ax = plt.subplots(figsize=(12,9))
     ax.plot(x, model, color='black', linewidth=2)
-    ax.text(minval+1, maxval*0.7, f'R²={r2:.4}', fontsize=18, color='black')
+    ax.text(minval+1, maxval*0.6, f'R²={r2:.4}', fontsize=18, color='black')
     mean_rr_nivometeo = dict()
     mean_rr_antilope = dict()
     for i,station in enumerate(stations):
@@ -397,7 +397,7 @@ def plot_massif(mydf, massif=None, subdomain=None, **kw):
         else:
             cmap = copy.copy(sns.color_palette('Reds', as_cmap=True))
             if suffix is not None: # A threshold has been applied on precipitation values
-                thresholds = [6, 7, 8, 9, 10, 11, 12, 13, 14, 15] 
+                thresholds = [0, 2, 4, 6, 8, 10, 12, 14, 16, 18] 
             else:
                 thresholds = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] 
             legend = f'{kw["product"]} {score} (mm/day)'
