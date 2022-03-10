@@ -3,7 +3,7 @@
 # Auteur: Matthieu Vernay
 # Date : 02/02/2022
 
-import os
+import os,sys
 import datetime
 from datetime import datetime, timedelta
 import pandas as pd
@@ -310,13 +310,14 @@ def elevation_scatterplot(workdf, datebegin, dateend, suffix=None, **kw):
 
     xpoints = ypoints = np.arange(0, maxval, 0.5) 
     ax1.plot(xpoints, ypoints, linestyle='--', color='grey', lw=1, scalex=False, scaley=False)
-    ax1.text(minval+1, maxval*0.8, f'{nbpoint} stations', fontsize=18, color='black')
+    ax1.text(minval+1, maxval*0.7, f'{nbpoint} stations', fontsize=18, color='black')
     ax1.set_xlim(left=minval, right=maxval)
     ax1.set_ylim(bottom=minval, top=maxval)
     layout(ax1)
     layout(ax2)
     ax1.set_ylabel(f'Mean daily {kw["product"]} precipitation estimate (mm/day)', fontsize=12)
     ax1.set_xlabel('Mean daily rain-gauges observed precipitation (mm/day)', fontsize=12)
+    plt.tight_layout()
     ax2.set_ylabel(f'{kw["product"]}/rain-gauges ratio', fontsize=12)
     ax2.set_xlabel('Rain-gauge elevation (m)', fontsize=12)
     plt.tight_layout()
@@ -439,21 +440,32 @@ def plot_massif(mydf, massif=None, subdomain=None, **kw):
         fig.save(f'{filename}.svg', formatout='svg')
         fig.close()
 
-def plot_obs(domain, lat, lon, alt):
-    # Plot stations on the map
-    class_ = getattr(cartopy, f'Map_{domain}')
-    fig = class_()
-    fig.init_massifs()
-    fig.addpoints(lon, lat, marker='+')
-    plt.tight_layout()
-    fig.save(f'obs_{domain}.svg', formatout='svg')
-    fig.close()
-    for massif in map_massifs[domain]:
-        fig = cartopy.Zoom_massif(massif)
+def plot_obs(lat, lon, alt, datebegin, dateend):
+    for domain in ['alpes', 'pyrenees']:
+        print(domain, len(alt))
+        # Plot stations on the map
+        class_ = getattr(cartopy, f'Map_{domain}')
+        if domain == 'pyrenees':
+            shrink = 0.7
+            mappos = [0.05, 0.05, 1, 0.98]
+        else:
+            shrink = 1
+            mappos = [0.06, 0.06, 0.98, 0.92]
+        fig = class_(mappos=mappos)
         fig.init_massifs()
-        fig.addpoints(lon, lat, alt)
-        fig.save(f'alti_obs_massif{massif}.svg', formatout='svg')
+        #myplot = fig.addpoints(lon, lat, marker='D', color=alt)
+        sc = fig.map.scatter(lon, lat, c=alt, marker="^", s=150)
+        plt.colorbar(sc, label='Elevation (m)', shrink=shrink)
+        plt.tight_layout()
+        fig.save(f'obs_{domain}_{datebegin}_{dateend}.svg', formatout='svg')
         fig.close()
+#        for massif in map_massifs[domain]:
+#            fig = cartopy.Zoom_massif(massif)
+#            fig.init_massifs()
+#            fig.addpoints(lon, lat, labels=alt)
+#            plt.tight_layout()
+#            fig.save(f'alti_obs_massif{massif}.svg', formatout='svg')
+#            fig.close()
 
 
 def plot_full_domain(domain, lat, lon, df, **kw):
@@ -572,7 +584,11 @@ if __name__ == "__main__":
     df = df.loc[~df['rr_nivometeo'].isna()].loc[~df[f'rr_{args.product}'].isna()] # Remove lines with missing value
     df = df.loc[df['massif_number']<99] # Remove Stations not associated to 1 massif
     df = df.loc[~df['name'].str.contains('EDFNIVO')] # Remove EDFNIVO stations
-    nb_obs_min = 100
+    nb_obs_min = 60
+    tmp = df.groupby(['num_poste']).date.count()
+    tmp = tmp.loc[tmp>nb_obs_min]
+    valid_stations = tmp.index.to_numpy()
+    df = df.loc[df['num_poste'].isin(valid_stations)] # Consider only points with at least 100 observations
     suffix = None
     if args.threshold is not None:
         df = df.loc[df['rr_nivometeo']>args.threshold] # If a threshold is given, filter data above
@@ -590,9 +606,11 @@ if __name__ == "__main__":
     lons          = df.groupby(['num_poste']).lon.mean()
     massif_number = df.groupby(['num_poste']).massif_number.mean() 
     # Regroupement dans une nouvelle dataframe (il est surement possible d'extraire directement cette DF depuis 'df' pour simplifier le code)
-    workdict = {'elevation':elevations, 'rr_nivometeo':rr_nivometeo, f'rr_{args.product}':rr_antilope, 'ndays':nb_values, 'massif_number':massif_number, 'lats':lats, 'lons':lons, 'num_poste':df['num_poste']}
+    num_poste = df.groupby(['num_poste']).num_poste.mean()
+    workdict = {'elevation':elevations, 'rr_nivometeo':rr_nivometeo, f'rr_{args.product}':rr_antilope, 'ndays':nb_values, 'massif_number':massif_number, 'lats':lats, 'lons':lons, 'num_poste':num_poste}
+    #workdict = {'elevation':elevations, 'rr_nivometeo':rr_nivometeo, f'rr_{args.product}':rr_antilope, 'ndays':nb_values, 'massif_number':massif_number, 'lats':lats, 'lons':lons}
     workdf   = pd.DataFrame(workdict)
-    workdf = workdf.loc[workdf['ndays']>nb_obs_min] # Consider only points with at least 100 observations
+    #workdf = workdf.loc[workdf['ndays']>nb_obs_min] # Consider only points with at least 100 observations
 
     # I- Visualisations des données
     ###############################
@@ -607,17 +625,16 @@ if __name__ == "__main__":
         plot_massif(workdf, massifs, subdomain=args.subdomain, suffix=suffix, product=args.product)
         massif_scatterplot(workdf, args.datebegin, args.dateend, subdomain=args.subdomain, suffix=suffix, product=args.product)
     else:
-        # 1. Raw sactter plot of all availbale stations
+        # 1. Plot rain-gauges informations
+        plot_obs(lats.to_numpy(), lons.to_numpy(), elevations.to_numpy(), args.datebegin.strftime('%Y%m%d'), args.dateend.strftime('%Y%m%d'))
+        # 2. Raw sactter plot of all availbale stations
         raw_scatterplot(workdf['rr_nivometeo'].to_numpy(), workdf[f'rr_{args.product}'].to_numpy(), workdf['elevation'].to_numpy(), args.datebegin, args.dateend, suffix=suffix, product=args.product)
-
-        # 2. Scatter plot with stations sorted by elevation range
+        # 3. Scatter plot with stations sorted by elevation range
         elevation_scatterplot(workdf, args.datebegin, args.dateend, suffix=suffix, product=args.product)
 
-        # 3. Maps
+        # 4. Maps
         #for domain in ['alpes', 'pyrenees', 'corse']:
         for domain in ['alpes', 'pyrenees']:
-            print(domain)
-            #plot_obs(domain, lats.to_numpy(), lons.to_numpy(), elevations.to_numpy())
             plot_full_domain(domain, lats.to_numpy(), lons.to_numpy(), workdf, suffix=suffix, product=args.product)
             plot_massif(df.loc[df['massif_number'].isin(map_massifs[domain])], suffix=suffix, product=args.product, domain=domain)
 
