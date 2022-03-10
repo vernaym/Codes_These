@@ -392,7 +392,7 @@ def plot_massif(mydf, massif=None, subdomain=None, **kw):
         cmap = copy.copy(ListedColormap(sns.diverging_palette(240, 12, n=11).as_hex()))
         if score == 'ratio':
             if suffix is not None: # A threshold has been applied on precipitation values
-                thresholds = [0.05, 0.1, 0.25, 0.5, 0.95, 1.05, 2, 4, 10, 20]
+                thresholds = [0.05, 0.1, 0.5, 0.80, 0.95, 1.05, 1.2, 2, 10, 20]
             else:
                 thresholds = [0.2, 0.5, 0.6, 0.8, 0.95, 1.05, 1.2, 1.4, 2, 5]
             legend = f'{kw["product"]}/rain-gauges {score}'
