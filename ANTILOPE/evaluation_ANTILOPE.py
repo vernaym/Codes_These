@@ -171,13 +171,18 @@ def RANSAC(x, y):
     score = reg.score(x, y)
     return score, model
 
-def massif_scatterplot(workdf, datebegin, dateend, massif=None, subdomain=None, suffix=None, **kw):
+def daily_scatterplot(workdf, datebegin, dateend, massif=None, subdomain=None, suffix=None, **kw):
+    infostation = True
     if massif is not None:
-        filename1 = f'scatterplot_massif{massif}'
-        filename2 = f'scatterplot_alti_massif{massif}'
+        filename1 = f'daily_scatterplot_massif{massif}'
+        filename2 = f'daily_scatterplot_alti_massif{massif}'
     elif subdomain is not None:
-        filename1 = f'scatterplot_subdomain_{subdomain}'
-        filename2 = f'scatterplot_alti_subdomain_{subdomain}'
+        filename1 = f'daily_scatterplot_subdomain_{subdomain}'
+        filename2 = f'daily_scatterplot_alti_subdomain_{subdomain}'
+    else:
+        filename1 = f'daily_scatterplot'
+        filename2 = f'daily_scatterplot_alti'
+        infostation = False
     if suffix is not None:
         filename1 = f'{filename1}_{suffix}'
         filename2 = f'{filename2}_{suffix}'
@@ -188,8 +193,9 @@ def massif_scatterplot(workdf, datebegin, dateend, massif=None, subdomain=None, 
 #    elif len(stations) <= 20:
 #        cm = plt.cm.get_cmap('tab20')
 
-    elevations = np.unique(workdf['alti'])
-    elevations = workdf.groupby(['num_poste']).alti.first().to_numpy()
+    #elevations = np.unique(workdf['elevation'])
+    workdf.reset_index(drop = True, inplace = True)
+    elevations = workdf.groupby(['num_poste']).elevation.first().to_numpy()
     names = workdf.groupby(['num_poste']).name.first().to_numpy()
     x = workdf['rr_nivometeo'].to_numpy()
     y = workdf[f'rr_{kw["product"]}'].to_numpy()
@@ -199,7 +205,7 @@ def massif_scatterplot(workdf, datebegin, dateend, massif=None, subdomain=None, 
 
     fig, ax = plt.subplots(figsize=(12,9))
     ax.plot(x, model, color='black', linewidth=2)
-    ax.text(minval+1, maxval*0.6, f'R²={r2:.4}', fontsize=18, color='black')
+    ax.text(maxval*0.75, maxval*0.5, f'R²={r2:.4}', fontsize=18, color='black')
     mean_rr_nivometeo = dict()
     mean_rr_antilope = dict()
     for i,station in enumerate(stations):
@@ -216,7 +222,8 @@ def massif_scatterplot(workdf, datebegin, dateend, massif=None, subdomain=None, 
         mean_rr_nivometeo[station] = x.mean()
         mean_rr_antilope[station] = y.mean()
 
-    ax.legend(fontsize=14)
+    if infostation:
+        ax.legend(fontsize=14) # Add legend with station informations
     ax.grid(visible=True, linestyle=':', linewidth=0.5)
     xpoints = ypoints = np.arange(minval, maxval, 0.1)
     ax.plot(xpoints, ypoints, linestyle='--', color='grey', lw=1, scalex=False, scaley=False)
@@ -224,7 +231,7 @@ def massif_scatterplot(workdf, datebegin, dateend, massif=None, subdomain=None, 
     ax.set_ylim(bottom=minval, top=maxval)
     ax.set_ylabel(f'Daily {kw["product"]} precipitation estimate (mm/day)', fontsize=12)
     ax.set_xlabel('Daily rain-gauges observed precipitation (mm/day)', fontsize=12)
-    #plt.tight_layout()
+    plt.tight_layout()
     #fig.savefig(f'scatterplot_massif_{massif}.svg', bbox_inches='tight', format='svg')
     fig.savefig(f'{filename1}.svg', format='svg')
 
@@ -575,7 +582,7 @@ if __name__ == "__main__":
     # Renomage de certaines colonnes (pour le merge des DF et pour faciliter la manipulation)
     nivometeo['date'] = nivometeo['dat'].dt.date # Necessaire (changement de type)
     nivometeo = nivometeo.rename(columns={'Q.num_poste':'num_poste', 'poste_nivo.lat_dg':'lat', 'poste_nivo.lon_dg':'lon', 
-        'poste_nivo.nom_usuel':'name', 'poste_nivo.massif_nivo':'massif_number', 'poste_nivo.alti':'alti', 'rr':'rr_nivometeo'}) # facultatif
+        'poste_nivo.nom_usuel':'name', 'poste_nivo.massif_nivo':'massif_number', 'poste_nivo.alti':'elevation', 'rr':'rr_nivometeo'}) # facultatif
     # merge des DF
     df = pd.merge(antilope, nivometeo, on=["date", "num_poste"])
     # Selection de la période 
@@ -601,15 +608,17 @@ if __name__ == "__main__":
     else:
         rr_antilope   = df.groupby(['num_poste']).rr_panthere.mean()
     nb_values     = df.groupby(['num_poste']).date.count()
-    elevations    = df.groupby(['num_poste']).alti.mean()
+    elevations    = df.groupby(['num_poste']).elevation.mean()
     lats          = df.groupby(['num_poste']).lat.mean()
     lons          = df.groupby(['num_poste']).lon.mean()
-    massif_number = df.groupby(['num_poste']).massif_number.mean() 
+    massif_number = df.groupby(['num_poste']).massif_number.mean()
+    names         = df.groupby(['num_poste']).name.first()
     # Regroupement dans une nouvelle dataframe (il est surement possible d'extraire directement cette DF depuis 'df' pour simplifier le code)
     num_poste = df.groupby(['num_poste']).num_poste.mean()
-    workdict = {'elevation':elevations, 'rr_nivometeo':rr_nivometeo, f'rr_{args.product}':rr_antilope, 'ndays':nb_values, 'massif_number':massif_number, 'lats':lats, 'lons':lons, 'num_poste':num_poste}
+    workdict = {'elevation':elevations, 'rr_nivometeo':rr_nivometeo, f'rr_{args.product}':rr_antilope, 'ndays':nb_values, 'massif_number':massif_number, 
+            'lats':lats, 'lons':lons, 'num_poste':num_poste}
     #workdict = {'elevation':elevations, 'rr_nivometeo':rr_nivometeo, f'rr_{args.product}':rr_antilope, 'ndays':nb_values, 'massif_number':massif_number, 'lats':lats, 'lons':lons}
-    workdf   = pd.DataFrame(workdict)
+    df_stat   = pd.DataFrame(workdict)
     #workdf = workdf.loc[workdf['ndays']>nb_obs_min] # Consider only points with at least 100 observations
 
     # I- Visualisations des données
@@ -618,24 +627,26 @@ if __name__ == "__main__":
         # Focus sur un unique massif (carte)
         workdf = df.loc[df['massif_number'] == args.massif]
         plot_massif(workdf, args.massif, suffix=suffix, product=args.product)
-        massif_scatterplot(workdf, args.datebegin, args.dateend, massif=args.massif, suffix=suffix, product=args.product)
+        daily_scatterplot(workdf, args.datebegin, args.dateend, massif=args.massif, suffix=suffix, product=args.product)
     elif args.subdomain is not None:
         massifs   = subdomain_map[args.subdomain]
         workdf = df.loc[df['massif_number'].isin(massifs)]
         plot_massif(workdf, massifs, subdomain=args.subdomain, suffix=suffix, product=args.product)
-        massif_scatterplot(workdf, args.datebegin, args.dateend, subdomain=args.subdomain, suffix=suffix, product=args.product)
+        daily_scatterplot(workdf, args.datebegin, args.dateend, subdomain=args.subdomain, suffix=suffix, product=args.product)
     else:
         # 1. Plot rain-gauges informations
         plot_obs(lats.to_numpy(), lons.to_numpy(), elevations.to_numpy(), args.datebegin.strftime('%Y%m%d'), args.dateend.strftime('%Y%m%d'))
         # 2. Raw sactter plot of all availbale stations
-        raw_scatterplot(workdf['rr_nivometeo'].to_numpy(), workdf[f'rr_{args.product}'].to_numpy(), workdf['elevation'].to_numpy(), args.datebegin, args.dateend, suffix=suffix, product=args.product)
+        raw_scatterplot(df_stat['rr_nivometeo'].to_numpy(), df_stat[f'rr_{args.product}'].to_numpy(), df_stat['elevation'].to_numpy(), args.datebegin, args.dateend, suffix=suffix, product=args.product)
         # 3. Scatter plot with stations sorted by elevation range
-        elevation_scatterplot(workdf, args.datebegin, args.dateend, suffix=suffix, product=args.product)
+        elevation_scatterplot(df_stat, args.datebegin, args.dateend, suffix=suffix, product=args.product)
+        # 4. Daily scatter plot 
+        daily_scatterplot(df, args.datebegin, args.dateend, suffix=suffix, product=args.product)
 
-        # 4. Maps
+        # 5. Maps
         #for domain in ['alpes', 'pyrenees', 'corse']:
         for domain in ['alpes', 'pyrenees']:
-            plot_full_domain(domain, lats.to_numpy(), lons.to_numpy(), workdf, suffix=suffix, product=args.product)
+            plot_full_domain(domain, lats.to_numpy(), lons.to_numpy(), df_stat, suffix=suffix, product=args.product)
             plot_massif(df.loc[df['massif_number'].isin(map_massifs[domain])], suffix=suffix, product=args.product, domain=domain)
 
 
