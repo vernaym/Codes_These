@@ -59,7 +59,7 @@ def parse_command_line():
     parser.add_argument('-d', '--domain', nargs='+', help='Domain of the file', choices=coords.keys(), default=['alp', 'pyr', 'cor'])
     parser.add_argument('-w', '--workdir', help='Runing directory (default for guppy)', default='/home/mrns/vernaym/workdir/extraction_antilope')
 #    parser.add_argument('-o', '--output', help='Output name of generated files')
-    parser.add_argument('-m', '--model', help='Model from which the data must be extracted', choices=['ANTILOPEQ', 'ANTILOPEQJP1'], default='ANTILOPEQ')
+    parser.add_argument('-m', '--model', help='Model from which the data must be extracted', choices=['ANTILOPEQ', 'ANTILOPEJP1Q'], default='ANTILOPEJP1Q')
     parser.add_argument('-g', '--grid', help='BDAP grid name from which to extract data', default='FRANXL1S100')
     parser.add_argument('-p', '--parameter', help='Parameter to extract', default='PRECIP')
     parser.add_argument('-l', '--level', help='Level to extract', default='SOL')
@@ -73,7 +73,7 @@ def parse_command_line():
     if args.dateend:
         args.dateend = get_date(args.dateend)
     else:
-        args.dateend = args.datebegin + timedelta(hours=24)
+        args.dateend = args.datebegin
 
     return args
 
@@ -159,7 +159,8 @@ class ExtractGrib(object):
                 
     def extract(self, parameter, level, cmd='dap3_dev'):
         self.requete(parameter, level)
-        os.environ["DMT_DATE_PIVOT"] = self.date.strftime('%Y%m%d%H%M%S')
+        startdate = self.date - timedelta(days=1) # File named "*ymdh" must contains 24h cumul since ym(d-1)h
+        os.environ["DMT_DATE_PIVOT"] = startdate.strftime('%Y%m%d%H%M%S')
         print(os.environ["DMT_DATE_PIVOT"])
         os.system("{0:s} {1:d} {2:s}".format(cmd, ech, self.rqst))
         
