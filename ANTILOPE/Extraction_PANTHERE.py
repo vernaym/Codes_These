@@ -86,7 +86,7 @@ if __name__ == "__main__":
     for date in extract_period:
         print(date)
         if date.month in [1,2,3,4,11,12]: # Consider only month with nivometeo observations
-            ficname = '{0:s}_010000_DATA.text'.format(date.strftime('%Y%m%d%H%M')) # 201904030600_010000_DATA.text
+            ficname = '{0:s}_010000_DATA.text'.format(date.strftime('%Y%m%d%H%M')) # ex: 201904030600_010000_DATA.text
             fic = os.path.join(workdir, ficname)
             if os.path.exists(fic):
                 radar = pd.read_csv(fic, sep=' ', comment='#', names=['lat', 'lon', 'rr'])
