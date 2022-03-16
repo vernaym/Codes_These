@@ -212,7 +212,7 @@ if __name__ == "__main__":
                         nearest = geometry.nearest_points(lon, lat, {'n':'1'}) # returns indices of the point in "data"
                         antilope = antilope.append({
                             'date': date,
-                            'num_poste':  num_poste,
+                            'num_poste':  int(num_poste),
                             'rr_antilope': rr_field.data[nearest[1]][nearest[0]]
                         }, ignore_index=True)
                 else:
