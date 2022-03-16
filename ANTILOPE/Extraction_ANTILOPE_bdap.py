@@ -45,6 +45,7 @@ coords = dict(
     alp = ['46875', '43125', '4500', '8500'],
     pyr = ['43500', '42000', '-2000', '3500'],
     cor = ['43000', '41000', '8000', '10500'],
+    ange = ['45240', '44990', '6010', '6490']
 )
 
 # Pas en lat/lon de la grille cible : 0.375 / 0.5
@@ -59,7 +60,8 @@ def parse_command_line():
     parser.add_argument('-d', '--domain', nargs='+', help='Domain of the file', choices=coords.keys(), default=['alp', 'pyr', 'cor'])
     parser.add_argument('-w', '--workdir', help='Runing directory (default for guppy)', default='/home/mrns/vernaym/workdir/extraction_antilope')
 #    parser.add_argument('-o', '--output', help='Output name of generated files')
-    parser.add_argument('-m', '--model', help='Model from which the data must be extracted', choices=['ANTILOPEQ', 'ANTILOPEJP1Q'], default='ANTILOPEJP1Q')
+    parser.add_argument('-m', '--model', help='Model from which the data must be extracted',
+            choices=['ANTILOPEQ', 'ANTILOPEJP1Q', 'ANTILOPEH', 'ANTILOPEJP1H'], default='ANTILOPEJP1Q')
     parser.add_argument('-g', '--grid', help='BDAP grid name from which to extract data', default='FRANXL1S100')
     parser.add_argument('-p', '--parameter', help='Parameter to extract', default='PRECIP')
     parser.add_argument('-l', '--level', help='Level to extract', default='SOL')
@@ -177,8 +179,11 @@ class ExtractGrib(object):
         
 if __name__ == "__main__":
     args = parse_command_line()
-
-    extract_period = date_range(args.datebegin, args.dateend)
+    if args.model  in ['ANTILOPEQ', 'ANTILOPEJP1Q']:
+        dt = 24
+    elif args.model in ['ANTILOPEH', 'ANTILOPEJP1H']:
+        dt = 1
+    extract_period = date_range(args.datebegin, args.dateend, dt=dt)
 
     antilope = pd.DataFrame(columns=['date', 'num_poste', 'rr_antilope'])
     for domain in args.domain:
@@ -189,11 +194,17 @@ if __name__ == "__main__":
         workdir = os.path.join(args.workdir, domain)
         goto(workdir)
         for date in extract_period:
+            print(date.strftime('%Y%m%d%H'))
             if date.month in [1,2,3,4,11,12]: # Consider only month with nivometeo observations
-                grib = ExtractGrib(args.model, args.grid, domain, date)
-                result = grib.run(args.parameter, args.level)
+                if not os.path.exists('{0:s}_{1:s}.grib'.format(args.model, date.strftime('%Y%m%d%H'))):
+                    grib = ExtractGrib(args.model, args.grid, domain, date)
+                    result = grib.run(args.parameter, args.level)
+                    gribname = grib.gribname
+                else:
+                    result = True
+                    gribname = '{0:s}_{1:s}.grib'.format(args.model, date.strftime('%Y%m%d%H'))
                 if result:
-                    data = epygram.formats.resource(grib.gribname, openmode='r', fmt='GRIB')
+                    data = epygram.formats.resource(gribname, openmode='r', fmt='GRIB')
                     rr_field = data.readfield({'indicatorOfTypeOfLevel':1, 'paramId': 0, 'indicatorOfParameter': 61}, getdata= True)
                     metadata = data.get_message_at_position(0).asfield(getdata=False)
                     geometry = metadata.geometry
@@ -209,7 +220,7 @@ if __name__ == "__main__":
 
     antilope.set_index('date')
     goto(args.workdir)
-    outname = 'ANTILOPE_{0:s}_{1:s}.csv'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))
+    outname = '{0:s}_{1:s}_{2:s}.csv'.format(args.model, args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))
     antilope.to_csv(outname, index=False, sep=';')
 
 
