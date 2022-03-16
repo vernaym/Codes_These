@@ -67,7 +67,7 @@ def parse_command_line():
     parser.add_argument('-m', '--massif', help='PLot for a specific massif', default=None, type=int)
     parser.add_argument('-d', '--subdomain', default=None, help='PLot for a specific subdomain, values=[NWA, NEA, CA, SA, WP, CP, EP]')
     parser.add_argument('-t', '--threshold', default=None, help='Threshold of precipitation (mm) to apply in the data to consider', type=int)
-    parser.add_argument('-p', '--product', default='antilope', help='Product to deal with', choices=['antilope', 'panthere'])
+    parser.add_argument('-p', '--product', default='antilopejp1', help='Product to deal with', choices=['antilope', 'antilopejp1', 'panthere'])
 
 
     args = parser.parse_args()
@@ -566,7 +566,9 @@ if __name__ == "__main__":
 
     extract_period = date_range(args.datebegin, args.dateend)
     if args.product == 'antilope':
-        RADAR_data = 'ANTILOPE_{0:s}_{1:s}.csv'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))
+        RADAR_data = 'ANTILOPEQ_{0:s}_{1:s}.csv'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))
+    elif args.product == 'antilopejp1':
+        RADAR_data = 'ANTILOPEJP1Q_{0:s}_{1:s}.csv'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))
     else:
         RADAR_data = 'PANTHERE_{0:s}_{1:s}.csv'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))
 
@@ -574,13 +576,17 @@ if __name__ == "__main__":
 
     # I- Lecture et mise en forme des données
     #########################################
+    print(RADAR_data)
+    print(args.product)
     antilope = pd.read_csv(RADAR_data, sep=';', parse_dates=['date'], dtype={f'rr_{args.product}': float, 'num_poste': int}, na_values=['--'])
     nivometeo = pd.read_csv(nivometeo_data, sep=';', parse_dates=['dat'], 
             dtype={'Q.num_poste':int, 'poste_nivo.nom_usuel':str, 'poste_nivo.alti':int, 'poste_nivo.lat_dg':float, 'poste_nivo.lon_dg':float, 'rr':float, 
                 'poste_nivo.massif_nivo':int, 'hist_reseau_poste.reseau_poste':int})
+
     antilope['date'] = antilope['date'].dt.date
     # Renomage de certaines colonnes (pour le merge des DF et pour faciliter la manipulation)
-    nivometeo['date'] = nivometeo['dat'].dt.date # Necessaire (changement de type)
+    nivometeo['date'] = nivometeo['dat'].dt.date + pd.Timedelta("1d") # Changement de type + matching dates with radar data (BDClim extraction 
+        # for date ymd is the observation from ymd6h to ym(d+1)6h )
     nivometeo = nivometeo.rename(columns={'Q.num_poste':'num_poste', 'poste_nivo.lat_dg':'lat', 'poste_nivo.lon_dg':'lon', 
         'poste_nivo.nom_usuel':'name', 'poste_nivo.massif_nivo':'massif_number', 'poste_nivo.alti':'elevation', 'rr':'rr_nivometeo'}) # facultatif
     # merge des DF
@@ -603,10 +609,13 @@ if __name__ == "__main__":
         nb_obs_min = 20
     # Calcul des valeurs agrégées par station
     rr_nivometeo  = df.groupby(['num_poste']).rr_nivometeo.mean()
-    if args.product == 'antilope':
-        rr_antilope   = df.groupby(['num_poste']).rr_antilope.mean()
-    else:
-        rr_antilope   = df.groupby(['num_poste']).rr_panthere.mean()
+    rr_antilope   = df.groupby(['num_poste'])[f'rr_{args.product}'].mean()
+#    if args.product in == 'antilope':
+#        rr_antilope   = df.groupby(['num_poste']).rr_antilope.mean()
+#    elif args.product in == 'antilopejp1':
+#        rr_antilope   = df.groupby(['num_poste']).rr_antilopejp1.mean()
+#    else:
+#        rr_antilope   = df.groupby(['num_poste']).rr_panthere.mean()
     nb_values     = df.groupby(['num_poste']).date.count()
     elevations    = df.groupby(['num_poste']).elevation.mean()
     lats          = df.groupby(['num_poste']).lat.mean()
