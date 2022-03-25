@@ -22,6 +22,8 @@ from sklearn.linear_model import LinearRegression, RANSACRegressor
 from sklearn.datasets import make_regression
 from sklearn.metrics import mean_squared_error, r2_score
 
+from scipy.stats import gaussian_kde
+
 from snowtools.plots.maps import cartopy
 
 
@@ -204,10 +206,38 @@ def daily_scatterplot(workdf, datebegin, dateend, massif=None, subdomain=None, s
     model, r2, det = linear_regression(x.reshape((-1, 1)), y)
 
     fig, ax = plt.subplots(figsize=(12,9))
+
     ax.plot(x, model, color='black', linewidth=2)
     ax.text(maxval*0.75, maxval*0.5, f'R²={r2:.4}', fontsize=18, color='black')
     mean_rr_nivometeo = dict()
     mean_rr_antilope = dict()
+    if massif is None and subdomain is None:
+        # The goal of the following is to add density on the scatter plot
+        # 1st method using histograms (axis are missing when the number of poitn is too important ??)
+        #--------------------------------------------------------------------------------------------
+#        #histogram definition
+#        bins = [1000, 1000] # number of bins
+#        # histogram the data
+#        hh, locx, locy = np.histogram2d(x, y, bins=bins)
+#        # Sort the points by density, so that the densest points are plotted last
+#        z = np.array([hh[np.argmax(a<=locx[1:]),np.argmax(b<=locy[1:])] for a,b in zip(x,y)])
+#        idx = z.argsort()
+#        x2, y2, z2 = x[idx], y[idx], z[idx]
+#        ax.scatter(x2, y2, c=z2, cmap='jet', marker='D', s=10)
+
+        # 2nd method : computing the density with gaussian_kde (very long, doesn't work for huge number of points)
+        #---------------------------------------------------------------------------------------------------------
+        t0 = datetime.now()
+        print('Number of points (x/y) = {0:d}, {1:d}'.format(len(x), len(y)))
+        xy = np.vstack(x, y)
+        z = gaussian_kde(xy)(xy)
+        # Sort the points by density, so that the densest points are plotted last
+        idx = z.argsort()
+        x, y, z = x[idx], y[idx], z[idx]
+        t1 = datetime.now()
+        print('time to plot density : ', (t1-t0))
+        ax.scatter(x, y, c=z, s=10, marker='D')
+
     for i,station in enumerate(stations):
         tmp = workdf.loc[workdf['num_poste']==station]
         ndays = len(tmp)
@@ -218,7 +248,8 @@ def daily_scatterplot(workdf, datebegin, dateend, massif=None, subdomain=None, s
             color = cm.colors[i]
         else:
             color = 'blue'
-        ax.scatter(x, y, marker='D', s=10, color=color, label=f'{names[i]}, {elevations[i]} m, {ndays} obs, {det}')
+        if massif is not None or subdomain is not None:
+            ax.scatter(x, y, marker='D', s=10, color=color, label=f'{names[i]}, {elevations[i]} m, {ndays} obs, {det}')
         mean_rr_nivometeo[station] = x.mean()
         mean_rr_antilope[station] = y.mean()
 
@@ -389,7 +420,9 @@ def plot_massif(mydf, massif=None, subdomain=None, **kw):
         #fig.highlight_massif(massif_number)
 
         #cmap = ListedColormap(sns.diverging_palette(240, 10, n=9).as_hex())
-        cmap = copy.copy(ListedColormap(sns.diverging_palette(240, 12, n=11).as_hex()))
+        cmap = copy.copy(ListedColormap(sns.diverging_palette(240, 10, n=9).as_hex()))
+        #cmap = copy.copy(ListedColormap(sns.color_palette('viridis', 12).as_hex()))
+        #cmap = copy.copy(ListedColormap(sns.diverging_palette(240, 12, n=11, center='dark').as_hex()))
         if score == 'ratio':
             if suffix is not None: # A threshold has been applied on precipitation values
                 thresholds = [0.05, 0.1, 0.5, 0.80, 0.95, 1.05, 1.2, 2, 10, 20]
@@ -435,7 +468,7 @@ def plot_massif(mydf, massif=None, subdomain=None, **kw):
 #                    #fig.map.text(tmp['lon'].mean(), tmp['lat'].mean(), tmp['ratio'].mean().round(3), horizontalalignment='right', verticalalignment='top', color='red')
 #        sc = fig.map.scatter(lons, lats, c=mean_score, cmap=cmap, norm=norm, marker="^", s=150)
 
-        sc = fig.map.scatter(tmp['lons'], tmp['lats'], c=tmp[f'{score}'], cmap=cmap, norm=norm, marker="^", s=150)
+        sc = fig.map.scatter(tmp['lons'], tmp['lats'], c=tmp[f'{score}'], cmap=cmap, norm=norm, marker="^", s=150, edgecolors='black')
         if massif is not None:
             for i, val in enumerate(tmp[f'{score}']):
                 text = '{0:.2f} ({1:d})'.format(val, tmp['nb_days'].to_numpy()[i])
