@@ -17,7 +17,21 @@ from matplotlib.pyplot import figure
 from snowtools.plots.maps import cartopy
 
 from pykrige.ok import OrdinaryKriging
+from pykrige.uk import UniversalKriging
 
+# PARAMETRES A MODIFIER :
+#=============================
+variogram  = 'exponential'
+#drift_terms = ['point_log']
+#=============================
+
+# Liste des coordonnées attendues par la commande dap3: lat_max, lat_min, lon_max, lon_min
+coords = dict(
+    alp = ['46875', '43125', '4500', '8500'],
+    pyr = ['43500', '42000', '-2000', '3500'],
+    cor = ['43000', '41000', '8000', '10500'],
+    ange = ['45240', '44990', '6010', '6490']
+)
 
 gridx = np.arange(5.2, 7.9, 0.01)
 gridy = np.arange(43.9, 46.5, 0.01)
@@ -27,6 +41,8 @@ def parse_command_line():
     parser = argparse.ArgumentParser(description=description)
     parser.add_argument('-b', '--datebegin', help='Begining date of extraction, format YYYYMMDDHH or YYMMDDHH', required=True)
     parser.add_argument('-e', '--dateend', help = 'Final date of extraction (default=datebegin)')
+    parser.add_argument('-p', '--plot', help = 'Plot krieged field for each date', default=False, action='store_true')
+
     args = parser.parse_args()
 
     args.datebegin = get_date(args.datebegin)
@@ -69,42 +85,79 @@ def goto(path):
         os.makedirs(path)
     os.chdir(path)
 
+def read_nivometeo_coords(domain):
+    metadata = pd.read_csv('postes_nivometeo.csv', sep=';')
+    latmax, latmin, lonmin, lonmax = np.array(coords[domain]).astype(float)/1000.
+    subdata = metadata[(metadata['poste_nivo.lat_dg']>=latmin) & (metadata['poste_nivo.lat_dg']<=latmax) & (metadata['poste_nivo.lon_dg']>=lonmin) & (metadata['poste_nivo.lon_dg']<=lonmax)]
+    return dict(zip(np.array(subdata['poste_nivo.num_poste']), zip(np.array(subdata['poste_nivo.lat_dg']), np.array(subdata['poste_nivo.lon_dg']))))
 
 if __name__ == "__main__":
     args = parse_command_line()
 
+    nivometeo = read_nivometeo_coords('alp')
 
     extract_period = date_range(args.datebegin, args.dateend)
-    fic = "obs_quotidiennes_RR_reseau_poste_full.data"
+    fic = "obs_quotidiennes_RR.data"
     pluvios = pd.read_csv(fic, sep=';', parse_dates=['dat'], dtype={'num_poste':int, 'poste':str, 'lat':float, 'lon':float, 'alti':int, 'rr':float, 'reseau_poste':int}, na_values=['--'])
+    pluvios = pluvios[~pluvios['num_poste'].isin(nivometeo.keys())] # sécurité pour assurer que le krigeage n'utilise pas d'obs d'évaluation 
     pluvios = pluvios.loc[~pluvios['rr'].isna()]
+    outkrig = pd.DataFrame(columns=['date', 'num_poste', 'rr_antilope'])
     for rundate in extract_period:
         print(rundate)
         startdate = rundate - timedelta(hours=24)
         # Extract hourly precipitation of the last 23-hours
-        tmp = pluvios.loc[pluvios['dat']<=rundate].loc[pluvios['dat']>startdate]
+        tmp  = pluvios.loc[pluvios['dat']<=rundate].loc[pluvios['dat']>startdate]
         nval = tmp.groupby(['num_poste']).dat.count()
-        y = tmp.groupby(['num_poste']).lat.mean()[nval==24]
-        x = tmp.groupby(['num_poste']).lon.mean()[nval==24]
+        y    = tmp.groupby(['num_poste']).lat.mean()[nval==24]
+        x    = tmp.groupby(['num_poste']).lon.mean()[nval==24]
         rr   = tmp.groupby(['num_poste']).rr.sum()[nval==24]
+        alti = tmp.groupby(['num_poste']).alti.mean()[nval==24]
 
-        OK = OrdinaryKriging(x.values, y.values, rr.values, variogram_model='gaussian')
-        z, ss = OK.execute('grid', gridx, gridy)
+        if np.max(rr) > 0:
+            #kriging = OrdinaryKriging(x.values, y.values, rr.values, variogram_model='linear')
+            drift = [x, y, alti]
+            #kriging = UniversalKriging(x.values, y.values, rr.values, variogram_model=variogram, drift_terms=drift_terms, point_drift=drift)
+            kriging = UniversalKriging(x.values, y.values, rr.values, variogram_model=variogram)
+            rr24, ss = kriging.execute('grid', gridx, gridy)
+        else:
+            print('No precipitation over the domain')
+            rr24 = np.zeros(shape=(len(gridy), len(gridx)))
 
-#        plt.imshow(z, interpolation='none', cmap='jet')
-#        plt.show()
-#        import pdb
-#        pdb.set_trace()
 
-        fig = cartopy.Map_alpes()
-        lon, lat = np.meshgrid(gridx, gridy)
-        cf = plt.contourf(lon, lat, z, levels=100, cmap='YlGnBu')
-        plt.colorbar(cf, label='24h precipitation (mm)')
-        fig.init_massifs()
-        fig.addpoints(x, y, labels=np.around(rr,1))
-        plt.tight_layout()
-        fig.save('map_{0:s}.svg'.format(rundate.strftime('%Y%m%d%H')), formatout='svg')
-        fig.close()
+#                          I-   Plot field after kriging
+#======================================================================================
+        if args.plot:
+    #        plt.imshow(z, interpolation='none', cmap='jet')
+    #        plt.show()
+    #        import pdb
+    #        pdb.set_trace()
+            fig = cartopy.Map_alpes()
+            lon, lat = np.meshgrid(gridx, gridy)
+            cf = plt.contourf(lon, lat, rr24, levels=100, cmap='YlGnBu')
+            plt.colorbar(cf, label='24h precipitation (mm)')
+            fig.init_massifs()
+            fig.addpoints(x, y, labels=np.around(rr,1))
+            #fig.set_figtitle('Universal Kriging for date {0:s} \n Variogram model = {1:s}, drift-terms = {2:s}'.format(rundate.strftime('%Y%m%d%H'), variogram, ','.join(drift_terms)))
+            fig.set_figtitle('Universal Kriging for date {0:s}. \n Variogram model : {1:s}'.format(rundate.strftime('%Y%m%d%H'), variogram))
+            plt.tight_layout()
+            fig.save('map_{0:s}.svg'.format(rundate.strftime('%Y%m%d%H')), formatout='svg')
+            fig.close()
+#======================================================================================
 
+        
+#                   II-  Get kriged values on the nivometeo stations 
+#======================================================================================
+        for num_poste, (lat, lon) in nivometeo.items():
+            idx = np.argmin(np.abs(gridx-lon))
+            idy = np.argmin(np.abs(gridy-lat))
+            outkrig = outkrig.append({
+                'date': rundate,
+                'num_poste':  int(num_poste),
+                'rr_kriging': rr24[idy][idx]
+            }, ignore_index=True)
+
+    outkrig.set_index('date')
+    outname = 'Kriging_{0:s}_{1:s}_{2:s}.csv'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'), variogram)
+    outkrig.to_csv(outname, index=False, sep=';')
 
 
