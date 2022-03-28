@@ -6,7 +6,7 @@
 import os,sys
 import datetime
 from datetime import datetime, timedelta
-import pandas as pd
+import pandas as pd # Version 0.25.3
 import numpy as np
 import copy
 
@@ -69,7 +69,7 @@ def parse_command_line():
     parser.add_argument('-m', '--massif', help='PLot for a specific massif', default=None, type=int)
     parser.add_argument('-d', '--subdomain', default=None, help='PLot for a specific subdomain, values=[NWA, NEA, CA, SA, WP, CP, EP]')
     parser.add_argument('-t', '--threshold', default=None, help='Threshold of precipitation (mm) to apply in the data to consider', type=int)
-    parser.add_argument('-p', '--product', default='antilopejp1', help='Product to deal with', choices=['antilope', 'antilopejp1', 'panthere'])
+    parser.add_argument('-p', '--product', default='antilopejp1', help='Product to deal with', choices=['antilope', 'antilopejp1', 'panthere', 'kriging'])
 
 
     args = parser.parse_args()
@@ -212,10 +212,11 @@ def daily_scatterplot(workdf, datebegin, dateend, massif=None, subdomain=None, s
     mean_rr_nivometeo = dict()
     mean_rr_antilope = dict()
     if massif is None and subdomain is None:
+
         # The goal of the following is to add density on the scatter plot
         # 1st method using histograms (axis are missing when the number of poitn is too important ??)
         #--------------------------------------------------------------------------------------------
-#        #histogram definition
+        #histogram definition
 #        bins = [1000, 1000] # number of bins
 #        # histogram the data
 #        hh, locx, locy = np.histogram2d(x, y, bins=bins)
@@ -229,7 +230,7 @@ def daily_scatterplot(workdf, datebegin, dateend, massif=None, subdomain=None, s
         #---------------------------------------------------------------------------------------------------------
         t0 = datetime.now()
         print('Number of points (x/y) = {0:d}, {1:d}'.format(len(x), len(y)))
-        xy = np.vstack(x, y)
+        xy = np.vstack((x, y))
         z = gaussian_kde(xy)(xy)
         # Sort the points by density, so that the densest points are plotted last
         idx = z.argsort()
@@ -237,6 +238,8 @@ def daily_scatterplot(workdf, datebegin, dateend, massif=None, subdomain=None, s
         t1 = datetime.now()
         print('time to plot density : ', (t1-t0))
         ax.scatter(x, y, c=z, s=10, marker='D')
+
+#        ax.scatter(x, y, s=10, marker='D')
 
     for i,station in enumerate(stations):
         tmp = workdf.loc[workdf['num_poste']==station]
@@ -379,8 +382,10 @@ def plot_massif(mydf, massif=None, subdomain=None, **kw):
     tmp['rr_nivometeo'] = mydf.groupby(['num_poste'])['rr_nivometeo'].mean()
     tmp['biais'] = tmp['rr_radar'] - tmp['rr_nivometeo']
     mydf['diff'] = np.square(mydf[f'rr_{kw["product"]}'] - mydf['rr_nivometeo'])
-    tmp['nb_days'] = mydf.groupby(['num_poste']).diff.count()
-    tmp['rmse']  = np.sqrt(mydf.groupby(['num_poste']).diff.mean())
+    tmp['nb_days'] = len(mydf.groupby(['num_poste'])["diff"])
+    #tmp['nb_days'] = mydf.groupby(['num_poste']).diff.count()
+    #tmp['rmse']  = np.sqrt(mydf.groupby(['num_poste']).diff.mean())
+    tmp['rmse']  = np.sqrt(mydf.groupby(['num_poste'])["diff"].mean())
     tmp['ratio'] = tmp['rr_radar'] / tmp['rr_nivometeo']
     tmp.replace([np.inf, -np.inf], np.nan, inplace=True)
     tmp = tmp.loc[~tmp['ratio'].isna()]
@@ -419,10 +424,13 @@ def plot_massif(mydf, massif=None, subdomain=None, **kw):
         fig.init_massifs()
         #fig.highlight_massif(massif_number)
 
+        #====================================== Creation de la palette ===================================
         #cmap = ListedColormap(sns.diverging_palette(240, 10, n=9).as_hex())
-        cmap = copy.copy(ListedColormap(sns.diverging_palette(240, 10, n=9).as_hex()))
+        #cmap = copy.copy(ListedColormap(sns.diverging_palette(240, 10, n=9).as_hex())) # original one
         #cmap = copy.copy(ListedColormap(sns.color_palette('viridis', 12).as_hex()))
         #cmap = copy.copy(ListedColormap(sns.diverging_palette(240, 12, n=11, center='dark').as_hex()))
+        cmap = copy.copy(plt.cm.get_cmap('nipy_spectral', 9))
+
         if score == 'ratio':
             if suffix is not None: # A threshold has been applied on precipitation values
                 thresholds = [0.05, 0.1, 0.5, 0.80, 0.95, 1.05, 1.2, 2, 10, 20]
@@ -602,6 +610,8 @@ if __name__ == "__main__":
         RADAR_data = 'ANTILOPEQ_{0:s}_{1:s}.csv'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))
     elif args.product == 'antilopejp1':
         RADAR_data = 'ANTILOPEJP1Q_{0:s}_{1:s}.csv'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))
+    elif args.product == 'kriging':
+        RADAR_data = 'Kriging_{0:s}_{1:s}_{2:s}.csv'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'), 'exponential') 
     else:
         RADAR_data = 'PANTHERE_{0:s}_{1:s}.csv'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))
 
@@ -687,7 +697,8 @@ if __name__ == "__main__":
 
         # 5. Maps
         #for domain in ['alpes', 'pyrenees', 'corse']:
-        for domain in ['alpes', 'pyrenees']:
+        #for domain in ['alpes', 'pyrenees']:
+        for domain in ['alpes']:
             plot_full_domain(domain, lats.to_numpy(), lons.to_numpy(), df_stat, suffix=suffix, product=args.product)
             plot_massif(df.loc[df['massif_number'].isin(map_massifs[domain])], suffix=suffix, product=args.product, domain=domain)
 
