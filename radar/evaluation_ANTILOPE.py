@@ -228,18 +228,18 @@ def daily_scatterplot(workdf, datebegin, dateend, massif=None, subdomain=None, s
 
         # 2nd method : computing the density with gaussian_kde (very long, doesn't work for huge number of points)
         #---------------------------------------------------------------------------------------------------------
-        t0 = datetime.now()
-        print('Number of points (x/y) = {0:d}, {1:d}'.format(len(x), len(y)))
-        xy = np.vstack((x, y))
-        z = gaussian_kde(xy)(xy)
-        # Sort the points by density, so that the densest points are plotted last
-        idx = z.argsort()
-        x, y, z = x[idx], y[idx], z[idx]
-        t1 = datetime.now()
-        print('time to plot density : ', (t1-t0))
-        ax.scatter(x, y, c=z, s=10, marker='D')
+#        t0 = datetime.now()
+#        print('Number of points (x/y) = {0:d}, {1:d}'.format(len(x), len(y)))
+#        xy = np.vstack((x, y))
+#        z = gaussian_kde(xy)(xy)
+#        # Sort the points by density, so that the densest points are plotted last
+#        idx = z.argsort()
+#        x, y, z = x[idx], y[idx], z[idx]
+#        t1 = datetime.now()
+#        print('time to plot density : ', (t1-t0))
+#        ax.scatter(x, y, c=z, s=10, marker='D')
 
-#        ax.scatter(x, y, s=10, marker='D')
+        ax.scatter(x, y, s=10, marker='D')
 
     for i,station in enumerate(stations):
         tmp = workdf.loc[workdf['num_poste']==station]
@@ -372,14 +372,16 @@ def elevation_scatterplot(workdf, datebegin, dateend, suffix=None, **kw):
     #fig2.savefig('ratio_scatterplot_by_elevation_{0:s}_{1:s}.svg'.format(datebegin.strftime('%Y%m%d'), dateend.strftime('%Y%m%d')), bbox_inches='tight', format='svg')
     fig2.savefig(f'{filename2}.svg', format='svg')
 
-def plot_massif(mydf, massif=None, subdomain=None, **kw):
+def plot_massif(mydf, massif=None, subdomain=None, error=0.2, **kw):
     #mydf = mydf.loc[~mydf['rr'].isna()].loc[~mydf['rr_antilope'].isna()]
     mydf = mydf.loc[~mydf[f'rr_{kw["product"]}'].isna()].loc[~mydf['rr_nivometeo'].isna()]
+    mydf['error'] = (mydf[f'rr_{kw["product"]}'] >= mydf['rr_nivometeo'] * (1-error)) & (mydf[f'rr_{kw["product"]}'] <= mydf['rr_nivometeo'] * (1+error))
     tmp = pd.DataFrame()
     tmp['lons'] = mydf.groupby(['num_poste']).lon.mean()
     tmp['lats'] = mydf.groupby(['num_poste']).lat.mean()
     tmp['rr_radar'] = mydf.groupby(['num_poste'])[f'rr_{kw["product"]}'].mean()
     tmp['rr_nivometeo'] = mydf.groupby(['num_poste'])['rr_nivometeo'].mean()
+    tmp['freq_error'] = (mydf.groupby(['num_poste']).error.sum() / mydf.groupby(['num_poste']).error.count()) * 100
     tmp['biais'] = tmp['rr_radar'] - tmp['rr_nivometeo']
     mydf['diff'] = np.square(mydf[f'rr_{kw["product"]}'] - mydf['rr_nivometeo'])
     tmp['nb_days'] = len(mydf.groupby(['num_poste'])["diff"])
@@ -390,11 +392,25 @@ def plot_massif(mydf, massif=None, subdomain=None, **kw):
     tmp.replace([np.inf, -np.inf], np.nan, inplace=True)
     tmp = tmp.loc[~tmp['ratio'].isna()]
 
-    #colorbar = sns.diverging_palette(240, 10, n=9)
+
+    #====================================== Creation de la palette ===================================
+    #cmap = ListedColormap(sns.diverging_palette(240, 10, n=9).as_hex())
+    #cmap = copy.copy(ListedColormap(sns.diverging_palette(240, 10, n=9).as_hex())) # original one
+    #cmap = copy.copy(ListedColormap(sns.color_palette('viridis', 12).as_hex()))
+    #cmap = copy.copy(ListedColormap(sns.diverging_palette(240, 12, n=11, center='dark').as_hex()))
+    #cmap = copy.copy(plt.cm.get_cmap('nipy_spectral'))
+
+    # Methode permettant de créer une colormap 'tronquée'
+    def truncate_colormap(cmap, minval=0.0, maxval=1.0, n=256):
+        new_cmap = matplotlib.colors.LinearSegmentedColormap.from_list(
+        'trunc({n},{a:.2f},{b:.2f})'.format(n=cmap.name, a=minval, b=maxval),
+        cmap(np.linspace(minval, maxval, n)))
+        return new_cmap
+
     #fig = cartopy.Zoom_massif(massif_number, bgimage=True)
     shrink = 1
     anchor = (0.0, 0.5) # Default anchor value
-    for score in ['biais', 'rmse', 'ratio']:
+    for score in ['biais', 'rmse', 'ratio', 'freq_error']:
         if subdomain is not None:
             if subdomain in ['NWA', 'NEA', 'CA', 'SA']:
                 class_ = getattr(cartopy, 'Map_alpes')
@@ -424,25 +440,27 @@ def plot_massif(mydf, massif=None, subdomain=None, **kw):
         fig.init_massifs()
         #fig.highlight_massif(massif_number)
 
-        #====================================== Creation de la palette ===================================
-        #cmap = ListedColormap(sns.diverging_palette(240, 10, n=9).as_hex())
-        #cmap = copy.copy(ListedColormap(sns.diverging_palette(240, 10, n=9).as_hex())) # original one
-        #cmap = copy.copy(ListedColormap(sns.color_palette('viridis', 12).as_hex()))
-        #cmap = copy.copy(ListedColormap(sns.diverging_palette(240, 12, n=11, center='dark').as_hex()))
-        cmap = copy.copy(plt.cm.get_cmap('nipy_spectral', 9))
-
         if score == 'ratio':
+            cmap = copy.copy(plt.cm.get_cmap('nipy_spectral', 9))
             if suffix is not None: # A threshold has been applied on precipitation values
                 thresholds = [0.05, 0.1, 0.5, 0.80, 0.95, 1.05, 1.2, 2, 10, 20]
             else:
                 thresholds = [0.2, 0.5, 0.6, 0.8, 0.95, 1.05, 1.2, 1.4, 2, 5]
             legend = f'{kw["product"]}/rain-gauges {score}'
         elif score == 'biais':
+            cmap = copy.copy(plt.cm.get_cmap('nipy_spectral', 9))
             if suffix is not None: # A threshold has been applied on precipitation values
                 thresholds = [-9, -7, -5, -3, -1, 1, 3, 5, 7, 9]
             else:
                 thresholds = [-4, -3, -2, -1, -0.5, 0.5, 1, 2, 3, 4]
             legend = f'{kw["product"]} {score} (mm/day)'
+        elif score == 'freq_error':
+            cmap = copy.copy(plt.cm.get_cmap('nipy_spectral_r')) # _r reverse the colormap
+            cmap = truncate_colormap(cmap, 0.05, 0.5, n=10)
+            thresholds = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+            #thresholds = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100]
+            legend = f'Frequency of {kw["product"]} precipitation with an error lower than {int(error*100)}%'
+            filename= f'{filename}_{error}'
         else:
             cmap = copy.copy(sns.color_palette('Reds', as_cmap=True))
             if suffix is not None: # A threshold has been applied on precipitation values
@@ -452,6 +470,30 @@ def plot_massif(mydf, massif=None, subdomain=None, **kw):
             legend = f'{kw["product"]} {score} (mm/day)'
 
         norm = matplotlib.colors.BoundaryNorm(thresholds, cmap.N)
+
+###################################################################################
+# To plot the defined colormap
+#        gradient = np.linspace(0, 1, 256)
+#        gradient = np.vstack((gradient, gradient))
+#        def plot_colormap(cmap_list):
+#            # Create figure and adjust figure height to number of colormaps
+#            nrows = len(cmap_list)
+#            figh = 0.35 + 0.15 + (nrows + (nrows - 1) * 0.1) * 0.22
+#            fig, axs = plt.subplots(nrows=nrows + 1, figsize=(6.4, figh))
+#            fig.subplots_adjust(top=1 - 0.35 / figh, bottom=0.15 / figh,
+#                                left=0.2, right=0.99)
+#
+#            for ax, name in zip(axs, cmap_list):
+#                ax.imshow(gradient, aspect='auto', cmap=plt.get_cmap(name))
+#                ax.text(-0.01, 0.5, name, va='center', ha='right', fontsize=10,
+#                        transform=ax.transAxes)
+#
+#            # Turn off *all* ticks & spines, not just the ones with colormaps.
+#            for ax in axs:
+#                ax.set_axis_off()
+#            plt.show()
+#        plot_colormap([cmap])
+###################################################################################
 
         mean_score = list()
         lats = list()
@@ -518,7 +560,7 @@ def plot_obs(lat, lon, alt, datebegin, dateend):
 
 def plot_full_domain(domain, lat, lon, df, **kw):
    
-    fill_all_massifs(domain, lat, lon, df, **kw)
+    #fill_all_massifs(domain, lat, lon, df, **kw)
     point_stations_info(domain, lat, lon, df)
 
 def point_stations_info(domain, lat, lon, df):
