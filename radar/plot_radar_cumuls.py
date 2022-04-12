@@ -9,6 +9,7 @@ import pandas as pd
 import xarray as xr
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib import cm
 
 import hvplot
 import hvplot.xarray
@@ -48,8 +49,6 @@ df['x2'],df['y2'] = transform(outProj,inProj,df['x'].values,df['y'].values)
 nx = 45 # ou 39 ?
 ny = 34 #  
 rr = []
-x = []
-y = []
 #for i in range(nx):
 for lon in mnt['x'].values:
     rr.append(list())
@@ -59,6 +58,29 @@ for lon in mnt['x'].values:
 
 radar = xr.DataArray(rr, coords=[("x", mnt['x']), ("y", mnt['y'])])
 
-plot=radar.hvplot(x='x',y='y')
-hvplot.show(plot)
-#hvplot.save(plot, 'CUMUL_PANTHERE.png')
+#plot=radar.hvplot(x='x',y='y')
+#hvplot.show(plot)
+##hvplot.save(plot, 'CUMUL_PANTHERE.png')
+x, y = np.meshgrid(mnt['x'], mnt['y'])
+X, Y = transform(inProj, outProj, x, y)
+Z = mnt['ZS']
+norm = plt.Normalize()
+colors = plt.cm.coolwarm(norm(np.transpose(radar.values)))
+fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
+surf = ax.plot_surface(X=X, Y=Y, Z=Z, linewidth=0, antialiased=False, facecolors=colors)
+ax.xaxis.pane.fill = False
+ax.xaxis.pane.set_edgecolor('white')
+ax.yaxis.pane.fill = False
+ax.yaxis.pane.set_edgecolor('white')
+ax.zaxis.pane.fill = False
+ax.zaxis.pane.set_edgecolor('white')
+ax.grid(False)
+ax.set_xlabel('Longitude', labelpad=20)
+ax.set_ylabel('Latitude', labelpad=20)
+ax.set_zlabel('Elevation (m)')
+ax.set_zlim(0, np.max(Z))
+#fig.colorbar(surf, shrink=0.5, aspect=5)
+#fig.colorbar(colorbar=colors, shrink=0.5, aspect=5)
+fig.colorbar(cm.ScalarMappable(norm=norm, cmap=plt.cm.coolwarm), ax=ax, shrink=0.75, aspect=8, label='PANTHERE cumulated precipitation between 2018113006 and 2019043006 (mm)')
+plt.show()
+#fig.save("CUMULS_PANTHERE_3D.svg", format='svg')
