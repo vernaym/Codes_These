@@ -193,6 +193,7 @@ if __name__ == "__main__":
         missing_grib = list()
         workdir = os.path.join(args.workdir, domain)
         goto(workdir)
+        cumul = None
         for date in extract_period:
             print(date.strftime('%Y%m%d%H'))
             if date.month in [1,2,3,4,11,12]: # Consider only month with nivometeo observations
@@ -215,9 +216,14 @@ if __name__ == "__main__":
                             'num_poste':  int(num_poste),
                             'rr_antilope': rr_field.data[nearest[1]][nearest[0]]
                         }, ignore_index=True)
+                    if cumul is None:
+                        cumul = rr_field
+                    else:
+                        cumul += rr_field
                 else:
                     print('Missing date {0:s}'.format(date.strftime("%Y%m%d%H")))
 
+        cumul.dump_to_nc('CUMUL_{0:s}_{1:s}_{2:s}.nc'.format(args.model, args.datebegin.strftime("%Y%m%d%H"), args.dateend.strftime("%Y%m%d%H")), variablename="rr_cumul")
     antilope.set_index('date')
     goto(args.workdir)
     outname = '{0:s}_{1:s}_{2:s}.csv'.format(args.model, args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))
