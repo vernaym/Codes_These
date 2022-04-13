@@ -390,7 +390,6 @@ def plot_massif(mydf, massif=None, subdomain=None, error=0.2, **kw):
     tmp['rmse']  = np.sqrt(mydf.groupby(['num_poste'])["diff"].mean())
     tmp['ratio'] = tmp['rr_radar'] / tmp['rr_nivometeo']
     tmp.replace([np.inf, -np.inf], np.nan, inplace=True)
-    tmp = tmp.loc[~tmp['ratio'].isna()]
 
 
     #====================================== Creation de la palette ===================================
@@ -441,6 +440,7 @@ def plot_massif(mydf, massif=None, subdomain=None, error=0.2, **kw):
         #fig.highlight_massif(massif_number)
 
         if score == 'ratio':
+            #tmp = tmp.loc[~tmp['ratio'].isna()] # Remove Nan Values to avoid problems
             cmap = copy.copy(plt.cm.get_cmap('nipy_spectral', 9))
             if suffix is not None: # A threshold has been applied on precipitation values
                 thresholds = [0.05, 0.1, 0.5, 0.80, 0.95, 1.05, 1.2, 2, 10, 20]
@@ -739,8 +739,8 @@ if __name__ == "__main__":
 
         # 5. Maps
         #for domain in ['alpes', 'pyrenees', 'corse']:
-        #for domain in ['alpes', 'pyrenees']:
-        for domain in ['alpes']:
+        for domain in ['alpes', 'pyrenees']:
+        #for domain in ['alpes']:
             plot_full_domain(domain, lats.to_numpy(), lons.to_numpy(), df_stat, suffix=suffix, product=args.product)
             plot_massif(df.loc[df['massif_number'].isin(map_massifs[domain])], suffix=suffix, product=args.product, domain=domain)
 
