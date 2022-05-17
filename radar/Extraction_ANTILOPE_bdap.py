@@ -151,27 +151,27 @@ class ExtractGrib(object):
         f.write('#MOD {0:s}\n'.format(self.model))
         f.write('#PARAM {0:s}\n'.format(parameter))
         f.write('#Z_REF {0:s}\n'.format(self.grid))
+
         if coords is not None:
             f.write("#Z_EXTR INTERPOLATION\n")
             f.write('#Z_GEO ' + ' '.join(coords[self.domain]) + '\n')
             f.write('#Z_STP ' + ' '.join(dl) + '\n')
         f.write('#L_TYP {0:s}\n'.format(level))
-        
         return True
                 
-    def extract(self, parameter, level, cmd='dap3_dev'):
+    def extract(self, parameter, level, ech, cmd='dap3_dev'):
         self.requete(parameter, level)
-        startdate = self.date - timedelta(days=1) # File named "*ymdh" must contains 24h cumul since ym(d-1)h
+        startdate = self.date - timedelta(hours=ech) # File named "*ymdh" must contains the cumul since ym(h-ech)
         os.environ["DMT_DATE_PIVOT"] = startdate.strftime('%Y%m%d%H%M%S')
         print(os.environ["DMT_DATE_PIVOT"])
         os.system("{0:s} {1:d} {2:s}".format(cmd, ech, self.rqst))
         
-    def run(self, parameter, level):
+    def run(self, parameter, level, ech):
         if os.path.exists(self.gribname):
             print('File {0:s} already exists'.format(self.gribname))
             return True
         else:
-            self.extract(parameter, level)
+            self.extract(parameter, level, ech)
             if os.path.isfile(self.gribname):
                 return True
             else:
@@ -199,7 +199,7 @@ if __name__ == "__main__":
             if date.month in [1,2,3,4,11,12]: # Consider only month with nivometeo observations
                 if not os.path.exists('{0:s}_{1:s}.grib'.format(args.model, date.strftime('%Y%m%d%H'))):
                     grib = ExtractGrib(args.model, args.grid, domain, date)
-                    result = grib.run(args.parameter, args.level)
+                    result = grib.run(args.parameter, args.level, dt)
                     gribname = grib.gribname
                 else:
                     result = True
