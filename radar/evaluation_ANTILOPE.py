@@ -40,6 +40,8 @@ map_massifs = dict(
     corse = [40, 41],
     )
 
+nb_obs_min = 60
+
 #subdomain_map = dict(
 #    1 = dict(name='North-West Alps', massifs=[1, 2, 3, 4, 5, 7, 8]),
 #    2 = dict(name='North-East Alps', massifs=[6, 9, 10, 11, 13]),
@@ -70,7 +72,7 @@ def parse_command_line():
     parser.add_argument('-d', '--subdomain', default=None, help='PLot for a specific subdomain, values=[NWA, NEA, CA, SA, WP, CP, EP]')
     parser.add_argument('-t', '--threshold', default=None, help='Threshold of precipitation (mm) to apply in the data to consider', type=int)
     parser.add_argument('-p', '--product', default='antilopejp1', help='Product to deal with', choices=['antilope', 'antilopejp1', 'panthere', 'kriging'])
-
+    parser.add_argument('-l', '--lpn', action='store_true', help='Take into account the rain-snow limit')
 
     args = parser.parse_args()
 
@@ -532,7 +534,7 @@ def plot_massif(mydf, massif=None, subdomain=None, error=0.2, **kw):
 
 def plot_obs(lat, lon, alt, datebegin, dateend):
     for domain in ['alpes', 'pyrenees']:
-        print(domain, len(alt))
+        print(domain)
         # Plot stations on the map
         class_ = getattr(cartopy, f'Map_{domain}')
         if domain == 'pyrenees':
@@ -657,36 +659,65 @@ if __name__ == "__main__":
     else:
         RADAR_data = 'PANTHERE_{0:s}_{1:s}.csv'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))
 
-    nivometeo_data = 'obs_nivometeo_daily_RR_{0:s}_{1:s}.csv'.format(args.datebegin.strftime('%Y%m%d'), args.dateend.strftime('%Y%m%d'))
 
     # I- Lecture et mise en forme des données
     #########################################
-    print(RADAR_data)
-    print(args.product)
-    antilope = pd.read_csv(RADAR_data, sep=';', parse_dates=['date'], dtype={f'rr_{args.product}': float, 'num_poste': int}, na_values=['--'])
+    print(f'Reading the following radar data {RADAR_data} from product {args.product}')
+    # I.1 Observations nivometeo
+    #---------------------------
+    #nivometeo_data = 'obs_nivometeo_daily_RR_{0:s}_{1:s}.csv'.format(args.datebegin.strftime('%Y%m%d'), args.dateend.strftime('%Y%m%d'))
+    nivometeo_data = 'obs_nivometeo_daily_RR.csv'
     nivometeo = pd.read_csv(nivometeo_data, sep=';', parse_dates=['dat'], 
             dtype={'Q.num_poste':int, 'poste_nivo.nom_usuel':str, 'poste_nivo.alti':int, 'poste_nivo.lat_dg':float, 'poste_nivo.lon_dg':float, 'rr':float, 
                 'poste_nivo.massif_nivo':int, 'hist_reseau_poste.reseau_poste':int})
-
-    antilope['date'] = antilope['date'].dt.date
+#    nivometeo_data = 'obs_nivometeo_hourly_RR.csv'
+#    nivometeo = pd.read_csv(nivometeo_data, sep=';', parse_dates=['H.dat'], 
+#            dtype={'H.num_poste':int, 'poste_nivo.nom_usuel':str, 'poste_nivo.alti':int, 'poste_nivo.lat_dg':float, 'poste_nivo.lon_dg':float, 'H.rr1':float, 
+#                'poste_nivo.massif_nivo':int, 'hist_reseau_poste.reseau_poste':int})
     # Renomage de certaines colonnes (pour le merge des DF et pour faciliter la manipulation)
     nivometeo['date'] = nivometeo['dat'].dt.date + pd.Timedelta("1d") # Changement de type + matching dates with radar data (BDClim extraction 
         # for date ymd is the observation from ymd6h to ym(d+1)6h )
     nivometeo = nivometeo.rename(columns={'Q.num_poste':'num_poste', 'poste_nivo.lat_dg':'lat', 'poste_nivo.lon_dg':'lon', 
         'poste_nivo.nom_usuel':'name', 'poste_nivo.massif_nivo':'massif_number', 'poste_nivo.alti':'elevation', 'rr':'rr_nivometeo'}) # facultatif
-    # merge des DF
+
+    # I.2 Produit radar
+    #------------------
+    antilope = pd.read_csv(RADAR_data, sep=';', parse_dates=['date'], dtype={f'rr_{args.product}': float, 'num_poste': int}, na_values=['--'])
+    antilope['date'] = antilope['date'].dt.date
+
+    # II- Merge des DF et mise en forme des données
+    ###############################################
+    # TODO : merge DF
     df = pd.merge(antilope, nivometeo, on=["date", "num_poste"])
+    if args.lpn:
+    #    lpn = pd.read_csv('LPN_nivometeo.csv', sep=';', parse_dates=['H_NIVO.DAT'], dtype={'H.num_poste':int, 'H_NIVO.ALTI_LPNX':int}, index_col=['H_NIVO.DAT'])
+        lpn = pd.read_csv('LPN_nivometeo.csv', sep=';', parse_dates=['H_NIVO.DAT'], dtype={'H.num_poste':int, 'H_NIVO.ALTI_LPNX':int})
+        lpn.rename(columns={'H_NIVO.ALTI_LPNX':'LPNX', 'H.num_poste':'num_poste'}, inplace=True)
+        lpn = lpn[lpn['LPNX']>0] # consider 0 values as missing observation
+        lpn['date'] = lpn['H_NIVO.DAT'] + pd.Timedelta("12h") # La LPN observée à 12:00 D concerne les précipitations entre D (6:00) et D+1 (6:00) que l'on veut identifier
+        # par la date ym(D+1), on décale donc de 12h pour que la date de l'obs passe à D+1
+        lpn.index = lpn['date']
+        lpn = lpn.groupby(['num_poste']).resample('1D').max() # When 2 observation (at 6:00 and 12:00) are available, set the daily LPN as the maximum
+        lpn = lpn[~np.isnan(lpn['LPNX'])]['LPNX'].reset_index()
+        lpn.date = lpn.date.dt.date
+        df = pd.merge(df, lpn, on=["date", "num_poste"])
+        # Pour ne prendre en compte que les situations de neige :
+        df = df[df['elevation']>df['LPNX']]
+        # On se met dans un répertoire spécifique pour ne pas mélanger les scores avec toutes précip confondues et seulement la neige
+        goto('onlysnow')
+        nb_obs_min = 10
+
     # Selection de la période 
     df = df.loc[df["date"]>=datetime.date(args.datebegin)].loc[df["date"]<=datetime.date(args.dateend)]
     # Retrait des données non exploitables
     df = df.loc[~df['rr_nivometeo'].isna()].loc[~df[f'rr_{args.product}'].isna()] # Remove lines with missing value
     df = df.loc[df['massif_number']<99] # Remove Stations not associated to 1 massif
     df = df.loc[~df['name'].str.contains('EDFNIVO')] # Remove EDFNIVO stations
-    nb_obs_min = 60
     tmp = df.groupby(['num_poste']).date.count()
     tmp = tmp.loc[tmp>nb_obs_min]
     valid_stations = tmp.index.to_numpy()
-    df = df.loc[df['num_poste'].isin(valid_stations)] # Consider only points with at least 100 observations
+
+    df = df.loc[df['num_poste'].isin(valid_stations)] # Consider only points with a minimum number of observations
     suffix = None
     if args.threshold is not None:
         df = df.loc[df['rr_nivometeo']>args.threshold] # If a threshold is given, filter data above
@@ -715,8 +746,8 @@ if __name__ == "__main__":
     df_stat   = pd.DataFrame(workdict)
     #workdf = workdf.loc[workdf['ndays']>nb_obs_min] # Consider only points with at least 100 observations
 
-    # I- Visualisations des données
-    ###############################
+    # III- Visualisations des données
+    #################################
     if args.massif is not None:
         # Focus sur un unique massif (carte)
         workdf = df.loc[df['massif_number'] == args.massif]
