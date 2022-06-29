@@ -128,7 +128,7 @@ def goto(path):
     os.chdir(path)
 
 def predict(x):
-   return slope * x + intercept       
+   return slope * x + intercept
 
 def raw_scatterplot(rr_nivometeo, rr_antilope, elevations, datebegin, dateend, suffix=None, **kw):
     nbpoint = len(rr_nivometeo)
