@@ -11,21 +11,22 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import cm
 
-import hvplot
-import hvplot.xarray
+#import hvplot
+#import hvplot.xarray
 from pyproj import Proj, transform
 
 
-print('USAGE : plot_radar_cumuls.py inputfile.csv')
+print('USAGE : plot_radar_cumuls.py inputfile')
 
 filename = sys.argv[1]
 
-extract_dom = ['45240', '44990', '6010', '6490'] # Domaine des Grandes Rousses
+extract_dom = ['45240', '44990', '6010', '6490']  # Domaine des Grandes Rousses
 
 norm = plt.Normalize()
 
 if filename.startswith('PANTHERE'):
-    mnt = xr.open_dataset("scriptMNTLouis.nc") # MNT uniquement sur les grandes Rousses
+
+    mnt = xr.open_dataset("scriptMNTLouis.nc")  # MNT uniquement sur les grandes Rousses
     df=pd.read_csv(filename)
     product = 'PANTHERE'
     outProj = Proj(init='epsg:4326')
@@ -54,12 +55,13 @@ if filename.startswith('PANTHERE'):
     colors = plt.cm.coolwarm(norm(np.transpose(radar.values)))
 
 else:
+
     ds = xr.open_dataset(filename)
     product = 'ANTILOPE'
-    mnt = xr.open_dataset('/home/vernaym/QGIS/MNT/DEM_ALPES_WGS84_250m_bilinear.nc')
+    mnt = xr.open_dataset('/home/vernaym/QGIS/MNT/DEM_ALPES_WGS84_250m_bilinear.nc')  # Pour tracer sur toutes les Alpes
+    mnt = xr.open_dataset("scriptMNTLouis.nc")  # MNT uniquement sur les grandes Rousses
     #tmp = ds.interp(X=mnt.lon,Y=mnt.lat,method='nearest') # Pour interpoller la grille ANTILOPE sur le MNT
-    # IL serait peut être mieux de faire l'inverse (interpoller le MNT sur la grille ANTILOPE) ?
-    tmp = mnt.interp(lon=ds.longitude,lat=ds.latitude,method='nearest') # Pour interpoller le MNT sur la grille ANTILOPE
+    tmp = mnt.interp(lon=ds.longitude,lat=ds.latitude,method='nearest')  # Pour interpoller le MNT sur la grille ANTILOPE
     # Il reste a selectionner le sous domaine d'intéret avant de plotter...
     X = ds['longitude'].values
     Y = ds['latitude'].values
