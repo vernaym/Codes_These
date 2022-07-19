@@ -163,7 +163,7 @@ def SCGD_shape_PDF(x, k=1., theta=1., delta=0., plot_distribution=False, plot_pa
         #plt.plot(Y, theta, linestyle='', marker='+', color='blue', label='theta')
         plt.plot(Y, delta, linestyle='', marker='+', color='k', label='delta')
         plt.plot(Y, scgd0, linestyle='', marker='+', color='red', label='P(0)')
-        plt.plot(Y,gamma_shape_PDF(0.1-delta, k=k, theta=theta),  marker='+', color='blue', label='P0+')
+        plt.plot(Y,gamma_shape_PDF(0.1-delta, k=k, theta=theta), marker='+', color='blue', label='P0+')
 
         if Y == 0:
             plt.legend(loc ="upper right")

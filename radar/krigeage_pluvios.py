@@ -3,8 +3,7 @@
 # Auteur: Matthieu Vernay
 # Date : 02/02/2022
 
-import os,sys
-import datetime
+import os
 from datetime import datetime, timedelta
 import pandas as pd
 import numpy as np
@@ -13,17 +12,11 @@ import argparse
 import matplotlib
 #matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from matplotlib.pyplot import figure
 from snowtools.plots.maps import cartopy
 
-from pykrige.ok import OrdinaryKriging
 from pykrige.uk import UniversalKriging
 
-# PARAMETRES A MODIFIER :
-#=============================
-variogram  = 'exponential'
-#drift_terms = ['point_log']
-#=============================
+variogram  = 'exponential'  # The same as for ANTILOPE without RADAR data
 
 # Liste des coordonnées attendues par la commande dap3: lat_max, lat_min, lon_max, lon_min
 coords = dict(
@@ -42,6 +35,7 @@ def parse_command_line():
     parser.add_argument('-b', '--datebegin', help='Begining date of extraction, format YYYYMMDDHH or YYMMDDHH', required=True)
     parser.add_argument('-e', '--dateend', help = 'Final date of extraction (default=datebegin)')
     parser.add_argument('-p', '--plot', help = 'Plot krieged field for each date', default=False, action='store_true')
+    parser.add_argument('-d', '--data', help = 'Data to use for kriging', default='nivometeo', choices=['nivometeo', 'pluvios_antilope'])
 
     args = parser.parse_args()
 
@@ -69,7 +63,7 @@ def get_date(a_string):
                     print('The start date provided is not in a good format (YYYYMMDDHH or YYMMDDHH or YYYYMMDDHHMM or YYMMDD or YYYYMMDD)')
                     raise
     finally:
-        return date 
+        return date
 
 def date_range(start, end, dt=24):
     start = start.replace(hour=6)
@@ -77,7 +71,7 @@ def date_range(start, end, dt=24):
     while start <= end:
         dates.append(start)
         start += timedelta(hours=dt)
-    
+
     return dates
 
 def goto(path):
@@ -91,17 +85,35 @@ def read_nivometeo_coords(domain):
     subdata = metadata[(metadata['poste_nivo.lat_dg']>=latmin) & (metadata['poste_nivo.lat_dg']<=latmax) & (metadata['poste_nivo.lon_dg']>=lonmin) & (metadata['poste_nivo.lon_dg']<=lonmax)]
     return dict(zip(np.array(subdata['poste_nivo.num_poste']), zip(np.array(subdata['poste_nivo.lat_dg']), np.array(subdata['poste_nivo.lon_dg']))))
 
+
+def read_ref_coords(domain):
+    metadata = pd.read_csv('obs_quotidiennes_RR.data', sep=';')
+    latmax, latmin, lonmin, lonmax = np.array(coords[domain]).astype(float)/1000.
+    subdata = metadata[(metadata['lat']>=latmin) & (metadata['lat']<=latmax) & (metadata['lon']>=lonmin) & (metadata['lon']<=lonmax)]
+    return dict(zip(np.array(subdata['num_poste']), zip(np.array(subdata['lat']), np.array(subdata['lon']))))
+
+
 if __name__ == "__main__":
     args = parse_command_line()
 
-    nivometeo = read_nivometeo_coords('alp')
-
     extract_period = date_range(args.datebegin, args.dateend)
-    fic = "obs_quotidiennes_RR.data"
-    pluvios = pd.read_csv(fic, sep=';', parse_dates=['dat'], dtype={'num_poste':int, 'poste':str, 'lat':float, 'lon':float, 'alti':int, 'rr':float, 'reseau_poste':int}, na_values=['--'])
-    pluvios = pluvios[~pluvios['num_poste'].isin(nivometeo.keys())] # sécurité pour assurer que le krigeage n'utilise pas d'obs d'évaluation 
+
+    if args.data == 'nivometeo':
+        reference = read_ref_coords('alp')
+        fic = 'obs_nivometeo_hourly_RR_20161101_20220419.csv'
+        pluvios = pd.read_csv(fic, sep=';', parse_dates=['H.dat'], dtype={'Q.num_poste':int, 'poste_nivo.nom_usuel':str, 'poste_nivo.massif_nivo':int,
+            'poste_nivo.lat_dg':float, 'poste_nivo.lon_dg':float, 'poste_nivo.alti':int, 'rr':float, 'hist_reseau_poste.reseau_poste':int}, na_values=['--'])
+        pluvios.rename(columns={'H.dat':'dat', 'H.num_poste':'num_poste', 'poste_nivo.lat_dg':'lat', 'poste_nivo.lon_dg':'lon', 'H.rr1':'rr',
+            'poste_nivo.alti':'alti', 'hist_reseau_poste.reseau_poste':'reseau_poste'}, inplace=True)
+    else:
+        reference = read_nivometeo_coords('alp')
+        fic = "obs_quotidiennes_RR.data"
+        pluvios = pd.read_csv(fic, sep=';', parse_dates=['dat'], dtype={'num_poste':int, 'poste':str, 'lat':float, 'lon':float, 'alti':int, 'rr':float, 'reseau_poste':int}, na_values=['--'])
+
+    pluvios = pluvios[~pluvios['num_poste'].isin(reference.keys())]  # sécurité pour assurer que le krigeage n'utilise pas d'obs d'évaluation
     pluvios = pluvios.loc[~pluvios['rr'].isna()]
-    outkrig = pd.DataFrame(columns=['date', 'num_poste', 'rr_antilope'])
+    #outkrig = pd.DataFrame(columns=['date', 'num_poste', 'rr_kriging'])
+    outkrig = pd.DataFrame()
     for rundate in extract_period:
         print(rundate)
         startdate = rundate - timedelta(hours=24)
@@ -127,16 +139,16 @@ if __name__ == "__main__":
 #                          I-   Plot field after kriging
 #======================================================================================
         if args.plot:
-    #        plt.imshow(z, interpolation='none', cmap='jet')
-    #        plt.show()
-    #        import pdb
-    #        pdb.set_trace()
+            import pdb
+            pdb.set_trace()
+            # plt.imshow(rr24, interpolation='none', cmap='jet')
+            # plt.show()
             fig = cartopy.Map_alpes()
             lon, lat = np.meshgrid(gridx, gridy)
-            cf = plt.contourf(lon, lat, rr24, levels=100, cmap='YlGnBu')
-            plt.colorbar(cf, label='24h precipitation (mm)')
+            #cf = plt.contourf(lon, lat, rr24.data, levels=100, cmap='YlGnBu')
+            #plt.colorbar(cf, label='24h precipitation (mm)')
             fig.init_massifs()
-            fig.addpoints(x, y, labels=np.around(rr,1))
+            fig.addpoints(x.values, y.values, labels=np.around(rr,1))
             #fig.set_figtitle('Universal Kriging for date {0:s} \n Variogram model = {1:s}, drift-terms = {2:s}'.format(rundate.strftime('%Y%m%d%H'), variogram, ','.join(drift_terms)))
             fig.set_figtitle('Universal Kriging for date {0:s}. \n Variogram model : {1:s}'.format(rundate.strftime('%Y%m%d%H'), variogram))
             plt.tight_layout()
@@ -144,20 +156,17 @@ if __name__ == "__main__":
             fig.close()
 #======================================================================================
 
-        
-#                   II-  Get kriged values on the nivometeo stations 
+#                   II-  Get kriged values on the reference stations
 #======================================================================================
-        for num_poste, (lat, lon) in nivometeo.items():
+        for num_poste, (lat, lon) in reference.items():
             idx = np.argmin(np.abs(gridx-lon))
             idy = np.argmin(np.abs(gridy-lat))
             outkrig = outkrig.append({
                 'date': rundate,
-                'num_poste':  int(num_poste),
+                'num_poste': int(num_poste),
                 'rr_kriging': rr24[idy][idx]
             }, ignore_index=True)
 
     outkrig.set_index('date')
-    outname = 'Kriging_{0:s}_{1:s}_{2:s}.csv'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'), variogram)
+    outname = 'Kriging_{0:s}_{1:s}_{2:s}.csv'.format(args.data, args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))
     outkrig.to_csv(outname, index=False, sep=';')
-
-
