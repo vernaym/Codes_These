@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # Auteur: Matthieu Vernay
 # Date : 02/02/2022
-
+ 
 import os
 from datetime import datetime, timedelta
 import pandas as pd
@@ -106,12 +106,12 @@ if __name__ == "__main__":
             'poste_nivo.alti':'alti', 'hist_reseau_poste.reseau_poste':'reseau_poste'}, inplace=True)
     elif args.data == 'all':
         reference = dict()
-        fic1 = 'obs_nivometeo.csv'
+        fic1 = f'obs_nivometeo_{args.datebegin.ymdh}_{args.dateend.ymdh}.csv'
         pluvios1 = pd.read_csv(fic1, sep=';', parse_dates=['H.dat'], dtype={'Q.num_poste':int, 'poste_nivo.nom_usuel':str, 'poste_nivo.massif_nivo':int,
             'poste_nivo.lat_dg':float, 'poste_nivo.lon_dg':float, 'poste_nivo.alti':int, 'rr':float, 'hist_reseau_poste.reseau_poste':int}, na_values=['--'])
         pluvios1.rename(columns={'H.dat':'dat', 'H.num_poste':'num_poste', 'poste_nivo.lat_dg':'lat', 'poste_nivo.lon_dg':'lon', 'H.rr1':'rr',
             'poste_nivo.alti':'alti', 'hist_reseau_poste.reseau_poste':'reseau_poste'}, inplace=True)
-        fic2 = "autres_obs.csv"
+        fic2 = ".csv"
         pluvios2 = pd.read_csv(fic2, sep=';', parse_dates=['dat'], dtype={'num_poste':int, 'poste':str, 'lat':float, 'lon':float, 'alti':int, 'rr':float, 'reseau_poste':int}, na_values=['--'])
         pluvios = pd.concat([pluvios1, pluvios2], ignore_index=True, sort=True)
     else:
@@ -125,10 +125,12 @@ if __name__ == "__main__":
     outkrig = pd.DataFrame()
     precipitation = np.zeros(shape=(len(gridy), len(gridx)))
     lon, lat = np.meshgrid(gridx, gridy)
-    cumul = xr.DataArray(data=precipitation,
-        dims=["X", "Y"],
-        coords=dict(lon=(["X", "Y"], lon), lat=(["X", "Y"], lat)),
-        attrs=dict(description="Total precipitation", units="mm",),
+    cumul = xr.DataArray(
+        data   = precipitation,
+        name   = 'rr_cumul',
+        dims   =["X", "Y"],
+        coords =dict(longitude=(["X", "Y"], lon), latitude=(["X", "Y"], lat)),
+        attrs  =dict(description="Total precipitation", units="mm",),
     )
     for rundate in extract_period:
         print(rundate)

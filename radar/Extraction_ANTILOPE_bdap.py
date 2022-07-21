@@ -5,7 +5,7 @@
 
 import os
 import datetime
-from datetime import datetime, timedelta
+from datetime import timedelta
 import pandas as pd
 import numpy as np
 
@@ -16,9 +16,9 @@ import epygram
 ##############################################################################################
 # Ce script sert à extraire les données ANTILOPE de la BDAP correspondant aux postes nivometeo
 # dans le but d'évaluer le biais d'ANTILOPE avec l'altitude.
-# A priori on ne peut extraire les données de la BDAP que sous forme de grille, on fait donc 
+# A priori on ne peut extraire les données de la BDAP que sous forme de grille, on fait donc
 # une extraction pour chaque sous domaine d'intéret (alp, pyr, cor) avant de selectionner les
-# pixels correspondant aux coordonnées des points des postes nivometeo. 
+# pixels correspondant aux coordonnées des points des postes nivometeo.
 # TODO : vérifier si ce n'est pas plus rapide d'extraire un grib complet (peu probable).
 ##############################################################################################
 
@@ -37,8 +37,6 @@ import epygram
 ech = 24
 # Format
 #fmt = 'GRIB2_C_MAX'
-
-
 
 # Liste des coordonnées attendues par la commande dap3: lat_max, lat_min, lon_max, lon_min
 coords = dict(
@@ -109,7 +107,7 @@ def get_date(a_string):
                         print('The start date provided is not in a good format (YYYYMMDDHH or YYMMDDHH or YYYYMMDDHHMM or YYMMDD or YYYYMMDD)')
                         raise
     finally:
-        return date 
+        return date
 
 def date_range(start, end, dt=24):
     start = start.replace(hour=6)
@@ -117,7 +115,7 @@ def date_range(start, end, dt=24):
     while start <= end:
         dates.append(start)
         start += timedelta(hours=dt)
-    
+
     return dates
 
 def goto(path):
@@ -134,16 +132,16 @@ def read_nivometeo_coords(domain):
 class ExtractGrib(object):
 
     def __init__(self, model, grid, domain, rundate):
-        
+
         self.model          = model
         self.domain         = domain
         self.grid           = grid.upper()
         self.coords         = coords[domain]
         self.date           = rundate
         self.gribname       = '{0:s}_{1:s}.grib'.format(self.model, self.date.strftime('%Y%m%d%H'))
-        
+
     def requete(self, parameter, level):
-        
+
         self.rqst = 'requete'.format(level)
         f = open(self.rqst, "w")
         f.write('#RQST\n')
@@ -158,14 +156,14 @@ class ExtractGrib(object):
             f.write('#Z_STP ' + ' '.join(dl) + '\n')
         f.write('#L_TYP {0:s}\n'.format(level))
         return True
-                
+
     def extract(self, parameter, level, ech, cmd='dap3_dev'):
         self.requete(parameter, level)
-        startdate = self.date - timedelta(hours=ech) # File named "*ymdh" must contains the cumul since ym(h-ech)
+        startdate = self.date - timedelta(hours=ech)  # File named "*ymdh" must contains the cumul since ym(h-ech)
         os.environ["DMT_DATE_PIVOT"] = startdate.strftime('%Y%m%d%H%M%S')
         print(os.environ["DMT_DATE_PIVOT"])
         os.system("{0:s} {1:d} {2:s}".format(cmd, ech, self.rqst))
-        
+
     def run(self, parameter, level, ech):
         if os.path.exists(self.gribname):
             print('File {0:s} already exists'.format(self.gribname))
@@ -176,10 +174,11 @@ class ExtractGrib(object):
                 return True
             else:
                 return False
-        
+
+
 if __name__ == "__main__":
     args = parse_command_line()
-    if args.model  in ['ANTILOPEQ', 'ANTILOPEJP1Q']:
+    if args.model in ['ANTILOPEQ', 'ANTILOPEJP1Q']:
         dt = 24
     elif args.model in ['ANTILOPEH', 'ANTILOPEJP1H']:
         dt = 1
@@ -196,7 +195,7 @@ if __name__ == "__main__":
         cumul = None
         for date in extract_period:
             print(date.strftime('%Y%m%d%H'))
-            if date.month in [1,2,3,4,11,12]: # Consider only month with nivometeo observations
+            if date.month in [1,2,3,4,11,12]:  # Consider only month with nivometeo observations
                 if not os.path.exists('{0:s}_{1:s}.grib'.format(args.model, date.strftime('%Y%m%d%H'))):
                     grib = ExtractGrib(args.model, args.grid, domain, date)
                     result = grib.run(args.parameter, args.level, dt)
@@ -210,10 +209,10 @@ if __name__ == "__main__":
                     metadata = data.get_message_at_position(0).asfield(getdata=False)
                     geometry = metadata.geometry
                     for num_poste, (lat, lon) in nivometeo.iteritems():
-                        nearest = geometry.nearest_points(lon, lat, {'n':'1'}) # returns indices of the point in "data"
+                        nearest = geometry.nearest_points(lon, lat, {'n':'1'})  # returns indices of the point in "data"
                         antilope = antilope.append({
-                            'date': date,
-                            'num_poste':  int(num_poste),
+                            'date':date,
+                            'num_poste':int(num_poste),
                             'rr_antilope': rr_field.data[nearest[1]][nearest[0]]
                         }, ignore_index=True)
                     if cumul is None:
@@ -228,6 +227,4 @@ if __name__ == "__main__":
     goto(args.workdir)
     outname = '{0:s}_{1:s}_{2:s}.csv'.format(args.model, args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))
     antilope.to_csv(outname, index=False, sep=';')
-
-
 

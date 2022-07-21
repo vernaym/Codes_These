@@ -3,10 +3,10 @@
 # Auteur: Matthieu Vernay
 # Date : 02/02/2022
 
-import os,sys
+import os
 import datetime
-from datetime import datetime, timedelta
-import pandas as pd # Version 0.25.3
+from datetime import timedelta
+import pandas as pd  # Version 0.25.3
 import numpy as np
 import copy
 
@@ -15,22 +15,17 @@ import argparse
 import matplotlib
 #matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from matplotlib.colors import ListedColormap
 import seaborn as sns
 
 from sklearn.linear_model import LinearRegression, RANSACRegressor
-from sklearn.datasets import make_regression
-from sklearn.metrics import mean_squared_error, r2_score
-
-from scipy.stats import gaussian_kde
 
 from snowtools.plots.maps import cartopy
 
 
 ##############################################################################################
 # Ce script sert permet de comparer les données ANTILOPE extraites de la BDAP par le script
-# "Extraction_ANTILOPE_bdap.py aux observations des postes du réseau nivométéo correspondants 
-# extraites par le script "extract_obs_nivometeo.py" de snowtools dans le but d'évaluer le 
+# "Extraction_ANTILOPE_bdap.py aux observations des postes du réseau nivométéo correspondants
+# extraites par le script "extract_obs_nivometeo.py" de snowtools dans le but d'évaluer le
 # biais d'ANTILOPE avec l'altitude.
 ##############################################################################################
 
@@ -38,7 +33,7 @@ map_massifs = dict(
     alpes = [*range(1, 24)],
     pyrenees = [*range(64, 75), *range(80, 92)],
     corse = [40, 41],
-    )
+)
 
 nb_obs_min = 60
 
@@ -59,7 +54,7 @@ subdomain_map = dict(
     WP  = [64, 65, 66],
     CP  = [67, 68, 69],
     EP  = [70, 71, 72, 73, 74],
-    )
+)
 
 def parse_command_line():
     description = "Evaluation of RADAR products (ANTILOPE or PANTHERE) using nivo-météo network observations"
