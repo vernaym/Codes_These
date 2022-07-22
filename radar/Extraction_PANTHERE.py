@@ -14,6 +14,7 @@ import numpy as np
 # point des postes du réseau nivo-météo.
 # Les données PANTHERES ont préalablement été extraites de Hendrix par l'outil
 # 'lunairs' sur la serveur sotrtm33-sidev.
+# TODO : Adapter le script pour extraire une sous grille sur le domaine des Grandes Rousses
 ##########################################################################################
 
 # Liste des coordonnées attendues par la commande dap3: lat_max, lat_min, lon_max, lon_min
@@ -21,13 +22,14 @@ coords = dict(
     alp = ['46875', '43125', '4500', '8500'],
     pyr = ['43500', '42000', '-2000', '3500'],
     cor = ['43000', '41000', '8000', '10500'],
+    GrandesRousses = ['45250', '44750', '6000', '6500']
 )
 
 datebegin = datetime(2018, 12, 1, 6, 0)
 dateend   = datetime(2019, 4, 30, 6, 0)
 
 workdir = '/home/vernaym/workdir/evaluation_PANTHERE' 
-                    
+
 dist = lambda dx,dy: np.sqrt(dx**2+dy**2)
 
 def nivologyseason(date):

@@ -16,7 +16,10 @@ import epygram
 
 ##############################################################################################
 # Ce script sert à extraire les données post-traitées de la PEAROME depuis la BDAP.
-# On fait une extraction pour chaque sous domaine d'intéret (alp, pyr, cor,...)
+# On fait une extraction par domaine d'intéret (alp, pyr, cor, GrandesRousses...)
+# En plus des fichiers grib journaliers, un fichier netcdf avec des dimensions
+# (lat, lon) corrrespondant au domaine et une dimension temporelle contenant la période
+# couverte par l'extraction
 ##############################################################################################
 
 # Identifiant du modèle dans la BDAP
