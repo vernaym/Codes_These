@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 # Auteur: Matthieu Vernay
 # Date : 02/02/2022
- 
-import sys
+
+import os,sys
 import pandas as pd
 import xarray as xr
 import numpy as np
@@ -15,17 +15,34 @@ from mpl_toolkits.mplot3d import Axes3D  # F401 unused import --> to ignore !
 #import hvplot.xarray
 from pyproj import Proj, transform
 
+# This script plot accumulated precipiation over the Grandes-Rousses domain (can
+# be easily adapted to plot over different domain or the whole input domain)
+# It interpolates a DEM grid on the grided precipitation data to plot 3D
+# precipitation fields
 
 print('USAGE : plot_radar_cumuls.py inputfile')
+datadir = '/home/vernaym/These/DATA'
+savedir = '/home/vernaym/These/figures'
 
 filename = sys.argv[1]
 
+datebegin = filename.split('.')[0].split('_')[-2]
+dateend   = filename.split('.')[0].split('_')[-1]
+
+if not os.path.isfile(filename):
+    print(f'WARNING : no such file or directory {filename}')
+    print(f'lookink for the file under {datadir}')
+    filename = os.path.join(datadir, filename)
+    if not os.path.isfile(filename):
+        print(f'ERROR : no such file or directory {filename}')
+        sys.exit(1)
+
 # Domaine des Grandes Rousses
 extract_dom = dict(
-        latmax = 45.240,
-        latmin = 44.990,
-        lonmin = 6.010,
-        lonmax = 6.490,
+    latmax = 45.240,
+    latmin = 44.990,
+    lonmin = 6.010,
+    lonmax = 6.490,
 )
 
 norm = plt.Normalize()
@@ -65,19 +82,17 @@ else:
     ds = xr.open_dataset(filename)
     #mnt = xr.open_dataset("scriptMNTLouis.nc")  # MNT uniquement sur les grandes Rousses
     mnt = xr.open_dataset('/home/vernaym/QGIS/MNT/DEM_ALPES_WGS84_250m_bilinear.nc')  # Pour tracer sur toutes les Alpes
-    if filename.startswith('ANTILOPE'):
+    if 'ANTILOPE' in filename:
         product = 'ANTILOPE'
         #tmp = ds.interp(X=mnt.lon, Y=mnt.lat, method='nearest') # Pour interpoller la grille ANTILOPE sur le MNT
         tmp = mnt.interp(lon=ds.longitude, lat=ds.latitude, method='nearest')  # Pour interpoller le MNT sur la grille ANTILOPE
-    else:
+    elif 'krigeage' in filename:
         product = 'KRIGING'
         #tmp = ds.interp(X=mnt.x, Y=mnt.y, method='nearest') # Pour interpoller la grille ANTILOPE sur le MNT
         tmp = mnt.interp(lon=ds.longitude, lat=ds.latitude, method='nearest')  # Pour interpoller le MNT sur la grille ANTILOPE
 
-
     tmp['Z'] = tmp['Band1']
     tmp['Z'].values = np.nan_to_num(tmp['Z'].values)
-
 
     latmin = extract_dom['latmin']
     lonmin = extract_dom['lonmin']
@@ -86,17 +101,16 @@ else:
 
     # On selectionne le sous domaine d'intéret avant de plotter...
     tmp = tmp.where((tmp.lon>=lonmin) & (tmp.lon<=lonmax) & (tmp.lat>=latmin) & (tmp.lat<=latmax), drop=True)
-    X = tmp['longitude'].values
-    Y = tmp['latitude'].values
+    X = tmp['lon'].values
+    Y = tmp['lat'].values
     Z = tmp['Z']
-
 
     # define pixel colors
     radar = ds.where((ds.longitude>=lonmin) & (ds.longitude<=lonmax) & (ds.latitude>=latmin) & (ds.latitude<=latmax), drop=True).rr_cumul
     colors = plt.cm.coolwarm(norm(np.nan_to_num(radar.values)))
 
-
 fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
+ax.view_init(elev=60., azim=135)  # Set point of view
 surf = ax.plot_surface(X=X, Y=Y, Z=Z, linewidth=0, antialiased=False, facecolors=colors)
 ax.xaxis.pane.fill = False
 ax.xaxis.pane.set_edgecolor('white')
@@ -112,6 +126,7 @@ ax.set_zlabel('Elevation (m)')
 ax.set_zlim(0., 3500.)
 #fig.colorbar(surf, shrink=0.5, aspect=5)
 #fig.colorbar(colorbar=colors, shrink=0.5, aspect=5)
-fig.colorbar(cm.ScalarMappable(norm=norm, cmap=plt.cm.coolwarm), ax=ax, shrink=0.75, aspect=8, label=f'{product} cumulated precipitation \n between 2018113006 and 2019043006 (mm)')
-plt.show()
-#fig.save("CUMULS_PANTHERE_3D.svg", format='svg')
+fig.colorbar(cm.ScalarMappable(norm=norm, cmap=plt.cm.coolwarm), ax=ax, shrink=0.75, aspect=8, label=f'{product} cumulated precipitation \n between {datebegin} and {dateend} (mm)')
+#plt.show()
+plt.savefig(f'{savedir}/CUMUL3D_{product}_{datebegin}_{dateend}.pdf', format='pdf')
+
