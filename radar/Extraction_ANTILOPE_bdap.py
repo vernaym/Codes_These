@@ -46,7 +46,7 @@ coords = dict(
     ange = ['45240', '44990', '6010', '6490']
 )
 
-# Pas en lat/lon de la grille cible : 0.375 / 0.5
+# Pas en lat/lon de la grille
 dl = ['10', '10']
 
 def parse_command_line():

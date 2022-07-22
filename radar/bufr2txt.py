@@ -19,5 +19,7 @@ while date <= datetime.datetime.strptime(dateend, '%Y%m%d%H%M'):
     old_date = date - datetime.timedelta(days=1)
     for f in glob.glob('/home/mrns/vernaym/tmp/RADAR/COMPOSIT_ELLIPSO/LAME_EAU/{0:s}*.bfr'.format(old_date.strftime('%Y%m%d'))):
         #print('DBUG ',f)
-        os.remove(f)
+        os.remove(f)  # WARNING : this delete only file up to 0h (J) but the .text file generated contain
+                      # 24h precipitation from 6h (J-1) to 6h J
     date = date + datetime.timedelta(days=1)
+
