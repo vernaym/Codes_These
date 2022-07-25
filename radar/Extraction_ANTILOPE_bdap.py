@@ -248,7 +248,7 @@ if __name__ == "__main__":
             coords=dict(lon=(["x", "y"], lon),lat=(["x", "y"], lat), time=time, reference_time=reference_time,),
             attrs=dict(description="24 hour precipitation",units="mm/24h"),
         )
-        outname = '{0:s}_{1:s}_{1:s}.nc'.format(args.model, args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))
+        outname = '{0:s}_{1:s}_{1:s}_{2:s}.nc'.format(args.model, args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'), domain)
         rr.to_netcdf(outname)
 
         cumul.dump_to_nc('CUMUL_{0:s}_{1:s}_{2:s}_{3:s}.nc'.format(args.model, args.datebegin.strftime("%Y%m%d%H"), args.dateend.strftime("%Y%m%d%H"), domain), variablename="rr_cumul")
