@@ -4,7 +4,6 @@
 # Date : 20/07/2022
 
 import os
-import datetime
 from datetime import datetime, timedelta
 import pandas as pd
 import numpy as np
@@ -198,11 +197,6 @@ if __name__ == "__main__":
     for domain in args.domain:
         workdir = os.path.join(args.workdir, domain)
         goto(workdir)
-        #rr24 = xr.DataArray(
-        #    data=temperature,
-        #    dims=["x", "y", "time"], 
-        #    coords=dict(lon=(["x", "y"], lon),lat=(["x", "y"], lat),time=time,reference_time=reference_time,),
-        #    attrs=dict(description="Ambient temperature.",units="degC",),
         for member in range(1, 17):
             missing_grib = list()
             time = pd.date_range(args.datebegin, args.dateend)

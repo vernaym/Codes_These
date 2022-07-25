@@ -4,10 +4,10 @@
 # Date : 25/01/2022
 
 import os
-import datetime
-from datetime import timedelta
+from datetime import datetime, timedelta
 import pandas as pd
 import numpy as np
+import xarray as xr
 
 import argparse
 
@@ -43,6 +43,7 @@ coords = dict(
     alp = ['46875', '43125', '4500', '8500'],
     pyr = ['43500', '42000', '-2000', '3500'],
     cor = ['43000', '41000', '8000', '10500'],
+    GrandesRousses = ['45250', '44750', '6000', '6500'],
     ange = ['45240', '44990', '6010', '6490']
 )
 
@@ -55,7 +56,7 @@ def parse_command_line():
     #parser.add_argument('-d', '--rundate', help='Rundate for operational executions, format YYMMDDHH')
     parser.add_argument('-b', '--datebegin', help='Begining date of extraction, format YYYYMMDDHH or YYMMDDHH', required=True)
     parser.add_argument('-e', '--dateend', help = 'Final date of extraction (default=datebegin)')
-    parser.add_argument('-d', '--domain', nargs='+', help='Domain of the file', choices=coords.keys(), default=['alp', 'pyr', 'cor'])
+    parser.add_argument('-d', '--domain', nargs='+', help='Domain of the file', choices=coords.keys(), default=['alp', 'pyr', 'cor', 'GrandesRousses'])
     parser.add_argument('-w', '--workdir', help='Runing directory (default for guppy)', default='/home/mrns/vernaym/workdir/extraction_antilope')
 #    parser.add_argument('-o', '--output', help='Output name of generated files')
     parser.add_argument('-m', '--model', help='Model from which the data must be extracted',
@@ -126,8 +127,8 @@ def goto(path):
 def read_nivometeo_coords(domain):
     metadata = pd.read_csv('postes_nivometeo.csv', sep=';')
     latmax, latmin, lonmin, lonmax = np.array(coords[domain]).astype(float)/1000.
-    subdata = metadata[(metadata['lat_dg']>=latmin) & (metadata['lat_dg']<=latmax) & (metadata['lon_dg']>=lonmin) & (metadata['lon_dg']<=lonmax)]
-    return dict(zip(np.array(subdata['num_poste']), zip(np.array(subdata['lat_dg']), np.array(subdata['lon_dg']))))
+    subdata = metadata[(metadata['poste_nivo.lat_dg']>=latmin) & (metadata['poste_nivo.lat_dg']<=latmax) & (metadata['poste_nivo.lon_dg']>=lonmin) & (metadata['poste_nivo.lon_dg']<=lonmax)]
+    return dict(zip(np.array(subdata['poste_nivo.num_poste']), zip(np.array(subdata['poste_nivo.lat_dg']), np.array(subdata['poste_nivo.lon_dg']))))
 
 class ExtractGrib(object):
 
@@ -183,8 +184,7 @@ if __name__ == "__main__":
     elif args.model in ['ANTILOPEH', 'ANTILOPEJP1H']:
         dt = 1
     extract_period = date_range(args.datebegin, args.dateend, dt=dt)
-
-    antilope = pd.DataFrame(columns=['date', 'num_poste', 'rr_antilope'])
+    antilope = pd.DataFrame(columns=['date', 'num_poste', 'rr_antilope'], dtype=object)
     for domain in args.domain:
         print(domain)
         goto(args.workdir)
@@ -193,34 +193,63 @@ if __name__ == "__main__":
         workdir = os.path.join(args.workdir, domain)
         goto(workdir)
         cumul = None
+        time = pd.date_range(args.datebegin, args.dateend)
+        reference_time = pd.Timestamp(args.datebegin)
+        rr24 = None
+        nan  = None
         for date in extract_period:
             print(date.strftime('%Y%m%d%H'))
-            if date.month in [1,2,3,4,11,12]:  # Consider only month with nivometeo observations
-                if not os.path.exists('{0:s}_{1:s}.grib'.format(args.model, date.strftime('%Y%m%d%H'))):
-                    grib = ExtractGrib(args.model, args.grid, domain, date)
-                    result = grib.run(args.parameter, args.level, dt)
-                    gribname = grib.gribname
+            #if date.month in [1,2,3,4,11,12]:  # Consider only month with nivometeo observations
+            if not os.path.exists('{0:s}_{1:s}.grib'.format(args.model, date.strftime('%Y%m%d%H'))):
+                grib = ExtractGrib(args.model, args.grid, domain, date)
+                result = grib.run(args.parameter, args.level, dt)
+                gribname = grib.gribname
+            else:
+                result = True
+                gribname = '{0:s}_{1:s}.grib'.format(args.model, date.strftime('%Y%m%d%H'))
+            if result:
+                data = epygram.formats.resource(gribname, openmode='r', fmt='GRIB')
+                rr_field = data.readfield({'indicatorOfTypeOfLevel':1, 'paramId': 0, 'indicatorOfParameter': 61}, getdata= True)
+                metadata = data.get_message_at_position(0).asfield(getdata=False)
+                geometry = metadata.geometry
+                lon = geometry.get_lonlat_grid()[0]
+                lat = geometry.get_lonlat_grid()[1]
+                if rr24 is None:
+                    rr24 = np.array([rr_field.data.data,])
+                    shape = np.shape(rr_field.data.data)  # Save the data shape to fill missing dates with nan values
                 else:
-                    result = True
-                    gribname = '{0:s}_{1:s}.grib'.format(args.model, date.strftime('%Y%m%d%H'))
-                if result:
-                    data = epygram.formats.resource(gribname, openmode='r', fmt='GRIB')
-                    rr_field = data.readfield({'indicatorOfTypeOfLevel':1, 'paramId': 0, 'indicatorOfParameter': 61}, getdata= True)
-                    metadata = data.get_message_at_position(0).asfield(getdata=False)
-                    geometry = metadata.geometry
-                    for num_poste, (lat, lon) in nivometeo.iteritems():
-                        nearest = geometry.nearest_points(lon, lat, {'n':'1'})  # returns indices of the point in "data"
-                        antilope = antilope.append({
-                            'date':date,
-                            'num_poste':int(num_poste),
-                            'rr_antilope': rr_field.data[nearest[1]][nearest[0]]
-                        }, ignore_index=True)
-                    if cumul is None:
-                        cumul = rr_field
-                    else:
-                        cumul += rr_field
+                    rr24 = np.append(rr24, np.array([rr_field.data.data]), axis=0)
+
+                # To Extract specific values where evaluation data (obs nivometeo) is available
+#                for num_poste, (lat, lon) in nivometeo.iteritems():  # python2 (guppy)
+#                    nearest = geometry.nearest_points(lon, lat, {'n':'1'})  # returns indices of the point in "data"
+#                    antilope = antilope.append({
+#                        'date':date,
+#                        'num_poste':int(num_poste),
+#                        'rr_antilope': rr_field.data[nearest[1]][nearest[0]]
+#                    }, ignore_index=True)
+                if cumul is None:
+                    cumul = rr_field
                 else:
-                    print('Missing date {0:s}'.format(date.strftime("%Y%m%d%H")))
+                    cumul += rr_field
+            else:
+                print('Missing date {0:s}'.format(date.strftime("%Y%m%d%H")))
+                # Fill missing day with nan values
+                # WARNING : this only works if the first date of the period have valid data
+                if nan is None:
+                    nan = np.empty(shape)
+                    nan[:] = np.NaN
+                rr24 = np.append(rr24, np.array([nan]), axis=0)
+
+        #  np.shape(rr24) = (time, 21, 21) et il faut un data de la forme (21, 21, time)
+        rr = xr.DataArray(
+            data = np.transpose(rr24, (1,2,0)),  # Pour passer la dimension temporelle en dernier : (lon, lat, time)
+            dims=["x", "y", "time"],
+            coords=dict(lon=(["x", "y"], lon),lat=(["x", "y"], lat), time=time, reference_time=reference_time,),
+            attrs=dict(description="24 hour precipitation",units="mm/24h"),
+        )
+        outname = '{0:s}_{1:s}_{1:s}.nc'.format(args.model, args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))
+        rr.to_netcdf(outname)
 
         cumul.dump_to_nc('CUMUL_{0:s}_{1:s}_{2:s}_{3:s}.nc'.format(args.model, args.datebegin.strftime("%Y%m%d%H"), args.dateend.strftime("%Y%m%d%H"), domain), variablename="rr_cumul")
     antilope.set_index('date')
