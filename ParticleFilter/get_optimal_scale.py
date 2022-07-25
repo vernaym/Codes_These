@@ -3,10 +3,11 @@
 # Auteur: Matthieu Vernay
 # Date : 02/02/2022
 
-import os
+import os, sys
 from datetime import datetime,timedelta
 import pandas as pd  # Version 0.25.3
 import numpy as np
+import xarray as xr
 #import copy
 
 import argparse
@@ -31,21 +32,14 @@ import statistics
 ##############################################################################################
 ##############################################################################################
 
-map_massifs = dict(
-    alpes = [*range(1, 24)],
-    pyrenees = [*range(64, 75), *range(80, 92)],
-    corse = [40, 41],
-)
-
-nb_obs_min = 60
-
+datadir = '/home/vernaym/These/DATA'
 
 def parse_command_line():
     description = "Evaluation of RADAR products (ANTILOPE or PANTHERE) using nivo-météo network observations"
     parser = argparse.ArgumentParser(description=description)
-    #parser.add_argument('-d', '--rundate', help='Rundate for operational executions, format YYMMDDHH')
     parser.add_argument('-b', '--datebegin', help='Begining date of extraction, format YYYYMMDDHH or YYMMDDHH', required=True)
     parser.add_argument('-e', '--dateend', help = 'Final date of extraction (default=datebegin)')
+    parser.add_argument('-d', '--domain', nargs='+', help='Domain of the file', choices=['alp', 'pyr', 'cor', 'GrandesRousses'], default='GrandesRousses')
     parser.add_argument('-w', '--workdir', help='Runing directory (default for guppy)', default='/home/mrns/vernaym/workdir/extraction_antilope')
     parser.add_argument('-m', '--massif', help='PLot for a specific massif', default=None, type=int)
     parser.add_argument('-t', '--threshold', default=None, help='Threshold of precipitation (mm) to apply in the data to consider', type=int)
@@ -171,177 +165,43 @@ def SCGD_shape_PDF(x, k=1., theta=1., delta=0., plot_distribution=False, plot_pa
     return np.array(list(map(lambda t: gamma_shape_PDF(t-delta, k=k, theta=theta) if t > 0
                     else scgd0 if t == 0 else 0, x)))
 
+def read_ensemble(datebegin, dateend, domain='GrandesRousses'):
+    pearome = dict()
+    for member in range(1,17):
+        #filename = f'pearome_{member:03d}_{datebegin}_{dateend}.nc'
+        # TODO : Verrue
+        filename = f'pearome_{member:03d}_2021073106_2022071506.nc'
+        filename = os.path.join(datadir, filename)
+        pearome[member] = xr.open_dataset(filename)
 
-def read_data(RADAR_data, datebegin, dateend):
-    # I- Lecture et mise en forme des données
-    #########################################
-    print(f'Reading the following radar data {RADAR_data} from product {args.product}')
-    # I.1 Observations nivometeo
-    # ---------------------------
-    # nivometeo_data = 'obs_nivometeo_daily_RR_{0:s}_{1:s}.csv'.format(args.datebegin.strftime('%Y%m%d'), args.dateend.strftime('%Y%m%d'))
-    nivometeo_data = 'obs_nivometeo_daily_RR.csv'
-    nivometeo = pd.read_csv(nivometeo_data, sep=';', parse_dates=['dat'],
-            dtype={'Q.num_poste': int, 'poste_nivo.nom_usuel': str, 'poste_nivo.alti': int, 'poste_nivo.lat_dg': float, 'poste_nivo.lon_dg': float, 'rr': float,
-                'poste_nivo.massif_nivo': int, 'hist_reseau_poste.reseau_poste': int})
-#    nivometeo_data = 'obs_nivometeo_hourly_RR.csv'
-#    nivometeo = pd.read_csv(nivometeo_data, sep=';', parse_dates=['H.dat'],
-#            dtype={'H.num_poste':int, 'poste_nivo.nom_usuel':str, 'poste_nivo.alti':int, 'poste_nivo.lat_dg':float, 'poste_nivo.lon_dg':float, 'H.rr1':float,
-#                'poste_nivo.massif_nivo':int, 'hist_reseau_poste.reseau_poste':int})
-    # Renomage de certaines colonnes (pour le merge des DF et pour faciliter la manipulation)
-    nivometeo['date'] = nivometeo['dat'].dt.date + pd.Timedelta("1d")  # Changement de type + matching dates with radar data (BDClim extraction
-    # for date ymd is the observation from ymd6h to ym(d+1)6h )
-    nivometeo = nivometeo.rename(columns={'Q.num_poste': 'num_poste', 'poste_nivo.lat_dg': 'lat', 'poste_nivo.lon_dg': 'lon',
-        'poste_nivo.nom_usuel':'name', 'poste_nivo.massif_nivo':'massif_number', 'poste_nivo.alti':'elevation', 'rr':'rr_nivometeo'})  # facultatif
-
-    # I.2 Produit radar
-    # ------------------
-    antilope = pd.read_csv(RADAR_data, sep=';', parse_dates=['date'], dtype={f'rr_{args.product}': float, 'num_poste': int}, na_values=['--'])
-    antilope['date'] = antilope['date'].dt.date
-
-    # II- Merge des DF et mise en forme des données
-    ###############################################
-    df = pd.merge(antilope, nivometeo, on=["date", "num_poste"])
-    # lpn = pd.read_csv('LPN_nivometeo.csv', sep=';', parse_dates=['H_NIVO.DAT'], dtype={'H.num_poste':int, 'H_NIVO.ALTI_LPNX':int}, index_col=['H_NIVO.DAT'])
-    lpn = pd.read_csv('LPN_nivometeo.csv', sep=';', parse_dates=['H_NIVO.DAT'], dtype={'H.num_poste':int, 'H_NIVO.ALTI_LPNX':int})
-    lpn.rename(columns={'H_NIVO.ALTI_LPNX':'LPNX', 'H.num_poste':'num_poste'}, inplace=True)
-    lpn = lpn[lpn['LPNX']>0]  # consider 0 values as missing observation
-    lpn['date'] = lpn['H_NIVO.DAT'] + pd.Timedelta("12h")  # La LPN observée à 12:00 D concerne les précipitations entre D (6:00) et D+1 (6:00) que l'on veut identifier
-    # par la date ym(D+1), on décale donc de 12h pour que la date de l'obs passe à D+1
-    lpn.index = lpn['date']
-    lpn = lpn.groupby(['num_poste']).resample('1D').max()  # When 2 observation (at 6:00 and 12:00) are available, set the daily LPN as the maximum
-    lpn = lpn[~np.isnan(lpn['LPNX'])]['LPNX'].reset_index()
-    lpn.date = lpn.date.dt.date
-    df = pd.merge(df, lpn, on=["date", "num_poste"])
-
-    # Pour ne prendre en compte que les situations de neige :
-    #df = df[df['elevation']>df['LPNX']]
-
-    # Selection de la période
-    df = df.loc[df["date"]>=datetime.date(datebegin)].loc[df["date"]<=datetime.date(dateend)]
-    # Retrait des données non exploitables
-    df = df.loc[~df['rr_nivometeo'].isna()].loc[~df[f'rr_{args.product}'].isna()]  # Remove lines with missing value
-    df = df.loc[df['massif_number']<99]  # Remove Stations not associated to 1 massif
-    df = df.loc[~df['name'].str.contains('EDFNIVO')]  # Remove EDFNIVO stations
-
-    # To apply a filter on the minimum number of observations :
-    #tmp = df.groupby(['num_poste']).date.count()
-    #tmp = tmp.loc[tmp>nb_obs_min] # Consider only points with a minimum number of observations
-    #valid_stations = tmp.index.to_numpy()
-    #df = df.loc[df['num_poste'].isin(valid_stations)] # Consider only points with a minimum number of observations
-
-    return df
-
-
-#    suffix = None
-#    if args.threshold is not None:
-#        df = df.loc[df['rr_nivometeo']>args.threshold] # If a threshold is given, filter data above
-#        suffix = f'{args.threshold}mm'
-#        nb_obs_min = 20
-#    # Calcul des valeurs agrégées par station
-#    rr_nivometeo  = df.groupby(['num_poste']).rr_nivometeo.mean()
-#    rr_antilope   = df.groupby(['num_poste'])[f'rr_{args.product}'].mean()
-##    if args.product in == 'antilope':
-##        rr_antilope   = df.groupby(['num_poste']).rr_antilope.mean()
-##    elif args.product in == 'antilopejp1':
-##        rr_antilope   = df.groupby(['num_poste']).rr_antilopejp1.mean()
-##    else:
-##        rr_antilope   = df.groupby(['num_poste']).rr_panthere.mean()
-#    nb_values     = df.groupby(['num_poste']).date.count()
-#    elevations    = df.groupby(['num_poste']).elevation.mean()
-#    lats          = df.groupby(['num_poste']).lat.mean()
-#    lons          = df.groupby(['num_poste']).lon.mean()
-#    massif_number = df.groupby(['num_poste']).massif_number.mean()
-#    names         = df.groupby(['num_poste']).name.first()
-#    # Regroupement dans une nouvelle dataframe (il est surement possible d'extraire directement cette DF depuis 'df' pour simplifier le code)
-#    num_poste = df.groupby(['num_poste']).num_poste.mean()
-#    workdict = {'elevation':elevations, 'rr_nivometeo':rr_nivometeo, f'rr_{args.product}':rr_antilope, 'ndays':nb_values, 'massif_number':massif_number,
-#            'lats':lats, 'lons':lons, 'num_poste':num_poste}
-#    #workdict = {'elevation':elevations, 'rr_nivometeo':rr_nivometeo, f'rr_{args.product}':rr_antilope, 'ndays':nb_values, 'massif_number':massif_number, 'lats':lats, 'lons':lons}
-#    df_stat   = pd.DataFrame(workdict)
-#    #workdf = workdf.loc[workdf['ndays']>nb_obs_min] # Consider only points with at least 100 observations
-
-def plot(workdf, rain, snow, elevation):
-    fig = plt.figure()
-    plt.plot(snow['rr_nivometeo'], snow['bias'], linestyle='', marker='+', color='blue', label='Solid precipitation only')
-    plt.plot(rain['rr_nivometeo'], rain['bias'], linestyle='', marker='+', color='red', label='Other precipitation')
-    plt.title(f'Station n°{station} ({elevation}m, {nb_obs} observations)')
-    plt.xlabel("24h precipitation ground observation (mm/24h)", fontsize=12)
-    plt.ylabel("ANTILOPE bias", fontsize=12)
-    plt.legend()
-    fig.savefig(f"radar_bias/station_{station}.svg", format='svg')
-    plt.close(fig)
-
-    fig = plt.figure()
-    plt.plot(snow['rr_nivometeo'], snow['bias']/snow['rr_nivometeo'], linestyle='', marker='+', color='blue', label='Solid precipitation only')
-    plt.plot(rain['rr_nivometeo'], rain['bias']/rain['rr_nivometeo'], linestyle='', marker='+', color='red', label='Other precipitation')
-    plt.title(f'Station n°{station} ({elevation}m, {nb_obs} observations)')
-    plt.xlabel("24h precipitation ground observation (mm/24h)", fontsize=12)
-    plt.ylabel("ANTILOPE relative bias", fontsize=12)
-    plt.legend()
-    fig.savefig(f"relative_bias/station_{station}.svg", format='svg')
-    plt.close(fig)
-
-    fig = plt.figure()
-    plt.plot(snow['rr_nivometeo'], snow[f'rr_{args.product}'], linestyle='', marker='+', color='blue', label='Solid precipitation only')
-    plt.plot(rain['rr_nivometeo'], rain[f'rr_{args.product}'], linestyle='', marker='+', color='red', label='Other precipitation')
-    plt.title(f'Station n°{station} ({elevation}m, {nb_obs} observations)')
-    plt.xlabel("24h precipitation ground observation (mm/24h)", fontsize=12)
-    plt.ylabel("24h ANTILOPE precipitation estimate (mm/24h)", fontsize=12)
-    plt.legend()
-    fig.savefig(f"scatterplot/station_{station}.svg", format='svg')
-    plt.close(fig)
-
-    rrmax = max([np.max(workdf[f'rr_{args.product}']), np.max(workdf['rr_nivometeo'])])
-    dx = 0.1
-    x = np.arange(0, rrmax, dx)
-    y = [len(workdf.loc[workdf[f'rr_{args.product}'] <= rr]) for rr in x]
-    z = [len(workdf.loc[workdf['rr_nivometeo'] <= rr]) for rr in x]
-    fig = plt.figure()
-    plt.plot(x, y, linestyle='-', marker='', color='blue', label='ANTILOPE')
-    plt.plot(x, z, linestyle='-', marker='', color='red', label='Nivometeo')
-    plt.title(f'Station n°{station} ({elevation}m, {nb_obs} observations)')
-    plt.xlabel("24h-precipitation (mm/24h)", fontsize=12)
-    plt.ylabel("Observation frequency", fontsize=12)
-    plt.legend()
-    fig.savefig(f"CDF/station_{station}.svg", format='svg')
-    plt.close(fig)
-
-def plot_pdf():
-    nbobs = len(df)
-    rrmax = max([np.max(df[f'rr_{args.product}']), np.max(df[f'rr_nivometeo'])])
-    rrmax=10
-    dx = 0.1
-    x = np.arange(0, rrmax, dx)
-    pdfradar = [len(df.loc[(df[f'rr_{args.product}'] >= rr) & (df[f'rr_{args.product}'] < rr+dx)]) / nbobs for rr in x]
-    pdfnivometeo = [len(df.loc[(df[f'rr_nivometeo'] >= rr) & (df[f'rr_nivometeo'] < rr+dx)]) / nbobs for rr in x]
-    fig = plt.figure()
-    plt.plot(x, pdfradar, linestyle='-', marker='', color='blue', label='ANTILOPE')
-    plt.plot(x, pdfnivometeo, linestyle='-', marker='', color='red', label='Nivometeo')
-    plt.title(f'{nbobs} observations')
-    plt.xlabel("24h-precipitation (mm/24h)", fontsize=12)
-    plt.ylabel("Probability of observation ", fontsize=12)
-    plt.legend()
-    fig.savefig(f"PDF_observations.svg", format='svg')
-    plt.close(fig)
+    return pearome
 
 
 if __name__ == "__main__":
     args = parse_command_line()
 
     extract_period = date_range(args.datebegin, args.dateend)
-    if args.product == 'antilope':
-        RADAR_data = 'ANTILOPEQ_{0:s}_{1:s}.csv'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))
-    elif args.product == 'antilopejp1':
-        RADAR_data = 'ANTILOPEJP1Q_{0:s}_{1:s}.csv'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))
-    elif args.product == 'kriging':
-        RADAR_data = 'Kriging_{0:s}_{1:s}_{2:s}.csv'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'), 'exponential')
+    filename = 'ANTILOPEQ_{0:s}_{1:s}_{2:s}.nc'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'), args.domain)
+    if not os.path.exists(filename):
+        print(f'WARNING : file {filename} does not exist, looking for it under {datadir}')
+        filename = os.path.join(datadir, filename)
+    if os.path.exists(filename):
+        antilope = xr.open_dataset(filename)
     else:
-        RADAR_data = 'PANTHERE_{0:s}_{1:s}.csv'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))
+        print(f'ERROR : file {filename} does not exist')
+        sys.exit(1)
+    pearome = read_ensemble(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))
 
-    df = read_data(RADAR_data, args.datebegin, args.dateend)
-    df['bias'] = df[f'rr_{args.product}'] - df['rr_nivometeo']
+    import pdb
+    pdb.set_trace()
 
-#    plot_pdf()
+    date = args.datebegin
+    while date <= args.dateend:
+        antilope.sel(time=date)
+        print()
+        date = date + timedelta(days=1)
+
+
     x = list()
     y = list()
     alti = list()

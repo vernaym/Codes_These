@@ -244,11 +244,12 @@ if __name__ == "__main__":
         #  np.shape(rr24) = (time, 21, 21) et il faut un data de la forme (21, 21, time)
         rr = xr.DataArray(
             data = np.transpose(rr24, (1,2,0)),  # Pour passer la dimension temporelle en dernier : (lon, lat, time)
+            name = 'rr',
             dims=["x", "y", "time"],
             coords=dict(lon=(["x", "y"], lon),lat=(["x", "y"], lat), time=time, reference_time=reference_time,),
             attrs=dict(description="24 hour precipitation",units="mm/24h"),
         )
-        outname = '{0:s}_{1:s}_{1:s}_{2:s}.nc'.format(args.model, args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'), domain)
+        outname = '{0:s}_{1:s}_{2:s}_{3:s}.nc'.format(args.model, args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'), domain)
         rr.to_netcdf(outname)
 
         cumul.dump_to_nc('CUMUL_{0:s}_{1:s}_{2:s}_{3:s}.nc'.format(args.model, args.datebegin.strftime("%Y%m%d%H"), args.dateend.strftime("%Y%m%d%H"), domain), variablename="rr_cumul")
