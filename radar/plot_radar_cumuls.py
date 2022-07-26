@@ -7,6 +7,7 @@ import os,sys
 import pandas as pd
 import xarray as xr
 import numpy as np
+from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
 from matplotlib import cm
 from mpl_toolkits.mplot3d import Axes3D  # F401 unused import --> to ignore !
@@ -29,13 +30,6 @@ filename = sys.argv[1]
 datebegin = filename.split('.')[0].split('_')[-2]
 dateend   = filename.split('.')[0].split('_')[-1]
 
-if not os.path.isfile(filename):
-    print(f'WARNING : no such file or directory {filename}')
-    print(f'lookink for the file under {datadir}')
-    filename = os.path.join(datadir, filename)
-    if not os.path.isfile(filename):
-        print(f'ERROR : no such file or directory {filename}')
-        sys.exit(1)
 
 # Domaine des Grandes Rousses
 extract_dom = dict(
@@ -45,15 +39,41 @@ extract_dom = dict(
     lonmax = 6.490,
 )
 
+outProj = Proj(init='epsg:4326')
+inProj = Proj(init='epsg:2154')
+
 norm = plt.Normalize()
 
-if filename.startswith('PANTHERE'):
+if not os.path.isfile(filename):
+    print(f'WARNING : no such file or directory {filename}')
+    print(f'lookink for the file under {datadir}')
+    filename = os.path.join(datadir, filename)
 
-    mnt = xr.open_dataset("scriptMNTLouis.nc")  # MNT uniquement sur les grandes Rousses
-    df=pd.read_csv(filename)
+if 'PANTHERE' in filename:
+
+    if not os.path.exists(filename):
+        ## First convert all csv files in netcdf file in order to read the with xarray
+        date = datetime.strptime(datebegin, '%Y%m%d%H%M')
+        while date <= datetime.strptime(dateend, '%Y%m%d%H%M'):
+            print(date)
+            csvfic = '{0:s}_010000_DATA.text'.format(date.strftime('%Y%m%d%H%M')) # ex: 201904030600_010000_DATA.text
+            if os.path.exists(csvfic):
+                tmp = pd.read_csv(csvfic, names=['y', 'x', 'rr'], header=None, dtype={'x':float, 'y':float, 'rr':float}, sep=' ', comment='#', index_col=['x', 'y'])
+                tmp = tmp.query('x>6.0 & x<6.5 & y<45.25 & y>44.9')
+                if 'df' in locals():
+                    df = df + tmp
+                else:
+                    df = tmp
+            date = date + timedelta(days=1)
+        #df = df.rename(index=lambda val: round(val, 2))
+        df.to_csv(filename)
+    else:
+        df = pd.read_csv(filename)
+
+    mnt = xr.open_dataset(os.path.join(datadir, "MNT_GrandesRousses.nc"))  # MNT uniquement sur les grandes Rousses
+    #mnt = xr.open_dataset("scriptMNTLouis.nc")  # MNT uniquement sur les grandes Rousses
+    df = pd.read_csv(filename)
     product = 'PANTHERE'
-    outProj = Proj(init='epsg:4326')
-    inProj = Proj(init='epsg:2154')
     df['x2'],df['y2'] = transform(outProj,inProj,df['x'].values,df['y'].values)
     #df.set_index(['x2', 'y2'], inplace=True)
     #radar = xr.Dataset.from_dataframe(df)
@@ -81,10 +101,11 @@ else:
 
     ds = xr.open_dataset(filename)
     #mnt = xr.open_dataset("scriptMNTLouis.nc")  # MNT uniquement sur les grandes Rousses
+    #mnt = xr.open_dataset(os.path.join(datadir, "MNT_GrandesRousses.nc"))  # MNT uniquement sur les grandes Rousses
     mnt = xr.open_dataset('/home/vernaym/QGIS/MNT/DEM_ALPES_WGS84_250m_bilinear.nc')  # Pour tracer sur toutes les Alpes
     if 'ANTILOPE' in filename:
         product = 'ANTILOPE'
-        #tmp = ds.interp(X=mnt.lon, Y=mnt.lat, method='nearest') # Pour interpoller la grille ANTILOPE sur le MNT
+        #tmp = ds.interp(X=mnt.x, Y=mnt.x, method='nearest') # Pour interpoller la grille ANTILOPE sur le MNT GrandesRousses
         tmp = mnt.interp(lon=ds.longitude, lat=ds.latitude, method='nearest')  # Pour interpoller le MNT sur la grille ANTILOPE
     elif 'krigeage' in filename:
         product = 'KRIGING'
