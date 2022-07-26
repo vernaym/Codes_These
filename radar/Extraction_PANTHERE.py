@@ -29,6 +29,7 @@ datebegin = datetime(2018, 12, 1, 6, 0)
 dateend   = datetime(2019, 4, 30, 6, 0)
 
 workdir = '/home/vernaym/workdir/evaluation_PANTHERE' 
+datadir = '/home/vernaym/These/DATA'
 
 dist = lambda dx,dy: np.sqrt(dx**2+dy**2)
 
@@ -70,7 +71,7 @@ def date_range(start, end, dt=24):
     while start <= end:
         dates.append(start)
         start += timedelta(hours=dt)
-    
+
     return dates
 
 def goto(path):
@@ -82,26 +83,31 @@ if __name__ == "__main__":
 
     extract_period = date_range(datebegin, dateend)
 
-    panthere = pd.DataFrame(columns=['date', 'num_poste', 'rr_panthere'])
+    panthere = pd.DataFrame(columns=['date', 'num_poste', 'rr_panthere'], dtype=object)
     goto(workdir)
-    nivometeo = pd.read_csv('postes_nivometeo.csv', sep=';')
+    nivometeo_path = 'postes_nivometeo.csv'
+    if not os.path.exists(nivometeo_path):
+        print(f'WARNING : file {nivometeo_path} does not exist, looking for it under {datadir}')
+        nivometeo_path = os.path.join(datadir, nivometeo_path)
+    nivometeo = pd.read_csv(nivometeo_path, sep=';')
+
     for date in extract_period:
         print(date)
-        if date.month in [1,2,3,4,11,12]: # Consider only month with nivometeo observations
-            ficname = '{0:s}_010000_DATA.text'.format(date.strftime('%Y%m%d%H%M')) # ex: 201904030600_010000_DATA.text
-            fic = os.path.join(workdir, ficname)
-            if os.path.exists(fic):
-                radar = pd.read_csv(fic, sep=' ', comment='#', names=['lat', 'lon', 'rr'])
-                def closest(row):
-                    darr = dist(radar['lat']-row['poste_nivo.lat_dg'], radar['lon']-row['poste_nivo.lon_dg'])
-                    idx = np.where(darr == np.amin(darr))[0][0]
-                    return radar['rr'][idx]
-                rr_panthere = nivometeo.apply(closest, axis=1)
-                tmp = pd.DataFrame()
-                tmp['rr_panthere'] = rr_panthere
-                tmp['date']        = date
-                tmp['num_poste']   = nivometeo['poste_nivo.num_poste']
-                panthere = panthere.append(tmp, ignore_index=True, sort=False)
+        ficname = '{0:s}_010000_DATA.text'.format(date.strftime('%Y%m%d%H%M')) # ex: 201904030600_010000_DATA.text
+        fic = os.path.join(workdir, ficname)
+        if os.path.exists(fic):
+            radar = pd.read_csv(fic, sep=' ', comment='#', names=['lat', 'lon', 'rr'])
+            if date.month in [1,2,3,4,11,12]: # Consider only month with nivometeo observations
+                    def closest(row):
+                        darr = dist(radar['lat']-row['poste_nivo.lat_dg'], radar['lon']-row['poste_nivo.lon_dg'])
+                        idx = np.where(darr == np.amin(darr))[0][0]
+                        return radar['rr'][idx]
+                    rr_panthere = nivometeo.apply(closest, axis=1)
+                    tmp = pd.DataFrame()
+                    tmp['rr_panthere'] = rr_panthere
+                    tmp['date']        = date
+                    tmp['num_poste']   = nivometeo['poste_nivo.num_poste']
+                    panthere = panthere.append(tmp, ignore_index=True, sort=False)
         else:
             print('Missing date {0:s}'.format(date.strftime("%Y%m%d%H")))
 
