@@ -15,8 +15,8 @@ import argparse
 #import matplotlib
 #matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-#from matplotlib.colors import ListedColormap
-#import seaborn as sns
+from matplotlib import cm
+from mpl_toolkits.mplot3d import Axes3D  # F401 unused import --> to ignore !
 
 #from sklearn.linear_model import LinearRegression, RANSACRegressor
 #from sklearn.datasets import make_regression
@@ -28,11 +28,20 @@ import statistics
 
 #from snowtools.plots.maps import cartopy
 
-
 ##############################################################################################
 ##############################################################################################
 
 datadir = '/home/vernaym/These/DATA'
+
+# Domaine des Grandes Rousses
+extract_dom = dict(
+    latmax = 45.240,
+    latmin = 44.990,
+    lonmin = 6.010,
+    lonmax = 6.490,
+)
+
+norm = plt.Normalize()
 
 def parse_command_line():
     description = "Evaluation of RADAR products (ANTILOPE or PANTHERE) using nivo-météo network observations"
@@ -168,13 +177,30 @@ def SCGD_shape_PDF(x, k=1., theta=1., delta=0., plot_distribution=False, plot_pa
 def read_ensemble(datebegin, dateend, domain='GrandesRousses'):
     pearome = dict()
     for member in range(1,17):
-        #filename = f'pearome_{member:03d}_{datebegin}_{dateend}.nc'
-        # TODO : Verrue
-        filename = f'pearome_{member:03d}_2021073106_2022071506.nc'
+        filename = f'pearome_{member:03d}_{datebegin}_{dateend}_{domain}.nc'
         filename = os.path.join(datadir, filename)
         pearome[member] = xr.open_dataset(filename)
 
     return pearome
+
+def plot3D(X, Y, Z, colors, date):
+    fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
+    ax.view_init(elev=60., azim=135)  # Set point of view
+    surf = ax.plot_surface(X=X, Y=Y, Z=Z, linewidth=0, antialiased=False, facecolors=colors)
+    ax.xaxis.pane.fill = False
+    ax.xaxis.pane.set_edgecolor('white')
+    ax.yaxis.pane.fill = False
+    ax.yaxis.pane.set_edgecolor('white')
+    ax.zaxis.pane.fill = False
+    ax.zaxis.pane.set_edgecolor('white')
+    ax.grid(False)
+    ax.set_xlabel('Longitude', labelpad=20)
+    ax.set_ylabel('Latitude', labelpad=20)
+    ax.set_zlabel('Elevation (m)')
+    #ax.set_zlim(0., np.max(Z))
+    ax.set_zlim(0., 3500.)
+    fig.colorbar(cm.ScalarMappable(norm=norm, cmap=plt.cm.coolwarm), ax=ax, shrink=0.75, aspect=8, label=f'ANTILOPE precipitation (mm)')
+    plt.savefig(f'OBS_3D_{date}.pdf', format='pdf')
 
 
 if __name__ == "__main__":
@@ -191,14 +217,62 @@ if __name__ == "__main__":
         print(f'ERROR : file {filename} does not exist')
         sys.exit(1)
     pearome = read_ensemble(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))
-
-    import pdb
-    pdb.set_trace()
+    #mnt = xr.open_dataset(os.path.join(datadir, "MNT_GrandesRousses.nc"))
+    mnt = xr.open_dataset('/home/vernaym/QGIS/MNT/DEM_ALPES_WGS84_250m_bilinear.nc')  # Pour tracer sur toutes les Alpes
+    # Extract Grandes Rousses domain :
+    latmin = extract_dom['latmin']
+    lonmin = extract_dom['lonmin']
+    latmax = extract_dom['latmax']
+    lonmax = extract_dom['lonmax']
 
     date = args.datebegin
     while date <= args.dateend:
-        antilope.sel(time=date)
-        print()
+        date_str = date.strftime('%Y%m%d%H')
+        radar = antilope.sel(time=date)
+        # WARNING :  la commande suivante réduit sensibement le domaine, attention aux comparaisons entre figures (en particulier avec les CUMULS)
+        radar = radar.where((radar.lon>=lonmin) & (radar.lon<=lonmax) & (radar.lat>=latmin) & (radar.lat<=latmax), drop=True)
+        obs = radar['rr'].data
+        radar_lat = radar.lat.data
+        radar_lon = radar.lon.data
+        # Plot ANTILOPE precipitation field
+        fig = plt.figure()
+        radar.transpose('lat', 'lon').rr.plot()
+        #radar.rr.plot()
+        fig.savefig(f'OBS_{date_str}.pdf', format='pdf')
+
+        # Plot 3D ANTILOPE precipitation field
+        tmp = mnt.interp(lon=radar.lon, lat=radar.lat, method='nearest')  # Pour interpoller le MNT sur la grille ANTILOPE
+        # WARNING :  la commande suivante réduit sensibement le domaine, attention aux comparaisons entre figures (en particulier avec les CUMULS)
+        #tmp = tmp.where((tmp.lon>=lonmin) & (tmp.lon<=lonmax) & (tmp.lat>=latmin) & (tmp.lat<=latmax), drop=True)
+        X, Y = np.meshgrid(tmp['lon'].values, tmp['lat'].values)
+        Z = np.nan_to_num(tmp['Band1'].values)
+        # define pixel colors
+        colors = plt.cm.coolwarm(norm(np.nan_to_num(radar.transpose('lat', 'lon').rr.data)))
+        plot3D(X, Y, Z, colors, date_str)
+
+        fig, axes = plt.subplots(nrows=4, ncols=4, figsize=(16, 16))
+        fig2, axes2 = plt.subplots(nrows=4, ncols=4, figsize=(16, 16))
+        i = 0
+        j = 0
+        for member,model in pearome.items():
+            model = model.sel(time=date)
+            model.rr.plot(ax=axes2[i,j])
+            # WARNING :  la commande suivante réduit sensibement le domaine, attention aux comparaisons entre figures (en particulier avec les CUMULS)
+            model = model.where((model.lon>=lonmin) & (model.lon<=lonmax) & (model.lat>=latmin) & (model.lat<=latmax), drop=True)
+            model_interp = model.interp(lon=radar.lon, lat=radar.lat)
+            model_interp.transpose('lat', 'lon').rr.plot(ax=axes[i,j])
+            j = j + 1
+            if j==4:
+                j = 0
+                i = i + 1
+
+        fig.savefig(f'MODEL_interp_{date_str}.pdf', format='pdf')
+        fig2.savefig(f'MODEL_raw_{date_str}.pdf', format='pdf')
+
+        import pdb
+        pdb.set_trace()
+
+
         date = date + timedelta(days=1)
 
 
