@@ -247,8 +247,8 @@ if __name__ == "__main__":
             rr = xr.DataArray(
                 data = np.transpose(rr24, (1,2,0)),  # Pour passer la dimension temporelle en dernier : (lon, lat, time)
                 name = 'rr',
-                dims=["x", "y", "time"],
-                coords=dict(lon=(["x", "y"], lon),lat=(["x", "y"], lat), time=time, reference_time=reference_time,),
+                dims=["lon", "lat", "time"],
+                coords=dict(lon=(["lon"], lon[0]), lat=(["lat"], lat[:,0]), time=time, reference_time=reference_time,),
                 attrs=dict(description="24 hour precipitation",units="mm/24h"),
             )
             outname = '{0:s}_{1:03d}_{2:s}_{3:s}_{4:s}.nc'.format(args.model, member, args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'), domain)
