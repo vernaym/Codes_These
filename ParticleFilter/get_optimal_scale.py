@@ -231,13 +231,35 @@ if __name__ == "__main__":
         radar = antilope.sel(time=date)
         # WARNING :  la commande suivante réduit sensibement le domaine, attention aux comparaisons entre figures (en particulier avec les CUMULS)
         radar = radar.where((radar.lon>=lonmin) & (radar.lon<=lonmax) & (radar.lat>=latmin) & (radar.lat<=latmax), drop=True)
+        # Save min/max values to set common colorbar
+        rrmin = np.nanmin(radar.rr.data) * 0.9
+        rrmax = np.nanmax(radar.rr.data) * 1.1
         obs = radar['rr'].data
         radar_lat = radar.lat.data
         radar_lon = radar.lon.data
         # Plot ANTILOPE precipitation field
-        fig = plt.figure()
-        radar.transpose('lat', 'lon').rr.plot()
-        #radar.rr.plot()
+        fig = plt.figure(figsize=(18,8))
+        radar.transpose('lat', 'lon').rr.plot(vmin=rrmin, vmax=rrmax, cbar_kwargs={'label': "24 hour precipitation (mm)"})  # quadmesh object
+        # Add Alpe d'Huez and Lautaret landmarks
+        plt.plot(6.070, 45.092, marker='o', color='red', markersize=10)
+        plt.annotate("Alpe d'Huez", (6.073, 45.095), color='red', fontsize=20)
+        plt.plot(6.124, 45.010, marker='o', color='red', markersize=10)
+        plt.annotate("Les 2 Alpes", (6.127, 45.013), color='red', fontsize=20)
+        plt.plot(6.405, 45.035, marker='X', color='red', markersize=10)
+        plt.annotate("Lautaret", (6.408, 45.038), color='red', fontsize=20)
+        plt.plot(6.308, 45.005, marker='^', color='red', markersize=10)
+        plt.annotate("La Meije", (6.311, 45.008), color='red', fontsize=20)
+        plt.plot(6.128, 45.125, marker='^', color='red', markersize=10)
+        plt.annotate("Pic Blanc", (6.131, 45.128), color='red', fontsize=20)
+
+        plt.xticks(fontsize=16)
+        plt.yticks(fontsize=16)
+        ax = plt.gca()
+        ax.set_aspect('equal')
+        ax.set_title(f'Date {date_str}', fontsize=20)
+        ax.axes.get_xaxis().get_label().set_visible(False)
+        ax.axes.get_yaxis().get_label().set_visible(False)
+        fig.tight_layout()
         fig.savefig(f'OBS_{date_str}.pdf', format='pdf')
 
         # Plot 3D ANTILOPE precipitation field
@@ -250,22 +272,39 @@ if __name__ == "__main__":
         colors = plt.cm.coolwarm(norm(np.nan_to_num(radar.transpose('lat', 'lon').rr.data)))
         plot3D(X, Y, Z, colors, date_str)
 
-        fig, axes = plt.subplots(nrows=4, ncols=4, figsize=(16, 16))
-        fig2, axes2 = plt.subplots(nrows=4, ncols=4, figsize=(16, 16))
+        fig, axes = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
+        fig2, axes2 = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
         i = 0
         j = 0
         for member,model in pearome.items():
             model = model.sel(time=date)
-            model.rr.plot(ax=axes2[i,j])
-            # WARNING :  la commande suivante réduit sensibement le domaine, attention aux comparaisons entre figures (en particulier avec les CUMULS)
             model = model.where((model.lon>=lonmin) & (model.lon<=lonmax) & (model.lat>=latmin) & (model.lat<=latmax), drop=True)
+            im2 = model.transpose('lat', 'lon').rr.plot(ax=axes2[i,j], add_colorbar=False, vmin=rrmin, vmax=rrmax)
+            # WARNING :  la commande suivante réduit sensibement le domaine, attention aux comparaisons entre figures (en particulier avec les CUMULS)
             model_interp = model.interp(lon=radar.lon, lat=radar.lat)
-            model_interp.transpose('lat', 'lon').rr.plot(ax=axes[i,j])
+            im = model_interp.transpose('lat', 'lon').rr.plot(ax=axes[i,j], add_colorbar=False, vmin=rrmin, vmax=rrmax)
+            for ax in [axes[i,j], axes2[i,j]]:
+                ax.plot(6.070, 45.092, marker='.', color='red')
+                ax.plot(6.124, 45.010, marker='.', color='red')
+                ax.plot(6.405, 45.035, marker='x', color='red')
+                ax.plot(6.308, 45.005, marker='^', color='red')
+                ax.plot(6.128, 45.125, marker='^', color='red')
+                ax.set_aspect('equal')
+                ax.axis('off')
+                ax.set_title(f'member {member:03d}')
             j = j + 1
             if j==4:
                 j = 0
                 i = i + 1
 
+        fig.tight_layout()
+        fig2.tight_layout()
+        fig.subplots_adjust(right=0.8)
+        fig2.subplots_adjust(right=0.8)
+        cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
+        cbar_ax2 = fig2.add_axes([0.85, 0.15, 0.05, 0.7])
+        fig.colorbar(im, cax=cbar_ax, label='24-hour precipitation (mm)')
+        fig2.colorbar(im2, cax=cbar_ax2, label='24-hour precipitation (mm)')
         fig.savefig(f'MODEL_interp_{date_str}.pdf', format='pdf')
         fig2.savefig(f'MODEL_raw_{date_str}.pdf', format='pdf')
 
