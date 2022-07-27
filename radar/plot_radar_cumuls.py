@@ -64,9 +64,12 @@ if 'PANTHERE' in filename:
                     df = df + tmp
                 else:
                     df = tmp
+            else:
+                print(f'Missing file {csvfic}, check that you lauched this script in the good directory')
             date = date + timedelta(days=1)
-        #df = df.rename(index=lambda val: round(val, 2))
-        df.to_csv(filename)
+        if 'df' in locals():
+            #df = df.rename(index=lambda val: round(val, 2))
+            df.to_csv(filename)
     else:
         df = pd.read_csv(filename)
 
