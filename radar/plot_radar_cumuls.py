@@ -87,7 +87,6 @@ if 'PANTHERE' in filename:
             df['dist'] = ((df['x2']-lon)**2+(df['y2']-lat)**2)**0.5
             rr[-1].append(df['rr'][df['dist'].idxmin()])
 
-    radar = xr.DataArray(rr, coords=[("x", mnt['x']), ("y", mnt['y'])])
 
     #plot=radar.hvplot(x='x',y='y')
     #hvplot.show(plot)
@@ -95,7 +94,19 @@ if 'PANTHERE' in filename:
     x, y = np.meshgrid(mnt['x'], mnt['y'])
     X, Y = transform(inProj, outProj, x, y)
     Z = mnt['ZS']
-    colors = plt.cm.coolwarm(norm(np.transpose(radar.values)))
+
+    radar = xr.DataArray(
+            data=np.transpose(rr),
+            name='rr',
+            dims=["X", "Y"],
+            coords=dict(longitude=(["X", "Y"], X), latitude=(["X", "Y"], Y)),
+            attrs=dict(description="Total precipitation",units="mm"),
+        )
+
+    radar.to_netcdf(os.path.join(datadir, os.path.basename(filename).replace('csv', 'nc')))
+
+    #colors = plt.cm.coolwarm(norm(np.transpose(radar.values)))
+    colors = plt.cm.coolwarm(norm(radar.values))
 
 else:
 
