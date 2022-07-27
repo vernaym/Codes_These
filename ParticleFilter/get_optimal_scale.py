@@ -17,6 +17,11 @@ import argparse
 import matplotlib.pyplot as plt
 from matplotlib import cm
 from mpl_toolkits.mplot3d import Axes3D  # F401 unused import --> to ignore !
+from matplotlib.text import Annotation
+from matplotlib import offsetbox
+
+from mpl_toolkits.mplot3d import proj3d
+from mpl_toolkits.mplot3d.proj3d import proj_transform
 
 #from sklearn.linear_model import LinearRegression, RANSACRegressor
 #from sklearn.datasets import make_regression
@@ -42,6 +47,14 @@ extract_dom = dict(
 )
 
 norm = plt.Normalize()
+
+landmarks = {
+        "Alpe d'Huez" : dict(lon=6.070, lat=45.092, alt=1800, marker='o'),
+        "Les 2 Alpes" : dict(lon=6.127, lat=45.013, alt=1800, marker='o'),
+        "Lautaret"    : dict(lon=6.408, lat=45.038, alt=2058, marker='X'),
+        "La Meije"    : dict(lon=6.311, lat=45.008, alt=3500, marker='^'),  # real alt = 3984
+        "Pic Blanc"   : dict(lon=6.131, lat=45.128, alt=3000, marker='^'),  # real alt = 3333
+    }
 
 def parse_command_line():
     description = "Evaluation of RADAR products (ANTILOPE or PANTHERE) using nivo-météo network observations"
@@ -183,6 +196,82 @@ def read_ensemble(datebegin, dateend, domain='GrandesRousses'):
 
     return pearome
 
+class Annotation3D(Annotation):
+    """ From : https://datascience.stackexchange.com/questions/11430/how-to-annotate-labels-in-a-3d-matplotlib-scatter-plot"""
+
+    def __init__(self, text, xyz, *args, **kwargs):
+        super().__init__(text, xy=(0, 0), *args, **kwargs)
+        self._xyz = xyz
+
+    def draw(self, renderer):
+        x2, y2, z2 = proj_transform(*self._xyz, self.axes.M)
+        self.xy = (x2, y2)
+        super().draw(renderer)
+
+class ImageAnnotations3D():
+    """ From : https://discuss.dizzycoding.com/matplotlib-3d-scatter-plot-with-images-as-annotations/ """
+
+    #def __init__(self, xyz, imgs, ax3d,ax2d):
+    def __init__(self, xyz, text, ax3d, ax2d):
+        self.xyz = xyz
+        #self.imgs = imgs
+        self.text = text
+        self.ax3d = ax3d
+        self.ax2d = ax2d
+        self.annot = []
+        #for s,im in zip(self.xyz, self.imgs):
+        for s,txt in zip(self.xyz, self.text):
+            x,y = self.proj(s)
+            self.annot.append(self.annotation(txt,[x,y]))
+            #self.annot.append(self.image(im,[x,y]))
+        self.lim = self.ax3d.get_w_lims()
+        self.rot = self.ax3d.get_proj()
+        self.cid = self.ax3d.figure.canvas.mpl_connect("draw_event",self.update)
+
+        self.funcmap = {"button_press_event" : self.ax3d._button_press,
+                        "motion_notify_event" : self.ax3d._on_move,
+                        "button_release_event" : self.ax3d._button_release}
+
+        self.cfs = [self.ax3d.figure.canvas.mpl_connect(kind, self.cb) 
+                        for kind in self.funcmap.keys()]
+
+    def cb(self, event):
+        event.inaxes = self.ax3d
+        self.funcmap[event.name](event)
+
+    def proj(self, X):
+        """ From a 3D point in axes ax1, 
+            calculate position in 2D in ax2 """
+        x,y,z = X
+        x2, y2, _ = proj3d.proj_transform(x,y,z, self.ax3d.get_proj())
+        tr = self.ax3d.transData.transform((x2, y2))
+        return self.ax2d.transData.inverted().transform(tr)
+
+    def image(self, arr, xy):
+        """ Place an image (arr) as annotation at position xy """
+        im = offsetbox.OffsetImage(arr, zoom=2)
+        im.image.axes = ax
+        ab = offsetbox.AnnotationBbox(im, xy, xybox=(-30., 30.),
+                            xycoords='data', boxcoords="offset points",
+                            pad=0.3, arrowprops=dict(arrowstyle="->"))
+        self.ax2d.add_artist(ab)
+        return ab
+
+    def annotation(self, ann, xy):
+        """ Place an annotation (ann) at position xy """
+        #an = Annotation3D(ann, xy, arrowprops=dict(arrowstyle="-|>", ec='black'))
+        an = Annotation(ann, xy, arrowprops=dict(arrowstyle="-|>", ec='black'),)
+            #                textcoords="offset points")
+        self.ax2d.add_artist(an)
+        return an
+
+    def update(self, event):
+        if np.any(self.ax3d.get_w_lims() != self.lim) or np.any(self.ax3d.get_proj() != self.rot):
+            self.lim = self.ax3d.get_w_lims()
+            self.rot = self.ax3d.get_proj()
+            for s,ab in zip(self.xyz, self.annot):
+                ab.xy = self.proj(s)
+
 def plot3D(X, Y, Z, colors, date):
     fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
     ax.view_init(elev=60., azim=135)  # Set point of view
@@ -197,6 +286,17 @@ def plot3D(X, Y, Z, colors, date):
     ax.set_xlabel('Longitude', labelpad=20)
     ax.set_ylabel('Latitude', labelpad=20)
     ax.set_zlabel('Elevation (m)')
+
+    # Create a dummy axes to place annotations to
+    ax2 = fig.add_subplot(111,frame_on=False) 
+    ax2.axis("off")
+    ax2.axis([0,1,0,1])
+
+    #ia = ImageAnnotations3D(np.array([[6.073, 45.095, 1800],]), "Alpe d'huez", ax, ax2 )
+    ia = ImageAnnotations3D(
+            np.array([[d['lon'], d['lat'], d['alt']] for d in landmarks.values()]),
+            list(landmarks.keys()), ax, ax2)
+
     #ax.set_zlim(0., np.max(Z))
     ax.set_zlim(0., 3500.)
     fig.colorbar(cm.ScalarMappable(norm=norm, cmap=plt.cm.coolwarm), ax=ax, shrink=0.75, aspect=8, label=f'ANTILOPE precipitation (mm)')
@@ -240,17 +340,10 @@ if __name__ == "__main__":
         # Plot ANTILOPE precipitation field
         fig = plt.figure(figsize=(18,8))
         radar.transpose('lat', 'lon').rr.plot(vmin=rrmin, vmax=rrmax, cbar_kwargs={'label': "24 hour precipitation (mm)"})  # quadmesh object
-        # Add Alpe d'Huez and Lautaret landmarks
-        plt.plot(6.070, 45.092, marker='o', color='red', markersize=10)
-        plt.annotate("Alpe d'Huez", (6.073, 45.095), color='red', fontsize=20)
-        plt.plot(6.124, 45.010, marker='o', color='red', markersize=10)
-        plt.annotate("Les 2 Alpes", (6.127, 45.013), color='red', fontsize=20)
-        plt.plot(6.405, 45.035, marker='X', color='red', markersize=10)
-        plt.annotate("Lautaret", (6.408, 45.038), color='red', fontsize=20)
-        plt.plot(6.308, 45.005, marker='^', color='red', markersize=10)
-        plt.annotate("La Meije", (6.311, 45.008), color='red', fontsize=20)
-        plt.plot(6.128, 45.125, marker='^', color='red', markersize=10)
-        plt.annotate("Pic Blanc", (6.131, 45.128), color='red', fontsize=20)
+        # Add landmarks
+        for landmark, infos in landmarks.items():
+            plt.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='red', markersize=10)
+            plt.annotate(landmark, (infos['lon']+0.003, infos['lat']+0.003), color='red', fontsize=20)
 
         plt.xticks(fontsize=16)
         plt.yticks(fontsize=16)
@@ -278,17 +371,14 @@ if __name__ == "__main__":
         j = 0
         for member,model in pearome.items():
             model = model.sel(time=date)
+            # WARNING :  la commande suivante réduit sensibement le domaine, attention aux comparaisons entre figures (en particulier avec les CUMULS)
             model = model.where((model.lon>=lonmin) & (model.lon<=lonmax) & (model.lat>=latmin) & (model.lat<=latmax), drop=True)
             im2 = model.transpose('lat', 'lon').rr.plot(ax=axes2[i,j], add_colorbar=False, vmin=rrmin, vmax=rrmax)
-            # WARNING :  la commande suivante réduit sensibement le domaine, attention aux comparaisons entre figures (en particulier avec les CUMULS)
             model_interp = model.interp(lon=radar.lon, lat=radar.lat)
             im = model_interp.transpose('lat', 'lon').rr.plot(ax=axes[i,j], add_colorbar=False, vmin=rrmin, vmax=rrmax)
             for ax in [axes[i,j], axes2[i,j]]:
-                ax.plot(6.070, 45.092, marker='.', color='red')
-                ax.plot(6.124, 45.010, marker='.', color='red')
-                ax.plot(6.405, 45.035, marker='x', color='red')
-                ax.plot(6.308, 45.005, marker='^', color='red')
-                ax.plot(6.128, 45.125, marker='^', color='red')
+                for landmark, infos in landmarks.items():
+                    ax.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='red', markersize=4)
                 ax.set_aspect('equal')
                 ax.axis('off')
                 ax.set_title(f'member {member:03d}')
@@ -299,10 +389,10 @@ if __name__ == "__main__":
 
         fig.tight_layout()
         fig2.tight_layout()
-        fig.subplots_adjust(right=0.8)
-        fig2.subplots_adjust(right=0.8)
-        cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
-        cbar_ax2 = fig2.add_axes([0.85, 0.15, 0.05, 0.7])
+        fig.subplots_adjust(right=0.85)
+        fig2.subplots_adjust(right=0.85)
+        cbar_ax = fig.add_axes([0.90, 0.15, 0.05, 0.7])
+        cbar_ax2 = fig2.add_axes([0.90, 0.15, 0.05, 0.7])
         fig.colorbar(im, cax=cbar_ax, label='24-hour precipitation (mm)')
         fig2.colorbar(im2, cax=cbar_ax2, label='24-hour precipitation (mm)')
         fig.savefig(f'MODEL_interp_{date_str}.pdf', format='pdf')
