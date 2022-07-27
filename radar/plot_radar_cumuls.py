@@ -81,9 +81,9 @@ if 'PANTHERE' in filename:
     #radar['rr'].expand_dims({'y':radar['y2']})
 
     rr = []
-    for lon in mnt['x'].values:
+    for lat in mnt['y'].values:
         rr.append(list())
-        for lat in mnt['y'].values:
+        for lon in mnt['x'].values:
             df['dist'] = ((df['x2']-lon)**2+(df['y2']-lat)**2)**0.5
             rr[-1].append(df['rr'][df['dist'].idxmin()])
 
@@ -94,12 +94,11 @@ if 'PANTHERE' in filename:
     x, y = np.meshgrid(mnt['x'], mnt['y'])
     X, Y = transform(inProj, outProj, x, y)
     Z = mnt['ZS']
-
     radar = xr.DataArray(
-            data=np.transpose(rr),
-            name='rr',
-            dims=["X", "Y"],
-            coords=dict(longitude=(["X", "Y"], X), latitude=(["X", "Y"], Y)),
+            data=rr,
+            name='rr_cumul',
+            dims=["lat", "lon"],
+            coords=dict(lon=X[0], lat=Y[:,0]),
             attrs=dict(description="Total precipitation",units="mm"),
         )
 

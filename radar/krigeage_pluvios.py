@@ -128,8 +128,8 @@ if __name__ == "__main__":
     cumul = xr.DataArray(
         data   = precipitation,
         name   = 'rr_cumul',
-        dims   =["X", "Y"],
-        coords =dict(longitude=(["X", "Y"], lon), latitude=(["X", "Y"], lat)),
+        dims   =["lat", "lon"],
+        coords =dict(lon=gridx, lat=gridy),
         attrs  =dict(description="Total precipitation", units="mm",),
     )
     for rundate in extract_period:
