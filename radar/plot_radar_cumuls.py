@@ -29,6 +29,8 @@ filename = sys.argv[1]
 
 datebegin = filename.split('.')[0].split('_')[-2]
 dateend   = filename.split('.')[0].split('_')[-1]
+print(f'Datebegin={datebegin}')
+print(f'Dateend={dateend}')
 
 
 # Domaine des Grandes Rousses
@@ -119,7 +121,7 @@ else:
     if 'ANTILOPE' in filename:
         product = 'ANTILOPE'
         #tmp = ds.interp(X=mnt.x, Y=mnt.x, method='nearest') # Pour interpoller la grille ANTILOPE sur le MNT GrandesRousses
-        tmp = mnt.interp(lon=ds.longitude, lat=ds.latitude, method='nearest')  # Pour interpoller le MNT sur la grille ANTILOPE
+        tmp = mnt.interp(lon=ds.lon, lat=ds.lat, method='nearest')  # Pour interpoller le MNT sur la grille ANTILOPE
     elif 'krigeage' in filename:
         product = 'KRIGING'
         #tmp = ds.interp(X=mnt.x, Y=mnt.y, method='nearest') # Pour interpoller la grille ANTILOPE sur le MNT
@@ -137,10 +139,12 @@ else:
     tmp = tmp.where((tmp.lon>=lonmin) & (tmp.lon<=lonmax) & (tmp.lat>=latmin) & (tmp.lat<=latmax), drop=True)
     X = tmp['lon'].values
     Y = tmp['lat'].values
+    X, Y = np.meshgrid(X, Y)
     Z = tmp['Z']
 
     # define pixel colors
-    radar = ds.where((ds.longitude>=lonmin) & (ds.longitude<=lonmax) & (ds.latitude>=latmin) & (ds.latitude<=latmax), drop=True).rr_cumul
+    #radar = ds.where((ds.longitude>=lonmin) & (ds.longitude<=lonmax) & (ds.latitude>=latmin) & (ds.latitude<=latmax), drop=True).rr_cumul
+    radar = ds.where((ds.lon>=lonmin) & (ds.lon<=lonmax) & (ds.lat>=latmin) & (ds.lat<=latmax), drop=True).rr_cumul
     colors = plt.cm.coolwarm(norm(np.nan_to_num(radar.values)))
 
 fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
