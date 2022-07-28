@@ -310,15 +310,69 @@ def resample(weights):
     import random
     Ne = len(weights)
     delta = 1/Ne
-    cumulated_weights = np.cumsum(weights)
-    for i in range(1, Ne+1):
-        selected_particles = list()
-        u = random.uniform(0, delta)
-        while u <= 1:
-            #print(u)
-            selected_particles.append(np.searchsorted(cumulated_weights, u)+1)
-            u += delta
+    # Sort particules on [0,1[ according to their weight
+    cumulated_weights = np.cumsum(weights, axis=0)
+    #for i in range(1, Ne+1):
+    selected_particles = list()
+    # Random draw between [0, 1/Ne[
+    rdm = random.uniform(0, delta)
+    #rdm = np.random.random_sample(np.shape(cumulated_weights[0]))*delta
+    while rdm <= 1:
+        # Select particle in wich rdm falls
+        #selected_particles.append(np.searchsorted(cumulated_weights, rdm)+1)
+        selected_particles.append(np.apply_along_axis(lambda a: a.searchsorted(rdm), axis=0, arr=cumulated_weights)+1)
+        # Go 1 step forward and start again
+        rdm += delta
     return selected_particles
+
+def plot_obs(radar, rrmin, rrmax, mnt):
+    # Plot ANTILOPE precipitation field
+    fig = plt.figure(figsize=(18,8))
+    radar.transpose('lat', 'lon').rr.plot(vmin=rrmin, vmax=rrmax, cbar_kwargs={'label': "24 hour precipitation (mm)"})  # quadmesh object
+    # Add landmarks
+    for landmark, infos in landmarks.items():
+        plt.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='red', markersize=10)
+        plt.annotate(landmark, (infos['lon']+0.003, infos['lat']+0.003), color='red', fontsize=20)
+
+    plt.xticks(fontsize=16)
+    plt.yticks(fontsize=16)
+    ax = plt.gca()
+    ax.set_aspect('equal')
+    ax.set_title(f'Date {date_str}', fontsize=20)
+    ax.axes.get_xaxis().get_label().set_visible(False)
+    ax.axes.get_yaxis().get_label().set_visible(False)
+    fig.tight_layout()
+    fig.savefig(f'OBS_{date_str}.pdf', format='pdf')
+
+    # Plot 3D ANTILOPE precipitation field
+    tmp = mnt.interp(lon=radar.lon, lat=radar.lat, method='nearest')  # Pour interpoller le MNT sur la grille ANTILOPE
+    # WARNING :  la commande suivante réduit sensibement le domaine, attention aux comparaisons entre figures (en particulier avec les CUMULS)
+    #tmp = tmp.where((tmp.lon>=lonmin) & (tmp.lon<=lonmax) & (tmp.lat>=latmin) & (tmp.lat<=latmax), drop=True)
+    X, Y = np.meshgrid(tmp['lon'].values, tmp['lat'].values)
+    Z = np.nan_to_num(tmp['Band1'].values)
+    # define pixel colors
+    colors = plt.cm.coolwarm(norm(np.nan_to_num(radar.transpose('lat', 'lon').rr.data)))
+    plot3D(X, Y, Z, colors, date_str)
+
+def plot_field(field, ax, vmin, vmax, title):
+
+    im = field.plot(ax=ax, add_colorbar=False, vmin=vmin, vmax=vmax)
+    for landmark, infos in landmarks.items():
+        ax.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='red', markersize=4)
+    ax.set_aspect('equal')
+    ax.axis('off')
+    ax.set_title(title)
+
+    return im
+
+def finalize_fig(figure, imm, label, outname):
+    figure.tight_layout()
+    figure.subplots_adjust(right=0.85)
+    cbar_ax = figure.add_axes([0.90, 0.15, 0.05, 0.7])
+    figure.colorbar(imm, cax=cbar_ax, label=label)
+    figure.colorbar(imm, cax=cbar_ax, label='24-hour precipitation (mm)')
+    figure.savefig(outname, format='pdf')
+
 
 if __name__ == "__main__":
     args = parse_command_line()
@@ -349,121 +403,100 @@ if __name__ == "__main__":
         radar = antilope.sel(time=date)
         # WARNING :  la commande suivante réduit sensibement le domaine, attention aux comparaisons entre figures (en particulier avec les CUMULS)
         radar = radar.where((radar.lon>=lonmin) & (radar.lon<=lonmax) & (radar.lat>=latmin) & (radar.lat<=latmax), drop=True)
-        # Save min/max values to set common colorbar
-        rrmin = np.nanmin(radar.rr.data) * 0.9
-        rrmax = np.nanmax(radar.rr.data) * 1.1
+
         obs = radar['rr'].data
         radar_lat = radar.lat.data
         radar_lon = radar.lon.data
-        # Plot ANTILOPE precipitation field
-        fig = plt.figure(figsize=(18,8))
-        radar.transpose('lat', 'lon').rr.plot(vmin=rrmin, vmax=rrmax, cbar_kwargs={'label': "24 hour precipitation (mm)"})  # quadmesh object
-        # Add landmarks
-        for landmark, infos in landmarks.items():
-            plt.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='red', markersize=10)
-            plt.annotate(landmark, (infos['lon']+0.003, infos['lat']+0.003), color='red', fontsize=20)
 
-        plt.xticks(fontsize=16)
-        plt.yticks(fontsize=16)
-        ax = plt.gca()
-        ax.set_aspect('equal')
-        ax.set_title(f'Date {date_str}', fontsize=20)
-        ax.axes.get_xaxis().get_label().set_visible(False)
-        ax.axes.get_yaxis().get_label().set_visible(False)
-        fig.tight_layout()
-        fig.savefig(f'OBS_{date_str}.pdf', format='pdf')
+        rrmin = min(np.nanmin([mod.sel(time=date).rr for mod in pearome.values()]), np.nanmin(radar.rr.data))
+        rrmax = max(np.nanmax([mod.sel(time=date).rr for mod in pearome.values()]), np.nanmax(radar.rr.data))
 
-        # Plot 3D ANTILOPE precipitation field
-        tmp = mnt.interp(lon=radar.lon, lat=radar.lat, method='nearest')  # Pour interpoller le MNT sur la grille ANTILOPE
-        # WARNING :  la commande suivante réduit sensibement le domaine, attention aux comparaisons entre figures (en particulier avec les CUMULS)
-        #tmp = tmp.where((tmp.lon>=lonmin) & (tmp.lon<=lonmax) & (tmp.lat>=latmin) & (tmp.lat<=latmax), drop=True)
-        X, Y = np.meshgrid(tmp['lon'].values, tmp['lat'].values)
-        Z = np.nan_to_num(tmp['Band1'].values)
-        # define pixel colors
-        colors = plt.cm.coolwarm(norm(np.nan_to_num(radar.transpose('lat', 'lon').rr.data)))
-        plot3D(X, Y, Z, colors, date_str)
+        # Plot observation field
+        plot_obs(radar, rrmin, rrmax, mnt)
 
+        # ASSIMILATION
+        #-------------
         # Define PDF parameters
         Y     = obs
         mu    = Y 
         delta = 0
-        sigma = 5  # constant over the domain
+        sigma = 2  # TODO : sigma doit être une fonction de l'obs de précipitation
         k = (2*sigma**2+mu**2+np.sqrt((mu**2*(4*sigma**2+mu**2))))/(2*sigma**2)  # condition : k > 1
         if not np.any(k>1):
-            print('ERROR : shape parameter k must be >0')
+            print('WARNING : shape parameter k must be >0')
         theta = mu / (k-1)
+        # plot PDF ?
         gamma_shape_PDF(Y, k=k, theta=theta)
         #SCGD_shape_PDF(Y, k=k, theta=theta, delta=delta, plot_parameters=False)
-        ##################################################################################################
+        #-----------------------------------------------------------------------
 
-        fig, axes = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
+        fig1, axes1 = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
         fig2, axes2 = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
         fig3, axes3 = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
         i = 0
         j = 0
         weight = dict()
+        wpixel = dict()
+        model_interp = dict()
         for member,model in pearome.items():
             model = model.sel(time=date)
+            tmp = model.interp(lon=radar.lon, lat=radar.lat)
+            # Sélection du domaine
             # WARNING :  la commande suivante réduit sensibement le domaine, attention aux comparaisons entre figures (en particulier avec les CUMULS)
-            #model = model.where((model.lon>=lonmin) & (model.lon<=lonmax) & (model.lat>=latmin) & (model.lat<=latmax), drop=True)
-            # TODO : transpose data before creating netcdf model files
-            #im2 = model.transpose('lat', 'lon').rr.plot(ax=axes2[i,j], add_colorbar=False, vmin=rrmin, vmax=rrmax)
-            im2 = model.rr.plot(ax=axes2[i,j], add_colorbar=False, vmin=rrmin, vmax=rrmax)
-            #model_interp = model.transpose('lat', 'lon').interp(lon=radar.lon, lat=radar.lat)
-            model_interp = model.interp(lon=radar.lon, lat=radar.lat)
-            # WARNING :  la commande suivante réduit sensibement le domaine, attention aux comparaisons entre figures (en particulier avec les CUMULS)
-            model_interp = model_interp.where((model_interp.lon>=lonmin) & (model_interp.lon<=lonmax) & (model_interp.lat>=latmin) & (model_interp.lat<=latmax), drop=True)
+            model_interp[member] = tmp.where((tmp.lon>=lonmin) & (tmp.lon<=lonmax) & (tmp.lat>=latmin) & (tmp.lat<=latmax), drop=True)
+            #print(f'member {member} ', model_interp[member].rr.data[0,0])
+            model = model.where((model.lon>=lonmin) & (model.lon<=lonmax) & (model.lat>=latmin) & (model.lat<=latmax), drop=True)
 
-            w = gamma_shape_PDF(model_interp.rr, k=k, theta=theta)
-            w.name='weight'
-            im3 = w.plot(ax=axes3[i,j], add_colorbar=False, vmin=0, vmax=0.1)
-            weight[member] = np.sum(w.data)
+            # ASSIMILATION
+            #-------------
+            wpixel[member] = gamma_shape_PDF(model_interp[member].rr, k=k, theta=theta)
+            wpixel[member].name='weight'
+            # Plot pixel weights
+            weight[member] = np.sum(wpixel[member].data)
+            #---------------------------------------------------------------------------------------------------------
 
-            ########################################################################################################################
-            #im = model_interp.transpose('lat', 'lon').rr.plot(ax=axes[i,j], add_colorbar=False, vmin=rrmin, vmax=rrmax)
-            im = model_interp.rr.plot(ax=axes[i,j], add_colorbar=False, vmin=rrmin, vmax=rrmax)
-            for ax in [axes[i,j], axes2[i,j], axes3[i,j]]:
-                for landmark, infos in landmarks.items():
-                    ax.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='red', markersize=4)
-                ax.set_aspect('equal')
-                ax.axis('off')
-                if ax == axes3[i,j]:
-                    ax.set_title(f'member {member:03d}, total weight={weight[member]:.3f}')
-                else:
-                    ax.set_title(f'member {member:03d}')
+            # Plot interpolated model field
+            im1 = plot_field(model_interp[member].rr, axes1[i,j], rrmin, rrmax, title=f'member {member:03d}')
+            # Plot raw model field
+            im2 = plot_field(model.rr, axes2[i,j], rrmin, rrmax, title=f'member {member:03d}')
+            # Plot weigh field
+            vmin = 0
+            vmax = 0.25  # TODO : vmax=f(sigma) [peut être renvoyé par la fonction de la PDF comme le max de probabilité]
+            im3 = plot_field(wpixel[member], axes3[i,j], vmin, vmax, title=f'member {member:03d}, total weight={weight[member]:.3f}')
+
             j = j + 1
             if j==4:
                 j = 0
                 i = i + 1
-            ########################################################################################################################
 
-        def finalize_fig(figure):
-            figure.tight_layout()
-            figure.subplots_adjust(right=0.85)
-            cbar_ax = figure.add_axes([0.90, 0.15, 0.05, 0.7])
-            return cbar_ax
+        finalize_fig(fig1, im1, label='24-hour precipitation (mm)', outname=f'MODEL_interp_{date_str}.pdf')
+        finalize_fig(fig2, im2, label='24-hour precipitation (mm)', outname=f'MODEL_raw_{date_str}.pdf')
+        finalize_fig(fig3, im3, label='Weight', outname=f'WEIGHTS_{date_str}_sigma={sigma}.pdf')
 
-        for figure in [fig, fig2, fig3]:
-            cbar_ax = finalize_fig(figure)
-            if figure == fig:
-                figure.colorbar(im, cax=cbar_ax, label='24-hour precipitation (mm)')
-            elif figure == fig2:
-                figure.colorbar(im2, cax=cbar_ax, label='24-hour precipitation (mm)')
-            else:
-                figure.colorbar(im3, cax=cbar_ax, label='Weight')
-        fig.savefig(f'MODEL_interp_{date_str}.pdf', format='pdf')
-        fig2.savefig(f'MODEL_raw_{date_str}.pdf', format='pdf')
-        fig3.savefig(f'WEIGHTS_{date_str}.pdf', format='pdf')
+        # I. global assimilation
+        #-----------------------
+        # I.1 Weighting
+#        total = sum(weight.values())
+#        weights =  {k: v/total for k, v in weight.items()}
+#        # I.2 Resampling
+#        selection1 = resample(list(weights.values()))
 
-        total = sum(weight.values())
-        weights =  {k: v/total for k, v in weight.items()}
-        selection = resample(list(weights.values()))
+        # II. local assimilation
+        #-----------------------
+        # I.1 Weighting
+        total = sum(wpixel.values()).data
+        weights =  {k: v.data/total for k, v in wpixel.items()}
+        # I.2 Resampling
+        selection2 = resample(np.array(list(weights.values())))
+
+        # TODO : il reste à reconstruire les 16 champs de precipitation correspondants...
+        mask = selection2[0]
+        model_interp[mask]
+
+
 
         import pdb
         pdb.set_trace()
-
-
-
 
         date = date + timedelta(days=1)
 
