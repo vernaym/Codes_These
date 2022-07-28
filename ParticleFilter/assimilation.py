@@ -126,12 +126,16 @@ def goto(path):
     os.chdir(path)
 
 # Definition of gamma distribution
-def gamma_shape_PDF(x, k=3, theta=1):
-    import math
-    if isinstance(x, np.ndarray):
-        return list(map(lambda t: t**(k-1)*np.exp(-t/theta)/(theta**k*math.gamma(k)) if t > 0 else None, x))
-    else:
-        return x**(k-1)*np.exp(-x/theta)/(theta**k*math.gamma(k)) if x > 0 else None
+def gamma_shape_PDF(x, k=3., theta=1.):
+    #import math  # math.gamma does not work with arrays
+    from scipy.special import gamma
+
+    return x**(k-1)*np.exp(-x/theta)/(theta**k*gamma(k))
+
+#    if isinstance(x, np.ndarray):
+#        return list(map(lambda t: t**(k-1)*np.exp(-t/theta)/(theta**k*gamma(k)) if t > 0 else None, x))
+#    else:
+#        return x**(k-1)*np.exp(-x/theta)/(theta**k*gamma(k)) if x > 0 else None
 
 # Definition of SCGD
 def SCGD_shape_PDF(x, k=1., theta=1., delta=0., plot_distribution=False, plot_parameters=False):
@@ -302,6 +306,19 @@ def plot3D(X, Y, Z, colors, date):
     fig.colorbar(cm.ScalarMappable(norm=norm, cmap=plt.cm.coolwarm), ax=ax, shrink=0.75, aspect=8, label=f'ANTILOPE precipitation (mm)')
     plt.savefig(f'OBS_3D_{date}.pdf', format='pdf')
 
+def resample(weights):
+    import random
+    Ne = len(weights)
+    delta = 1/Ne
+    cumulated_weights = np.cumsum(weights)
+    for i in range(1, Ne+1):
+        selected_particles = list()
+        u = random.uniform(0, delta)
+        while u <= 1:
+            #print(u)
+            selected_particles.append(np.searchsorted(cumulated_weights, u)+1)
+            u += delta
+    return selected_particles
 
 if __name__ == "__main__":
     args = parse_command_line()
@@ -326,6 +343,7 @@ if __name__ == "__main__":
     lonmax = extract_dom['lonmax']
 
     date = args.datebegin
+    # TODO : on doit même pouvoir se passer de la boucle temporelle !
     while date <= args.dateend:
         date_str = date.strftime('%Y%m%d%H')
         radar = antilope.sel(time=date)
@@ -365,41 +383,86 @@ if __name__ == "__main__":
         colors = plt.cm.coolwarm(norm(np.nan_to_num(radar.transpose('lat', 'lon').rr.data)))
         plot3D(X, Y, Z, colors, date_str)
 
+        # Define PDF parameters
+        Y     = obs
+        mu    = Y 
+        delta = 0
+        sigma = 5  # constant over the domain
+        k = (2*sigma**2+mu**2+np.sqrt((mu**2*(4*sigma**2+mu**2))))/(2*sigma**2)  # condition : k > 1
+        if not np.any(k>1):
+            print('ERROR : shape parameter k must be >0')
+        theta = mu / (k-1)
+        gamma_shape_PDF(Y, k=k, theta=theta)
+        #SCGD_shape_PDF(Y, k=k, theta=theta, delta=delta, plot_parameters=False)
+        ##################################################################################################
+
         fig, axes = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
         fig2, axes2 = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
+        fig3, axes3 = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
         i = 0
         j = 0
+        weight = dict()
         for member,model in pearome.items():
             model = model.sel(time=date)
             # WARNING :  la commande suivante réduit sensibement le domaine, attention aux comparaisons entre figures (en particulier avec les CUMULS)
-            model = model.where((model.lon>=lonmin) & (model.lon<=lonmax) & (model.lat>=latmin) & (model.lat<=latmax), drop=True)
-            im2 = model.transpose('lat', 'lon').rr.plot(ax=axes2[i,j], add_colorbar=False, vmin=rrmin, vmax=rrmax)
+            #model = model.where((model.lon>=lonmin) & (model.lon<=lonmax) & (model.lat>=latmin) & (model.lat<=latmax), drop=True)
+            # TODO : transpose data before creating netcdf model files
+            #im2 = model.transpose('lat', 'lon').rr.plot(ax=axes2[i,j], add_colorbar=False, vmin=rrmin, vmax=rrmax)
+            im2 = model.rr.plot(ax=axes2[i,j], add_colorbar=False, vmin=rrmin, vmax=rrmax)
+            #model_interp = model.transpose('lat', 'lon').interp(lon=radar.lon, lat=radar.lat)
             model_interp = model.interp(lon=radar.lon, lat=radar.lat)
-            im = model_interp.transpose('lat', 'lon').rr.plot(ax=axes[i,j], add_colorbar=False, vmin=rrmin, vmax=rrmax)
-            for ax in [axes[i,j], axes2[i,j]]:
+            # WARNING :  la commande suivante réduit sensibement le domaine, attention aux comparaisons entre figures (en particulier avec les CUMULS)
+            model_interp = model_interp.where((model_interp.lon>=lonmin) & (model_interp.lon<=lonmax) & (model_interp.lat>=latmin) & (model_interp.lat<=latmax), drop=True)
+
+            w = gamma_shape_PDF(model_interp.rr, k=k, theta=theta)
+            w.name='weight'
+            im3 = w.plot(ax=axes3[i,j], add_colorbar=False, vmin=0, vmax=0.1)
+            weight[member] = np.sum(w.data)
+
+            ########################################################################################################################
+            #im = model_interp.transpose('lat', 'lon').rr.plot(ax=axes[i,j], add_colorbar=False, vmin=rrmin, vmax=rrmax)
+            im = model_interp.rr.plot(ax=axes[i,j], add_colorbar=False, vmin=rrmin, vmax=rrmax)
+            for ax in [axes[i,j], axes2[i,j], axes3[i,j]]:
                 for landmark, infos in landmarks.items():
                     ax.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='red', markersize=4)
                 ax.set_aspect('equal')
                 ax.axis('off')
-                ax.set_title(f'member {member:03d}')
+                if ax == axes3[i,j]:
+                    ax.set_title(f'member {member:03d}, total weight={weight[member]:.3f}')
+                else:
+                    ax.set_title(f'member {member:03d}')
             j = j + 1
             if j==4:
                 j = 0
                 i = i + 1
+            ########################################################################################################################
 
-        fig.tight_layout()
-        fig2.tight_layout()
-        fig.subplots_adjust(right=0.85)
-        fig2.subplots_adjust(right=0.85)
-        cbar_ax = fig.add_axes([0.90, 0.15, 0.05, 0.7])
-        cbar_ax2 = fig2.add_axes([0.90, 0.15, 0.05, 0.7])
-        fig.colorbar(im, cax=cbar_ax, label='24-hour precipitation (mm)')
-        fig2.colorbar(im2, cax=cbar_ax2, label='24-hour precipitation (mm)')
+        def finalize_fig(figure):
+            figure.tight_layout()
+            figure.subplots_adjust(right=0.85)
+            cbar_ax = figure.add_axes([0.90, 0.15, 0.05, 0.7])
+            return cbar_ax
+
+        for figure in [fig, fig2, fig3]:
+            cbar_ax = finalize_fig(figure)
+            if figure == fig:
+                figure.colorbar(im, cax=cbar_ax, label='24-hour precipitation (mm)')
+            elif figure == fig2:
+                figure.colorbar(im2, cax=cbar_ax, label='24-hour precipitation (mm)')
+            else:
+                figure.colorbar(im3, cax=cbar_ax, label='Weight')
         fig.savefig(f'MODEL_interp_{date_str}.pdf', format='pdf')
         fig2.savefig(f'MODEL_raw_{date_str}.pdf', format='pdf')
+        fig3.savefig(f'WEIGHTS_{date_str}.pdf', format='pdf')
+
+        total = sum(weight.values())
+        weights =  {k: v/total for k, v in weight.items()}
+        selection = resample(list(weights.values()))
 
         import pdb
         pdb.set_trace()
+
+
 
 
         date = date + timedelta(days=1)
