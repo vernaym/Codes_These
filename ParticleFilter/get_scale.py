@@ -14,6 +14,8 @@ import matplotlib.pyplot as plt
 
 import argparse
 
+from pyproj import Proj, transform
+
 #from sklearn.linear_model import LinearRegression, RANSACRegressor
 #from sklearn.datasets import make_regression
 #from sklearn.metrics import mean_squared_error, r2_score
@@ -26,6 +28,7 @@ import statistics
 ##############################################################################################
 
 datadir = '/home/vernaym/These/DATA'
+savedir = '/home/vernaym/These/figures'
 
 # Domaine des Grandes Rousses
 extract_dom = dict(
@@ -189,14 +192,22 @@ def read_ensemble(datebegin, dateend, domain='GrandesRousses'):
 
     return pearome
 
+def proj_mnt(mnt):
+    outProj = Proj(init='epsg:4326')
+    inProj = Proj(init='epsg:2154')
+    x, y = np.meshgrid(mnt['x'], mnt['y'])
+    X, Y = transform(inProj, outProj, x, y)
+    Z = mnt['ZS']
+    mnt_proj = xr.DataArray(
+        data=Z,
+        name='elevation',
+        dims=["lat", "lon"],
+        coords=dict(lon=X[0], lat=Y[:,0]),
+        attrs=dict(description="Elevation",units="m"),
+    )
+    return mnt_proj
 
-if __name__ == "__main__":
-    args = parse_command_line()
-    extract_period = date_range(args.datebegin, args.dateend)
-    mnt = xr.open_dataset(os.path.join(datadir, "MNT_GrandesRousses.nc"))
-    panthere = xr.open_dataset(os.path.join(datadir, 'PANTHERE_CUMUL_{0:s}_{1:s}.nc'.format(args.datebegin.strftime('%Y%m%d%H%M'), args.dateend.strftime('%Y%m%d%H%M'))))
-    antilope = xr.open_dataset(os.path.join(datadir, 'CUMUL_ANTILOPEQ_{0:s}_{1:s}_GrandesRousses.nc'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))))
-    krigeage = xr.open_dataset(os.path.join(datadir, 'CUMUL_krigeage_{0:s}_{1:s}.nc'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))))
+def add_obs_nivometeo():
     nivometeo = pd.read_csv(os.path.join(datadir, 'obs_nivometeo_daily_RR_20211201_20220430.csv'), sep=';', parse_dates=['Q.dat'],
         dtype={'Q.num_poste':int, 'poste_nivo.nom_usuel':str, 'poste_nivo.alti':int, 'poste_nivo.lat_dg':float, 'poste_nivo.lon_dg':float, 'poste_nivo.massif_nivo':int, 'Q.rr':float})
 
@@ -241,38 +252,69 @@ if __name__ == "__main__":
 
     #print(first_day, last_day)
     #print(keep)
-    print(biais_antilope, biais_krigeage)
+    return biais_antilope, biais_krigeage, lon, lat
+
+if __name__ == "__main__":
+    args = parse_command_line()
+    extract_period = date_range(args.datebegin, args.dateend)
+    mnt = xr.open_dataset(os.path.join(datadir, "MNT_GrandesRousses.nc"))
+    mnt_proj = proj_mnt(mnt)
+    panthere = xr.open_dataset(os.path.join(datadir, 'PANTHERE_CUMUL_{0:s}_{1:s}.nc'.format(args.datebegin.strftime('%Y%m%d%H%M'), args.dateend.strftime('%Y%m%d%H%M'))))
+    antilope = xr.open_dataset(os.path.join(datadir, 'CUMUL_ANTILOPEQ_GrandesRousses_{0:s}_{1:s}.nc'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))))
+    krigeage = xr.open_dataset(os.path.join(datadir, 'CUMUL_krigeage_{0:s}_{1:s}.nc'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))))
+    safran   = xr.open_dataset(os.path.join(datadir, 'CUMUL_SAFRAN_GrandesRousses_{0:s}_{1:s}.nc'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))))
+    safran = safran.rr.sum(axis=0).interp(elevation=mnt_proj, method='nearest')
+
+    if args.datebegin == datetime(2021, 12, 1) and args.dateend == datetime(2022, 4, 30):
+        biais_antilope, biais_krigeage, lon, lat = add_obs_nivometeo()
+
 
     # Interp all data on the ANTILOPE grid over the GrandesRousses domain
     antilope = antilope.where((antilope.lon>=lonmin) & (antilope.lon<=lonmax) & (antilope.lat<=latmax) & (antilope.lat>=latmin), drop=True)
     krigeage = krigeage.interp(lon=antilope.lon, lat=antilope.lat, method='nearest')
+    safran   = safran.where((safran.lon>=lonmin) & (safran.lon<=lonmax) & (safran.lat<=latmax) & (safran.lat>=latmin), drop=True)
     #panthere = panthere.interp(lon=antilope.lon, lat=antilope.lat, method='nearest')
+
+    vmin = min([np.min(antilope.rr_cumul), np.min(panthere.rr_cumul), np.min(krigeage.rr_cumul), np.min(safran)])
+    vmax = max([np.max(antilope.rr_cumul), np.max(panthere.rr_cumul), np.max(krigeage.rr_cumul), np.min(safran)])
 
     fig, ax = plt.subplots(nrows=2, ncols=2, figsize=(16,7))
     fig.suptitle('Total precipitation between {0:s} and {1:s}'.format(args.datebegin.strftime('%Y%m%d'), args.dateend.strftime('%Y%m%d')), fontsize=16)
-    rantilope = antilope['rr_cumul']/np.max(antilope['rr_cumul'])
-    #rantilope.plot(ax=ax[0,0])
-    antilope.rr_cumul.plot(ax=ax[0,0])
-    for (c,x,y) in zip(biais_antilope, lon, lat):
-        ax[0,0].annotate('{0:.2f}'.format(c), (x, y))
+    antilope.rr_cumul.plot(ax=ax[0,0], vmin=vmin, vmax=vmax)
+
+    # plot ANTILOPE in the upper left corner
+    if args.datebegin == datetime(2021, 12, 1) and args.dateend == datetime(2022, 4, 30):
+        for (c,x,y) in zip(biais_antilope, lon, lat):
+            ax[0,0].annotate('{0:.2f}'.format(c), (x, y))
     ax[0,0].set_title("ANTILOPE")
     ax[0,0].axis('off')
-    rpanthere = panthere['rr_cumul']/np.max(panthere['rr_cumul'])
-    #rpanthere.plot(ax=ax[0,1])
-    panthere.rr_cumul.plot(ax=ax[0,1])
+
+    # Plot PANTHERE in the upper right corner
+    panthere.rr_cumul.plot(ax=ax[0,1], vmin=vmin, vmax=vmax)
     ax[0,1].set_title("PANTHERE")
     ax[0,1].axis('off')
-    rkrigeage = krigeage['rr_cumul']/np.max(krigeage['rr_cumul'])
-    #rkrigeage.plot(ax=ax[1,0])
-    krigeage.rr_cumul.plot(ax=ax[1,0])
-    for (c,x,y) in zip(biais_krigeage, lon, lat):
-        ax[1,0].annotate('{0:.2f}'.format(c), (x, y))
+
+    # Plot krigeage in the lower left corner
+    krigeage.rr_cumul.plot(ax=ax[1,0], vmin=vmin, vmax=vmax)
+    if args.datebegin == datetime(2021, 12, 1) and args.dateend == datetime(2022, 4, 30):
+        for (c,x,y) in zip(biais_krigeage, lon, lat):
+            ax[1,0].annotate('{0:.2f}'.format(c), (x, y))
     ax[1,0].set_title('KRIGEAGE')
     ax[1,0].axis('off')
-    rerror = rantilope - rkrigeage
-    rerror.plot(ax=ax[1,1])
-    ax[1,1].set_title('ANTILOPE-KRIGEAGE')
+
+    # plot SAFRAN in the lower right corner
+    safran.plot(ax=ax[1,1], vmin=vmin, vmax=vmax)
+    ax[1,1].set_title('SAFRAN')
     ax[1,1].axis('off')
+
+    # To plot the difference between antilope and kriging fields
+#    rantilope = antilope['rr_cumul']/np.max(antilope['rr_cumul'])
+#    rkrigeage = krigeage['rr_cumul']/np.max(krigeage['rr_cumul'])
+#    rpanthere = panthere['rr_cumul']/np.max(panthere['rr_cumul'])
+#    rerror = rantilope - rkrigeage
+#    rerror.plot(ax=ax[1,1])
+#    ax[1,1].set_title('ANTILOPE-KRIGEAGE')
+#    ax[1,1].axis('off')
 
     for axis in ax.flatten():
         plt.sca(axis)
@@ -288,7 +330,7 @@ if __name__ == "__main__":
     #panthere.rr_cumul.plot(ax=ax[0,1])
     #krigeage.rr_cumul.plot(ax=ax[1,1])
     #plt.show()
-    fig.savefig('CUMULS_{0:s}_{1:s}.pdf'.format(args.datebegin.strftime('%Y%m%d'), args.dateend.strftime('%Y%m%d')))
+    fig.savefig(os.path.join(savedir, 'CUMULS_{0:s}_{1:s}.pdf'.format(args.datebegin.strftime('%Y%m%d'), args.dateend.strftime('%Y%m%d'))))
 
 
 
