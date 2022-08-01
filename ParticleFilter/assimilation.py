@@ -355,7 +355,6 @@ def plot_obs(radar, rrmin, rrmax, mnt):
     plot3D(X, Y, Z, colors, date_str)
 
 def plot_field(field, ax, vmin, vmax, title):
-
     im = field.plot(ax=ax, add_colorbar=False, vmin=vmin, vmax=vmax)
     for landmark, infos in landmarks.items():
         ax.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='red', markersize=4)
@@ -370,7 +369,6 @@ def finalize_fig(figure, imm, label, outname):
     figure.subplots_adjust(right=0.85)
     cbar_ax = figure.add_axes([0.90, 0.15, 0.05, 0.7])
     figure.colorbar(imm, cax=cbar_ax, label=label)
-    figure.colorbar(imm, cax=cbar_ax, label='24-hour precipitation (mm)')
     figure.savefig(outname, format='pdf')
 
 
@@ -408,8 +406,8 @@ if __name__ == "__main__":
         radar_lat = radar.lat.data
         radar_lon = radar.lon.data
 
-        rrmin = min(np.nanmin([mod.sel(time=date).rr for mod in pearome.values()]), np.nanmin(radar.rr.data))
-        rrmax = max(np.nanmax([mod.sel(time=date).rr for mod in pearome.values()]), np.nanmax(radar.rr.data))
+        rrmin = min(np.nanmin([mod.sel(time=date).where((mod.lon>=lonmin) & (mod.lon<=lonmax) & (mod.lat>=latmin) & (mod.lat<=latmax)).rr for mod in pearome.values()]), np.nanmin(radar.rr.data))
+        rrmax = max(np.nanmax([mod.sel(time=date).where((mod.lon>=lonmin) & (mod.lon<=lonmax) & (mod.lat>=latmin) & (mod.lat<=latmax)).rr for mod in pearome.values()]), np.nanmax(radar.rr.data))
 
         # Plot observation field
         plot_obs(radar, rrmin, rrmax, mnt)
@@ -418,9 +416,10 @@ if __name__ == "__main__":
         #-------------
         # Define PDF parameters
         Y     = obs
-        mu    = Y 
+        mu    = Y
         delta = 0
         sigma = 2  # TODO : sigma doit être une fonction de l'obs de précipitation
+        sigma = Y*0.1  # TODO : sigma doit être une fonction de l'obs de précipitation
         k = (2*sigma**2+mu**2+np.sqrt((mu**2*(4*sigma**2+mu**2))))/(2*sigma**2)  # condition : k > 1
         if not np.any(k>1):
             print('WARNING : shape parameter k must be >0')
@@ -469,17 +468,17 @@ if __name__ == "__main__":
                 j = 0
                 i = i + 1
 
-        finalize_fig(fig1, im1, label='24-hour precipitation (mm)', outname=f'MODEL_interp_{date_str}.pdf')
-        finalize_fig(fig2, im2, label='24-hour precipitation (mm)', outname=f'MODEL_raw_{date_str}.pdf')
-        finalize_fig(fig3, im3, label='Weight', outname=f'WEIGHTS_{date_str}_sigma={sigma}.pdf')
+#        finalize_fig(fig1, im1, label='24-hour precipitation (mm)', outname=f'MODEL_interp_{date_str}.pdf')
+#        finalize_fig(fig2, im2, label='24-hour precipitation (mm)', outname=f'MODEL_raw_{date_str}.pdf')
+#        finalize_fig(fig3, im3, label='Weight', outname=f'WEIGHTS_{date_str}_sigma={sigma}.pdf')
 
         # I. global assimilation
         #-----------------------
         # I.1 Weighting
-#        total = sum(weight.values())
-#        weights =  {k: v/total for k, v in weight.items()}
-#        # I.2 Resampling
-#        selection1 = resample(list(weights.values()))
+        total = sum(weight.values())
+        weights =  {k: v/total for k, v in weight.items()}
+        # I.2 Resampling
+        selection_globale = resample(list(weights.values()))
 
         # II. local assimilation
         #-----------------------
@@ -487,12 +486,32 @@ if __name__ == "__main__":
         total = sum(wpixel.values()).data
         weights =  {k: v.data/total for k, v in wpixel.items()}
         # I.2 Resampling
-        selection2 = resample(np.array(list(weights.values())))
+        selection_locale = resample(np.array(list(weights.values())))
 
-        # TODO : il reste à reconstruire les 16 champs de precipitation correspondants...
-        mask = selection2[0]
-        model_interp[mask]
 
+        nline, ncol = np.shape(obs)
+        localfield = dict()
+        fig1, ax1 = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
+        fig2, ax2 = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
+        i = 0
+        j = 0
+        for m in range(1, len(pearome)+1):
+            local = np.array([[model_interp[selection_locale[m-1][i,j]].rr.data[i,j] for j in range(ncol)] for i in range(nline)])
+            localfield[m] = xr.DataArray(
+                    data=local,
+                    name='rr',
+                    dims=["lat", "lon"],
+                    coords=dict(lon=radar.lon, lat=radar.lat),
+                    attrs=dict(description="Total precipitation",units="mm"),
+                ).to_dataset()
+            im1 = plot_field(model_interp[selection_globale[m-1]].rr, ax1[i,j], rrmin, rrmax, title=f'Member {selection_globale[m-1]:03d}')
+            im2 = plot_field(localfield[m].rr, ax2[i,j], rrmin, rrmax, title=f'New member {m:03d}')
+            j = j + 1
+            if j==4:
+                j = 0
+                i = i + 1
+        finalize_fig(fig1, im1, label='24-hour precipitation (mm)', outname=f'ASSIM_globale_{date_str}.pdf')
+        finalize_fig(fig2, im2, label='24-hour precipitation (mm)', outname=f'ASSIM_locale_{date_str}.pdf')
 
 
         import pdb
@@ -500,43 +519,3 @@ if __name__ == "__main__":
 
         date = date + timedelta(days=1)
 
-
-    x = list()
-    y = list()
-    alti = list()
-    for station in np.unique(df['num_poste']):
-        workdf = df.loc[df['num_poste'] == station]
-        elevation = int(workdf['elevation'].mean())
-        nb_obs = len(workdf)
-        if nb_obs > 10:
-            snow = workdf.loc[workdf['elevation'] > workdf['LPNX']]
-            rain = workdf.loc[workdf['elevation'] <= workdf['LPNX']]
-
-#            plot(workdf, rain, snow, elevation)
-
-            mu0 = workdf['bias'].mean()
-            sigma = statistics.stdev(workdf['bias'].values)
-            x.append(mu0)
-            y.append(sigma)
-            alti.append(elevation)
-
-            fig1 = plt.figure()
-            for Y in np.arange(0, 5, 0.1):
-                mu1 = Y - mu0
-                #delta = delta0*np.exp(-mu)
-                #mu = mu - delta
-                delta = -2*np.exp(-Y)
-                mu = mu1 - delta
-                k = (2*sigma**2+mu**2+np.sqrt((mu**2*(4*sigma**2+mu**2))))/(2*sigma**2)  # condition : k > 1
-                theta = mu / (k-1)
-                SCGD_shape_PDF(Y, k=float(k), theta=float(theta), delta=float(delta), plot_parameters=True)
-            fig1.savefig(f"parameters/station_{station}.svg", format='svg')
-
-
-#    fig0,ax0 = plt.subplots()
-#    sc = ax0.scatter(x, y, c=alti, marker="^")
-#    plt.colorbar(sc, label='Elevation (m)')
-#    ax0.set_xlabel('Mean ANTILOPE / rain gauge deviation (mm)')
-#    ax0.set_ylabel('ANTILOPE / rain gauge standard deviation (mm)')
-#    fig0.savefig('Mean_std_scatterplot.svg', format='svg')
-#    plt.close(fig0)
