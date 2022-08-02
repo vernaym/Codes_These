@@ -4,8 +4,7 @@
 # Date : 02/02/2022
 
 import os
-import datetime
-from datetime import timedelta
+from datetime import datetime, timedelta
 import pandas as pd  # Version 0.25.3
 import numpy as np
 import copy
@@ -637,6 +636,21 @@ def fill_all_massifs(domain, lat, lon, df, suffix=None, **kw):
     fig.save(f'{filename}.svg', formatout='svg')
     fig.close()
 
+def error_vs_RR(df, datebegin, dateend, **kw):
+    import seaborn as sns
+    df['error'] = np.sqrt(np.square(df[f'rr_{kw["product"]}'] - df['rr_nivometeo']))
+    fig = plt.figure()
+    #sns.regplot(df[f'rr_{kw["product"]}'], df['error'])
+    plt.plot(df[f'rr_{kw["product"]}'], df['error'], linestyle='', marker='+')
+    a, b = np.polyfit(df[f'rr_{kw["product"]}'], df['error'], deg=1)
+    x = np.array([0, np.max(df[f'rr_{kw["product"]}'])])
+    plt.plot(x, a*x+b, marker=None, color='k', label=f'Regression parameters : slope={a:.3f}, intercept={b:.3f}')
+    plt.xlabel('ANTILOPE 24-hour precipitation (mm)')
+    plt.ylabel('ANTILOPE root mean square deviation (mm)')
+    plt.legend()
+    plt.tight_layout()
+    fig.savefig(f'ANTILOPE_rmsd_vs_ANTILOPE_RR_{datebegin.strftime("%Y%m%d")}_{dateend.strftime("%Y%m%d")}.pdf', format='pdf')
+
 
 if __name__ == "__main__":
     args = parse_command_line()
@@ -658,7 +672,7 @@ if __name__ == "__main__":
     #---------------------------
     #nivometeo_data = 'obs_nivometeo_daily_RR_{0:s}_{1:s}.csv'.format(args.datebegin.strftime('%Y%m%d'), args.dateend.strftime('%Y%m%d'))
     nivometeo_data = 'obs_nivometeo_daily_RR.csv'
-    nivometeo = pd.read_csv(nivometeo_data, sep=';', parse_dates=['dat'],
+    nivometeo = pd.read_csv(nivometeo_data, sep=';', parse_dates=['Q.dat'],
             dtype={'Q.num_poste':int, 'poste_nivo.nom_usuel':str, 'poste_nivo.alti':int, 'poste_nivo.lat_dg':float, 'poste_nivo.lon_dg':float, 'rr':float,
                 'poste_nivo.massif_nivo':int, 'hist_reseau_poste.reseau_poste':int})
 #    nivometeo_data = 'obs_nivometeo_hourly_RR.csv'
@@ -666,10 +680,10 @@ if __name__ == "__main__":
 #            dtype={'H.num_poste':int, 'poste_nivo.nom_usuel':str, 'poste_nivo.alti':int, 'poste_nivo.lat_dg':float, 'poste_nivo.lon_dg':float, 'H.rr1':float,
 #                'poste_nivo.massif_nivo':int, 'hist_reseau_poste.reseau_poste':int})
     # Renomage de certaines colonnes (pour le merge des DF et pour faciliter la manipulation)
-    nivometeo['date'] = nivometeo['dat'].dt.date + pd.Timedelta("1d")  # Changement de type + matching dates with radar data (BDClim extraction
+    nivometeo['date'] = nivometeo['Q.dat'].dt.date + pd.Timedelta("1d")  # Changement de type + matching dates with radar data (BDClim extraction
         # for date ymd is the observation from ymd6h to ym(d+1)6h )
     nivometeo = nivometeo.rename(columns={'Q.num_poste':'num_poste', 'poste_nivo.lat_dg':'lat', 'poste_nivo.lon_dg':'lon',
-        'poste_nivo.nom_usuel':'name', 'poste_nivo.massif_nivo':'massif_number', 'poste_nivo.alti':'elevation', 'rr':'rr_nivometeo'})  # facultatif
+        'poste_nivo.nom_usuel':'name', 'poste_nivo.massif_nivo':'massif_number', 'poste_nivo.alti':'elevation', 'Q.rr':'rr_nivometeo'})  # facultatif
 
     # I.2 Produit radar
     #------------------
@@ -708,12 +722,17 @@ if __name__ == "__main__":
     tmp = tmp.loc[tmp>nb_obs_min]
     valid_stations = tmp.index.to_numpy()
 
+    # 1. Scatter plot of the error as a function of the observed precipitation value
+    #-------------------------------------------------------------------------------
+    error_vs_RR(df, args.datebegin, args.dateend, product=args.product)
+
     df = df.loc[df['num_poste'].isin(valid_stations)]  # Consider only points with a minimum number of observations
     suffix = None
     if args.threshold is not None:
         df = df.loc[df['rr_nivometeo']>args.threshold]  # If a threshold is given, filter data above
         suffix = f'{args.threshold}mm'
         nb_obs_min = 20
+
     # Calcul des valeurs agrégées par station
     rr_nivometeo  = df.groupby(['num_poste']).rr_nivometeo.mean()
     rr_antilope   = df.groupby(['num_poste'])[f'rr_{args.product}'].mean()
@@ -765,5 +784,6 @@ if __name__ == "__main__":
         for domain in ['alpes', 'pyrenees']:
             plot_full_domain(domain, lats.to_numpy(), lons.to_numpy(), df_stat, suffix=suffix, product=args.product)
             plot_massif(df.loc[df['massif_number'].isin(map_massifs[domain])], suffix=suffix, product=args.product, domain=domain)
+
 
 
