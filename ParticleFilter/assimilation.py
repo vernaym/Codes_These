@@ -150,7 +150,8 @@ def SCGD_shape_PDF(x, k=1., theta=1., delta=0., plot_distribution=False, plot_pa
 
     # WARNING : la distribution obtenue sera discontinue en 0 et potentiellement accordera trop / trop peu de
     # poids aux precipitations nulles
-    y = np.arange(delta, theta*(k-1)+delta+3*k*theta**2, dy)  # WARNING : 'y' doit ABSOLUMENT couvrir toute la distribution
+    num = np.max(((4*k + delta) / dy).astype(int))
+    y = np.linspace(-delta, 4*k, num=num)  # WARNING : 'y' doit ABSOLUMENT couvrir toute la distribution
                                     # de gamma sinon la probabilité en 0 est artificiellement surestimée !
     gamma = np.array(list(map(
         lambda t: gamma_shape_PDF(t-delta, k=k, theta=theta) if t > delta else 0, y)))
@@ -328,7 +329,8 @@ def resample(weights):
 def plot_obs(radar, rrmin, rrmax, mnt):
     # Plot ANTILOPE precipitation field
     fig = plt.figure(figsize=(18,8))
-    radar.transpose('lat', 'lon').rr.plot(vmin=rrmin, vmax=rrmax, cbar_kwargs={'label': "24 hour precipitation (mm)"})  # quadmesh object
+    #radar.transpose('lat', 'lon').rr.plot(vmin=rrmin, vmax=rrmax, cbar_kwargs={'label': "24 hour precipitation (mm)"})  # quadmesh object
+    radar.rr.plot(vmin=rrmin, vmax=rrmax, cbar_kwargs={'label': "24 hour precipitation (mm)"})  # quadmesh object
     # Add landmarks
     for landmark, infos in landmarks.items():
         plt.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='red', markersize=10)
@@ -351,7 +353,8 @@ def plot_obs(radar, rrmin, rrmax, mnt):
     X, Y = np.meshgrid(tmp['lon'].values, tmp['lat'].values)
     Z = np.nan_to_num(tmp['Band1'].values)
     # define pixel colors
-    colors = plt.cm.coolwarm(norm(np.nan_to_num(radar.transpose('lat', 'lon').rr.data)))
+    #colors = plt.cm.coolwarm(norm(np.nan_to_num(radar.transpose('lat', 'lon').rr.data)))
+    colors = plt.cm.coolwarm(norm(np.nan_to_num(radar.rr.data)))
     plot3D(X, Y, Z, colors, date_str)
 
 def plot_field(field, ax, vmin, vmax, title):
@@ -382,6 +385,7 @@ if __name__ == "__main__":
         filename = os.path.join(datadir, filename)
     if os.path.exists(filename):
         antilope = xr.open_dataset(filename)
+        antilope = antilope.transpose('lat', 'lon', 'time')  # TODO : Fix the dataset in the generation script
     else:
         print(f'ERROR : file {filename} does not exist')
         sys.exit(1)
@@ -401,10 +405,7 @@ if __name__ == "__main__":
         radar = antilope.sel(time=date)
         # WARNING :  la commande suivante réduit sensibement le domaine, attention aux comparaisons entre figures (en particulier avec les CUMULS)
         radar = radar.where((radar.lon>=lonmin) & (radar.lon<=lonmax) & (radar.lat>=latmin) & (radar.lat<=latmax), drop=True)
-
-        obs = radar['rr'].data
-        radar_lat = radar.lat.data
-        radar_lon = radar.lon.data
+        nline, ncol = np.shape(radar.rr.data)
 
         rrmin = min(np.nanmin([mod.sel(time=date).where((mod.lon>=lonmin) & (mod.lon<=lonmax) & (mod.lat>=latmin) & (mod.lat<=latmax)).rr for mod in pearome.values()]), np.nanmin(radar.rr.data))
         rrmax = max(np.nanmax([mod.sel(time=date).where((mod.lon>=lonmin) & (mod.lon<=lonmax) & (mod.lat>=latmin) & (mod.lat<=latmax)).rr for mod in pearome.values()]), np.nanmax(radar.rr.data))
@@ -415,17 +416,57 @@ if __name__ == "__main__":
         # ASSIMILATION
         #-------------
         # Define PDF parameters
-        Y     = obs
-        mu    = Y
-        delta = 0
-        sigma = 2  # TODO : sigma doit être une fonction de l'obs de précipitation
-        sigma = Y*0.1  # TODO : sigma doit être une fonction de l'obs de précipitation
-        k = (2*sigma**2+mu**2+np.sqrt((mu**2*(4*sigma**2+mu**2))))/(2*sigma**2)  # condition : k > 1
-        if not np.any(k>1):
-            print('WARNING : shape parameter k must be >0')
-        theta = mu / (k-1)
-        # plot PDF ?
-        gamma_shape_PDF(Y, k=k, theta=theta)
+        parameters = radar
+        parameters = parameters.rename({'rr':'mu'})  #  Mode=observation (WARNING : mu is NOT the mean) TODO : check if the ensemble after assimilation is not biased
+        #mu = radar.rr.data
+        parameters['sigma'] = 0.261 + 0.263 * parameters['mu']  # According to the linear regression of ANTILOPE RMSE vs ANTILOPE RR
+        #sigma = 0.261 + 0.263 * mu
+        # shift of the gamma PDF ==> this defines the weight given to 0mm forecats (=0 if delta=0) !!
+        parameters = parameters.assign(delta=lambda x: 10/x.mu)  # TODO : find a better shift than 10/mu
+        parameters.delta.data[np.isinf(parameters.delta.data)] = 0
+        #delta = np.zeros(np.shape(mu))
+        #delta[np.where(mu>0)] = 1 / mu[np.where(mu>0)]
+        parameters['k'] = (2*parameters.sigma**2+parameters.mu**2+np.sqrt((parameters.mu**2*(4*parameters.sigma**2+parameters.mu**2))))/(2*parameters.sigma**2)  # shape parameter of the Gamma PDF
+        #k = (2*sigma**2+mu**2+np.sqrt((mu**2*(4*sigma**2+mu**2))))/(2*sigma**2)  # shape parameter of the Gamma PDF
+        parameters.k.where(parameters.mu==0).data = parameters.mu.where(parameters.mu==0).data / parameters.mu.where(parameters.mu==0).data   # k>1 if Y>0 else k==1
+        #k[np.where(mu==0)] = 1
+        parameters['theta'] = parameters.mu / (parameters.k-1)  # Scale parameter of the Gamma PDF
+        #theta = mu / (k-1)
+        # TODO : plot PDF for some pixels
+        # gamma_shape_PDF(Y, k=k, theta=theta)
+
+        fig, ax = plt.subplots(nrows=2, ncols=2, figsize=(16,7))
+        i = 0
+        j = 0
+        for param in ['sigma', 'k', 'theta', 'delta']:
+            if param == 'sigma':
+                cmap = 'nipy_spectral'
+            else:
+                cmap = 'viridis'
+            im = parameters[param].plot(ax=ax[i,j], cmap=cmap)
+            for landmark, infos in landmarks.items():
+                ax[i,j].plot(infos['lon'], infos['lat'], marker=infos['marker'], color='red', markersize=4)
+            ax[i,j].set_aspect('equal')
+            ax[i,j].axis('off')
+            ax[i,j].set_title(param)
+            j = j + 1
+            if j == 2:
+                j = 0
+                i = i +1
+        fig.tight_layout()
+        fig.savefig(f"PDF_parameters_{date_str}.pdf", format='pdf')
+
+#        im1 = ax[0,0].imshow(sigma, cmap='nipy_spectral')
+#        plt.colorbar(im1, ax=ax[0,0], label='sigma (mm)')
+#        im2 = ax[0,1].imshow(k, cmap='viridis')
+#        plt.colorbar(im2, ax=ax[0,1], label='k')
+#        im3 = ax[1,0].imshow(theta, cmap='viridis')
+#        plt.colorbar(im3, ax=ax[1,0], label='Theta (mm)')
+#        im4 = ax[1,1].imshow(delta, cmap='viridis')
+#        plt.colorbar(im4, ax=ax[1,1], label='delta (mm)')
+#        plt.tight_layout()
+#        fig.savefig(f"PDF_parameters_{date_str}.pdf", format='pdf')
+
         #SCGD_shape_PDF(Y, k=k, theta=theta, delta=delta, plot_parameters=False)
         #-----------------------------------------------------------------------
 
@@ -448,7 +489,8 @@ if __name__ == "__main__":
 
             # ASSIMILATION
             #-------------
-            wpixel[member] = gamma_shape_PDF(model_interp[member].rr, k=k, theta=theta)
+            #wpixel[member] = gamma_shape_PDF(model_interp[member].rr, k=parameters.k.data, theta=parameters.theta.data)
+            wpixel[member] = SCGD_shape_PDF(model_interp[member].rr, k=parameters.k.data, theta=parameters.theta.data, delta=parameters.delta.data)
             wpixel[member].name='weight'
             # Plot pixel weights
             weight[member] = np.sum(wpixel[member].data)
@@ -460,7 +502,8 @@ if __name__ == "__main__":
             im2 = plot_field(model.rr, axes2[i,j], rrmin, rrmax, title=f'member {member:03d}')
             # Plot weigh field
             vmin = 0
-            vmax = 0.25  # TODO : vmax=f(sigma) [peut être renvoyé par la fonction de la PDF comme le max de probabilité]
+            #vmax = 0.25  # TODO : vmax=f(sigma) [peut être renvoyé par la fonction de la PDF comme le max de probabilité]
+            vmax = np.max(gamma_shape_PDF(parameters.mu.data, k=parameters.k.data, theta=parameters.theta.data))
             im3 = plot_field(wpixel[member], axes3[i,j], vmin, vmax, title=f'member {member:03d}, total weight={weight[member]:.3f}')
 
             j = j + 1
@@ -468,9 +511,9 @@ if __name__ == "__main__":
                 j = 0
                 i = i + 1
 
-#        finalize_fig(fig1, im1, label='24-hour precipitation (mm)', outname=f'MODEL_interp_{date_str}.pdf')
-#        finalize_fig(fig2, im2, label='24-hour precipitation (mm)', outname=f'MODEL_raw_{date_str}.pdf')
-#        finalize_fig(fig3, im3, label='Weight', outname=f'WEIGHTS_{date_str}_sigma={sigma}.pdf')
+        finalize_fig(fig1, im1, label='24-hour precipitation (mm)', outname=f'MODEL_interp_{date_str}.pdf')
+        finalize_fig(fig2, im2, label='24-hour precipitation (mm)', outname=f'MODEL_raw_{date_str}.pdf')
+        finalize_fig(fig3, im3, label='Weight', outname=f'WEIGHTS_{date_str}.pdf')
 
         # I. global assimilation
         #-----------------------
@@ -489,7 +532,6 @@ if __name__ == "__main__":
         selection_locale = resample(np.array(list(weights.values())))
 
 
-        nline, ncol = np.shape(obs)
         localfield = dict()
         fig1, ax1 = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
         fig2, ax2 = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
