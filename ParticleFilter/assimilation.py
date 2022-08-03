@@ -139,25 +139,35 @@ def gamma_shape_PDF(x, k=3., theta=1.):
 
 # Definition of SCGD
 def SCGD_shape_PDF(x, k=1., theta=1., delta=0., plot_distribution=False, plot_parameters=False):
-    if not (isinstance(x, (list, np.ndarray))):
-        x = np.array([x])
+#    if not (isinstance(x, (list, np.ndarray))):
+#        x = np.array([x])
     # On n'impose pas de condition sur delta : on peut vouloir translater la distribution vers la droite ou vers la gauche
 #    if delta > 0:
 #        # WARNING : dans Schuerer and Hammil 2015 and Nusu 2019 delat est définit comme > 0, ce qui entraine un
 #        # décallage vers la droite plutot que vers la gauche...
 #        raise ValueError('Error : delta parameter must be <= 0')
-    dy = 0.01
 
+    # On veut des poids relatifs, pas besoin de modifier artificiellement la probabilité de précipitations nulles :
+    # la valeur fournie par la SCGD convient parfaitement et assure la continuité des poids.
+    # Le fait de ne pas avoir la somme des poids à priori égale à 1 (la "masses" en desous de 0 est perdue) n'est 
+    # pas important puisque les poids sont normés à posteriori.
     # WARNING : la distribution obtenue sera discontinue en 0 et potentiellement accordera trop / trop peu de
     # poids aux precipitations nulles
-    num = np.max(((4*k + delta) / dy).astype(int))
-    y = np.linspace(-delta, 4*k, num=num)  # WARNING : 'y' doit ABSOLUMENT couvrir toute la distribution
-                                    # de gamma sinon la probabilité en 0 est artificiellement surestimée !
-    gamma = np.array(list(map(
-        lambda t: gamma_shape_PDF(t-delta, k=k, theta=theta) if t > delta else 0, y)))
-    scgd0 = 1 - sum(gamma[y>0]*dy)  # Calcul de la probabilité résiduelle en 0
+#    dy = 0.01
+#    num = np.max(((4*k + delta) / dy).astype(int))
+#    y = np.linspace(-delta, 4*k, num=num)  # WARNING : 'y' doit ABSOLUMENT couvrir toute la distribution
+#                                    # de gamma sinon la probabilité en 0 est artificiellement surestimée !
+#    gamma = np.array(list(map(
+#        lambda t: gamma_shape_PDF(t+delta, k=k, theta=theta) if t > delta else 0, y)))
+#    scgd0 = 1 - sum(gamma[y>0]*dy)  # Calcul de la probabilité résiduelle en 0
 
     if plot_distribution:
+        dy = 0.01
+        num = np.max(((4*k + delta) / dy).astype(int))
+        y = np.linspace(-delta, 4*k, num=num)  # WARNING : 'y' doit ABSOLUMENT couvrir toute la distribution
+                                        # de gamma sinon la probabilité en 0 est artificiellement surestimée !
+        gamma = np.array(list(map(
+            lambda t: gamma_shape_PDF(t+delta, k=k, theta=theta) if t > delta else 0, y)))
         fig,ax = plt.subplots()
         color = next(ax._get_lines.prop_cycler)['color']
         # Plot over a smaller range for better lisibility
@@ -170,10 +180,10 @@ def SCGD_shape_PDF(x, k=1., theta=1., delta=0., plot_distribution=False, plot_pa
         plt.axvline(x=Y, color='k', linestyle='--', label=f'Observation : {Y:0.2}')
         plt.axvline(x=mu1, color='red', linestyle='--', label=f'Observation + mean bias : {mu1:0.2}')
         plt.axvline(x=mu, color='blue', linestyle='--', label=f'Artificial max : {mu:0.2}')
-        if scgd0 > 0.0001:
-            ax.plot(0, scgd0, marker='.', markersize=20, markeredgecolor=color, markeredgewidth=2,
-                     color='none', markerfacecolor='lightgrey', label=f'P(0)={scgd0:0.3}')
-            ax.fill_between(x=y, y1=gamma, where=(delta < y) & (y < 0), color='lightgrey')
+#        if scgd0 > 0.0001:
+#            ax.plot(0, scgd0, marker='.', markersize=20, markeredgecolor=color, markeredgewidth=2,
+#                     color='none', markerfacecolor='lightgrey', label=f'P(0)={scgd0:0.3}')
+#            ax.fill_between(x=y, y1=gamma, where=(delta < y) & (y < 0), color='lightgrey')
         #ax.bar(0, scgd0, width=0.2, align='edge', color=color)
         #ax.bar(0, scgd0, width=0.2, color=color)
         plt.legend(loc ="upper right")
@@ -183,14 +193,17 @@ def SCGD_shape_PDF(x, k=1., theta=1., delta=0., plot_distribution=False, plot_pa
         #plt.plot(Y, k, linestyle='', marker='.', color='blue', label='k')
         #plt.plot(Y, theta, linestyle='', marker='+', color='blue', label='theta')
         plt.plot(Y, delta, linestyle='', marker='+', color='k', label='delta')
-        plt.plot(Y, scgd0, linestyle='', marker='+', color='red', label='P(0)')
-        plt.plot(Y,gamma_shape_PDF(0.1-delta, k=k, theta=theta), marker='+', color='blue', label='P0+')
+        #plt.plot(Y, scgd0, linestyle='', marker='+', color='red', label='P(0)')
+        plt.plot(Y,gamma_shape_PDF(0.1+delta, k=k, theta=theta), marker='+', color='blue', label='P0+')
 
         if Y == 0:
             plt.legend(loc ="upper right")
 
-    return np.array(list(map(lambda t: gamma_shape_PDF(t-delta, k=k, theta=theta) if t > 0
-                    else scgd0 if t == 0 else 0, x)))
+#    return np.array(list(map(lambda t: gamma_shape_PDF(t-delta, k=k, theta=theta) if t > 0
+#                    else scgd0 if t == 0 else 0, x)))
+    draw = gamma_shape_PDF(x+delta, k=k, theta=theta)
+    #draw[np.where(x<0)] = 0  # x is already a precipitation field
+    return draw
 
 def read_ensemble(datebegin, dateend, domain='GrandesRousses'):
     pearome = dict()
@@ -305,7 +318,7 @@ def plot3D(X, Y, Z, colors, date):
     #ax.set_zlim(0., np.max(Z))
     ax.set_zlim(0., 3500.)
     fig.colorbar(cm.ScalarMappable(norm=norm, cmap=plt.cm.coolwarm), ax=ax, shrink=0.75, aspect=8, label=f'ANTILOPE precipitation (mm)')
-    plt.savefig(f'OBS_3D_{date}.pdf', format='pdf')
+    plt.savefig(f'{date}/OBS_3D_{date}.pdf', format='pdf')
 
 def resample(weights):
     import random
@@ -344,7 +357,7 @@ def plot_obs(radar, rrmin, rrmax, mnt):
     ax.axes.get_xaxis().get_label().set_visible(False)
     ax.axes.get_yaxis().get_label().set_visible(False)
     fig.tight_layout()
-    fig.savefig(f'OBS_{date_str}.pdf', format='pdf')
+    fig.savefig(f'{date_str}/OBS_{date_str}.pdf', format='pdf')
 
     # Plot 3D ANTILOPE precipitation field
     tmp = mnt.interp(lon=radar.lon, lat=radar.lat, method='nearest')  # Pour interpoller le MNT sur la grille ANTILOPE
@@ -401,14 +414,25 @@ if __name__ == "__main__":
     date = args.datebegin
     # TODO : on doit même pouvoir se passer de la boucle temporelle !
     while date <= args.dateend:
+        print(date)
         date_str = date.strftime('%Y%m%d%H')
+        if not os.path.exists(date_str):
+            os.mkdir(date_str)
         radar = antilope.sel(time=date)
         # WARNING :  la commande suivante réduit sensibement le domaine, attention aux comparaisons entre figures (en particulier avec les CUMULS)
         radar = radar.where((radar.lon>=lonmin) & (radar.lon<=lonmax) & (radar.lat>=latmin) & (radar.lat<=latmax), drop=True)
         nline, ncol = np.shape(radar.rr.data)
 
-        rrmin = min(np.nanmin([mod.sel(time=date).where((mod.lon>=lonmin) & (mod.lon<=lonmax) & (mod.lat>=latmin) & (mod.lat<=latmax)).rr for mod in pearome.values()]), np.nanmin(radar.rr.data))
-        rrmax = max(np.nanmax([mod.sel(time=date).where((mod.lon>=lonmin) & (mod.lon<=lonmax) & (mod.lat>=latmin) & (mod.lat<=latmax)).rr for mod in pearome.values()]), np.nanmax(radar.rr.data))
+        rrmin = min(
+                np.nanmin([mod.where((mod.lon>=lonmin) & (mod.lon<=lonmax) & (mod.lat>=latmin) & (mod.lat<=latmax)).rr
+                    for mod in list(map(lambda x:x.sel(time=date), pearome.values()))]), 
+                np.nanmin(radar.rr.data))
+        rrmax = max(
+                np.nanmax([mod.where((mod.lon>=lonmin) & (mod.lon<=lonmax) & (mod.lat>=latmin) & (mod.lat<=latmax)).rr
+                    for mod in list(map(lambda x:x.sel(time=date), pearome.values()))]), 
+                np.nanmax(radar.rr.data))
+        #rrmin = min(np.nanmin([mod.sel(time=date).where((mod.lon>=lonmin) & (mod.lon<=lonmax) & (mod.lat>=latmin) & (mod.lat<=latmax)).rr for mod.sel(time=date) in pearome.values()]), np.nanmin(radar.rr.data))
+        #rrmax = max(np.nanmax([mod.sel(time=date).where((mod.lon>=lonmin) & (mod.lon<=lonmax) & (mod.lat>=latmin) & (mod.lat<=latmax)).rr for mod.sel(time=date) in pearome.values()]), np.nanmax(radar.rr.data))
 
         # Plot observation field
         plot_obs(radar, rrmin, rrmax, mnt)
@@ -426,15 +450,20 @@ if __name__ == "__main__":
         parameters.delta.data[np.isinf(parameters.delta.data)] = 0
         #delta = np.zeros(np.shape(mu))
         #delta[np.where(mu>0)] = 1 / mu[np.where(mu>0)]
+        #
+        # TODO : Intégrer delta au calcul de k
+        # ====================================
         parameters['k'] = (2*parameters.sigma**2+parameters.mu**2+np.sqrt((parameters.mu**2*(4*parameters.sigma**2+parameters.mu**2))))/(2*parameters.sigma**2)  # shape parameter of the Gamma PDF
         #k = (2*sigma**2+mu**2+np.sqrt((mu**2*(4*sigma**2+mu**2))))/(2*sigma**2)  # shape parameter of the Gamma PDF
         parameters.k.where(parameters.mu==0).data = parameters.mu.where(parameters.mu==0).data / parameters.mu.where(parameters.mu==0).data   # k>1 if Y>0 else k==1
         #k[np.where(mu==0)] = 1
         parameters['theta'] = parameters.mu / (parameters.k-1)  # Scale parameter of the Gamma PDF
+        parameters['theta'] = xr.where(parameters.k==1, 3*parameters.k, parameters.theta)  # Set theta=3 by default. TODO : In this case the scale parameter could depend on neighboring observations
         #theta = mu / (k-1)
         # TODO : plot PDF for some pixels
         # gamma_shape_PDF(Y, k=k, theta=theta)
 
+        label_map = dict(sigma='Standard deviation sigma (mm)', k='Shape parameter (k)', theta='Scale parameter (theta)', delta='Shift parameter (delta)')
         fig, ax = plt.subplots(nrows=2, ncols=2, figsize=(16,7))
         i = 0
         j = 0
@@ -443,7 +472,7 @@ if __name__ == "__main__":
                 cmap = 'nipy_spectral'
             else:
                 cmap = 'viridis'
-            im = parameters[param].plot(ax=ax[i,j], cmap=cmap)
+            im = parameters[param].plot(ax=ax[i,j], cmap=cmap, cbar_kwargs=dict(label=label_map[param]))
             for landmark, infos in landmarks.items():
                 ax[i,j].plot(infos['lon'], infos['lat'], marker=infos['marker'], color='red', markersize=4)
             ax[i,j].set_aspect('equal')
@@ -454,7 +483,7 @@ if __name__ == "__main__":
                 j = 0
                 i = i +1
         fig.tight_layout()
-        fig.savefig(f"PDF_parameters_{date_str}.pdf", format='pdf')
+        fig.savefig(f"{date_str}/PDF_parameters_{date_str}.pdf", format='pdf')
 
 #        im1 = ax[0,0].imshow(sigma, cmap='nipy_spectral')
 #        plt.colorbar(im1, ax=ax[0,0], label='sigma (mm)')
@@ -491,7 +520,7 @@ if __name__ == "__main__":
             #-------------
             #wpixel[member] = gamma_shape_PDF(model_interp[member].rr, k=parameters.k.data, theta=parameters.theta.data)
             wpixel[member] = SCGD_shape_PDF(model_interp[member].rr, k=parameters.k.data, theta=parameters.theta.data, delta=parameters.delta.data)
-            wpixel[member].name='weight'
+            wpixel[member].name = 'weight'
             # Plot pixel weights
             weight[member] = np.sum(wpixel[member].data)
             #---------------------------------------------------------------------------------------------------------
@@ -511,9 +540,9 @@ if __name__ == "__main__":
                 j = 0
                 i = i + 1
 
-        finalize_fig(fig1, im1, label='24-hour precipitation (mm)', outname=f'MODEL_interp_{date_str}.pdf')
-        finalize_fig(fig2, im2, label='24-hour precipitation (mm)', outname=f'MODEL_raw_{date_str}.pdf')
-        finalize_fig(fig3, im3, label='Weight', outname=f'WEIGHTS_{date_str}.pdf')
+        finalize_fig(fig1, im1, label='24-hour precipitation (mm)', outname=f'{date_str}/MODEL_interp_{date_str}.pdf')
+        finalize_fig(fig2, im2, label='24-hour precipitation (mm)', outname=f'{date_str}/MODEL_raw_{date_str}.pdf')
+        finalize_fig(fig3, im3, label='Weight', outname=f'{date_str}/WEIGHTS_{date_str}.pdf')
 
         # I. global assimilation
         #-----------------------
@@ -552,12 +581,14 @@ if __name__ == "__main__":
             if j==4:
                 j = 0
                 i = i + 1
-        finalize_fig(fig1, im1, label='24-hour precipitation (mm)', outname=f'ASSIM_globale_{date_str}.pdf')
-        finalize_fig(fig2, im2, label='24-hour precipitation (mm)', outname=f'ASSIM_locale_{date_str}.pdf')
+        finalize_fig(fig1, im1, label='24-hour precipitation (mm)', outname=f'{date_str}/ASSIM_globale_{date_str}.pdf')
+        finalize_fig(fig2, im2, label='24-hour precipitation (mm)', outname=f'{date_str}/ASSIM_locale_{date_str}.pdf')
 
+        plt.close('all')
 
-        import pdb
-        pdb.set_trace()
+        # TODO : SAVE all assimilated fields for an evaluation of the performance over the period
 
         date = date + timedelta(days=1)
 
+        import pdb
+        pdb.set_trace()
