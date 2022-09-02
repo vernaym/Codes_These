@@ -519,7 +519,7 @@ def plot_massif(mydf, massif=None, subdomain=None, error=0.2, **kw):
         #fig.fig.colorbar(sc, label='Radar/Rain-gauge ratio', shrink=shrink)
         #fig.fig.colorbar(sc, label='Radar/Rain-gauge ratio', ax=fig.fig.axes[0], shrink=shrink)
         fig.fig.colorbar(sc, label=legend, shrink=shrink, anchor=anchor)
-        #plt.tight_layout()
+        plt.tight_layout()
         fig.save(f'{filename}.svg', formatout='svg')
         fig.close()
 
@@ -696,8 +696,8 @@ if __name__ == "__main__":
     df = pd.merge(antilope, nivometeo, on=["date", "num_poste"])
     if args.lpn:
         #lpn = pd.read_csv('LPN_nivometeo.csv', sep=';', parse_dates=['H_NIVO.DAT'], dtype={'H.num_poste':int, 'H_NIVO.ALTI_LPNX':int}, index_col=['H_NIVO.DAT'])
-        lpn = pd.read_csv('LPN_nivometeo.csv', sep=';', parse_dates=['H_NIVO.DAT'], dtype={'H.num_poste':int, 'H_NIVO.ALTI_LPNX':int})
-        lpn.rename(columns={'H_NIVO.ALTI_LPNX':'LPNX', 'H.num_poste':'num_poste'}, inplace=True)
+        lpn = pd.read_csv('LPN_nivometeo.csv', sep=';', parse_dates=['H_NIVO.DAT'], dtype={'H_NIVO.NUM_POSTE':int, 'H_NIVO.ALTI_LPNX':int})
+        lpn.rename(columns={'H_NIVO.ALTI_LPNX':'LPNX', 'H_NIVO.NUM_POSTE':'num_poste'}, inplace=True)
         lpn = lpn[lpn['LPNX']>0]  # consider 0 values as missing observation
         lpn['date'] = lpn['H_NIVO.DAT'] + pd.Timedelta("12h")  # La LPN observée à 12:00 D concerne les précipitations entre D (6:00) et D+1 (6:00) que l'on veut identifier
         # par la date ym(D+1), on décale donc de 12h pour que la date de l'obs passe à D+1
