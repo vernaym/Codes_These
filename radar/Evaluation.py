@@ -434,11 +434,25 @@ def plot_massif(mydf, massif=None, subdomain=None, error=0.2, **kw):
 
         if score == 'ratio':
             #tmp = tmp.loc[~tmp['ratio'].isna()] # Remove Nan Values to avoid problems
-            cmap = copy.copy(plt.cm.get_cmap('nipy_spectral', 9))
+            #cmap = matplotlib.colors.LinearSegmentedColormap.from_list("", ["navy", "cornflowerblue", "green", "orange", "red"], 5)
+            cmap = matplotlib.colors.LinearSegmentedColormap.from_list("", ["black", "blue", "green", "orange", "red"], 5)
             if suffix is not None:  # A threshold has been applied on precipitation values
-                thresholds = [0.05, 0.1, 0.5, 0.80, 0.95, 1.05, 1.2, 2, 10, 20]
+                #thresholds = [0.05, 0.1, 0.5, 0.80, 0.95, 1.05, 1.2, 2, 10, 20]
+                thresholds = [0., 0.5, 0.80, 1.2, 1.5, 10]
             else:
+                cmap = copy.copy(plt.cm.get_cmap('nipy_spectral', 9))
                 thresholds = [0.2, 0.5, 0.6, 0.8, 0.95, 1.05, 1.2, 1.4, 2, 5]
+
+            def set_marker(row):
+                if row['ratio'] <= 0.8:
+                    return 'v'
+                elif row['ratio'] > 0.8 and row['ratio'] < 1.2:
+                    return 'o'
+                else:
+                    return '^'
+
+            tmp["marker"] = tmp.apply(set_marker, axis=1)
+            # axis=1 makes sure that function is applied to each row
             legend = f'{kw["product"]}/rain-gauges {score}'
         elif score == 'biais':
             cmap = copy.copy(plt.cm.get_cmap('nipy_spectral', 9))
@@ -511,11 +525,15 @@ def plot_massif(mydf, massif=None, subdomain=None, error=0.2, **kw):
 #                    #fig.map.text(tmp['lon'].mean(), tmp['lat'].mean(), tmp['ratio'].mean().round(3), horizontalalignment='right', verticalalignment='top', color='red')
 #        sc = fig.map.scatter(lons, lats, c=mean_score, cmap=cmap, norm=norm, marker="^", s=150)
 
-        sc = fig.map.scatter(tmp['lons'], tmp['lats'], c=tmp[f'{score}'], cmap=cmap, norm=norm, marker="^", s=150, edgecolors='black')
+        if score == 'ratio':
+            for marker, d in tmp.groupby('marker'):
+                sc = fig.map.scatter(d['lons'], d['lats'], c=d[f'{score}'], cmap=cmap, norm=norm, marker=marker, s=150, edgecolors='black')
+        else:
+            sc = fig.map.scatter(tmp['lons'], tmp['lats'], c=tmp[f'{score}'], cmap=cmap, norm=norm, marker="^", s=150, edgecolors='black')
         if massif is not None:
             for i, val in enumerate(tmp[f'{score}']):
                 text = '{0:.2f} ({1:d})'.format(val, tmp['nb_days'].to_numpy()[i])
-                txt = fig.map.text(tmp['lons'].to_numpy()[i]-0.018, tmp['lats'].to_numpy()[i]-0.014, text, fontsize=8)
+                fig.map.text(tmp['lons'].to_numpy()[i]-0.018, tmp['lats'].to_numpy()[i]-0.014, text, fontsize=8)
         #fig.fig.colorbar(sc, label='Radar/Rain-gauge ratio', shrink=shrink)
         #fig.fig.colorbar(sc, label='Radar/Rain-gauge ratio', ax=fig.fig.axes[0], shrink=shrink)
         fig.fig.colorbar(sc, label=legend, shrink=shrink, anchor=anchor)
@@ -637,7 +655,7 @@ def fill_all_massifs(domain, lat, lon, df, suffix=None, **kw):
     fig.close()
 
 def error_vs_RR(df, datebegin, dateend, **kw):
-    import seaborn as sns
+    #import seaborn as sns
     df['error'] = np.sqrt(np.square(df[f'rr_{kw["product"]}'] - df['rr_nivometeo']))
     fig = plt.figure()
     #sns.regplot(df[f'rr_{kw["product"]}'], df['error'])
