@@ -142,7 +142,7 @@ def goto(path):
 
 class ExtractGrib(object):
 
-    def __init__(self, model, grid, domain, rundate, ech, member=None):
+    def __init__(self, model, grid, domain, ech, origin, rundate=None, member=None):
 
         self.model          = model
         self.domain         = domain
@@ -150,8 +150,11 @@ class ExtractGrib(object):
         self.grid           = grid.upper()
         self.coords         = coords[domain]
         self.date           = rundate
-        self.ech            = ech  # list of lead times
-        self.gribname       = '{0:s}_{1:s}_{2:d}_{3:s}.grib'.format(self.model, self.date.strftime('%Y%m%d%H'), self.ech, self.domain)
+        self.ech            = ech
+        if rundate is None:
+            self.gribname       = 'geometry.grib'
+        else:
+            self.gribname       = '{0:s}_{1:s}_{2:d}_{3:s}.grib'.format(self.model, self.date.strftime('%Y%m%d%H'), self.ech, self.domain)
         self.extractedfiles = list()
         self.vapp           = 'arome'
         # Identifiant des modèles dans la BDAP
@@ -164,6 +167,7 @@ class ExtractGrib(object):
         elif model == 'arome':
             self.model_desc = 'PAROME'
             self.vconf = '3dvarfr'
+        self.origin = origin
 
     def requete(self):
         self.rqst = 'requete.tmp'
@@ -180,7 +184,7 @@ class ExtractGrib(object):
             f.write('#Z_STP ' + ' '.join(dl[self.grid]) + '\n')
         f.write('#L_TYP {0:s}\n'.format(level_type))
 
-    def extract(self, cmd='dap3_dev'):
+    def extract_from_bdap(self, cmd='dap3_dev'):
         self.requete()
         os.system("{0:s} {1:d} {2:s}".format(cmd, self.ech, self.rqst))
         self.extractedfiles.append(self.gribname)
@@ -231,53 +235,59 @@ class ExtractGrib(object):
                 print('Removing empty file {0:s}'.format(self.gribname))
                 os.remove(self.gribname)
 
-        if self.extract():
+        if self.origin == 'bdap':
+            result = self.extract_from_bdap()
+        elif self.origin == 'hendrix':
+            result = self.extract_from_hendrix()
+
+        if result:
             return None
         else:
-            if self.extract_from_hendrix():
-                return None
-
-        # No file has been extracted
-        if self.member is not None:
-            return self.gribname + ' for member {0:d}'.format(self.member)
-        else:
-            return self.gribname
+            # No file has been extracted
+            if self.member is not None:
+                return self.gribname + ' for member {0:d}'.format(self.member)
+            else:
+                return self.gribname
 
 
 class PrecipitationExtractor(object):
 
-    def __init__(self, args, echeances, domain, timecoord, member=None):
-
+    def __init__(self, args, echeance, domain, timecoord, member=None):
         self.args      = args
-        self.echeances = echeances
+        self.echeance  = echeance
         self.member    = member
         self.rr24      = None
         self.domain    = domain
         self.geometry  = None
         self.timecoord = timecoord
 
-    def read_grib(self, gribname):
-
-        data = epygram.formats.resource(gribname, openmode='r', fmt='GRIB')
-        try:
-            # If the grib file has been extracted from the BDAP, the precipitation field has been computed at the extraction
-            rr_field = data.readfield({'indicatorOfTypeOfLevel': 1, 'paramId': paramID[args.model], 'indicatorOfParameter': 61}, getdata= True)
-        except epygram.epygramError:
-            if self.geometry is not None:
-                # If the grib file comes from hendrix, the precipitation field must be cumputed now
-                rain = data.extract_subdomain({'parameterNumber': 65, 'level': 0}, self.geometry)
-                import pdb
-                pdb.set_trace()
-                snow = data.extract_subdomain({'parameterNumber': 66, 'level': 0}, self.geometry)
-
-                rr_field = (rain + snow) / 3600.
-            else:
-                print('ERROR : the output geometry is unkown yet')
-        if self.rr24 is None:  # Reading first grib file
+    def read_geometry(self):
+        result = None
+        if self.origin == 'hendrix':  # Need to extract a grib file from BDAP to get the correct geometry
+            grib = ExtractGrib(self.args.model, self.args.grid, self.domain, self.echeance, 'bdap', member=self.member)
+            result = grib.run()
+        if result is not None:
+            print('Missing grib, try another date (use default DMT_DATE_PIVOT)')
+        else:
+            data = epygram.formats.resource(grib.gribname, openmode='r', fmt='GRIB')
             metadata = data.get_message_at_position(0).asfield(getdata=False)
             self.geometry = metadata.geometry
             self.lon = self.geometry.get_lonlat_grid()[0]
             self.lat = self.geometry.get_lonlat_grid()[1]
+
+    def read_grib(self, gribname):
+        data = epygram.formats.resource(gribname, openmode='r', fmt='GRIB')
+        if self.geometry is None:  # Reading first grib file
+            self.read_geometry()
+        if self.origin == 'bdap':
+            # If the grib file has been extracted from the BDAP, the precipitation field has been computed at the extraction
+            rr_field = data.readfield({'indicatorOfTypeOfLevel': 1, 'paramId': paramID[args.model], 'indicatorOfParameter': 61}, getdata= True)
+        elif self.origin == 'hendrix':
+            # If the grib file comes from hendrix, the precipitation field must be cumputed now
+            rain = data.extract_subdomain({'parameterNumber': 65, 'level': 0}, self.geometry)
+            snow = data.extract_subdomain({'parameterNumber': 66, 'level': 0}, self.geometry)
+            rr_field = rain + snow
+        if self.rr24 is None:  # Reading first grib file
             self.rr24 = np.array([rr_field.data,])
             self.shape = np.shape(rr_field.data)  # Save the data shape to fill missing dates with nan values
         else:
@@ -295,28 +305,29 @@ class PrecipitationExtractor(object):
         i=0
         for date in extract_period[:-1]:  # Verrue pour avoir la bonne dimension temporelle
             i = i+1
-            if self.member is not None:
+            if self.member is not None:  # Extraction de la pearome depuis la BDAP
+                self.origin = 'bdap'
                 goto(os.path.join(workdir, 'mb{0:03d}'.format(self.member)))
-            else:
+            else:  # Extraction d'AROME depuis hendrix
+                self.origin = 'hendrix'
                 goto(workdir)
             datepivot = date - timedelta(hours=dt)
             os.environ["DMT_DATE_PIVOT"] = datepivot.strftime('%Y%m%d%H%M%S')
-            for ech in self.echeances:
-                #for ech in range(9, 34, 1):  # Pour le réseau de 21h
-                print(os.environ["DMT_DATE_PIVOT"])
-                grib = ExtractGrib(self.args.model, self.args.grid, domain, date, ech, member=self.member)
-                result = grib.run()
-                if result is not None:
-                    print('Missing date {0:s}'.format(date.strftime("%Y%m%d%H")))
-                    missing_grib.append(result)
-                    # Fill missing day with nan values
-                    # WARNING : this only works if the first date of the period have valid data
-                    if nan is None:
-                        nan = np.empty(self.shape)
-                        nan[:] = np.NaN
-                    self.rr24 = np.append(self.rr24, np.array([nan]), axis=0)
-                else:
-                    self.read_grib(grib.gribname)
+            #for ech in range(9, 34, 1):  # Pour le réseau de 21h
+            print(os.environ["DMT_DATE_PIVOT"])
+            grib = ExtractGrib(self.args.model, self.args.grid, self.domain, self.echeance, self.origin, date, member=self.member)
+            result = grib.run()
+            if result is not None:
+                print('Missing date {0:s}'.format(date.strftime("%Y%m%d%H")))
+                missing_grib.append(result)
+                # Fill missing day with nan values
+                # WARNING : this only works if the first date of the period have valid data
+                if nan is None:
+                    nan = np.empty(self.shape)
+                    nan[:] = np.NaN
+                self.rr24 = np.append(self.rr24, np.array([nan]), axis=0)
+            else:
+                self.read_grib(grib.gribname)
 
         rr = xr.DataArray(
             data = np.transpose(self.rr24, (1,2,0)),  # Pour passer la dimension temporelle en dernier : (lon, lat, time)
@@ -355,14 +366,16 @@ if __name__ == "__main__":
             # Dans le cas de le PEAROME post_traitée : date = J (6h) et on veut le cumul prévu entre J 6h et J+1 6h par le réseau de J-1 21h
             # Il faut donc extraire les echeances 9h à 24h de J-1 21h (=DMT_DATE_PIVOT)
             dt = 9
-            echeances = [33]  # Correpond à un cumul 24h entre 6h J+1 et 6h J+2 (cf page 259 doc BDAP)
+            echeance = 33  # Correpond à un cumul 24h entre 6h J+1 et 6h J+2 (cf page 259 doc BDAP)
             for member in range(1, 17):
-                precip = PrecipitationExtractor(args, echeances, domain, timecoord[:-1], member=member)
+                precip = PrecipitationExtractor(args, echeance, domain, timecoord[:-1], member=member)
                 precip.extract(dt=9)
         else:
-            echeances = range(1, 25)
-            timecoord = date_range(args.datebegin, args.dateend, dt=1)
-            precip = PrecipitationExtractor(args, echeances, domain, timecoord[:-1])
+            echeance = 24
+            # AROME data are extracted from hendrix : 24h forecasts lead times provide the previous 24h precipitation accumulation
+            extract_preiod = date_range(args.datebegin, args.dateend, dt=24)
+            timecoord = extract_period[:-1]
+            precip = PrecipitationExtractor(args, echeance, domain, timecoord)
             precip.extract()
 
 
