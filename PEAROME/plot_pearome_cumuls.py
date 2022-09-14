@@ -55,37 +55,62 @@ landmarks = {
 norm = plt.Normalize()
 
 cumul = dict()
-vmin = None
-vmax = None
-for member in range(1, 17):
-    filename = f'pearome_{member:03d}_{datebegin}_{dateend}_{domaine}.nc'
+
+def read_data(filename):
     filename = os.path.join(datadir, filename)
     ds = xr.open_dataset(filename)
     ds = ds.where((ds.lon>=lonmin) & (ds.lon<=lonmax) & (ds.lat>=latmin) & (ds.lat<=latmax), drop=True)
-    cumul[member] = ds.sum('time').rr
-    vmin = min(np.nanmin(cumul[member]), vmin) if vmin is not None else np.nanmin(cumul[member])
-    vmax = max(np.nanmax(cumul[member]), vmax) if vmax is not None else np.nanmax(cumul[member])
+    cumul = ds.sum('time').rr
+    return cumul
 
-# Plot
-fig, ax = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
-i = 0
-j = 0
-for member, field in cumul.items():
-    im = field.plot(ax=ax[i,j], add_colorbar=False, vmin=vmin, vmax=vmax)
+def add_landmarks(ax):
     for landmark, infos in landmarks.items():
-        ax[i,j].plot(infos['lon'], infos['lat'], marker=infos['marker'], color='red', markersize=4)
-    ax[i,j].set_aspect('equal')
-    ax[i,j].axis('off')
-    ax[i,j].set_title(f'Member {member:03d}')
+        ax.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='red', markersize=4)
 
-    j = j + 1
-    if j==4:
-        j = 0
-        i = i + 1
+def finalize_fig(fig, im, savename):
+    #fig.subplots_adjust(right=0.85)
+    fig.tight_layout()
+    fig.savefig(os.path.join(savedir, savename), format='pdf')
 
-fig.tight_layout()
-fig.subplots_adjust(right=0.85)
-cbar_ax = fig.add_axes([0.90, 0.15, 0.05, 0.7])
-fig.colorbar(im, cax=cbar_ax, label=f'Total precipitation between {datebegin} and {dateend} (mm)')
-fig.savefig(os.path.join(savedir, f'CUMULS_PEAROME_{datebegin}_{dateend}.pdf'), format='pdf')
 
+def plot_arome():
+    filename = f'arome_{datebegin}_{dateend}_{domaine}.nc'
+    cumul = read_data(filename)
+    fig, ax = plt.subplots(figsize=(13,6))
+    im = cumul.plot(ax=ax)
+    add_landmarks(ax)
+    finalize_fig(fig, im, f'CUMULS_AROME_{datebegin}_{dateend}.pdf')
+
+def plot_pearome():
+    vmin = None
+    vmax = None
+    for member in range(1, 17):
+        filename = f'pearome_{member:03d}_{datebegin}_{dateend}_{domaine}.nc'
+        cumul[member] = read_data(filename)
+        vmin = min(np.nanmin(cumul[member]), vmin) if vmin is not None else np.nanmin(cumul[member])
+        vmax = max(np.nanmax(cumul[member]), vmax) if vmax is not None else np.nanmax(cumul[member])
+
+    # Plot
+    fig, ax = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
+    i = 0
+    j = 0
+    for member, field in cumul.items():
+        im = field.plot(ax=ax[i,j], add_colorbar=False, vmin=vmin, vmax=vmax)
+        add_landmarks(ax[i,j])
+        ax[i,j].set_aspect('equal')
+        ax[i,j].axis('off')
+        ax[i,j].set_title(f'Member {member:03d}')
+
+        j = j + 1
+        if j==4:
+            j = 0
+            i = i + 1
+
+    cbar_ax = fig.add_axes([0.90, 0.15, 0.05, 0.7])
+    fig.colorbar(im, cax=cbar_ax, label=f'Total precipitation between {datebegin} and {dateend} (mm)')
+    finalize_fig(fig, im, f'CUMULS_PEAROME_{datebegin}_{dateend}.pdf')
+
+if __name__ == "__main__":
+
+    plot_arome()
+    plot_pearome()
