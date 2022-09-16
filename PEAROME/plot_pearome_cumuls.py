@@ -68,8 +68,8 @@ def add_landmarks(ax):
         ax.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='red', markersize=4)
 
 def finalize_fig(fig, im, savename):
-    #fig.subplots_adjust(right=0.85)
     fig.tight_layout()
+    fig.subplots_adjust(right=0.85)
     fig.savefig(os.path.join(savedir, savename), format='pdf')
 
 
@@ -81,11 +81,11 @@ def plot_arome():
     add_landmarks(ax)
     finalize_fig(fig, im, f'CUMULS_AROME_{datebegin}_{dateend}.pdf')
 
-def plot_pearome():
+def plot_pearome(model):
     vmin = None
     vmax = None
     for member in range(1, 17):
-        filename = f'pearome_{member:03d}_{datebegin}_{dateend}_{domaine}.nc'
+        filename = f'{model}_{member:03d}_{datebegin}_{dateend}_{domaine}.nc'
         cumul[member] = read_data(filename)
         vmin = min(np.nanmin(cumul[member]), vmin) if vmin is not None else np.nanmin(cumul[member])
         vmax = max(np.nanmax(cumul[member]), vmax) if vmax is not None else np.nanmax(cumul[member])
@@ -108,9 +108,14 @@ def plot_pearome():
 
     cbar_ax = fig.add_axes([0.90, 0.15, 0.05, 0.7])
     fig.colorbar(im, cax=cbar_ax, label=f'Total precipitation between {datebegin} and {dateend} (mm)')
-    finalize_fig(fig, im, f'CUMULS_PEAROME_{datebegin}_{dateend}.pdf')
+    if model == 'pearome':
+        outname = f'CUMULS_PEAROME_{datebegin}_{dateend}.pdf'
+    elif model == 'stats':
+        outname = f'CUMULS_Q50_{datebegin}_{dateend}.pdf'
+    finalize_fig(fig, im, outname)
 
 if __name__ == "__main__":
 
     plot_arome()
-    plot_pearome()
+    plot_pearome('stats')
+    plot_pearome('pearome')

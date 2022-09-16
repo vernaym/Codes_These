@@ -321,7 +321,8 @@ if __name__ == "__main__":
 #    vmax = max([np.max(antilope.rr_cumul), np.max(panthere.rr_cumul), np.max(krigeage.rr_cumul), np.min(safran)])
 #    vmin = min([np.min(antilope.rr_cumul), np.min(panthere.rr_cumul), np.min(krigeage.rr_cumul), np.min(safran)])
 
-    antilopevsarome = (antilope / np.max(antilope.rr_cumul)) / (arome / np.max(arome.rr_cumul))
+    #antilopevsarome = (antilope / np.max(antilope.rr_cumul)) / (arome / np.max(arome.rr_cumul))
+    antilopevsarome = antilope / arome
 
     #vmax = max([np.max(antilope.rr_cumul), np.max(panthere.rr_cumul), np.max(arome.rr_cumul), np.max(pearome.rr_cumul)])
     #vmin = min([np.min(antilope.rr_cumul), np.min(panthere.rr_cumul), np.min(arome.rr_cumul), np.min(pearome.rr_cumul)])
