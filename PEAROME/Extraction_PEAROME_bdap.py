@@ -43,6 +43,7 @@ import footprints
 parameter  = 'PRECIP'
 parameter = dict(
         pearome   = ['PRECIP'],
+        aspearome = ['PRECIP'],
         stats     = ['RR24_Q50'],
         #stats     = ['RR24_MIN', 'RR24_MAX', 'RR24_Q50'],
     )
@@ -68,9 +69,11 @@ dl = dict(
 )
 
 paramID = dict(
-    arome   = 228228,
-    pearome = 0,
-    stats   = 0,
+    aarome    = 228228,
+    parome    = 228228,
+    pearome   = 0,
+    aspearome = 0,
+    stats     = 0,
 )
 indicatorOfParameter = dict(
         pearome = 61,
@@ -87,7 +90,7 @@ def parse_command_line():
     parser.add_argument('-w', '--workdir', help='Runing directory (default for guppy)', default='/home/mrns/vernaym/workdir/extraction_PEAROME')
 #    parser.add_argument('-o', '--output', help='Output name of generated files')
     parser.add_argument('-m', '--model', help='NWP model from which the data must be extracted', 
-                choices=['pearome', 'stats', 'arome'], default='pearome')
+                choices=['pearome', 'aspearome', 'stats', 'aarome', 'parome'], default='pearome')
     parser.add_argument('-c', '--cutoff', help='NWP model cutoff from which the data must be extracted', choices=['assimilation', 'prevision'], default='prevision')
     parser.add_argument('-g', '--grid', help='BDAP grid name from which to extract data', default='FRANXL0025', choices=['FRANXL0025', 'EURW1S40', 'EURW1S100'])
     parser.add_argument('-r', '--read', action = 'store_true', help="Read data (to disable on guppy since xarray.to_netcdf doesn't work)", default=False)
@@ -169,14 +172,15 @@ class ExtractGrib(object):
         # Identifiant des modèles dans la BDAP
         if model == 'stats':
             self.model_desc = 'PG1PEAROME'
-        elif model == 'pearome':
+        elif model == 'aspearome':
             self.model_desc = pearome_desc[member]
             #model_desc = ['PG1PEAROME{member:03d}' for member in range(1,17)]  # PG1PEAROME001 à PG1PEAROME016
             self.vconf = 'pefrance'
-        elif model == 'arome':
+        elif model in ['aarome', 'parome']:
             self.model_desc = 'PAROME'
             self.vconf = '3dvarfr'
         self.origin = origin
+        self.missing = None
 
     def requete(self):
         self.rqst = 'requete.tmp'
@@ -207,6 +211,11 @@ class ExtractGrib(object):
 
     def extract_from_hendrix(self):
 
+        if self.model == 'parome':
+            cutoff = 'production'
+        elif self.model == 'aarome':
+            cutoff = 'assimilation'
+
         tbaro = toolbox.input(
             role           = 'Gridpoint',
             format         = 'grib',
@@ -216,7 +225,7 @@ class ExtractGrib(object):
             local          = self.gribname,
             date           = self.date.strftime('%Y%m%d%H'),
             term           = self.ech,
-            cutoff         = 'production',
+            cutoff         = cutoff,
             namespace      = 'vortex.multi.fr',
             block          = 'forecast',
             nativefmt      = '[format]',
@@ -240,7 +249,7 @@ class ExtractGrib(object):
         if os.path.exists(self.gribname):
             if os.path.getsize(self.gribname) > 0:
                 #print('File {0:s} already exists'.format(self.gribname))
-                return None
+                return self.gribname
             else:
                 print('Removing empty file {0:s}'.format(self.gribname))
                 os.remove(self.gribname)
@@ -251,13 +260,14 @@ class ExtractGrib(object):
             result = self.extract_from_hendrix()
 
         if result:
-            return None
+            return self.gribname
         else:
             # No file has been extracted
             if self.member is not None:
-                return self.gribname + ' for member {0:d}'.format(self.member)
+                self.missing = self.gribname + ' for member {0:d}'.format(self.member)
             else:
-                return self.gribname
+                self.missing = self.gribname
+            return None
 
 
 class PrecipitationExtractor(object):
@@ -272,11 +282,12 @@ class PrecipitationExtractor(object):
         self.timecoord = timecoord
 
     def read_geometry(self, data):
-        result = None
+        result = True
         if self.origin == 'hendrix':  # Need to extract a grib file from BDAP to get the correct geometry
             grib = ExtractGrib(self.args.model, self.args.grid, self.domain, self.echeance, 'bdap', member=self.member)
             result = grib.run()
-        if result is not None:
+            data = epygram.formats.resource(result, openmode='r', fmt='GRIB')
+        if result is None:
             print('Missing grib, try another date (use default DMT_DATE_PIVOT)')
         else:
             metadata = data.get_message_at_position(0).asfield(getdata=False)
@@ -296,18 +307,58 @@ class PrecipitationExtractor(object):
             rain = data.extract_subdomain({'parameterNumber': 65, 'level': 0}, self.geometry)
             snow = data.extract_subdomain({'parameterNumber': 66, 'level': 0}, self.geometry)
             rr_field = rain + snow
-        if self.rr24 is None:  # Reading first grib file
-            self.rr24 = np.array([rr_field.data,])
+        if self.shape is None:
             self.shape = np.shape(rr_field.data)  # Save the data shape to fill missing dates with nan values
+
+        return rr_field
+
+    def get_data(self, date):
+        if self.args.model == 'aspearome':
+            # Les champs de précip reconstitués après AS sont des cumuls de précipitation depuis le réseau de production
+            # Les AS PEAROME tournent sur les réseaux de 9h et 21h, on utilise donc le réseau de 21h (J-1). Pour obtenir des cumuls
+            # de précip entre 6h (J) et 6h (J+1) il faut donc faire la différence entre les cumuls de l'échéance 33h (cumul de 21h (J-1)
+            # à 6h (J+1) et le cumul de l'échéance 9h (cumul de 21h (J-1) à 6h (J))
+            grib1 = ExtractGrib(self.args.model, self.args.grid, self.domain, 9, self.origin, date, member=self.member)  # ech 9h du réseau de 21h (J-1) valable pour J (6h)
+            grib2 = ExtractGrib(self.args.model, self.args.grid, self.domain, 33, self.origin, date, member=self.member)  # ech 33h du réseau de 21h (J-1) valable pour J+1 (6h)
+            gribs = [grib1.run(), grib2.run()]  # WARNING : the order is important (increasing lead times)
         else:
-            self.rr24 = np.append(self.rr24, np.array([rr_field.data]), axis=0)
-#       if cumul is None:
-#           cumul = rr_field
-#       else:
-#           cumul += rr_field
+            grib = ExtractGrib(self.args.model, self.args.grid, self.domain, self.echeance, self.origin, date, member=self.member)
+            gribs = [grib.run()]
+
+        fail = None in gribs
+#        if fail:
+#            print('Missing data for date {0:s}'.format(date.strftime("%Y%m%d%H")))
+#            self.missing_grib.append(','.join(gribs))
+        if args.read:
+            read_data(gribs, fail)
+
+    def read_data(self, gribs, fail):
+        if fail:
+            # Fill missing day with nan values
+            # WARNING : this only works if the first date of the period have valid data
+            if nan is None:
+                nan = np.empty(self.shape)
+                nan[:] = np.NaN
+            else:
+                print('ERROR : no known shape to fill missing data')
+            self.update_data(nan)
+        else:
+            if len(gribs) == 1:
+                self.update_data(self.read_grib(gribs[0]).data)
+            elif self.args.model == 'aspearome':
+                rr9h  = self.read_grib(gribs[0])
+                rr33h = self.read_grib(gribs[1])
+                newdata = rr33h.data-rr9h.data
+                self.update_data(newdata)
+
+    def update_data(self, mydata):
+        if self.rr24 is None:  # Reading first grib file
+            self.rr24 = np.array([mydata,])
+        else:
+            self.rr24 = np.append(self.rr24, np.array([mydata]), axis=0)
 
     def extract(self, dt=0):
-        missing_grib = list()
+        self.missing_grib = list()
         reference_time = pd.Timestamp(self.args.datebegin)
         nan  = None
         #cumul = None
@@ -322,26 +373,8 @@ class PrecipitationExtractor(object):
                 goto(workdir)
             datepivot = date - timedelta(hours=dt)
             os.environ["DMT_DATE_PIVOT"] = datepivot.strftime('%Y%m%d%H%M%S')
-            #for ech in range(9, 34, 1):  # Pour le réseau de 21h
             print(os.environ["DMT_DATE_PIVOT"])
-            grib = ExtractGrib(self.args.model, self.args.grid, self.domain, self.echeance, self.origin, date, member=self.member)
-            result = grib.run()
-            if result is not None:
-                print('Missing date {0:s}'.format(date.strftime("%Y%m%d%H")))
-                missing_grib.append(result)
-                if self.args.read:
-                    # Fill missing day with nan values
-                    # WARNING : this only works if the first date of the period have valid data
-                    if nan is None:
-                        nan = np.empty(self.shape)
-                        nan[:] = np.NaN
-                    else:
-                        print('ERROR : no known shape to fill missing data')
-                    self.rr24 = np.append(self.rr24, np.array([nan]), axis=0)
-            else:
-                if self.args.read:
-                    self.read_grib(grib.gribname)
-
+            self.get_data(date)
 
         if self.args.read:
             rr = xr.DataArray(
@@ -362,9 +395,9 @@ class PrecipitationExtractor(object):
 
             #cumul.dump_to_nc('CUMUL_{0:s}_{1:s}_{2:s}_{3:s}.nc'.format(args.model, args.datebegin.strftime("%Y%m%d%H"), args.dateend.strftime("%Y%m%d%H"), domain), variablename="rr_cumul")
 
-        if len(missing_grib) > 0:
+        if len(self.missing_grib) > 0:
             with open('missing_grib', 'w') as f:
-                for m in missing_grib:
+                for m in self.missing_grib:
                     f.write('{0:s}\n'.format(m))
 
 if __name__ == "__main__":
@@ -375,12 +408,14 @@ if __name__ == "__main__":
         goto(workdir)
         extract_period = date_range(args.datebegin, args.dateend)
 
-        if args.model in ['pearome', 'stats']:
+        if args.model in ['aspearome', 'stats']:
             timecoord = extract_period
             # Dans le cas de le PEAROME post_traitée : date = J (6h) et on veut le cumul prévu entre J 6h et J+1 6h par le réseau de J-1 21h
             # Il faut donc extraire les echeances 9h à 24h de J-1 21h (=DMT_DATE_PIVOT)
-            dt = 9
-            echeance = 33  # Correpond à un cumul 24h entre 6h J+1 et 6h J+2 (cf page 259 doc BDAP)
+            dt = 9  # réseau 21h (J-1)
+            echeance = 33  # WARNING : pour les statistiques (quantiles), l'échéance33h correpond à un cumul 24h entre 6h J+1 et 6h J+2
+            # (cf page 259 doc BDAP). En revanche pour les 16 "membres" (champs de précip) reconstitués il faut bien prendre l'échéance 24h
+            # du réseau de 6h ou faire une différence entre 2 échéances distantyes de 24h.
             for member in range(1, 17):
                 precip = PrecipitationExtractor(args, echeance, domain, timecoord[:-1], member=member)
                 precip.extract(dt=9)
