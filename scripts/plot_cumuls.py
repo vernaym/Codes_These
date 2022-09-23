@@ -10,7 +10,13 @@ import numpy as np
 import xarray as xr
 #import copy
 
+import matplotlib
 import matplotlib.pyplot as plt
+from matplotlib.offsetbox import OffsetImage, AnnotationBbox
+
+plt.rcParams["figure.figsize"] = [7.50, 3.50]
+plt.rcParams["figure.autolayout"] = True
+
 
 import argparse
 
@@ -261,6 +267,45 @@ def nextax(i,j):
         i = i + 1
     return i, j
 
+
+def add_landmarks():
+    # Add landmarks
+    for landmark, infos in landmarks.items():
+        plt.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='red', markersize=5)
+        plt.annotate(landmark, (infos['lon']+0.003, infos['lat']+0.003), color='red', fontsize=12)
+
+def add_scores():
+    fic_score = os.path.join(datadir, 'scores_{0:s}_{1:s}_alpes_10.csv'.format(args.datebegin.strftime('%Y1101%H'), args.dateend.strftime('%Y0430%H')))
+    scores = pd.read_csv(fic_score, sep=';')
+    cmap = matplotlib.colors.LinearSegmentedColormap.from_list("", ["black", "blue", "green", "orange", "red"], 5)
+    thresholds = [0., 0.5, 0.80, 1.2, 1.5, 10]
+    norm = matplotlib.colors.BoundaryNorm(thresholds, cmap.N)
+
+    def set_marker(row):
+        if row['ratio'] <= 0.8:
+            return 'v'
+        elif row['ratio'] > 0.8 and row['ratio'] < 1.2:
+            return 'o'
+        else:
+            return '^'
+    scores["marker"] = scores.apply(set_marker, axis=1)  # axis=1 makes sure that function is applied to each row
+    for marker, d in scores.groupby('marker'):
+        sc = plt.scatter(d['lons'], d['lats'], c=d['ratio'], cmap=cmap, norm=norm, marker=marker, s=150, edgecolors='black')
+
+def add_radar_positions(ax):
+    radars = dict(
+    	moucherotte = dict(lat=45.14776, lon=5.63933, alt=1920,name='Moucherotte'),
+        colombis    = dict(lat=44.49664, lon=6.21729, alt=1742, name='Colombis'),
+        ladole      = dict(lat=46.42565, lon=6.10001, alt=1677, name='La Dole'),
+    )
+    def getImage(path):
+       return OffsetImage(plt.imread(path, format="png"), zoom=.1)
+
+    symbole_radar = '/home/vernaym/These/figures/symbole_radar.png'
+    for radar, infos in radars.items():
+       ab = AnnotationBbox(getImage(symbole_radar), (infos['lon'], infos['lat']), frameon=False)
+       ax.add_artist(ab)
+
 def plot(data, vmin, vmax):
 
     fig, ax = plt.subplots(nrows=2, ncols=2, figsize=(16,7))
@@ -279,10 +324,7 @@ def plot(data, vmin, vmax):
 #            for (c,x,y) in zip(biais_antilope, lon, lat):
 #                ax[0,0].annotate('{0:.2f}'.format(c), (x, y))
         plt.sca(ax[i,j])
-        # Add landmarks
-        for landmark, infos in landmarks.items():
-            plt.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='red', markersize=5)
-            plt.annotate(landmark, (infos['lon']+0.003, infos['lat']+0.003), color='red', fontsize=12)
+        add_landmarks()
         i,j = nextax(i,j)
 
     fig.tight_layout()
@@ -290,53 +332,69 @@ def plot(data, vmin, vmax):
 
     fig.savefig(os.path.join(savedir, 'CUMULS_{0:s}_{1:s}.pdf'.format(args.datebegin.strftime('%Y%m%d'), args.dateend.strftime('%Y%m%d'))))
 
+def plot_antilope(antilope):
+
+    fig, ax = plt.subplots(figsize=(12,6))
+    antilope.rr_cumul.plot(ax=ax, cbar_kwargs={"label":'Total precipitation between {0:s} and {1:s} (mm)'.format(args.datebegin.strftime('%Y%m%d'), args.dateend.strftime('%Y%m%d'))}, cmap=plt.cm.coolwarm)
+    add_landmarks()
+    add_radar_positions(ax)
+    add_scores()
+    fig.tight_layout()
+    fig.savefig(os.path.join(savedir, 'CUMUL_ANTILOPE_{0:s}_{1:s}.pdf'.format(args.datebegin.strftime('%Y%m%d'), args.dateend.strftime('%Y%m%d'))))
+
+
 if __name__ == "__main__":
     args = parse_command_line()
     extract_period = date_range(args.datebegin, args.dateend)
     mnt = xr.open_dataset(os.path.join(datadir, "MNT_GrandesRousses.nc"))
     mnt_proj = proj_mnt(mnt)
-    panthere = xr.open_dataset(os.path.join(datadir, 'PANTHERE_CUMUL_{0:s}_{1:s}.nc'.format(args.datebegin.strftime('%Y%m%d%H%M'), args.dateend.strftime('%Y%m%d%H%M'))))
     antilope = xr.open_dataset(os.path.join(datadir, 'CUMUL_ANTILOPEQ_GrandesRousses_{0:s}_{1:s}.nc'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))))
-    arome    = xr.open_dataset(os.path.join(datadir, 'arome_{0:s}_{1:s}_GrandesRousses.nc'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))))
-    arome = arome.sum('time').rename({'rr':'rr_cumul'})
-    pearome  = xr.open_dataset(os.path.join(datadir, 'pearome_001_{0:s}_{1:s}_GrandesRousses.nc'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))))
-    pearome = pearome.sum('time').rename({'rr':'rr_cumul'})
-#    krigeage = xr.open_dataset(os.path.join(datadir, 'CUMUL_krigeage_{0:s}_{1:s}.nc'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))))
-#    safran   = xr.open_dataset(os.path.join(datadir, 'CUMUL_SAFRAN_GrandesRousses_{0:s}_{1:s}.nc'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))))
-#    safran = safran.rr.sum(axis=0).interp(elevation=mnt_proj, method='nearest')
+    try:
+        panthere = xr.open_dataset(os.path.join(datadir, 'PANTHERE_CUMUL_{0:s}_{1:s}.nc'.format(args.datebegin.strftime('%Y%m%d%H%M'), args.dateend.strftime('%Y%m%d%H%M'))))
+        arome    = xr.open_dataset(os.path.join(datadir, 'arome_{0:s}_{1:s}_GrandesRousses.nc'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))))
+        arome = arome.sum('time').rename({'rr':'rr_cumul'})
+        aspearome  = xr.open_dataset(os.path.join(datadir, 'aspearome_001_{0:s}_{1:s}_GrandesRousses.nc'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))))
+        aspearome = aspearome.sum('time').rename({'rr':'rr_cumul'})
+    #    krigeage = xr.open_dataset(os.path.join(datadir, 'CUMUL_krigeage_{0:s}_{1:s}.nc'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))))
+    #    safran   = xr.open_dataset(os.path.join(datadir, 'CUMUL_SAFRAN_GrandesRousses_{0:s}_{1:s}.nc'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))))
+    #    safran = safran.rr.sum(axis=0).interp(elevation=mnt_proj, method='nearest')
+        antilope_only = False
+    except:
+        antilope_only = True
 
-    if args.datebegin == datetime(2021, 12, 1) and args.dateend == datetime(2022, 4, 30):
-        biais_antilope, biais_krigeage, lon, lat = add_obs_nivometeo()
+
 
     # Interp all data on the ANTILOPE grid over the GrandesRousses domain
     antilope = antilope.where((antilope.lon>=lonmin) & (antilope.lon<=lonmax) & (antilope.lat<=latmax) & (antilope.lat>=latmin), drop=True)
-    panthere = panthere.where((panthere.lon>=lonmin) & (panthere.lon<=lonmax) & (panthere.lat<=latmax) & (panthere.lat>=latmin), drop=True)
-    arome = arome.where((arome.lon>=lonmin) & (arome.lon<=lonmax) & (arome.lat<=latmax) & (arome.lat>=latmin), drop=True)
-    pearome = pearome.where((pearome.lon>=lonmin) & (pearome.lon<=lonmax) & (pearome.lat<=latmax) & (pearome.lat>=latmin), drop=True)
+    if not antilope_only:
+        #biais_antilope, biais_krigeage, lon, lat = add_obs_nivometeo()
+        panthere = panthere.where((panthere.lon>=lonmin) & (panthere.lon<=lonmax) & (panthere.lat<=latmax) & (panthere.lat>=latmin), drop=True)
+        arome = arome.where((arome.lon>=lonmin) & (arome.lon<=lonmax) & (arome.lat<=latmax) & (arome.lat>=latmin), drop=True)
+        aspearome = aspearome.where((aspearome.lon>=lonmin) & (aspearome.lon<=lonmax) & (aspearome.lat<=latmax) & (aspearome.lat>=latmin), drop=True)
+        antilopevsarome = antilope / arome
+        #krigeage = krigeage.interp(lon=antilope.lon, lat=antilope.lat, method='nearest')
+        #safran   = safran.where((safran.lon>=lonmin) & (safran.lon<=lonmax) & (safran.lat<=latmax) & (safran.lat>=latmin), drop=True)
+        #panthere = panthere.interp(lon=antilope.lon, lat=antilope.lat, method='nearest')
+        #vmax = max([np.max(antilope.rr_cumul), np.max(panthere.rr_cumul), np.max(krigeage.rr_cumul), np.min(safran)])
+        #vmin = min([np.min(antilope.rr_cumul), np.min(panthere.rr_cumul), np.min(krigeage.rr_cumul), np.min(safran)])
 
-    #krigeage = krigeage.interp(lon=antilope.lon, lat=antilope.lat, method='nearest')
-    #safran   = safran.where((safran.lon>=lonmin) & (safran.lon<=lonmax) & (safran.lat<=latmax) & (safran.lat>=latmin), drop=True)
-    #panthere = panthere.interp(lon=antilope.lon, lat=antilope.lat, method='nearest')
+        #antilopevsarome = (antilope / np.max(antilope.rr_cumul)) / (arome / np.max(arome.rr_cumul))
+        vmax = max([np.max(antilope.rr_cumul), np.max(panthere.rr_cumul), np.max(arome.rr_cumul)])
+        vmin = min([np.min(antilope.rr_cumul), np.min(panthere.rr_cumul), np.min(arome.rr_cumul)])
+        data = dict(
+            ANTILOPE = antilope,
+            PANTHERE = panthere,
+            AROME    = arome,
+            #PEAROME  = pearome,
+            ANTILOPEVSAROME  = antilopevsarome,
+        )
+        plot(data, vmin, vmax)
+    else:
+        vmax = np.max(antilope.rr_cumul)
+        vmin = np.min(antilope.rr_cumul)
 
-#    vmax = max([np.max(antilope.rr_cumul), np.max(panthere.rr_cumul), np.max(krigeage.rr_cumul), np.min(safran)])
-#    vmin = min([np.min(antilope.rr_cumul), np.min(panthere.rr_cumul), np.min(krigeage.rr_cumul), np.min(safran)])
+    plot_antilope(antilope)
 
-    #antilopevsarome = (antilope / np.max(antilope.rr_cumul)) / (arome / np.max(arome.rr_cumul))
-    antilopevsarome = antilope / arome
-
-    #vmax = max([np.max(antilope.rr_cumul), np.max(panthere.rr_cumul), np.max(arome.rr_cumul), np.max(pearome.rr_cumul)])
-    #vmin = min([np.min(antilope.rr_cumul), np.min(panthere.rr_cumul), np.min(arome.rr_cumul), np.min(pearome.rr_cumul)])
-    vmax = max([np.max(antilope.rr_cumul), np.max(panthere.rr_cumul), np.max(arome.rr_cumul)])
-    vmin = min([np.min(antilope.rr_cumul), np.min(panthere.rr_cumul), np.min(arome.rr_cumul)])
-    data = dict(
-        ANTILOPE = antilope,
-        PANTHERE = panthere,
-        AROME    = arome,
-        #PEAROME  = pearome,
-        ANTILOPEVSAROME  = antilopevsarome,
-    )
-
-    plot(data, vmin, vmax)
 
 
 

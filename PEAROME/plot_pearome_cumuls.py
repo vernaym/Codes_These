@@ -53,6 +53,8 @@ landmarks = {
     }
 
 norm = plt.Normalize()
+#colormap = plt.cm.gist_ncar
+colormap = plt.cm.YlGnBu
 
 cumul = dict()
 
@@ -77,7 +79,7 @@ def plot_arome():
     filename = f'arome_{datebegin}_{dateend}_{domaine}.nc'
     cumul = read_data(filename)
     fig, ax = plt.subplots(figsize=(13,6))
-    im = cumul.plot(ax=ax)
+    im = cumul.plot(ax=ax, cmap=colormap)
     add_landmarks(ax)
     finalize_fig(fig, im, f'CUMULS_AROME_{datebegin}_{dateend}.pdf')
 
@@ -95,7 +97,8 @@ def plot_pearome(model):
     i = 0
     j = 0
     for member, field in cumul.items():
-        im = field.plot(ax=ax[i,j], add_colorbar=False, vmin=vmin, vmax=vmax)
+        im = field.plot(ax=ax[i,j], add_colorbar=False, vmin=0, vmax=vmax, cmap=colormap)
+    #im = field.plot(ax=ax[i,j], add_colorbar=False, vmin=vmin, vmax=vmax, cmap=colormap)
         add_landmarks(ax[i,j])
         ax[i,j].set_aspect('equal')
         ax[i,j].axis('off')
@@ -108,8 +111,8 @@ def plot_pearome(model):
 
     cbar_ax = fig.add_axes([0.90, 0.15, 0.05, 0.7])
     fig.colorbar(im, cax=cbar_ax, label=f'Total precipitation between {datebegin} and {dateend} (mm)')
-    if model == 'pearome':
-        outname = f'CUMULS_PEAROME_{datebegin}_{dateend}.pdf'
+    if model == 'aspearome':
+        outname = f'CUMULS_ASPEAROME_{datebegin}_{dateend}.pdf'
     elif model == 'stats':
         outname = f'CUMULS_Q50_{datebegin}_{dateend}.pdf'
     finalize_fig(fig, im, outname)
@@ -118,4 +121,4 @@ if __name__ == "__main__":
 
     plot_arome()
     plot_pearome('stats')
-    plot_pearome('pearome')
+    plot_pearome('aspearome')

@@ -148,7 +148,7 @@ else:
     colors = plt.cm.coolwarm(norm(np.nan_to_num(radar.values)))
 
 fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
-ax.view_init(elev=60., azim=135)  # Set point of view
+ax.view_init(elev=50., azim=135)  # Set point of view
 surf = ax.plot_surface(X=X, Y=Y, Z=Z, linewidth=0, antialiased=False, facecolors=colors)
 ax.xaxis.pane.fill = False
 ax.xaxis.pane.set_edgecolor('white')
@@ -166,5 +166,6 @@ ax.set_zlim(0., 3500.)
 #fig.colorbar(colorbar=colors, shrink=0.5, aspect=5)
 fig.colorbar(cm.ScalarMappable(norm=norm, cmap=plt.cm.coolwarm), ax=ax, shrink=0.75, aspect=8, label=f'{product} cumulated precipitation \n between {datebegin} and {dateend} (mm)')
 #plt.show()
+plt.tight_layout()
 plt.savefig(f'{savedir}/CUMUL3D_{product}_{datebegin}_{dateend}.pdf', format='pdf')
 

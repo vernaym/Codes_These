@@ -61,8 +61,8 @@ def parse_command_line():
     parser = argparse.ArgumentParser(description=description)
     parser.add_argument('-b', '--datebegin', help='Begining date of extraction, format YYYYMMDDHH or YYMMDDHH', required=True)
     parser.add_argument('-e', '--dateend', help = 'Final date of extraction (default=datebegin)')
-    parser.add_argument('-d', '--domain', nargs='+', help='Domain of the file', choices=['alp', 'pyr', 'cor', 'GrandesRousses'], default='GrandesRousses')
-    parser.add_argument('-w', '--workdir', help='Runing directory (default for guppy)', default='/home/mrns/vernaym/workdir/extraction_antilope')
+    parser.add_argument('-d', '--domain', help='Domain of the file', choices=['alp', 'pyr', 'cor', 'GrandesRousses'], default='GrandesRousses')
+    parser.add_argument('-w', '--workdir', help='Runing directory', default='/home/vernaym/workdir/ASSIMILATION/XP00')
     parser.add_argument('-m', '--massif', help='PLot for a specific massif', default=None, type=int)
     parser.add_argument('-t', '--threshold', default=None, help='Threshold of precipitation (mm) to apply in the data to consider', type=int)
     parser.add_argument('-p', '--product', default='antilopejp1', help='Product to deal with', choices=['antilope', 'antilopejp1', 'panthere', 'kriging'])
@@ -208,7 +208,7 @@ def SCGD_shape_PDF(x, k=1., theta=1., delta=0., plot_distribution=False, plot_pa
 def read_ensemble(datebegin, dateend, domain='GrandesRousses'):
     pearome = dict()
     for member in range(1,17):
-        filename = f'pearome_{member:03d}_{datebegin}_{dateend}_{domain}.nc'
+        filename = f'aspearome_{member:03d}_{datebegin}_{dateend}_{domain}.nc'
         filename = os.path.join(datadir, filename)
         pearome[member] = xr.open_dataset(filename)
 
@@ -370,8 +370,8 @@ def plot_obs(radar, rrmin, rrmax, mnt):
     colors = plt.cm.coolwarm(norm(np.nan_to_num(radar.rr.data)))
     plot3D(X, Y, Z, colors, date_str)
 
-def plot_field(field, ax, vmin, vmax, title):
-    im = field.plot(ax=ax, add_colorbar=False, vmin=vmin, vmax=vmax)
+def plot_field(field, ax, vmin, vmax, title, cmap=plt.cm.YlGnBu):
+    im = field.plot(ax=ax, add_colorbar=False, vmin=vmin, vmax=vmax, cmap=cmap)
     for landmark, infos in landmarks.items():
         ax.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='red', markersize=4)
     ax.set_aspect('equal')
@@ -390,6 +390,8 @@ def finalize_fig(figure, imm, label, outname):
 
 if __name__ == "__main__":
     args = parse_command_line()
+
+    goto(args.workdir)
 
     extract_period = date_range(args.datebegin, args.dateend)
     filename = 'ANTILOPEQ_{0:s}_{1:s}_{2:s}.nc'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'), args.domain)
@@ -427,6 +429,7 @@ if __name__ == "__main__":
                 np.nanmin([mod.where((mod.lon>=lonmin) & (mod.lon<=lonmax) & (mod.lat>=latmin) & (mod.lat<=latmax)).rr
                     for mod in list(map(lambda x:x.sel(time=date), pearome.values()))]), 
                 np.nanmin(radar.rr.data))
+        rrmin = 0.
         rrmax = max(
                 np.nanmax([mod.where((mod.lon>=lonmin) & (mod.lon<=lonmax) & (mod.lat>=latmin) & (mod.lat<=latmax)).rr
                     for mod in list(map(lambda x:x.sel(time=date), pearome.values()))]), 
@@ -443,22 +446,24 @@ if __name__ == "__main__":
         parameters = radar
         parameters = parameters.rename({'rr':'mu'})  #  Mode=observation (WARNING : mu is NOT the mean) TODO : check if the ensemble after assimilation is not biased
         #mu = radar.rr.data
-        parameters['sigma'] = 0.261 + 0.263 * parameters['mu']  # According to the linear regression of ANTILOPE RMSE vs ANTILOPE RR
+        parameters['sigma'] = (0.261 + 0.263 * parameters['mu'])*5  # According to the linear regression of ANTILOPE RMSE vs ANTILOPE RR
         #sigma = 0.261 + 0.263 * mu
         # shift of the gamma PDF ==> this defines the weight given to 0mm forecats (=0 if delta=0) !!
         parameters = parameters.assign(delta=lambda x: 10/x.mu)  # TODO : find a better shift than 10/mu
-        parameters.delta.data[np.isinf(parameters.delta.data)] = 0
+        parameters.delta.data[np.isinf(parameters.delta.data)] = 0  # Si l'obs est nulle on veut imposer une PDF exponentielle décroissante (k=1) sans translation
         #delta = np.zeros(np.shape(mu))
         #delta[np.where(mu>0)] = 1 / mu[np.where(mu>0)]
         #
         # TODO : Intégrer delta au calcul de k
         # ====================================
+	# TODO : si mu=0, k doit être <1 pour avoir une exponentielle décroissante.
         parameters['k'] = (2*parameters.sigma**2+parameters.mu**2+np.sqrt((parameters.mu**2*(4*parameters.sigma**2+parameters.mu**2))))/(2*parameters.sigma**2)  # shape parameter of the Gamma PDF
         #k = (2*sigma**2+mu**2+np.sqrt((mu**2*(4*sigma**2+mu**2))))/(2*sigma**2)  # shape parameter of the Gamma PDF
-        parameters.k.where(parameters.mu==0).data = parameters.mu.where(parameters.mu==0).data / parameters.mu.where(parameters.mu==0).data   # k>1 if Y>0 else k==1
+        #parameters.k.where(parameters.mu==0).data = parameters.mu.where(parameters.mu==0).data / parameters.mu.where(parameters.mu==0).data   # k>1 if Y>0 else k==1
+        parameters["k"] = xr.where(parameters.mu==0, 1, parameters.k)   # k>1 if Y>0 else k==1
         #k[np.where(mu==0)] = 1
         parameters['theta'] = parameters.mu / (parameters.k-1)  # Scale parameter of the Gamma PDF
-        parameters['theta'] = xr.where(parameters.k==1, 3*parameters.k, parameters.theta)  # Set theta=3 by default. TODO : In this case the scale parameter could depend on neighboring observations
+        parameters['theta'] = xr.where(parameters.k==1, 3*parameters.k, parameters.theta)  # Set theta=3 by default if k=1. TODO : In this case the scale parameter could depend on neighboring observations
         #theta = mu / (k-1)
         # TODO : plot PDF for some pixels
         # gamma_shape_PDF(Y, k=k, theta=theta)
@@ -533,7 +538,8 @@ if __name__ == "__main__":
             vmin = 0
             #vmax = 0.25  # TODO : vmax=f(sigma) [peut être renvoyé par la fonction de la PDF comme le max de probabilité]
             vmax = np.max(gamma_shape_PDF(parameters.mu.data, k=parameters.k.data, theta=parameters.theta.data))
-            im3 = plot_field(wpixel[member], axes3[i,j], vmin, vmax, title=f'member {member:03d}, total weight={weight[member]:.3f}')
+	    # TODO : normaliser les poids par pixel également
+            im3 = plot_field(wpixel[member], axes3[i,j], vmin, vmax, title=f'member {member:03d}, total weight={weight[member]:.3f}', cmap=plt.cm.Greys)
 
             j = j + 1
             if j==4:

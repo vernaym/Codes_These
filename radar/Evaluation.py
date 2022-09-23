@@ -14,6 +14,7 @@ import argparse
 import matplotlib
 #matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 import seaborn as sns
 
 from sklearn.linear_model import LinearRegression, RANSACRegressor
@@ -66,7 +67,7 @@ def parse_command_line():
     parser.add_argument('-m', '--massif', help='PLot for a specific massif', default=None, type=int)
     parser.add_argument('-s', '--subdomain', default=None, help='PLot for a specific subdomain, values=[NWA, NEA, CA, SA, WP, CP, EP]')
     parser.add_argument('-t', '--threshold', default=None, help='Threshold of precipitation (mm) to apply in the data to consider', type=int)
-    parser.add_argument('-p', '--product', default='antilopejp1', help='Product to deal with', choices=['antilope', 'antilopejp1', 'panthere', 'kriging'])
+    parser.add_argument('-p', '--product', default='antilopejp1', help='Product to deal with', choices=['antilope', 'antilopejp1', 'panthere', 'kriging', 'arome'])
     parser.add_argument('-l', '--lpn', action='store_true', help='Take into account the rain-snow limit')
 
     args = parser.parse_args()
@@ -122,6 +123,23 @@ def goto(path):
         os.makedirs(path)
     os.chdir(path)
 
+def add_radar_positions(ax):
+    radars = dict(
+    	moucherotte  = dict(lat=45.14776, lon=5.63933, alt=1920,name='Moucherotte'),
+        colombis     = dict(lat=44.49664, lon=6.21729, alt=1742, name='Colombis'),
+        ladole       = dict(lat=46.42565, lon=6.10001, alt=1677, name='La Dole'),
+        #collobrieres = dict(lat=43.22, lon=6.37, alt=641, name='Collobrières'),
+    )
+    def getImage(path):
+       return OffsetImage(plt.imread(path, format="png"), zoom=.03)
+
+    symbole_radar = '/home/vernaym/These/figures/symbole_radar.png'
+    for radar, infos in radars.items():
+       ab = AnnotationBbox(getImage(symbole_radar), (infos['lon'], infos['lat']), frameon=False)
+       ax.add_artist(ab)
+       circle = plt.Circle((infos['lon'], infos['lat']), 1, color='grey', fill=False, linestyle='--')
+       ax.add_patch(circle)
+
 def raw_scatterplot(rr_nivometeo, rr_antilope, elevations, datebegin, dateend, suffix=None, **kw):
     nbpoint = len(rr_nivometeo)
     minval = min([min(rr_nivometeo), min(rr_antilope)]) - 0.3
@@ -146,13 +164,13 @@ def raw_scatterplot(rr_nivometeo, rr_antilope, elevations, datebegin, dateend, s
     plt.plot(rr_nivometeo, y, color="red", linewidth=1)
     plt.text(minval+1, maxval*0.7, f'R²={r2:.4}', fontsize=18, color='red')
 
-    plt.tight_layout()
     #fig.savefig('raw_scatterplot_{0:s}_{1:s}.svg'.format(datebegin.strftime('%Y%m%d'), dateend.strftime('%Y%m%d')), bbox_inches='tight', format='svg')
     filename = 'raw_scatterplot_{0:s}_{1:s}'.format(datebegin.strftime('%Y%m%d'), dateend.strftime('%Y%m%d'))
     if suffix is not None:
         filename = f'{filename}_{suffix}'
 
-    fig.savefig(f'{filename}.svg', format='svg')
+    #plt.tight_layout()
+    fig.savefig(f'{filename}.svg', format='svg', bbox_inches='tight')
 
 def linear_regression(x, y):
     reg = LinearRegression().fit(x.reshape((-1, 1)), y)
@@ -259,9 +277,9 @@ def daily_scatterplot(workdf, datebegin, dateend, massif=None, subdomain=None, s
     ax.set_ylim(bottom=minval, top=maxval)
     ax.set_ylabel(f'Daily {kw["product"]} precipitation estimate (mm/day)', fontsize=12)
     ax.set_xlabel('Daily rain-gauges observed precipitation (mm/day)', fontsize=12)
-    plt.tight_layout()
+    #plt.tight_layout()
     #fig.savefig(f'scatterplot_massif_{massif}.svg', bbox_inches='tight', format='svg')
-    fig.savefig(f'{filename1}.svg', format='svg')
+    fig.savefig(f'{filename1}.svg', format='svg', bbox_inches='tight')
 
     fig, ax = plt.subplots(figsize=(12,9))
     #ax.set_xlim(left=700, right=np.max(elevations) * 1.1)
@@ -286,8 +304,8 @@ def daily_scatterplot(workdf, datebegin, dateend, massif=None, subdomain=None, s
     ax.set_ylim(bottom=0, top=np.max([np.max(y1), np.max(y2)]) * 1.1)
     ax.set_ylabel('Mean daily precipitation (mm/day)', fontsize=12)
     ax.set_xlabel('Elevation (m)', fontsize=12)
-    plt.tight_layout()
-    fig.savefig(f'{filename2}.svg', format='svg')
+    #plt.tight_layout()
+    fig.savefig(f'{filename2}.svg', format='svg', bbox_inches='tight')
 
 def elevation_scatterplot(workdf, datebegin, dateend, suffix=None, **kw):
 
@@ -362,9 +380,9 @@ def elevation_scatterplot(workdf, datebegin, dateend, suffix=None, **kw):
     if suffix is not None:
         filename1 = f'{filename1}_{suffix}'
         filename2 = f'{filename2}_{suffix}'
-    fig1.savefig(f'{filename1}.svg', format='svg')
+    fig1.savefig(f'{filename1}.svg', format='svg', bbox_inches='tight')
     #fig2.savefig('ratio_scatterplot_by_elevation_{0:s}_{1:s}.svg'.format(datebegin.strftime('%Y%m%d'), dateend.strftime('%Y%m%d')), bbox_inches='tight', format='svg')
-    fig2.savefig(f'{filename2}.svg', format='svg')
+    fig2.savefig(f'{filename2}.svg', format='svg', bbox_inches='tight')
 
 def plot_massif(mydf, massif=None, subdomain=None, error=0.2, **kw):
     #mydf = mydf.loc[~mydf['rr'].isna()].loc[~mydf['rr_antilope'].isna()]
@@ -384,6 +402,7 @@ def plot_massif(mydf, massif=None, subdomain=None, error=0.2, **kw):
     tmp['rmse']  = np.sqrt(mydf.groupby(['num_poste'])["diff"].mean())
     tmp['ratio'] = tmp['rr_radar'] / tmp['rr_nivometeo']
     tmp.replace([np.inf, -np.inf], np.nan, inplace=True)
+    tmp.to_csv('scores_{0:s}_{1:s}_{2:s}_{3:d}.csv'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'), domain, args.threshold), sep=';')
 
     #====================================== Creation de la palette ===================================
     #cmap = ListedColormap(sns.diverging_palette(240, 10, n=9).as_hex())
@@ -436,12 +455,13 @@ def plot_massif(mydf, massif=None, subdomain=None, error=0.2, **kw):
             #tmp = tmp.loc[~tmp['ratio'].isna()] # Remove Nan Values to avoid problems
             #cmap = matplotlib.colors.LinearSegmentedColormap.from_list("", ["navy", "cornflowerblue", "green", "orange", "red"], 5)
             cmap = matplotlib.colors.LinearSegmentedColormap.from_list("", ["black", "blue", "green", "orange", "red"], 5)
-            if suffix is not None:  # A threshold has been applied on precipitation values
-                #thresholds = [0.05, 0.1, 0.5, 0.80, 0.95, 1.05, 1.2, 2, 10, 20]
-                thresholds = [0., 0.5, 0.80, 1.2, 1.5, 10]
-            else:
-                cmap = copy.copy(plt.cm.get_cmap('nipy_spectral', 9))
-                thresholds = [0.2, 0.5, 0.6, 0.8, 0.95, 1.05, 1.2, 1.4, 2, 5]
+            thresholds = [0., 0.5, 0.80, 1.2, 1.5, 10]
+#            if suffix is not None:  # A threshold has been applied on precipitation values
+#                #thresholds = [0.05, 0.1, 0.5, 0.80, 0.95, 1.05, 1.2, 2, 10, 20]
+#                thresholds = [0., 0.5, 0.80, 1.2, 1.5, 10]
+#            else:
+#                cmap = copy.copy(plt.cm.get_cmap('nipy_spectral', 9))
+#                thresholds = [0.2, 0.5, 0.6, 0.8, 0.95, 1.05, 1.2, 1.4, 2, 5]
 
             def set_marker(row):
                 if row['ratio'] <= 0.8:
@@ -450,7 +470,6 @@ def plot_massif(mydf, massif=None, subdomain=None, error=0.2, **kw):
                     return 'o'
                 else:
                     return '^'
-
             tmp["marker"] = tmp.apply(set_marker, axis=1)
             # axis=1 makes sure that function is applied to each row
             legend = f'{kw["product"]}/rain-gauges {score}'
@@ -525,6 +544,8 @@ def plot_massif(mydf, massif=None, subdomain=None, error=0.2, **kw):
 #                    #fig.map.text(tmp['lon'].mean(), tmp['lat'].mean(), tmp['ratio'].mean().round(3), horizontalalignment='right', verticalalignment='top', color='red')
 #        sc = fig.map.scatter(lons, lats, c=mean_score, cmap=cmap, norm=norm, marker="^", s=150)
 
+        ax = fig.fig.axes[0]
+        add_radar_positions(ax)
         if score == 'ratio':
             for marker, d in tmp.groupby('marker'):
                 sc = fig.map.scatter(d['lons'], d['lats'], c=d[f'{score}'], cmap=cmap, norm=norm, marker=marker, s=150, edgecolors='black')
@@ -538,7 +559,7 @@ def plot_massif(mydf, massif=None, subdomain=None, error=0.2, **kw):
         #fig.fig.colorbar(sc, label='Radar/Rain-gauge ratio', ax=fig.fig.axes[0], shrink=shrink)
         fig.fig.colorbar(sc, label=legend, shrink=shrink, anchor=anchor)
         plt.tight_layout()
-        fig.save(f'{filename}.svg', formatout='svg')
+        fig.save(f'{filename}.svg', formatout='svg', bbox_inches='tight')
         fig.close()
 
 def plot_obs(lat, lon, alt, datebegin, dateend):
@@ -555,10 +576,12 @@ def plot_obs(lat, lon, alt, datebegin, dateend):
         fig = class_(mappos=mappos)
         fig.init_massifs()
         #myplot = fig.addpoints(lon, lat, marker='D', color=alt)
+        ax = fig.fig.axes[0]
+        add_radar_positions(ax)
         sc = fig.map.scatter(lon, lat, c=alt, marker="^", s=150)
         plt.colorbar(sc, label='Elevation (m)', shrink=shrink)
         plt.tight_layout()
-        fig.save(f'obs_{domain}_{datebegin}_{dateend}.svg', formatout='svg')
+        fig.save(f'obs_{domain}_{datebegin}_{dateend}.svg', formatout='svg', bbox_inches='tight')
         fig.close()
 #        for massif in map_massifs[domain]:
 #            fig = cartopy.Zoom_massif(massif)
@@ -637,7 +660,7 @@ def fill_all_massifs(domain, lat, lon, df, suffix=None, **kw):
     fig.draw_massifs(np.fromiter(bias.keys(), dtype=int), np.fromiter(bias.values(), dtype=float), **attributes)
     fig.plot_center_massif(massif_numbers, np.fromiter(nb_stations.values(), dtype=int), **attributes)
     #plt.tight_layout()
-    fig.save(f'{filename}.svg', formatout='svg')
+    fig.save(f'{filename}.svg', formatout='svg', bbox_inches='tight')
     fig.close()
 
     filename = f'RMSE_by_massif_{domain}'
@@ -651,7 +674,7 @@ def fill_all_massifs(domain, lat, lon, df, suffix=None, **kw):
     fig.draw_massifs(np.fromiter(rmse.keys(), dtype=int), np.fromiter(rmse.values(), dtype=float), **attributes)
     fig.plot_center_massif(massif_numbers, np.fromiter(nb_stations.values(), dtype=int), **attributes)
     #plt.tight_layout()
-    fig.save(f'{filename}.svg', formatout='svg')
+    fig.save(f'{filename}.svg', formatout='svg', bbox_inches='tight')
     fig.close()
 
 def error_vs_RR(df, datebegin, dateend, **kw):
@@ -667,21 +690,9 @@ def error_vs_RR(df, datebegin, dateend, **kw):
     plt.ylabel('ANTILOPE root mean square deviation (mm)')
     plt.legend()
     plt.tight_layout()
-    fig.savefig(f'ANTILOPE_rmsd_vs_ANTILOPE_RR_{datebegin.strftime("%Y%m%d")}_{dateend.strftime("%Y%m%d")}.pdf', format='pdf')
+    fig.savefig(f'ANTILOPE_rmsd_vs_ANTILOPE_RR_{datebegin.strftime("%Y%m%d")}_{dateend.strftime("%Y%m%d")}.pdf', format='pdf', bbox_inches='tight')
 
-
-if __name__ == "__main__":
-    args = parse_command_line()
-
-    extract_period = date_range(args.datebegin, args.dateend)
-    if args.product == 'antilope':
-        RADAR_data = 'ANTILOPEQ_{0:s}_{1:s}.csv'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))
-    elif args.product == 'antilopejp1':
-        RADAR_data = 'ANTILOPEJP1Q_{0:s}_{1:s}.csv'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))
-    elif args.product == 'kriging':
-        RADAR_data = 'Kriging_{0:s}_{1:s}_{2:s}.csv'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'), 'exponential')
-    else:
-        RADAR_data = 'PANTHERE_{0:s}_{1:s}.csv'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))
+def read_nivometeo():
 
     # I- Lecture et mise en forme des données
     #########################################
@@ -703,9 +714,37 @@ if __name__ == "__main__":
     nivometeo = nivometeo.rename(columns={'Q.num_poste':'num_poste', 'poste_nivo.lat_dg':'lat', 'poste_nivo.lon_dg':'lon',
         'poste_nivo.nom_usuel':'name', 'poste_nivo.massif_nivo':'massif_number', 'poste_nivo.alti':'elevation', 'Q.rr':'rr_nivometeo'})  # facultatif
 
+    return nivometeo
+
+if __name__ == "__main__":
+    args = parse_command_line()
+
+    extract_period = date_range(args.datebegin, args.dateend)
+    if args.product == 'antilope':
+        RADAR_data = 'ANTILOPEQ_{0:s}_{1:s}.csv'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))
+    elif args.product == 'antilopejp1':
+        RADAR_data = 'ANTILOPEJP1Q_{0:s}_{1:s}.csv'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))
+    elif args.product == 'kriging':
+        RADAR_data = 'Kriging_{0:s}_{1:s}_{2:s}.csv'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'), 'exponential')
+    elif args.product == 'arome':
+        RADAR_data = 'arome_{0:s}_{1:s}_GrandesRousses.nc'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))
+    else:
+        RADAR_data = 'PANTHERE_{0:s}_{1:s}.csv'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))
+
+    nivometeo = read_nivometeo()
+
     # I.2 Produit radar
     #------------------
-    antilope = pd.read_csv(RADAR_data, sep=';', parse_dates=['date'], dtype={f'rr_{args.product}': float, 'num_poste': int}, na_values=['--'])
+    import xarray as xr
+    if args.product == 'arome':
+        datadir = '/home/vernaym/These/DATA'
+        xrdata = xr.open_dataset(os.path.join(datadir, RADAR_data))
+        antilope = xrdata.to_dataframe().reset_index().rename(columns={'time':'date'})
+        # TODO : Extraire les valeurs de la PEAROME correspondant aux point d'obs nivometeo
+        import pdb
+        pdb.set_trace()
+    else:
+        antilope = pd.read_csv(RADAR_data, sep=';', parse_dates=['date'], dtype={f'rr_{args.product}': float, 'num_poste': int}, na_values=['--'])
     antilope['date'] = antilope['date'].dt.date
 
     # II- Merge des DF et mise en forme des données
@@ -798,8 +837,8 @@ if __name__ == "__main__":
 
         # 5. Maps
         #for domain in ['alpes', 'pyrenees', 'corse']:
-        #for domain in ['alpes']:
-        for domain in ['alpes', 'pyrenees']:
+        #for domain in ['alpes', 'pyrenees']:
+        for domain in ['alpes']:
             plot_full_domain(domain, lats.to_numpy(), lons.to_numpy(), df_stat, suffix=suffix, product=args.product)
             plot_massif(df.loc[df['massif_number'].isin(map_massifs[domain])], suffix=suffix, product=args.product, domain=domain)
 

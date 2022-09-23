@@ -76,8 +76,9 @@ paramID = dict(
     stats     = 0,
 )
 indicatorOfParameter = dict(
-        pearome = 61,
-        stats   = 13,
+        pearome   = 61,
+        aspearome = 61,
+        stats     = 13,
 )
 
 def parse_command_line():
@@ -280,6 +281,8 @@ class PrecipitationExtractor(object):
         self.domain    = domain
         self.geometry  = None
         self.timecoord = timecoord
+        self.shape     = None
+        self.nan  = None
 
     def read_geometry(self, data):
         result = True
@@ -330,18 +333,18 @@ class PrecipitationExtractor(object):
 #            print('Missing data for date {0:s}'.format(date.strftime("%Y%m%d%H")))
 #            self.missing_grib.append(','.join(gribs))
         if args.read:
-            read_data(gribs, fail)
+            self.read_data(gribs, fail)
 
     def read_data(self, gribs, fail):
         if fail:
             # Fill missing day with nan values
             # WARNING : this only works if the first date of the period have valid data
-            if nan is None:
-                nan = np.empty(self.shape)
-                nan[:] = np.NaN
+            if self.nan is None:
+                self.nan = np.empty(self.shape)
+                self.nan[:] = np.NaN
             else:
                 print('ERROR : no known shape to fill missing data')
-            self.update_data(nan)
+            self.update_data(self.nan)
         else:
             if len(gribs) == 1:
                 self.update_data(self.read_grib(gribs[0]).data)
@@ -360,7 +363,6 @@ class PrecipitationExtractor(object):
     def extract(self, dt=0):
         self.missing_grib = list()
         reference_time = pd.Timestamp(self.args.datebegin)
-        nan  = None
         #cumul = None
         i=0
         for date in extract_period[:-1]:  # Verrue pour avoir la bonne dimension temporelle
