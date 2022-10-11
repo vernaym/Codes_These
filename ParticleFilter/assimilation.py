@@ -138,7 +138,7 @@ def gamma_shape_PDF(x, k=3., theta=1.):
 #        return x**(k-1)*np.exp(-x/theta)/(theta**k*gamma(k)) if x > 0 else None
 
 # Definition of SCGD
-def SCGD_shape_PDF(x, k=1., theta=1., delta=0., plot_distribution=False, plot_parameters=False):
+def SCGD_shape_PDF(x, mu, k=1., theta=1., delta=0., plot_distribution=False, plot_parameters=False):
 #    if not (isinstance(x, (list, np.ndarray))):
 #        x = np.array([x])
     # On n'impose pas de condition sur delta : on peut vouloir translater la distribution vers la droite ou vers la gauche
@@ -164,30 +164,36 @@ def SCGD_shape_PDF(x, k=1., theta=1., delta=0., plot_distribution=False, plot_pa
     if plot_distribution:
         dy = 0.01
         num = np.max(((4*k + delta) / dy).astype(int))
-        y = np.linspace(-delta, 4*k, num=num)  # WARNING : 'y' doit ABSOLUMENT couvrir toute la distribution
+        y = np.linspace(-delta, 20*k, num=num)  # WARNING : 'y' doit ABSOLUMENT couvrir toute la distribution
                                         # de gamma sinon la probabilité en 0 est artificiellement surestimée !
         gamma = np.array(list(map(
-            lambda t: gamma_shape_PDF(t+delta, k=k, theta=theta) if t > delta else 0, y)))
+            #lambda t: gamma_shape_PDF(t+delta, k=k, theta=theta) if t > delta else 0, y)))
+            lambda t: gamma_shape_PDF(t+delta, k=k, theta=theta) if t > 0 else 0, y)))
         fig,ax = plt.subplots()
         color = next(ax._get_lines.prop_cycler)['color']
         # Plot over a smaller range for better lisibility
         ymin = theta*(k-1)+delta-k*theta**2
-        ymax = theta*(k-1)+delta+1.5*k*theta**2
+        ymax = theta*(k-1)+delta+10*k*theta**2
+        ax.plot(x, gamma_shape_PDF(x+delta, k=k, theta=theta), linestyle='', marker='+', markersize=10.)
         ax.plot(y[y<ymax], gamma[y<ymax], linestyle=':', color=color)
         ax.plot(y[(y>0) & (y<ymax)], gamma[(y>0) & (y<ymax)],
-                label=f'SCGD (k={k:0.2}, theta={theta:0.2}, delta={delta:0.2}, mu={mu1:0.2}, bias={mu0:0.2}, sigma={sigma:0.2})', color=color)
+                #label=f'SCGD (k={k:0.2}, theta={theta:0.2}, delta={delta:0.2}, mu={mu1:0.2}, bias={mu0:0.2}, sigma={sigma:0.2})', color=color)
+                label=f'SCGD (k={k:0.2}, theta={theta:0.2}, delta={delta:0.2})', color=color)
         plt.axvline(x=0, color='k', linestyle='-', linewidth=0.5)
-        plt.axvline(x=Y, color='k', linestyle='--', label=f'Observation : {Y:0.2}')
-        plt.axvline(x=mu1, color='red', linestyle='--', label=f'Observation + mean bias : {mu1:0.2}')
-        plt.axvline(x=mu, color='blue', linestyle='--', label=f'Artificial max : {mu:0.2}')
+        #mu = k*theta 
+        plt.axvline(x=mu, color='k', linestyle='--', label=f'Observation : {mu:0.2}')
+        #plt.axvline(x=mu1, color='red', linestyle='--', label=f'Observation + mean bias : {mu1:0.2}')
+        #plt.axvline(x=mu, color='blue', linestyle='--', label=f'Artificial max : {mu:0.2}')
 #        if scgd0 > 0.0001:
 #            ax.plot(0, scgd0, marker='.', markersize=20, markeredgecolor=color, markeredgewidth=2,
 #                     color='none', markerfacecolor='lightgrey', label=f'P(0)={scgd0:0.3}')
 #            ax.fill_between(x=y, y1=gamma, where=(delta < y) & (y < 0), color='lightgrey')
         #ax.bar(0, scgd0, width=0.2, align='edge', color=color)
         #ax.bar(0, scgd0, width=0.2, color=color)
+        plt.xlabel('24-hour precipitation (mm)')
+        plt.ylabel('Weight')
         plt.legend(loc ="upper right")
-        fig.savefig(f"PDF/station_{station}_{Y}mm.svg", format='svg')
+        fig.savefig(f"PDF00.pdf", format='pdf')
 
     if plot_parameters:
         #plt.plot(Y, k, linestyle='', marker='.', color='blue', label='k')
@@ -202,7 +208,7 @@ def SCGD_shape_PDF(x, k=1., theta=1., delta=0., plot_distribution=False, plot_pa
 #    return np.array(list(map(lambda t: gamma_shape_PDF(t-delta, k=k, theta=theta) if t > 0
 #                    else scgd0 if t == 0 else 0, x)))
     draw = gamma_shape_PDF(x+delta, k=k, theta=theta)
-    #draw[np.where(x<0)] = 0  # x is already a precipitation field
+    #draw[np.where(x<0)] = 0  # x is already a precipitation field with >0 values
     return draw
 
 def read_ensemble(datebegin, dateend, domain='GrandesRousses'):
@@ -370,7 +376,8 @@ def plot_obs(radar, rrmin, rrmax, mnt):
     colors = plt.cm.coolwarm(norm(np.nan_to_num(radar.rr.data)))
     plot3D(X, Y, Z, colors, date_str)
 
-def plot_field(field, ax, vmin, vmax, title, cmap=plt.cm.YlGnBu):
+#def plot_field(field, ax, vmin, vmax, title, cmap=plt.cm.YlGnBu):
+def plot_field(field, ax, vmin, vmax, title, cmap='viridis'):
     im = field.plot(ax=ax, add_colorbar=False, vmin=vmin, vmax=vmax, cmap=cmap)
     for landmark, infos in landmarks.items():
         ax.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='red', markersize=4)
@@ -446,7 +453,7 @@ if __name__ == "__main__":
         parameters = radar
         parameters = parameters.rename({'rr':'mu'})  #  Mode=observation (WARNING : mu is NOT the mean) TODO : check if the ensemble after assimilation is not biased
         #mu = radar.rr.data
-        parameters['sigma'] = (0.261 + 0.263 * parameters['mu'])*5  # According to the linear regression of ANTILOPE RMSE vs ANTILOPE RR
+        parameters['sigma'] = (0.261 + 0.263 * parameters['mu'])*3  # According to the linear regression of ANTILOPE RMSE vs ANTILOPE RR
         #sigma = 0.261 + 0.263 * mu
         # shift of the gamma PDF ==> this defines the weight given to 0mm forecats (=0 if delta=0) !!
         parameters = parameters.assign(delta=lambda x: 10/x.mu)  # TODO : find a better shift than 10/mu
@@ -524,7 +531,7 @@ if __name__ == "__main__":
             # ASSIMILATION
             #-------------
             #wpixel[member] = gamma_shape_PDF(model_interp[member].rr, k=parameters.k.data, theta=parameters.theta.data)
-            wpixel[member] = SCGD_shape_PDF(model_interp[member].rr, k=parameters.k.data, theta=parameters.theta.data, delta=parameters.delta.data)
+            wpixel[member] = SCGD_shape_PDF(model_interp[member].rr, parameters.mu.data, k=parameters.k.data, theta=parameters.theta.data, delta=parameters.delta.data)
             wpixel[member].name = 'weight'
             # Plot pixel weights
             weight[member] = np.sum(wpixel[member].data)
@@ -534,38 +541,37 @@ if __name__ == "__main__":
             im1 = plot_field(model_interp[member].rr, axes1[i,j], rrmin, rrmax, title=f'member {member:03d}')
             # Plot raw model field
             im2 = plot_field(model.rr, axes2[i,j], rrmin, rrmax, title=f'member {member:03d}')
-            # Plot weigh field
-            vmin = 0
-            #vmax = 0.25  # TODO : vmax=f(sigma) [peut être renvoyé par la fonction de la PDF comme le max de probabilité]
-            vmax = np.max(gamma_shape_PDF(parameters.mu.data, k=parameters.k.data, theta=parameters.theta.data))
-	    # TODO : normaliser les poids par pixel également
-            im3 = plot_field(wpixel[member], axes3[i,j], vmin, vmax, title=f'member {member:03d}, total weight={weight[member]:.3f}', cmap=plt.cm.Greys)
 
             j = j + 1
             if j==4:
                 j = 0
                 i = i + 1
 
+        nx = -1 
+        ny = 0
+        x=[values.rr.data[nx][ny] for values in model_interp.values()]
+        SCGD_shape_PDF(x, parameters.mu.data[nx][ny], k=parameters.k.data[nx][ny], theta=parameters.theta.data[nx][ny],delta=parameters.delta.data[nx][ny], plot_distribution=True)
+
+
         finalize_fig(fig1, im1, label='24-hour precipitation (mm)', outname=f'{date_str}/MODEL_interp_{date_str}.pdf')
         finalize_fig(fig2, im2, label='24-hour precipitation (mm)', outname=f'{date_str}/MODEL_raw_{date_str}.pdf')
-        finalize_fig(fig3, im3, label='Weight', outname=f'{date_str}/WEIGHTS_{date_str}.pdf')
 
         # I. global assimilation
         #-----------------------
         # I.1 Weighting
-        total = sum(weight.values())
-        weights =  {k: v/total for k, v in weight.items()}
+        total_global = sum(weight.values())
+        global_weights =  {k: v/total_global for k, v in weight.items()}
         # I.2 Resampling
-        selection_globale = resample(list(weights.values()))
+        selection_globale = resample(list(global_weights.values()))
 
         # II. local assimilation
         #-----------------------
         # I.1 Weighting
-        total = sum(wpixel.values()).data
-        weights =  {k: v.data/total for k, v in wpixel.items()}
+        #total_local = sum(wpixel.values()).data
+        total_local = sum(wpixel.values())
+        local_weights =  {k: v.data/total_local for k, v in wpixel.items()}
         # I.2 Resampling
-        selection_locale = resample(np.array(list(weights.values())))
-
+        selection_locale = resample(np.array(list(local_weights.values())))
 
         localfield = dict()
         fig1, ax1 = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
@@ -573,6 +579,15 @@ if __name__ == "__main__":
         i = 0
         j = 0
         for m in range(1, len(pearome)+1):
+
+            # Plot weigh field
+            vmin = 0
+            #vmax = 0.25  # TODO : vmax=f(sigma) [peut être renvoyé par la fonction de la PDF comme le max de probabilité]
+            #vmax = np.max(gamma_shape_PDF(parameters.mu.data, k=parameters.k.data, theta=parameters.theta.data))
+            vmax = max([np.max(ww.data) for ww in local_weights.values()])
+            im3 = plot_field(local_weights[m], axes3[i,j], vmin, vmax, title=f'member {m:03d}, total weight={weight[m]:.3f}', cmap=plt.cm.Greys)
+
+            # Selection de valeur pixel par pixel
             local = np.array([[model_interp[selection_locale[m-1][i,j]].rr.data[i,j] for j in range(ncol)] for i in range(nline)])
             localfield[m] = xr.DataArray(
                     data=local,
@@ -589,6 +604,7 @@ if __name__ == "__main__":
                 i = i + 1
         finalize_fig(fig1, im1, label='24-hour precipitation (mm)', outname=f'{date_str}/ASSIM_globale_{date_str}.pdf')
         finalize_fig(fig2, im2, label='24-hour precipitation (mm)', outname=f'{date_str}/ASSIM_locale_{date_str}.pdf')
+        finalize_fig(fig3, im3, label='Weight', outname=f'{date_str}/WEIGHTS_{date_str}.pdf')
 
         plt.close('all')
 
