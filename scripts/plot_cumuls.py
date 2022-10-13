@@ -314,10 +314,11 @@ def plot(data, vmin, vmax):
     i = 0
     j = 0
     for product, field in data.items():
-        if product == 'ANTILOPEVSAROME':
-            field.rr_cumul.plot(ax=ax[i,j], cmap=plt.cm.gist_ncar)
+        if product in ['ANTILOPE_VS_AROME', 'ANTILOPE_VS_PANTHERE']:
+            field.rr_cumul.plot(ax=ax[i,j], vmin=0.5, vmax=2.0, cmap=plt.cm.RdBu)
         else:
             field.rr_cumul.plot(ax=ax[i,j], vmin=vmin, vmax=vmax, cmap=plt.cm.gist_ncar)
+            #field.rr_cumul.plot(ax=ax[i,j], vmin=0, vmax=vmax, cmap=plt.cm.YlGnBu)
         ax[i,j].set_title(product)
         ax[i,j].axis('off')
 #        if args.datebegin == datetime(2021, 12, 1) and args.dateend == datetime(2022, 4, 30):
@@ -348,7 +349,8 @@ if __name__ == "__main__":
     extract_period = date_range(args.datebegin, args.dateend)
     mnt = xr.open_dataset(os.path.join(datadir, "MNT_GrandesRousses.nc"))
     mnt_proj = proj_mnt(mnt)
-    antilope = xr.open_dataset(os.path.join(datadir, 'CUMUL_ANTILOPEQ_GrandesRousses_{0:s}_{1:s}.nc'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))))
+    #antilope = xr.open_dataset(os.path.join(datadir, 'CUMUL_ANTILOPEQ_GrandesRousses_{0:s}_{1:s}.nc'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))))
+    antilope = xr.open_dataset(os.path.join(datadir, 'CUMUL_ANTILOPEJP1Q_GrandesRousses_{0:s}_{1:s}.nc'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))))
     try:
         panthere = xr.open_dataset(os.path.join(datadir, 'PANTHERE_CUMUL_{0:s}_{1:s}.nc'.format(args.datebegin.strftime('%Y%m%d%H%M'), args.dateend.strftime('%Y%m%d%H%M'))))
         arome    = xr.open_dataset(os.path.join(datadir, 'arome_{0:s}_{1:s}_GrandesRousses.nc'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))))
@@ -362,16 +364,16 @@ if __name__ == "__main__":
     except:
         antilope_only = True
 
-
-
     # Interp all data on the ANTILOPE grid over the GrandesRousses domain
     antilope = antilope.where((antilope.lon>=lonmin) & (antilope.lon<=lonmax) & (antilope.lat<=latmax) & (antilope.lat>=latmin), drop=True)
     if not antilope_only:
         #biais_antilope, biais_krigeage, lon, lat = add_obs_nivometeo()
+        panthere = panthere.interp(lon=antilope.lon, lat=antilope.lat, method='nearest')
         panthere = panthere.where((panthere.lon>=lonmin) & (panthere.lon<=lonmax) & (panthere.lat<=latmax) & (panthere.lat>=latmin), drop=True)
         arome = arome.where((arome.lon>=lonmin) & (arome.lon<=lonmax) & (arome.lat<=latmax) & (arome.lat>=latmin), drop=True)
         aspearome = aspearome.where((aspearome.lon>=lonmin) & (aspearome.lon<=lonmax) & (aspearome.lat<=latmax) & (aspearome.lat>=latmin), drop=True)
         antilopevsarome = antilope / arome
+        antilopevspanthere = antilope / panthere
         #krigeage = krigeage.interp(lon=antilope.lon, lat=antilope.lat, method='nearest')
         #safran   = safran.where((safran.lon>=lonmin) & (safran.lon<=lonmax) & (safran.lat<=latmax) & (safran.lat>=latmin), drop=True)
         #panthere = panthere.interp(lon=antilope.lon, lat=antilope.lat, method='nearest')
@@ -386,12 +388,14 @@ if __name__ == "__main__":
             PANTHERE = panthere,
             AROME    = arome,
             #PEAROME  = pearome,
-            ANTILOPEVSAROME  = antilopevsarome,
+            ANTILOPE_VS_AROME  = antilopevsarome,
+            #ANTILOPE_VS_PANTHERE  = antilopevspanthere,
         )
         plot(data, vmin, vmax)
     else:
         vmax = np.max(antilope.rr_cumul)
         vmin = np.min(antilope.rr_cumul)
+
 
     plot_antilope(antilope)
 
