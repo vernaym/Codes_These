@@ -81,6 +81,8 @@ indicatorOfParameter = dict(
         stats     = 13,
 )
 
+datadir = '/home/vernaym/These/DATA'
+
 def parse_command_line():
     description = "BDAP extraction of NWP (AS-PEAROME) model data."
     parser = argparse.ArgumentParser(description=description)
@@ -318,11 +320,11 @@ class PrecipitationExtractor(object):
     def get_data(self, date):
         if self.args.model == 'aspearome':
             # Les champs de précip reconstitués après AS sont des cumuls de précipitation depuis le réseau de production
-            # Les AS PEAROME tournent sur les réseaux de 9h et 21h, on utilise donc le réseau de 21h (J-1). Pour obtenir des cumuls
-            # de précip entre 6h (J) et 6h (J+1) il faut donc faire la différence entre les cumuls de l'échéance 33h (cumul de 21h (J-1)
-            # à 6h (J+1) et le cumul de l'échéance 9h (cumul de 21h (J-1) à 6h (J))
-            grib1 = ExtractGrib(self.args.model, self.args.grid, self.domain, 9, self.origin, date, member=self.member)  # ech 9h du réseau de 21h (J-1) valable pour J (6h)
-            grib2 = ExtractGrib(self.args.model, self.args.grid, self.domain, 33, self.origin, date, member=self.member)  # ech 33h du réseau de 21h (J-1) valable pour J+1 (6h)
+            # Les AS PEAROME tournent sur les réseaux de 9h et 21h, on utilise donc le réseau de 21h (J-2). Pour obtenir des cumuls
+            # de précip entre 6h (J-1) et 6h (J) il faut donc faire la différence entre les cumuls de l'échéance 33h (cumul de 21h (J-2)
+            # à 6h (J) et le cumul de l'échéance 9h (cumul de 21h (J-2) à 6h (J-1))
+            grib1 = ExtractGrib(self.args.model, self.args.grid, self.domain, 9, self.origin, date, member=self.member)  # ech 9h du réseau de 21h (J-2) valable pour J-1 (6h)
+            grib2 = ExtractGrib(self.args.model, self.args.grid, self.domain, 33, self.origin, date, member=self.member)  # ech 33h du réseau de 21h (J-2) valable pour J (6h)
             gribs = [grib1.run(), grib2.run()]  # WARNING : the order is important (increasing lead times)
         else:
             grib = ExtractGrib(self.args.model, self.args.grid, self.domain, self.echeance, self.origin, date, member=self.member)
@@ -365,7 +367,7 @@ class PrecipitationExtractor(object):
         reference_time = pd.Timestamp(self.args.datebegin)
         #cumul = None
         i=0
-        for date in extract_period[:-1]:  # Verrue pour avoir la bonne dimension temporelle
+        for date in extract_period:
             i = i+1
             if self.member is not None:  # Extraction de la pearome depuis la BDAP
                 self.origin = 'bdap'
@@ -376,7 +378,7 @@ class PrecipitationExtractor(object):
             datepivot = date - timedelta(hours=dt)
             os.environ["DMT_DATE_PIVOT"] = datepivot.strftime('%Y%m%d%H%M%S')
             print(os.environ["DMT_DATE_PIVOT"])
-            self.get_data(date)
+            self.get_data(datepivot)
 
         if self.args.read:
             rr = xr.DataArray(
@@ -402,6 +404,33 @@ class PrecipitationExtractor(object):
                 for m in self.missing_grib:
                     f.write('{0:s}\n'.format(m))
 
+    def read_nivometeo_coords():
+        metadata = pd.read_csv(os.path.join(datadir, 'postes_nivometeo.csv'), sep=';')
+        latmax, latmin, lonmin, lonmax = np.array(coords[self.domain]).astype(float)/1000.
+        subdata = metadata[(metadata['poste_nivo.lat_dg']>=latmin) & (metadata['poste_nivo.lat_dg']<=latmax) & (metadata['poste_nivo.lon_dg']>=lonmin) & (metadata['poste_nivo.lon_dg']<=lonmax)]
+        return dict(zip(np.array(subdata['poste_nivo.num_poste']), zip(np.array(subdata['poste_nivo.lat_dg']), np.array(subdata['poste_nivo.lon_dg']))))
+
+    def extract_station_values():
+        # To Extract specific values where evaluation data (obs nivometeo) is available
+        nivometeo = self.read_nivometeo_coords(self.domain)
+        data = pd.DataFrame(columns=['date', 'num_poste', 'rr_{0:s}'.format(self.product)], dtype=object)
+        for num_poste, (lat, lon) in nivometeo.iteritems():  # python2 (guppy)
+            nearest = geometry.nearest_points(lon, lat, {'n':'1'})  # returns indices of the point in "data"
+            data = data.append({
+                'date':date,
+                'num_poste':int(num_poste),
+                'rr.{0:s}'.format(self.product): self.model_field.data[nearest[1]][nearest[0]]
+            }, ignore_index=True)
+
+        return data
+
+    def write_station_data(data):
+        data.set_index('date')
+        outname = '{0:s}_{1:s}_{2:s}.csv'.format(self.product, args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))
+        data.to_csv(outname, index=False, sep=';')
+
+
+
 if __name__ == "__main__":
     args = parse_command_line()
 
@@ -419,8 +448,8 @@ if __name__ == "__main__":
             # (cf page 259 doc BDAP). En revanche pour les 16 "membres" (champs de précip) reconstitués il faut bien prendre l'échéance 24h
             # du réseau de 6h ou faire une différence entre 2 échéances distantyes de 24h.
             for member in range(1, 17):
-                precip = PrecipitationExtractor(args, echeance, domain, timecoord[:-1], member=member)
-                precip.extract(dt=9)
+                precip = PrecipitationExtractor(args, echeance, domain, timecoord, member=member)
+                precip.extract(dt=33)
         else:
             echeance = 24
             # AROME data are extracted from hendrix : 24h forecasts lead times provide the previous 24h precipitation accumulation
