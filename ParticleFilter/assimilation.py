@@ -23,15 +23,7 @@ from matplotlib import offsetbox
 from mpl_toolkits.mplot3d import proj3d
 from mpl_toolkits.mplot3d.proj3d import proj_transform
 
-#from sklearn.linear_model import LinearRegression, RANSACRegressor
-#from sklearn.datasets import make_regression
-#from sklearn.metrics import mean_squared_error, r2_score
-
-#from scipy.stats import gaussian_kde
-
-import statistics
-
-#from snowtools.plots.maps import cartopy
+import time
 
 ##############################################################################################
 ##############################################################################################
@@ -78,6 +70,14 @@ def parse_command_line():
 
     return args
 
+def speedtest(function):
+    def wrapper(*args, **kw):
+        t1 = time.time()
+        result = function(*args, **kw)
+        t2 = time.time()
+        print('The method {0:s} took {1:f}ms'.format(function.__name__, (t2-t1)*1000.0))
+        return result
+    return wrapper
 
 def nivologyseason(date):
     """Return the nivology season of a current date"""
@@ -89,7 +89,6 @@ def nivologyseason(date):
         season_end   = datetime(date.year + 1, 7, 31)
 
     return season_begin.strftime('%y') + season_end.strftime('%y')
-
 
 def get_date(a_string):
     try:
@@ -109,7 +108,6 @@ def get_date(a_string):
     finally:
         return date
 
-
 def date_range(start, end, dt=24):
     start = start.replace(hour=6)
     dates = list()
@@ -119,18 +117,19 @@ def date_range(start, end, dt=24):
 
     return dates
 
-
 def goto(path):
     if not os.path.exists(path):
         os.makedirs(path)
     os.chdir(path)
-
 
 def read_ensemble(datebegin, dateend, domain='GrandesRousses'):
     pearome = dict()
     for member in range(1,17):
         filename = f'aspearome_{member:03d}_{datebegin}_{dateend}_{domain}.nc'
         filename = os.path.join(datadir, filename)
+        if not os.path.exists(filename):
+            print(f'WARNING : file {filename} does not exist, using default file')
+            filename = os.path.join(datadir, f'aspearome_{member:03d}_2021080106_2022070106_GrandesRousses.nc')
         model = xr.open_dataset(filename).clip(0)  # Avoid <0 values
         # Extract domain of interest :
         model = model.where((model.lon>=lonmin-0.25) & (model.lon<=lonmax+0.25) & (model.lat>=latmin-0.25) & (model.lat<=latmax+0.25), drop=True)
@@ -256,18 +255,29 @@ def plot_field(field, ax, vmin, vmax, title, cmap='viridis'):
 
     return im
 
+@speedtest
 def finalize_fig(figure, imm, label, outname):
+    # Saving figures is by far the slowest part (~1s per figure)
+
+    #t1 = time.time()
     figure.tight_layout()
     figure.subplots_adjust(right=0.85)
     cbar_ax = figure.add_axes([0.90, 0.15, 0.05, 0.7])
     figure.colorbar(imm, cax=cbar_ax, label=label)
+    #t2 = time.time()
+    #print(f'Finalising figures took {(t2-t1)*1000.}ms')
     figure.savefig(outname, format='pdf')
+    #t3 = time.time()
+    #print(f'Saving figures took {(t3-t2)*1000.}ms')
 
 def read_obs(args):
     filename = 'ANTILOPEQ_{0:s}_{1:s}_{2:s}.nc'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'), args.domain)
     if not os.path.exists(filename):
         print(f'WARNING : file {filename} does not exist, looking for it under {datadir}')
         filename = os.path.join(datadir, filename)
+    if not os.path.exists(filename):
+        print(f'WARNING : no file named {filename} under {datadir}, using default file ANTILOPEQ_2021080106_2022070106_GrandesRousses.nc')
+        filename = os.path.join(datadir, 'ANTILOPEQ_2021080106_2022070106_GrandesRousses.nc')
     if os.path.exists(filename):
         antilope = xr.open_dataset(filename)
         antilope = antilope.transpose('lat', 'lon', 'time')  # TODO : Fix the dataset in the generation script
@@ -505,6 +515,7 @@ class ParticleFilter(object):
             rdm += delta
         return selected_particles
 
+    @speedtest
     def raw_weighting(self):
 
         # On profite de la loop sur les membres pour tracer les ensembles bruts avant et après interpolation
@@ -560,6 +571,7 @@ class ParticleFilter(object):
         # 4.field reconstruction
         self.make_new_local_fields()
 
+    @speedtest
     def make_new_local_fields(self):
         # Initialisation of output fields
         null  = np.empty(np.shape(radar.rr))
@@ -596,15 +608,24 @@ class ParticleFilter(object):
         model = [values.rr.data[x][y] for values in self.ensemble.values()]
         self.SCGD_shape_PDF(model, self.parameters.mu.data[x][y], k=self.parameters.k.data[x][y], theta=self.parameters.theta.data[x][y],delta=self.parameters.delta.data[x][y], plot_distribution=True)
 
+    @speedtest
     def output(self, localfields, globalfields):
+        # This method takes ~3.5 s but most of the time (~3.3s) is spent
+        # while saving figures.
+
         fig1, ax1 = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
         fig2, ax2 = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
         fig3, axes3 = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
         i = 0
         j = 0
         for m in range(1, self.Ne+1):
+            #t1 = time.time()
             localfields.loc[{'time':self.date, 'member':m}] = self.newlocalfield[m]  # self.newlocalfield is a numpy array
+            #t2 = time.time()
+            #print(f'Wrinting localfields took {(t2-t1)*1000.}ms')
             globalfields.loc[{'time':self.date, 'member':m}] = self.ensemble[self.selection_globale[m-1]].rr.data  # self.ensemble is a DataArray
+            #t3 = time.time()
+            #print(f'Wrinting globalfields took {(t3-t2)*1000.}ms')
 
             # Plot local weight fields
             vmin = 0
@@ -613,17 +634,10 @@ class ParticleFilter(object):
             vmax = max([np.max(ww.data) for ww in self.local_weights.values()])
             im3 = plot_field(self.local_weights[m], axes3[i,j], vmin, vmax, title=f'member {m:03d}, total weight={self.weight[m]:.3f}', cmap=plt.cm.Greys)
 
-#            # Selection de valeur pixel par pixel
-#            local = np.array([[model_interp[selection_locale[m-1][i,j]].rr.data[i,j] for j in range(ncol)] for i in range(nline)])
-#            localfield[m] = xr.DataArray(
-#                    data=local,
-#                    name='rr',
-#                    dims=["lat", "lon"],
-#                    coords=dict(lon=radar.lon, lat=radar.lat),
-#                    attrs=dict(description="Total precipitation",units="mm"),
-#                ).to_dataset()
             im1 = plot_field(globalfields.loc[{'time':self.date, 'member':m}], ax1[i,j], self.rrmin, self.rrmax, title=f'Member {self.selection_globale[m-1]:03d}')
             im2 = plot_field(localfields.loc[{'time':self.date, 'member':m}], ax2[i,j], self.rrmin, self.rrmax, title=f'New member {m:03d}')
+            #t4 = time.time()
+            #print(f'Plotting took {(t4-t3)*1000.}ms')
             j = j + 1
             if j==4:
                 j = 0
@@ -631,10 +645,14 @@ class ParticleFilter(object):
         finalize_fig(fig1, im1, label='24-hour precipitation (mm)', outname=f'{self.date_str}/ASSIM_globale_{self.date_str}.pdf')
         finalize_fig(fig2, im2, label='24-hour precipitation (mm)', outname=f'{self.date_str}/ASSIM_locale_{self.date_str}.pdf')
         finalize_fig(fig3, im3, label='Weight', outname=f'{self.date_str}/WEIGHTS_{self.date_str}.pdf')
+        #t5 = time.time()
+        #print(f'Finalisation of figures took {(t5-t4)*1000.}ms')
 
         plt.close('all')
 
         return localfields, globalfields
+
+
 
 if __name__ == "__main__":
     args = parse_command_line()
@@ -675,7 +693,8 @@ if __name__ == "__main__":
 
         # TODO : SAVE all assimilated fields for an evaluation of the performance over the period
 
-    evaluation = Evaluation()
+    localfields.to_netcdf(f"Assimilation_locale_{args.datebegin.strftime('%Y%m%d%H')}_{args.dateend.strftime('%Y%m%d%H')}.nc")
+    globalfields.to_netcdf(f"Assimilation_globale_{args.datebegin.strftime('%Y%m%d%H')}_{args.dateend.strftime('%Y%m%d%H')}.nc")
 
 #        date = date + timedelta(days=1)
 
