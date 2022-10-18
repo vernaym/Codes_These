@@ -216,7 +216,7 @@ def read_ensemble(datebegin, dateend, domain='GrandesRousses'):
     for member in range(1,17):
         filename = f'aspearome_{member:03d}_{datebegin}_{dateend}_{domain}.nc'
         filename = os.path.join(datadir, filename)
-        pearome[member] = xr.open_dataset(filename)
+        pearome[member] = xr.open_dataset(filename).clip(0)  # To avoid <0 values
 
     return pearome
 
@@ -453,7 +453,7 @@ if __name__ == "__main__":
         parameters = radar
         parameters = parameters.rename({'rr':'mu'})  #  Mode=observation (WARNING : mu is NOT the mean) TODO : check if the ensemble after assimilation is not biased
         #mu = radar.rr.data
-        parameters['sigma'] = (0.261 + 0.263 * parameters['mu'])*3  # According to the linear regression of ANTILOPE RMSE vs ANTILOPE RR
+        parameters['sigma'] = (0.261 + 0.263 * parameters['mu'])  # According to the linear regression of ANTILOPE RMSE vs ANTILOPE RR
         #sigma = 0.261 + 0.263 * mu
         # shift of the gamma PDF ==> this defines the weight given to 0mm forecats (=0 if delta=0) !!
         parameters = parameters.assign(delta=lambda x: 10/x.mu)  # TODO : find a better shift than 10/mu
@@ -463,7 +463,7 @@ if __name__ == "__main__":
         #
         # TODO : Intégrer delta au calcul de k
         # ====================================
-	# TODO : si mu=0, k doit être <1 pour avoir une exponentielle décroissante.
+        # TODO : si mu=0, k doit être <1 pour avoir une exponentielle décroissante.
         parameters['k'] = (2*parameters.sigma**2+parameters.mu**2+np.sqrt((parameters.mu**2*(4*parameters.sigma**2+parameters.mu**2))))/(2*parameters.sigma**2)  # shape parameter of the Gamma PDF
         #k = (2*sigma**2+mu**2+np.sqrt((mu**2*(4*sigma**2+mu**2))))/(2*sigma**2)  # shape parameter of the Gamma PDF
         #parameters.k.where(parameters.mu==0).data = parameters.mu.where(parameters.mu==0).data / parameters.mu.where(parameters.mu==0).data   # k>1 if Y>0 else k==1
@@ -524,7 +524,7 @@ if __name__ == "__main__":
             tmp = model.interp(lon=radar.lon, lat=radar.lat)
             # Sélection du domaine
             # WARNING :  la commande suivante réduit sensibement le domaine, attention aux comparaisons entre figures (en particulier avec les CUMULS)
-            model_interp[member] = tmp.where((tmp.lon>=lonmin) & (tmp.lon<=lonmax) & (tmp.lat>=latmin) & (tmp.lat<=latmax), drop=True)
+            model_interp[member] = tmp.where((tmp.lon>=lonmin) & (tmp.lon<=lonmax) & (tmp.lat>=latmin) & (tmp.lat<=latmax), drop=True).round(2)
             #print(f'member {member} ', model_interp[member].rr.data[0,0])
             model = model.where((model.lon>=lonmin) & (model.lon<=lonmax) & (model.lat>=latmin) & (model.lat<=latmax), drop=True)
 
@@ -566,16 +566,51 @@ if __name__ == "__main__":
 
         # II. local assimilation
         #-----------------------
-        # I.1 Weighting
+
+        # II.1 Ensemble Copula Coupling (to produce fields matching the raw ones)
+        ecc = np.argsort([field.rr.data for field in model_interp.values()], axis=0)
+
+        # II.2 Weighting
         #total_local = sum(wpixel.values()).data
         total_local = sum(wpixel.values())
         local_weights =  {k: v.data/total_local for k, v in wpixel.items()}
-        # I.2 Resampling
+        # II.3 Resampling
         selection_locale = resample(np.array(list(local_weights.values())))
 
         localfield = dict()
         fig1, ax1 = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
         fig2, ax2 = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
+
+        # Initialisation of output fields
+        null = np.empty(np.shape(radar.rr))
+        localfield = {m:xr.DataArray(
+                    data   = null.copy(),  # copy variable to avoid to erase the value at each iteration
+                    name   = 'rr',
+                    dims   = ["lat", "lon"],
+                    coords = dict(lon=radar.lon, lat=radar.lat),
+                    attrs  = dict(description="Total precipitation",units="mm"),
+                ) for m in range(1, len(pearome)+1)}
+
+        # Loop over the domain's pixels
+        for i in range(nline):
+            for j in range(ncol):
+                free = list(ecc[:,i,j].copy()+1)  # Define the order in which the fields are to be filled
+                selection = [selection_locale[idx][i,j] for idx in range(len(pearome))]  # local PF output
+                # Loop over ordered raw members
+                for idx in ecc[:,i,j]:
+                    oldmember = idx + 1  # Convert the index into an ensemble member
+                    value = model_interp[oldmember].rr.data[i,j]  # corresponding raw value
+                    # Fill as many members as the raw member duplicates
+                    for count in range(selection.count(oldmember)):
+                        newmember = free.pop(0)  # select first member to fill in the "waiting list"
+                        localfield[newmember].data[i,j] = value  # fill new member
+#                print('i,j=',i,j)
+#                print('Obs = ',parameters.mu.data[i,j])
+#                print('Raw = ',[rawfield.rr.data[i,j] for rawfield in model_interp.values()])
+#                print('ECC = ',ecc[:,i,j])
+#                print('Selection = ',selection)
+#                print('Assim = ',[field.data[i,j] for field in localfield.values()])
+
         i = 0
         j = 0
         for m in range(1, len(pearome)+1):
@@ -587,17 +622,17 @@ if __name__ == "__main__":
             vmax = max([np.max(ww.data) for ww in local_weights.values()])
             im3 = plot_field(local_weights[m], axes3[i,j], vmin, vmax, title=f'member {m:03d}, total weight={weight[m]:.3f}', cmap=plt.cm.Greys)
 
-            # Selection de valeur pixel par pixel
-            local = np.array([[model_interp[selection_locale[m-1][i,j]].rr.data[i,j] for j in range(ncol)] for i in range(nline)])
-            localfield[m] = xr.DataArray(
-                    data=local,
-                    name='rr',
-                    dims=["lat", "lon"],
-                    coords=dict(lon=radar.lon, lat=radar.lat),
-                    attrs=dict(description="Total precipitation",units="mm"),
-                ).to_dataset()
+#            # Selection de valeur pixel par pixel
+#            local = np.array([[model_interp[selection_locale[m-1][i,j]].rr.data[i,j] for j in range(ncol)] for i in range(nline)])
+#            localfield[m] = xr.DataArray(
+#                    data=local,
+#                    name='rr',
+#                    dims=["lat", "lon"],
+#                    coords=dict(lon=radar.lon, lat=radar.lat),
+#                    attrs=dict(description="Total precipitation",units="mm"),
+#                ).to_dataset()
             im1 = plot_field(model_interp[selection_globale[m-1]].rr, ax1[i,j], rrmin, rrmax, title=f'Member {selection_globale[m-1]:03d}')
-            im2 = plot_field(localfield[m].rr, ax2[i,j], rrmin, rrmax, title=f'New member {m:03d}')
+            im2 = plot_field(localfield[m], ax2[i,j], rrmin, rrmax, title=f'New member {m:03d}')
             j = j + 1
             if j==4:
                 j = 0
@@ -612,5 +647,5 @@ if __name__ == "__main__":
 
         date = date + timedelta(days=1)
 
-        import pdb
-        pdb.set_trace()
+#        import pdb
+#        pdb.set_trace()
