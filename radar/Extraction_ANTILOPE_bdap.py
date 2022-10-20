@@ -57,7 +57,7 @@ def parse_command_line():
     parser.add_argument('-b', '--datebegin', help='Begining date of extraction, format YYYYMMDDHH or YYMMDDHH', required=True)
     parser.add_argument('-e', '--dateend', help = 'Final date of extraction (default=datebegin)')
     parser.add_argument('-d', '--domain', nargs='+', help='Domain of the file', choices=coords.keys(), default=['alp', 'pyr', 'cor', 'GrandesRousses'])
-    parser.add_argument('-w', '--workdir', help='Runing directory (default for guppy)', default='/home/mrns/vernaym/workdir/extraction_antilope')
+    parser.add_argument('-w', '--workdir', help='Runing directory (default for sotrtm35-sidev)', default='/home/mrns/vernaym/workdir')
 #    parser.add_argument('-o', '--output', help='Output name of generated files')
     parser.add_argument('-m', '--model', help='Model from which the data must be extracted',
             choices=['ANTILOPEQ', 'ANTILOPEJP1Q', 'ANTILOPEH', 'ANTILOPEJP1H'], default='ANTILOPEJP1Q')
@@ -110,7 +110,7 @@ def get_date(a_string):
     finally:
         return date
 
-def date_range(start, end, dt=24):
+def date_range(start, end, dt):
     start = start.replace(hour=6)
     dates = list()
     while start <= end:
@@ -183,17 +183,16 @@ if __name__ == "__main__":
         dt = 24
     elif args.model in ['ANTILOPEH', 'ANTILOPEJP1H']:
         dt = 1
-    extract_period = date_range(args.datebegin, args.dateend, dt=dt)
+    extract_period = date_range(args.datebegin, args.dateend, dt)
     antilope = pd.DataFrame(columns=['date', 'num_poste', 'rr_antilope'], dtype=object)
     for domain in args.domain:
         print(domain)
-        goto(args.workdir)
+        #goto(args.workdir)
         nivometeo = read_nivometeo_coords(domain)
         missing_grib = list()
-        workdir = os.path.join(args.workdir, domain)
-        goto(workdir)
+        #workdir = os.path.join(args.workdir, domain)
+        goto(domain)
         cumul = None
-        time = pd.date_range(args.datebegin, args.dateend)
         reference_time = pd.Timestamp(args.datebegin)
         rr24 = None
         nan  = None
@@ -247,7 +246,7 @@ if __name__ == "__main__":
             name = 'rr',
             dims=["lat", "lon", "time"],
             #coords=dict(lon=(["lon"], lon[0]),lat=(["lat"], lat[:,0]), time=time, reference_time=reference_time,),
-            coords=dict(lon=lon[0], lat=lat[:,0], time=time, reference_time=reference_time,),
+            coords=dict(lon=lon[0], lat=lat[:,0], time=extract_period, reference_time=reference_time,),
             attrs=dict(description="24 hour precipitation",units="mm/24h"),
         )
         outname = '{0:s}_{1:s}_{2:s}_{3:s}.nc'.format(args.model, args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'), domain)
