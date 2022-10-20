@@ -97,7 +97,7 @@ def parse_command_line():
     parser.add_argument('-c', '--cutoff', help='NWP model cutoff from which the data must be extracted', choices=['assimilation', 'prevision'], default='prevision')
     parser.add_argument('-g', '--grid', help='BDAP grid name from which to extract data', default='FRANXL0025', choices=['FRANXL0025', 'EURW1S40', 'EURW1S100'])
     parser.add_argument('-r', '--read', action = 'store_true', help="Read data (to disable on guppy since xarray.to_netcdf doesn't work)", default=False)
-#    parser.add_argument('-t', '--tar', action='store_true', help='Tar generated files (for reanalaysis applications')
+    parser.add_argument('-t', '--pdt', help='Pas de temps des precipitation à extraire (horaires ou journalières)', choices=[1, 24], type=int)
 
     args = parser.parse_args()
 
@@ -149,6 +149,17 @@ def date_range(start, end, dt=24):
         start += timedelta(hours=dt)
 
     return dates
+
+def datespivot(start, end, reseau=21):
+    # datepivot = réseau de 21h dont la prévi couvre J-1 6h --> J 6h
+    datepivot = start-timedelta(hours=start.hour+3)  # réseau de 21h (J-1)
+    datespivot = list()
+    while datepivot <= end:
+        datespivot.append(datepivot)
+        datepivot = datepivot + timedelta(hours==24)
+
+    return datespivot
+
 
 def goto(path):
     if not os.path.exists(path):
@@ -323,9 +334,10 @@ class PrecipitationExtractor(object):
             # Les AS PEAROME tournent sur les réseaux de 9h et 21h, on utilise donc le réseau de 21h (J-2). Pour obtenir des cumuls
             # de précip entre 6h (J-1) et 6h (J) il faut donc faire la différence entre les cumuls de l'échéance 33h (cumul de 21h (J-2)
             # à 6h (J) et le cumul de l'échéance 9h (cumul de 21h (J-2) à 6h (J-1))
-            grib1 = ExtractGrib(self.args.model, self.args.grid, self.domain, 9, self.origin, date, member=self.member)  # ech 9h du réseau de 21h (J-2) valable pour J-1 (6h)
-            grib2 = ExtractGrib(self.args.model, self.args.grid, self.domain, 33, self.origin, date, member=self.member)  # ech 33h du réseau de 21h (J-2) valable pour J (6h)
-            gribs = [grib1.run(), grib2.run()]  # WARNING : the order is important (increasing lead times)
+            #grib1 = ExtractGrib(self.args.model, self.args.grid, self.domain, 9, self.origin, date, member=self.member)  # ech 9h du réseau de 21h (J-2) valable pour J-1 (6h)
+            #grib2 = ExtractGrib(self.args.model, self.args.grid, self.domain, 33, self.origin, date, member=self.member)  # ech 33h du réseau de 21h (J-2) valable pour J (6h)
+            extract = [ExtractGrib(self.args.model, self.args.grid, self.domain, ech, self.origin, date, member=self.member) for ech in self.echeance]
+            gribs = [grib.run() for grib in extract]  # WARNING : the order is important (increasing lead times)
         else:
             grib = ExtractGrib(self.args.model, self.args.grid, self.domain, self.echeance, self.origin, date, member=self.member)
             gribs = [grib.run()]
@@ -339,7 +351,7 @@ class PrecipitationExtractor(object):
 
     def read_data(self, gribs, fail):
         if fail:
-            # Fill missing day with nan values
+            # Fill missing data with nan values
             # WARNING : this only works if the first date of the period have valid data
             if self.nan is None:
                 self.nan = np.empty(self.shape)
@@ -351,10 +363,12 @@ class PrecipitationExtractor(object):
             if len(gribs) == 1:
                 self.update_data(self.read_grib(gribs[0]).data)
             elif self.args.model == 'aspearome':
-                rr9h  = self.read_grib(gribs[0])
-                rr33h = self.read_grib(gribs[1])
-                newdata = rr33h.data-rr9h.data
-                self.update_data(newdata)
+                # Calcul des cumuls horaires ou journalier
+                for idx in range(len(gribs)):
+                    rrh1  = self.read_grib(gribs[idx])
+                    rrh2 = self.read_grib(gribs[idx+1])
+                    newdata = rrh2.data-rrh1.data
+                    self.update_data(newdata)
 
     def update_data(self, mydata):
         if self.rr24 is None:  # Reading first grib file
@@ -362,23 +376,20 @@ class PrecipitationExtractor(object):
         else:
             self.rr24 = np.append(self.rr24, np.array([mydata]), axis=0)
 
-    def extract(self, dt=0):
+    def extract(self, datespivot):
         self.missing_grib = list()
         reference_time = pd.Timestamp(self.args.datebegin)
         #cumul = None
-        i=0
-        for date in extract_period:
-            i = i+1
+        for date in datespivot:
             if self.member is not None:  # Extraction de la pearome depuis la BDAP
                 self.origin = 'bdap'
                 goto(os.path.join(workdir, 'mb{0:03d}'.format(self.member)))
             else:  # Extraction d'AROME depuis hendrix
                 self.origin = 'hendrix'
                 goto(workdir)
-            datepivot = date - timedelta(hours=dt)
-            os.environ["DMT_DATE_PIVOT"] = datepivot.strftime('%Y%m%d%H%M%S')
+            os.environ["DMT_DATE_PIVOT"] = date.strftime('%Y%m%d%H%M%S')
             print(os.environ["DMT_DATE_PIVOT"])
-            self.get_data(datepivot)
+            self.get_data(date)
 
         if self.args.read:
             rr = xr.DataArray(
@@ -437,23 +448,27 @@ if __name__ == "__main__":
     for domain in args.domain:
         workdir = os.path.join(args.workdir, domain, args.model)
         goto(workdir)
-        extract_period = date_range(args.datebegin, args.dateend)
+        timecoord = date_range(args.datebegin, args.dateend, dt=args.pdt)
+        datespivot = datespivot(args.datebegin, args.dateend)
 
         if args.model in ['aspearome', 'stats']:
-            timecoord = extract_period
-            # Dans le cas de le PEAROME post_traitée : date = J (6h) et on veut le cumul prévu entre J 6h et J+1 6h par le réseau de J-1 21h
-            # Il faut donc extraire les echeances 9h à 24h de J-1 21h (=DMT_DATE_PIVOT)
-            dt = 9  # réseau 21h (J-1)
-            echeance = 33  # WARNING : pour les statistiques (quantiles), l'échéance33h correpond à un cumul 24h entre 6h J+1 et 6h J+2
-            # (cf page 259 doc BDAP). En revanche pour les 16 "membres" (champs de précip) reconstitués il faut bien prendre l'échéance 24h
-            # du réseau de 6h ou faire une différence entre 2 échéances distantyes de 24h.
+            if args.pdt == 24:
+                # Dans le cas de le PEAROME post_traitée : date = J (6h) et on veut le cumul prévu entre J 6h et J+1 6h par le réseau de J-1 21h
+                # Il faut donc extraire les echeances 9h à 24h de J-1 21h (=DMT_DATE_PIVOT)
+                #dt = 9  # réseau 21h (J-1)
+                echeances = [9, 33]  # WARNING : pour les statistiques (quantiles), l'échéance33h correpond à un cumul 24h entre 6h J+1 et 6h J+2
+                # (cf page 259 doc BDAP). En revanche pour les 16 "membres" (champs de précip) reconstitués il faut bien prendre l'échéance 24h
+                # du réseau de 6h ou faire une différence entre 2 échéances distantyes de 24h.
+            elif args.pdt == 1:
+                #dt = 1
+                echeances = range(9, 34)
             for member in range(1, 17):
-                precip = PrecipitationExtractor(args, echeance, domain, timecoord, member=member)
-                precip.extract(dt=33)
+                precip = PrecipitationExtractor(args, echeances, domain, timecoord, member=member)
+                precip.extract(datespivot)
         else:
             echeance = 24
             # AROME data are extracted from hendrix : 24h forecasts lead times provide the previous 24h precipitation accumulation
-            extract_preiod = date_range(args.datebegin, args.dateend, dt=24)
+            extract_period = date_range(args.datebegin, args.dateend, dt=24)
             timecoord = extract_period[:-1]
             precip = PrecipitationExtractor(args, echeance, domain, timecoord)
             precip.extract()
