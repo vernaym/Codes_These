@@ -45,6 +45,7 @@ class Evaluation(object):
 
     def __init__(self, ensemble):
         self.ensemble = ensemble  # DataArray(lat,lon,time,member)
+        self.Ne = len(self.ensemble.member)
         self.read_nivometeo_obs()  # Read observation --> self.obs
 
     def ensemble_attributes(self):
@@ -53,6 +54,12 @@ class Evaluation(object):
     @property
     def mean(self):
         return  self.ensemble.mean(axis=3).rr.data
+
+    def mean_error(self, simu, obs):
+        return simu.mean() - obs
+
+    def median_error(self, simu, obs):
+        return simu.median() - obs
 
     def dispersion(self):
         """
@@ -65,14 +72,59 @@ class Evaluation(object):
 
     def rmse(self, simu, obs, num_poste):
         rmse = np.sqrt(np.mean(np.square(simu.mean() - obs)))
-        print(f'RMSE for station {num_poste} :',rmse)
+        #print(f'RMSE for station {num_poste} :',rmse)
+        print(f'RMSE=',rmse)
         return rmse
 
-    def brier_score(self, simu, obs, threshold=1):
+    def brier_skill_score(self, simu, ref, obs, threshold):
+        """  BSS = 1 - BS / BSref  """
+        return 1 - self.brier_score(simu, obs, threshold=threshold) / self.brier_score(ref, obs, threshold=threshold)
+
+    def brier_score(self, simu, obs, threshold):
+        pens  = np.count_nonzero(simu>=threshold, axis=0) / self.Ne
+        fobs   = np.where(obs>=threshold, 1, 0)
+        brier = np.mean((pens-fobs)**2)
+        print('Brier=',brier)
+        return brier
+
+    def brier_decomposition(self, simu, obs, threshold, nb_cat=17):
+
+        # TODO : la décomposition du score de Brier devrait donner le même résultat
+        # que le calcul direct (BS=BSfiab-BSres+BSunc), mais ce n'est pas le cas...
+
+        catsize  = list()
+        freq_occ = list()
+        proba    = list()
+        for Nm in range(nb_cat):
+            Ni = np.count_nonzero(np.count_nonzero(simu>=threshold, axis=0)==Nm)
+            if Ni > 0:
+                proba.append(Nm/self.Ne)
+                catsize.append(Ni)
+                freq_occ.append(np.count_nonzero(obs[np.count_nonzero(simu>=threshold, axis=0)==Nm]>=threshold)/Ni)
+        ndays = len(obs)
+        fiability   = self.fiability(proba, catsize, freq_occ, ndays)
+        global_freq_obs = np.count_nonzero(obs[obs>=threshold]) / ndays
+        resolution  = self.resolution(proba, catsize, freq_occ, global_freq_obs, ndays)
+        uncertainty = self.uncertainty(global_freq_obs)
         import pdb
         pdb.set_trace()
-        pens = np.count_nonzero(simu>=threshold, axis=0) / len(simu)
-        obs = 
+
+        return fiability, resolution, uncertainty
+
+    def fiability(self, proba, catsize, freq_occ, ndays):
+        fiability = 1/ndays*np.sum([Ni*(proba-focc)**2 for (proba, Ni, focc) in zip(proba, catsize, freq_occ)])
+        print('Fiability=',fiability)
+        return fiability
+
+    def resolution(self, proba, catsize, freq_occ, global_freq_obs, ndays):
+        resolution = 1/ndays*np.sum([Ni*(focc-global_freq_obs)**2 for (proba, Ni, focc) in zip(proba, catsize, freq_occ)])
+        print('Resolution=',resolution)
+        return resolution
+
+    def uncertainty(self, global_freq_obs):
+        uncertainty =  global_freq_obs*(1-global_freq_obs)**2
+        print('Uncertainty=',uncertainty)
+        return uncertainty
 
     def read_nivometeo_obs(self):
         nivometeo = pd.read_csv(os.path.join(datadir, 'obs_nivometeo_daily_RR_20211201_20220430.csv'), sep=';', parse_dates=['Q.dat'],
@@ -93,19 +145,34 @@ class Evaluation(object):
             # Find element of "array" the closer to "value"
             return float(array[np.abs(array - value).argmin()].data)
 
+        threshold = 1
+
         # To Extract specific values where evaluation data (obs nivometeo) is available
+        pos = 1
+        dates = dict()
+        simu  = dict()
+        obs   = dict()
+        brier = dict()
         for num_poste, (lat, lon) in self.read_nivometeo_coords(domain).items():
             nearest_lat = nearest(self.ensemble.lat, lat)
             nearest_lon = nearest(self.ensemble.lon, lon)
             tmp  = self.obs.loc[self.obs["Q.num_poste"]==num_poste]
             if len(tmp)>0:
-                time = np.array(tmp["Q.dat"] + timedelta(hours=30))  # Date yyyymmdd is the cumul between yyyymmdd06 and yyyymm(d+1)06
-                obs  = np.array(tmp['Q.rr'])
+                print(f'Poste {num_poste} ({len(tmp)} data)')
+                dates[num_poste] = np.array(tmp["Q.dat"] + timedelta(hours=30))  # Date yyyymmdd is the cumul between yyyymmdd06 and yyyymm(d+1)06
+                obs[num_poste]  = np.array(tmp['Q.rr'])
                 # Select corresponding simulations
-                simu = np.transpose(self.ensemble.sel({'lat':nearest_lat, 'lon':nearest_lon}).loc[{'time':time}].rr.data)
-                self.rmse(simu, obs, num_poste)
+                simu[num_poste] = np.transpose(self.ensemble.sel({'lat':nearest_lat, 'lon':nearest_lon}).loc[{'time':dates[num_poste]}].rr.data)
+                self.rmse(simu[num_poste], obs[num_poste], num_poste)
+                if num_poste == 5064403:
+                    fiability, resolution, uncertainty = self.brier_decomposition(simu[num_poste], obs[num_poste], threshold)
+                    print('BSfiab+BSres+BSunc=',fiability-resolution+uncertainty)
+                    brier       = self.brier_score(simu[num_poste], obs[num_poste], threshold)
                 #self.temporal_plot(time, simu, obs, num_poste)
-                self.brier_score(simu, obs)
+                #plt.violinplot(self.mean_error(simu, obs), positions=[pos])
+                pos = pos + 1
+        brier_global = self.brier_score(np.concat(simu.values()), np.concat(obs.values()), threshold)
+        #plt.show()
         return tmp
 
     def temporal_plot(self, time, simu, obs, num_poste):
@@ -115,10 +182,7 @@ class Evaluation(object):
         plt.plot(time, obs, marker='.', linestyle='', color='k')
         plt.violinplot(simu, positions=mpl.dates.date2num(time))
         fig.savefig(f'{savedir}/{num_poste}.pdf', formatout='pdf',  bbox_inches='tight')
-
-
         #plt.show()
-
 
     def eval_simu(self):
         pass
