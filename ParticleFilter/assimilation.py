@@ -57,7 +57,7 @@ def parse_command_line():
     parser.add_argument('-w', '--workdir', help='Runing directory', default='/home/vernaym/workdir/ASSIMILATION/XP00')
     parser.add_argument('-m', '--massif', help='PLot for a specific massif', default=None, type=int)
     parser.add_argument('-t', '--threshold', default=None, help='Threshold of precipitation (mm) to apply in the data to consider', type=int)
-    parser.add_argument('-p', '--product', default='antilopejp1', help='Product to deal with', choices=['antilope', 'antilopejp1', 'panthere', 'kriging'])
+    parser.add_argument('-p', '--plot', action='store_true', default=False, help='Plot assimilated fields')
     parser.add_argument('-l', '--lpn', action='store_true', help='Take into account the rain-snow limit')
 
     args = parser.parse_args()
@@ -291,7 +291,7 @@ def read_obs(args):
 
 class ParticleFilter(object):
 
-    def __init__(self, date, obs, ensemble):
+    def __init__(self, date, obs, ensemble, plot):
 
         self.date = date
         self.date_str = date.strftime('%Y%m%d%H')
@@ -307,9 +307,11 @@ class ParticleFilter(object):
                 )
         self.ensemble = ensemble
         self.Ne = len(self.ensemble)
+        self.plot = plot
 
         # Plot observation field
-        self.plot_obs()
+        if self.plot:
+            self.plot_obs()
 
     # Definition of gamma distribution
     def gamma_shape_PDF(self, x, k=3., theta=1.):
@@ -457,7 +459,8 @@ class ParticleFilter(object):
         # TODO : plot PDF for some pixels
         # gamma_shape_PDF(Y, k=k, theta=theta)
 
-        self.plot_parameters()
+        if self.plot:
+            self.plot_parameters()
 
     def plot_parameters(self):
         label_map = dict(sigma='Standard deviation sigma (mm)', k='Shape parameter (k)', theta='Scale parameter (theta)', delta='Shift parameter (delta)')
@@ -517,10 +520,10 @@ class ParticleFilter(object):
 
     @speedtest
     def raw_weighting(self):
-
-        # On profite de la loop sur les membres pour tracer les ensembles bruts avant et après interpolation
-        fig1, axes1 = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
-        fig2, axes2 = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
+        if self.plot:
+            # On profite de la loop sur les membres pour tracer les ensembles bruts avant et après interpolation
+            fig1, axes1 = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
+            fig2, axes2 = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
         i = 0
         j = 0
         self.weight = dict()
@@ -530,21 +533,24 @@ class ParticleFilter(object):
             #----------
             self.wpixel[member] = self.SCGD_shape_PDF(model.rr, self.parameters.mu.data, k=self.parameters.k.data, theta=self.parameters.theta.data, delta=self.parameters.delta.data)
             self.wpixel[member].name = 'weight'
-            # Plot pixel weights
-            self.weight[member] = np.sum(self.wpixel[member].data)
-            #---------------------------------------------------------------------------------------------------------
 
-            # Plot interpolated model field
-            im1 = plot_field(model.rr, axes1[i,j], self.rrmin, self.rrmax, title=f'member {member:03d}')
-            # Plot raw model field  (do it now to avoid another loop)
-            im2 = plot_field(raw_ensemble[member].rr, axes2[i,j], self.rrmin, self.rrmax, title=f'member {member:03d}')
+            if self.plot:
+                # Plot pixel weights
+                self.weight[member] = np.sum(self.wpixel[member].data)
+                #---------------------------------------------------------------------------------------------------------
+
+                # Plot interpolated model field
+                im1 = plot_field(model.rr, axes1[i,j], self.rrmin, self.rrmax, title=f'member {member:03d}')
+                # Plot raw model field  (do it now to avoid another loop)
+                im2 = plot_field(raw_ensemble[member].rr, axes2[i,j], self.rrmin, self.rrmax, title=f'member {member:03d}')
             j = j + 1
             if j==4:
                 j = 0
                 i = i + 1
 
-        finalize_fig(fig1, im1, label='24-hour precipitation (mm)', outname=f'{self.date_str}/MODEL_interp_{self.date_str}.pdf')
-        finalize_fig(fig2, im2, label='24-hour precipitation (mm)', outname=f'{self.date_str}/MODEL_raw_{self.date_str}.pdf')
+        if self.plot:
+            finalize_fig(fig1, im1, label='24-hour precipitation (mm)', outname=f'{self.date_str}/MODEL_interp_{self.date_str}.pdf')
+            finalize_fig(fig2, im2, label='24-hour precipitation (mm)', outname=f'{self.date_str}/MODEL_raw_{self.date_str}.pdf')
 
     def selection(self):
         self.global_selection()
@@ -613,9 +619,10 @@ class ParticleFilter(object):
         # This method takes ~3.5 s but most of the time (~3.3s) is spent
         # while saving figures.
 
-        fig1, ax1 = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
-        fig2, ax2 = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
-        fig3, axes3 = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
+        if self.plot:
+            fig1, ax1 = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
+            fig2, ax2 = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
+            fig3, axes3 = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
         i = 0
         j = 0
         for m in range(1, self.Ne+1):
@@ -627,26 +634,29 @@ class ParticleFilter(object):
             #t3 = time.time()
             #print(f'Wrinting globalfields took {(t3-t2)*1000.}ms')
 
-            # Plot local weight fields
-            vmin = 0
-            #vmax = 0.25  # TODO : vmax=f(sigma) [peut être renvoyé par la fonction de la PDF comme le max de probabilité]
-            #vmax = np.max(gamma_shape_PDF(parameters.mu.data, k=parameters.k.data, theta=parameters.theta.data))
-            vmax = max([np.max(ww.data) for ww in self.local_weights.values()])
-            im3 = plot_field(self.local_weights[m], axes3[i,j], vmin, vmax, title=f'member {m:03d}, total weight={self.weight[m]:.3f}', cmap=plt.cm.Greys)
+            if self.plot:
+                # Plot local weight fields
+                vmin = 0
+                #vmax = 0.25  # TODO : vmax=f(sigma) [peut être renvoyé par la fonction de la PDF comme le max de probabilité]
+                #vmax = np.max(gamma_shape_PDF(parameters.mu.data, k=parameters.k.data, theta=parameters.theta.data))
+                vmax = max([np.max(ww.data) for ww in self.local_weights.values()])
+                im3 = plot_field(self.local_weights[m], axes3[i,j], vmin, vmax, title=f'member {m:03d}, total weight={self.weight[m]:.3f}', cmap=plt.cm.Greys)
 
-            im1 = plot_field(globalfields.loc[{'time':self.date, 'member':m}], ax1[i,j], self.rrmin, self.rrmax, title=f'Member {self.selection_globale[m-1]:03d}')
-            im2 = plot_field(localfields.loc[{'time':self.date, 'member':m}], ax2[i,j], self.rrmin, self.rrmax, title=f'New member {m:03d}')
-            #t4 = time.time()
-            #print(f'Plotting took {(t4-t3)*1000.}ms')
+                im1 = plot_field(globalfields.loc[{'time':self.date, 'member':m}], ax1[i,j], self.rrmin, self.rrmax, title=f'Member {self.selection_globale[m-1]:03d}')
+                im2 = plot_field(localfields.loc[{'time':self.date, 'member':m}], ax2[i,j], self.rrmin, self.rrmax, title=f'New member {m:03d}')
+                #t4 = time.time()
+                #print(f'Plotting took {(t4-t3)*1000.}ms')
             j = j + 1
             if j==4:
                 j = 0
                 i = i + 1
-        finalize_fig(fig1, im1, label='24-hour precipitation (mm)', outname=f'{self.date_str}/ASSIM_globale_{self.date_str}.pdf')
-        finalize_fig(fig2, im2, label='24-hour precipitation (mm)', outname=f'{self.date_str}/ASSIM_locale_{self.date_str}.pdf')
-        finalize_fig(fig3, im3, label='Weight', outname=f'{self.date_str}/WEIGHTS_{self.date_str}.pdf')
-        #t5 = time.time()
-        #print(f'Finalisation of figures took {(t5-t4)*1000.}ms')
+
+        if self.plot:
+            finalize_fig(fig1, im1, label='24-hour precipitation (mm)', outname=f'{self.date_str}/ASSIM_globale_{self.date_str}.pdf')
+            finalize_fig(fig2, im2, label='24-hour precipitation (mm)', outname=f'{self.date_str}/ASSIM_locale_{self.date_str}.pdf')
+            finalize_fig(fig3, im3, label='Weight', outname=f'{self.date_str}/WEIGHTS_{self.date_str}.pdf')
+            #t5 = time.time()
+            #print(f'Finalisation of figures took {(t5-t4)*1000.}ms')
 
         plt.close('all')
 
@@ -684,14 +694,12 @@ if __name__ == "__main__":
         raw_ensemble    = {k:v.sel(time=date) for k,v in pearome.items()}
         interp_ensemble = {k:v.interp(lon=radar.lon, lat=radar.lat) for k,v in raw_ensemble.items()}
 
-        pf = ParticleFilter(date, radar, interp_ensemble)
+        pf = ParticleFilter(date, radar, interp_ensemble, args.plot)
         pf.pdf_parameters()
         pf.raw_weighting()  # Compute weight fields before normalisation + plot raw/interp fields
         pf.selection()  # Global and local selections
 
         localfields, globalfields = pf.output(localfields, globalfields)
-
-        # TODO : SAVE all assimilated fields for an evaluation of the performance over the period
 
     localfields.to_netcdf(f"Assimilation_locale_{args.datebegin.strftime('%Y%m%d%H')}_{args.dateend.strftime('%Y%m%d%H')}.nc")
     globalfields.to_netcdf(f"Assimilation_globale_{args.datebegin.strftime('%Y%m%d%H')}_{args.dateend.strftime('%Y%m%d%H')}.nc")

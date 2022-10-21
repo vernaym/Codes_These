@@ -152,13 +152,13 @@ def date_range(start, end, dt=24):
 
 def datespivot(start, end, reseau=21, dt=1):
     # datepivot = réseau de 21h dont la prévi couvre J-1 6h --> J 6h
-    datepivot = start-timedelta(hours=start.hour+3)  # réseau de 21h (J-1)
+    datepivot = start-timedelta(hours=24+start.hour+3)  # réseau de 21h (J-2)
     datespivot = list()
     validitydates = list()
     while datepivot <= end:
         datespivot.append(datepivot)
-        for h in range(0, 24, dt):
-            validitydates.append(datepivot+timedelta(33)-timedelta(h))
+        for h in range(1, 25, dt):
+            validitydates.append(datepivot+timedelta(hours=9)+timedelta(hours=h))
         datepivot = datepivot + timedelta(hours=24)
 
     return datespivot, validitydates
@@ -404,14 +404,16 @@ class PrecipitationExtractor(object):
                 data = np.transpose(self.rr, (1,2,0)),  # Pour passer la dimension temporelle en dernier : (lon, lat, time)
                 name = 'rr',
                 dims=["lat", "lon", "time"],
-                coords=dict(lon=self.lon[0], lat=self.lat[:,0], time=self.timecoord, reference_time=reference_time,),
-                attrs=dict(description="24 hour precipitation",units="mm/24h"),
+                #coords=dict(lon=self.lon[0], lat=self.lat[:,0], time=self.timecoord, reference_time=reference_time,),
+                coords=dict(lon=self.lon[0], lat=self.lat[:,0], time=self.timecoord, reference_time=self.timecoord[0],),
+                attrs=dict(description="24 hour precipitation",units="mm/24h"),  # TODO : modifier le cumul
             )
 
+            datedeb = self.args.datebegin-timedelta(hours=24)
             if self.member is not None:
-                outname = '{0:s}_{1:03d}_{2:s}_{3:s}_{4:s}.nc'.format(self.args.model, self.member, self.args.datebegin.strftime('%Y%m%d%H'), self.args.dateend.strftime('%Y%m%d%H'), self.domain)
+                outname = '{0:s}_{1:03d}_{2:s}_{3:s}_{4:s}.nc'.format(self.args.model, self.member, datedeb.strftime('%Y%m%d%H'), self.args.dateend.strftime('%Y%m%d%H'), self.domain)
             else:
-                outname = '{0:s}_{1:s}_{2:s}_{3:s}.nc'.format(self.args.model, self.args.datebegin.strftime('%Y%m%d%H'), self.args.dateend.strftime('%Y%m%d%H'), self.domain)
+                outname = '{0:s}_{1:s}_{2:s}_{3:s}.nc'.format(self.args.model, datedeb.strftime('%Y%m%d%H'), self.args.dateend.strftime('%Y%m%d%H'), self.domain)
             # WARNING : DO NOT WORK ON GUPPY !
             # Transfert the extracted files locally and rerun this script
             rr.to_netcdf(outname)
