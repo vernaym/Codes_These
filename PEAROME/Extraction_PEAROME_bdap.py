@@ -150,15 +150,18 @@ def date_range(start, end, dt=24):
 
     return dates
 
-def datespivot(start, end, reseau=21):
+def datespivot(start, end, reseau=21, dt=1):
     # datepivot = réseau de 21h dont la prévi couvre J-1 6h --> J 6h
     datepivot = start-timedelta(hours=start.hour+3)  # réseau de 21h (J-1)
     datespivot = list()
+    validitydates = list()
     while datepivot <= end:
         datespivot.append(datepivot)
-        datepivot = datepivot + timedelta(hours==24)
+        for h in range(0, 24, dt):
+            validitydates.append(datepivot+timedelta(33)-timedelta(h))
+        datepivot = datepivot + timedelta(hours=24)
 
-    return datespivot
+    return datespivot, validitydates
 
 
 def goto(path):
@@ -290,7 +293,7 @@ class PrecipitationExtractor(object):
         self.args      = args
         self.echeance  = echeance
         self.member    = member
-        self.rr24      = None
+        self.rr        = None
         self.domain    = domain
         self.geometry  = None
         self.timecoord = timecoord
@@ -354,27 +357,32 @@ class PrecipitationExtractor(object):
             # Fill missing data with nan values
             # WARNING : this only works if the first date of the period have valid data
             if self.nan is None:
-                self.nan = np.empty(self.shape)
-                self.nan[:] = np.NaN
+                if self.shape is None:
+                    print('ERROR : no known shape to fill missing data')
+                else:
+                    self.nan = np.empty(self.shape)
+                    self.nan[:] = np.NaN
+            if len(gribs) == 1:
+                self.update_data(self.nan)
             else:
-                print('ERROR : no known shape to fill missing data')
-            self.update_data(self.nan)
+                for idx in range(1, len(gribs)):
+                    self.update_data(self.nan)
         else:
             if len(gribs) == 1:
                 self.update_data(self.read_grib(gribs[0]).data)
             elif self.args.model == 'aspearome':
                 # Calcul des cumuls horaires ou journalier
-                for idx in range(len(gribs)):
-                    rrh1  = self.read_grib(gribs[idx])
-                    rrh2 = self.read_grib(gribs[idx+1])
+                for idx in range(1, len(gribs)):
+                    rrh1  = self.read_grib(gribs[idx-1])
+                    rrh2 = self.read_grib(gribs[idx])
                     newdata = rrh2.data-rrh1.data
                     self.update_data(newdata)
 
     def update_data(self, mydata):
-        if self.rr24 is None:  # Reading first grib file
-            self.rr24 = np.array([mydata,])
+        if self.rr is None:  # Reading first grib file
+            self.rr = np.array([mydata,])
         else:
-            self.rr24 = np.append(self.rr24, np.array([mydata]), axis=0)
+            self.rr = np.append(self.rr, np.array([mydata]), axis=0)
 
     def extract(self, datespivot):
         self.missing_grib = list()
@@ -393,7 +401,7 @@ class PrecipitationExtractor(object):
 
         if self.args.read:
             rr = xr.DataArray(
-                data = np.transpose(self.rr24, (1,2,0)),  # Pour passer la dimension temporelle en dernier : (lon, lat, time)
+                data = np.transpose(self.rr, (1,2,0)),  # Pour passer la dimension temporelle en dernier : (lon, lat, time)
                 name = 'rr',
                 dims=["lat", "lon", "time"],
                 coords=dict(lon=self.lon[0], lat=self.lat[:,0], time=self.timecoord, reference_time=reference_time,),
@@ -448,8 +456,8 @@ if __name__ == "__main__":
     for domain in args.domain:
         workdir = os.path.join(args.workdir, domain, args.model)
         goto(workdir)
-        timecoord = date_range(args.datebegin, args.dateend, dt=args.pdt)
-        datespivot = datespivot(args.datebegin, args.dateend)
+        #timecoord = date_range(args.datebegin, args.dateend, dt=args.pdt)
+        datespivot, timecoord = datespivot(args.datebegin, args.dateend)
 
         if args.model in ['aspearome', 'stats']:
             if args.pdt == 24:
