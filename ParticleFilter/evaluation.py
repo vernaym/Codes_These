@@ -87,6 +87,43 @@ class Evaluation(object):
         print('Brier=',brier)
         return brier
 
+    def ROC(self, simu, obs, threshold):
+        """ Here "probability" is the forecasted probability above which the
+        event is considered well forecasted by the ensemble.
+        We built the contingency table :
+            - a = forecasted and observed
+            - b = forecasted but not observed
+            - c = observed but not forecasted
+            - d = Not forecasted and not observed
+
+        Then the success rate is a/(a=c) and the false alarm rate is b/(b+d)
+        """
+        #for threshold in [1, 5, 10, 20]:
+        succes_rate = list()
+        false_alarm = list()
+        for seuil in range(1, self.Ne+1):
+#                a = np.count_nonzero(np.where((obs>=threshold) & (np.count_nonzero(simu>=threshold, axis=0)>=seuil)))
+#                b = np.count_nonzero(np.where((obs<threshold) & (np.count_nonzero(simu>=threshold, axis=0)>=seuil)))
+#                c = np.count_nonzero(np.where((obs>=threshold) & (np.count_nonzero(simu>=threshold, axis=0)<seuil)))
+#                d = np.count_nonzero(np.where((obs<threshold) & (np.count_nonzero(simu>=threshold, axis=0)<seuil)))
+            a = np.count_nonzero(np.where((obs>=1) & (obs<5) & (np.count_nonzero((simu>=1) & (simu<5), axis=0)>=seuil)))
+            b = np.count_nonzero(np.where(((obs<1) | (obs>=5)) & (np.count_nonzero((simu>=1) & (simu<5), axis=0)>=seuil)))
+            c = np.count_nonzero(np.where((obs>=1) & (obs<5) & (np.count_nonzero((simu>=1) & (simu<5), axis=0)<seuil)))
+            d = np.count_nonzero(np.where(((obs<1) | (obs>=5)) & (np.count_nonzero((simu>=1) & (simu<5), axis=0)<seuil)))
+            #print(a,b,c,d)
+            succes_rate.append(a/(a+c) if a>0 else 0)
+            false_alarm.append(b/(b+d) if b>0 else 0)
+            #print(a/(a+c) if a>0 else 0)
+            #print(b/(b+d) if b>0 else 0)
+            #plt.plot(false_alarm, succes_rate, label=f"Threshold={threshold}mm")
+        plt.plot(false_alarm, succes_rate)
+        plt.xlim([0, 1])
+        plt.ylim([0, 1])
+        plt.legend()
+        plt.show()
+
+
+
     def brier_decomposition(self, simu, obs, threshold, nb_cat=17):
 
         # TODO : la décomposition du score de Brier devrait donner le même résultat
@@ -106,8 +143,6 @@ class Evaluation(object):
         global_freq_obs = np.count_nonzero(obs[obs>=threshold]) / ndays
         resolution  = self.resolution(proba, catsize, freq_occ, global_freq_obs, ndays)
         uncertainty = self.uncertainty(global_freq_obs)
-        import pdb
-        pdb.set_trace()
 
         return fiability, resolution, uncertainty
 
@@ -149,6 +184,8 @@ class Evaluation(object):
 
         # To Extract specific values where evaluation data (obs nivometeo) is available
         pos = 1
+
+        # TODO : gerer les données avec une DataFrame ou un DataSet
         dates = dict()
         simu  = dict()
         obs   = dict()
@@ -164,14 +201,14 @@ class Evaluation(object):
                 # Select corresponding simulations
                 simu[num_poste] = np.transpose(self.ensemble.sel({'lat':nearest_lat, 'lon':nearest_lon}).loc[{'time':dates[num_poste]}].rr.data)
                 self.rmse(simu[num_poste], obs[num_poste], num_poste)
-                if num_poste == 5064403:
-                    fiability, resolution, uncertainty = self.brier_decomposition(simu[num_poste], obs[num_poste], threshold)
-                    print('BSfiab+BSres+BSunc=',fiability-resolution+uncertainty)
-                    brier       = self.brier_score(simu[num_poste], obs[num_poste], threshold)
+                fiability, resolution, uncertainty = self.brier_decomposition(simu[num_poste], obs[num_poste], threshold)
+                print('BSfiab+BSres+BSunc=',fiability-resolution+uncertainty)
+                brier       = self.brier_score(simu[num_poste], obs[num_poste], threshold)
                 #self.temporal_plot(time, simu, obs, num_poste)
                 #plt.violinplot(self.mean_error(simu, obs), positions=[pos])
                 pos = pos + 1
-        brier_global = self.brier_score(np.concat(simu.values()), np.concat(obs.values()), threshold)
+        self.ROC(np.concatenate([array for array in simu.values()], axis=1), np.concatenate([array for array in obs.values()]), threshold)
+        brier_global = self.brier_score(np.concatenate([array for array in simu.values()], axis=1), np.concatenate([array for array in obs.values()]), threshold)
         #plt.show()
         return tmp
 
