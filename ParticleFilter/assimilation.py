@@ -38,6 +38,9 @@ lonmin = 6.010
 lonmax = 6.490
 #)
 
+suffix = dict(hourly='H', daily='Q')
+timestep = dict(hourly=1, daily=24)
+
 norm = plt.Normalize()
 
 landmarks = {
@@ -54,10 +57,11 @@ def parse_command_line():
     parser.add_argument('-b', '--datebegin', help='Begining date of extraction, format YYYYMMDDHH or YYMMDDHH', required=True)
     parser.add_argument('-e', '--dateend', help = 'Final date of extraction (default=datebegin)')
     parser.add_argument('-d', '--domain', help='Domain of the file', choices=['alp', 'pyr', 'cor', 'GrandesRousses'], default='GrandesRousses')
-    parser.add_argument('-w', '--workdir', help='Runing directory', default='/home/vernaym/workdir/ASSIMILATION/XP00')
+    parser.add_argument('-w', '--workdir', help='Runing directory', default='/home/vernaym/workdir/ASSIMILATION')
     parser.add_argument('-m', '--massif', help='PLot for a specific massif', default=None, type=int)
     parser.add_argument('-t', '--threshold', default=None, help='Threshold of precipitation (mm) to apply in the data to consider', type=int)
     parser.add_argument('-p', '--plot', action='store_true', default=False, help='Plot assimilated fields')
+    parser.add_argument('-f', '--frequency', choices=['hourly', 'daily'], help='Assimilation frequency')
     parser.add_argument('-l', '--lpn', action='store_true', help='Take into account the rain-snow limit')
 
     args = parser.parse_args()
@@ -109,7 +113,7 @@ def get_date(a_string):
         return date
 
 def date_range(start, end, dt=24):
-    start = start.replace(hour=6)
+    start = start.replace(hour=6) + timedelta(hours=dt)
     dates = list()
     while start <= end:
         dates.append(start)
@@ -122,10 +126,10 @@ def goto(path):
         os.makedirs(path)
     os.chdir(path)
 
-def read_ensemble(datebegin, dateend, domain='GrandesRousses'):
+def read_ensemble(datebegin, dateend, frequency, domain='GrandesRousses'):
     pearome = dict()
     for member in range(1,17):
-        filename = f'aspearome_{member:03d}_{datebegin}_{dateend}_{domain}.nc'
+        filename = f'aspearome_{member:03d}_{datebegin}_{dateend}_{domain}_{frequency}.nc'
         filename = os.path.join(datadir, filename)
         if not os.path.exists(filename):
             print(f'WARNING : file {filename} does not exist, using default file')
@@ -271,13 +275,13 @@ def finalize_fig(figure, imm, label, outname):
     #print(f'Saving figures took {(t3-t2)*1000.}ms')
 
 def read_obs(args):
-    filename = 'ANTILOPEQ_{0:s}_{1:s}_{2:s}.nc'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'), args.domain)
+    filename = f'ANTILOPE{suffix[args.frequency]}_{args.datebegin.strftime("%Y%m%d%H")}_{args.dateend.strftime("%Y%m%d%H")}_{args.domain}.nc'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'), args.domain)
     if not os.path.exists(filename):
         print(f'WARNING : file {filename} does not exist, looking for it under {datadir}')
         filename = os.path.join(datadir, filename)
     if not os.path.exists(filename):
         print(f'WARNING : no file named {filename} under {datadir}, using default file ANTILOPEQ_2021080106_2022070106_GrandesRousses.nc')
-        filename = os.path.join(datadir, 'ANTILOPEQ_2021080106_2022070106_GrandesRousses.nc')
+        filename = os.path.join(datadir, f'ANTILOPE{suffix[args.frequency]}_2021080106_2022070106_GrandesRousses.nc')
     if os.path.exists(filename):
         antilope = xr.open_dataset(filename)
         antilope = antilope.transpose('lat', 'lon', 'time')  # TODO : Fix the dataset in the generation script
@@ -437,7 +441,10 @@ class ParticleFilter(object):
         #-------------
         parameters = self.radar.copy()  # TODO : vérifier si ce n'est pas trop couteux (de toutes façon l'bs n'a pas de raison d'être modifiée)
         parameters = parameters.rename({'rr':'mu'})  #  Mode=observation (WARNING : mu is NOT the mean) TODO : check if the ensemble after assimilation is not biased
-        parameters['sigma'] = (0.261 + 0.263 * parameters['mu'])  # According to the linear regression of ANTILOPE RMSE vs ANTILOPE RR
+
+        # Observation error
+        mask = xr.open_dataset(os.path.join(datadir, "mask_error_antilope_GrandesRousses.nc"))
+        parameters['sigma'] = (0.261 + 0.263 * parameters['mu'])*mask  # According to the linear regression of ANTILOPE RMSE vs ANTILOPE RR
         # shift of the gamma PDF ==> this defines the weight given to 0mm forecats (=0 if delta=0) !!
         parameters = parameters.assign(delta=lambda x: 10/x.mu)  # TODO : find a better shift than 10/mu
         parameters.delta.data[np.isinf(parameters.delta.data)] = 0  # Si l'obs est nulle on veut imposer une PDF exponentielle décroissante (k=1) sans translation
@@ -533,12 +540,9 @@ class ParticleFilter(object):
             #----------
             self.wpixel[member] = self.SCGD_shape_PDF(model.rr, self.parameters.mu.data, k=self.parameters.k.data, theta=self.parameters.theta.data, delta=self.parameters.delta.data)
             self.wpixel[member].name = 'weight'
+            self.weight[member] = np.sum(self.wpixel[member].data)
 
             if self.plot:
-                # Plot pixel weights
-                self.weight[member] = np.sum(self.wpixel[member].data)
-                #---------------------------------------------------------------------------------------------------------
-
                 # Plot interpolated model field
                 im1 = plot_field(model.rr, axes1[i,j], self.rrmin, self.rrmax, title=f'member {member:03d}')
                 # Plot raw model field  (do it now to avoid another loop)
@@ -667,11 +671,11 @@ class ParticleFilter(object):
 if __name__ == "__main__":
     args = parse_command_line()
 
-    goto(args.workdir)
-    extract_period = date_range(args.datebegin, args.dateend)
+    #goto(args.workdir)
+    extract_period = date_range(args.datebegin, args.dateend, dt=timestep[args.frequency])
 
     antilope = read_obs(args)
-    pearome = read_ensemble(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))
+    pearome = read_ensemble(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'), args.frequency)
     localfields = xr.DataArray(
             name   = 'rr',
             dims   = ["lat", "lon", "time", "member"],
