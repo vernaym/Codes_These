@@ -316,6 +316,8 @@ def plot(data, vmin, vmax):
     for product, field in data.items():
         if product in ['ANTILOPE_VS_AROME', 'ANTILOPE_VS_PANTHERE']:
             field.rr_cumul.plot(ax=ax[i,j], vmin=0.5, vmax=2.0, cmap=plt.cm.RdBu)
+        elif product == 'MASK':
+            field.plot(ax=ax[i,j], cmap=plt.cm.binary)
         else:
             field.rr_cumul.plot(ax=ax[i,j], vmin=vmin, vmax=vmax, cmap=plt.cm.gist_ncar)
             #field.rr_cumul.plot(ax=ax[i,j], vmin=0, vmax=vmax, cmap=plt.cm.YlGnBu)
@@ -355,8 +357,8 @@ if __name__ == "__main__":
         panthere = xr.open_dataset(os.path.join(datadir, 'PANTHERE_CUMUL_{0:s}_{1:s}.nc'.format(args.datebegin.strftime('%Y%m%d%H%M'), args.dateend.strftime('%Y%m%d%H%M'))))
         arome    = xr.open_dataset(os.path.join(datadir, 'arome_{0:s}_{1:s}_GrandesRousses.nc'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))))
         arome = arome.sum('time').rename({'rr':'rr_cumul'})
-        aspearome  = xr.open_dataset(os.path.join(datadir, 'aspearome_001_{0:s}_{1:s}_GrandesRousses.nc'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))))
-        aspearome = aspearome.sum('time').rename({'rr':'rr_cumul'})
+        #aspearome  = xr.open_dataset(os.path.join(datadir, 'aspearome_001_{0:s}_{1:s}_GrandesRousses_daily.nc'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))))
+        #aspearome = aspearome.sum('time').rename({'rr':'rr_cumul'})
     #    krigeage = xr.open_dataset(os.path.join(datadir, 'CUMUL_krigeage_{0:s}_{1:s}.nc'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))))
     #    safran   = xr.open_dataset(os.path.join(datadir, 'CUMUL_SAFRAN_GrandesRousses_{0:s}_{1:s}.nc'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))))
     #    safran = safran.rr.sum(axis=0).interp(elevation=mnt_proj, method='nearest')
@@ -371,7 +373,7 @@ if __name__ == "__main__":
         panthere = panthere.interp(lon=antilope.lon, lat=antilope.lat, method='nearest')
         panthere = panthere.where((panthere.lon>=lonmin) & (panthere.lon<=lonmax) & (panthere.lat<=latmax) & (panthere.lat>=latmin), drop=True)
         arome = arome.where((arome.lon>=lonmin) & (arome.lon<=lonmax) & (arome.lat<=latmax) & (arome.lat>=latmin), drop=True)
-        aspearome = aspearome.where((aspearome.lon>=lonmin) & (aspearome.lon<=lonmax) & (aspearome.lat<=latmax) & (aspearome.lat>=latmin), drop=True)
+        #aspearome = aspearome.where((aspearome.lon>=lonmin) & (aspearome.lon<=lonmax) & (aspearome.lat<=latmax) & (aspearome.lat>=latmin), drop=True)
         antilopevsarome = antilope / arome
         antilopevspanthere = antilope / panthere
         #krigeage = krigeage.interp(lon=antilope.lon, lat=antilope.lat, method='nearest')
@@ -383,15 +385,22 @@ if __name__ == "__main__":
         #antilopevsarome = (antilope / np.max(antilope.rr_cumul)) / (arome / np.max(arome.rr_cumul))
         vmax = max([np.max(antilope.rr_cumul), np.max(panthere.rr_cumul), np.max(arome.rr_cumul)])
         vmin = min([np.min(antilope.rr_cumul), np.min(panthere.rr_cumul), np.min(arome.rr_cumul)])
+        mask = xr.where((antilopevsarome.rr_cumul>=1.5) | (antilopevsarome.rr_cumul<=0.75), 5, 1)
+        print(mask)
         data = dict(
             ANTILOPE = antilope,
-            PANTHERE = panthere,
+            #PANTHERE = panthere,
             AROME    = arome,
             #PEAROME  = pearome,
             ANTILOPE_VS_AROME  = antilopevsarome,
+            MASK = mask,
             #ANTILOPE_VS_PANTHERE  = antilopevspanthere,
         )
         plot(data, vmin, vmax)
+        #mask = mask.rename({'rr_cumul':'factor'})
+        mask = mask.rename('mask')
+        mask.to_netcdf(os.path.join(datadir, 'mask_error_antilope_GrandesRousses.nc'))
+
     else:
         vmax = np.max(antilope.rr_cumul)
         vmin = np.min(antilope.rr_cumul)
