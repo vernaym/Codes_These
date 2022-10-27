@@ -316,13 +316,8 @@ class ParticleFilter(object):
         self.nline, self.ncol = np.shape(obs.rr.data)
 
         # To look at one specific point
-        #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        # TODO : retourner les bons indices
-        #self.zoom_lat = nearest(obs.lat, zoom['lat'])
-        #self.zoom_lon = nearest(obs.lon, zoom['lon'])
-        #self.zoom_x = index(self.zoom_lat)
-        #self.zoom_y = index(self.zoom_lon)
-        #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        self.zoom_x = np.argwhere(obs.lat.data == nearest(obs.lat, zoom['lat']))[0][0]
+        self.zoom_y = np.argwhere(obs.lon.data == nearest(obs.lon, zoom['lon']))[0][0]
 
         self.radar = obs
         self.rrmin = 0.
@@ -381,7 +376,7 @@ class ParticleFilter(object):
                                             # de gamma sinon la probabilité en 0 est artificiellement surestimée !
             gamma = np.array(list(map(
                 #lambda t: gamma_shape_PDF(t+delta, k=k, theta=theta) if t > delta else 0, y)))
-                lambda t: gamma_shape_PDF(t+delta, k=k, theta=theta) if t > 0 else 0, y)))
+                lambda t: self.gamma_shape_PDF(t+delta, k=k, theta=theta) if t > 0 else 0, y)))
             fig,ax = plt.subplots()
             color = next(ax._get_lines.prop_cycler)['color']
             # Plot over a smaller range for better lisibility
@@ -469,8 +464,9 @@ class ParticleFilter(object):
         #parameters['sigma'] = (0.261 + 0.263 * parameters['mu'])*mask.mask  # According to the linear regression of ANTILOPE RMSE vs ANTILOPE RR
         parameters['sigma'] = (0.261 + 0.263 * parameters['mu'])  # According to the linear regression of ANTILOPE RMSE vs ANTILOPE RR
         # shift of the gamma PDF ==> this defines the weight given to 0mm forecats (=0 if delta=0) !!
-        parameters = parameters.assign(delta=lambda x: 10/x.mu)  # TODO : find a better shift than 10/mu
+        parameters = parameters.assign(delta=lambda x: 1/(1+x.mu))  # TODO : find a better shift than 10/mu
         parameters.delta.data[np.isinf(parameters.delta.data)] = 0  # Si l'obs est nulle on veut imposer une PDF exponentielle décroissante (k=1) sans translation
+        #print(parameters['delta'].data[self.zoom_x, self.zoom_y])
         #delta = np.zeros(np.shape(mu))
         #delta[np.where(mu>0)] = 1 / mu[np.where(mu>0)]
         #
@@ -490,7 +486,17 @@ class ParticleFilter(object):
         # gamma_shape_PDF(Y, k=k, theta=theta)
 
         if self.plot:
+            self.plot_sigma()
             self.plot_parameters()
+
+    def plot_sigma(self):
+        fig, ax = plt.subplots(figsize=(14,6))
+        cmap = 'nipy_spectral'
+        im = self.parameters['sigma'].plot(ax=ax[i,j], cmap=cmap, cbar_kwargs=dict(label='Standard deviation (mm)'))
+        for landmark, infos in landmarks.items():
+                ax[i,j].plot(infos['lon'], infos['lat'], marker=infos['marker'], color='red', markersize=4)
+        fig.tight_layout()
+        fig.savefig(f"{self.date_str}/PDF_std_{self.date_str}.pdf", format='pdf')
 
     def plot_parameters(self):
         label_map = dict(sigma='Standard deviation sigma (mm)', k='Shape parameter (k)', theta='Scale parameter (theta)', delta='Shift parameter (delta)')
@@ -532,21 +538,51 @@ class ParticleFilter(object):
     def resample(self, weights):
         import random
         Ne = len(weights)
-        delta = 1/Ne
+        step = 1/Ne
         # Sort particules on [0,1[ according to their weight
         cumulated_weights = np.cumsum(weights, axis=0)
         #for i in range(1, Ne+1):
         selected_particles = list()
         # Random draw between [0, 1/Ne[
-        rdm = random.uniform(0, delta)
-        #rdm = np.random.random_sample(np.shape(cumulated_weights[0]))*delta
+        rdm = random.uniform(0, step)
+        #rdm = np.random.random_sample(np.shape(cumulated_weights[0]))*step
         while rdm <= 1:
             # Select particle in wich rdm falls
             #selected_particles.append(np.searchsorted(cumulated_weights, rdm)+1)
             selected_particles.append(np.apply_along_axis(lambda a: a.searchsorted(rdm), axis=0, arr=cumulated_weights)+1)
             # Go 1 step forward and start again
-            rdm += delta
+            rdm += step
         return selected_particles
+
+    def normal_dist(self, x , mean , sd):
+        prob_density = (np.pi*sd) * np.exp(-0.5*((x-mean)/sd)**2)
+        return prob_density
+
+    def weighting(self, x, mu, sigma, plot_distribution=False, plot_parameters=False, **kw):
+
+        draw = self.normal_dist(x, mu, sigma)
+
+        if plot_distribution:
+            dy = 0.01
+            num = np.max((mu+3*sigma)/dy).astype(int)
+            y = np.linspace(0, mu+3*sigma, num=num)
+            norm = self.normal_dist(y, mu, sigma)
+            fig,ax = plt.subplots()
+            color = next(ax._get_lines.prop_cycler)['color']
+            # Plot over a smaller range for better lisibility
+            ymin = mu-3*sigma
+            ymax = mu+3*sigma
+            ax.plot(x, draw, linestyle='', marker='+', markersize=10.)
+            ax.plot(y[(y>0) & (y<ymax)], norm[(y>0) & (y<ymax)],
+                    label=f'Norm(mu={mu:0.2},sigma={sigma:0.2})', color=color)
+            plt.axvline(x=0, color='k', linestyle='-', linewidth=0.5)
+            plt.axvline(x=mu, color='k', linestyle='--', label=f'Observation : {mu:0.2}')
+            plt.xlabel('Precipitation (mm)')
+            plt.ylabel('Weight')
+            plt.legend(loc ="upper right")
+            fig.savefig(f"distribution.pdf", format='pdf')
+
+        return draw
 
     @speedtest
     def raw_weighting(self):
@@ -561,7 +597,8 @@ class ParticleFilter(object):
         for member, model in self.ensemble.items():
             # Weighting
             #----------
-            self.wpixel[member] = self.SCGD_shape_PDF(model.rr, self.parameters.mu.data, k=self.parameters.k.data, theta=self.parameters.theta.data, delta=self.parameters.delta.data)
+            #self.wpixel[member] = self.SCGD_shape_PDF(model.rr, self.parameters.mu.data, k=self.parameters.k.data, theta=self.parameters.theta.data, delta=self.parameters.delta.data)
+            self.wpixel[member] = self.weighting(model.rr, self.parameters.mu.data, self.parameters.sigma.data)
             self.wpixel[member].name = 'weight'
             self.weight[member] = np.sum(self.wpixel[member].data)
 
@@ -630,16 +667,29 @@ class ParticleFilter(object):
                     for count in range(selection.count(oldmember)):
                         newmember = free.pop(0)  # select first member to fill in the "waiting list"
                         self.newlocalfield[newmember][i,j] = value  # fill new member
+
+                #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                # check one specific point
+#                if (i == self.zoom_x) and (j == self.zoom_y):
+#                    idxi = i
+#                    idxj = j
+#                    zraw = [field.rr.data[idxi,idxj] for field in self.ensemble.values()]
+#                    zobs = self.radar.rr.data[idxi,idxj]
+#                    zsel = selection
+#                    [zweight.data[idxi,idxj] for zweight in self.wpixel.values()]
+#                    self.plot_one_pixel(idxi, idxj)
 #                print('i,j=',i,j)
 #                print('Obs = ',self.parameters.mu.data[i,j])
 #                print('Raw = ',[rawfield.rr.data[i,j] for rawfield in self.ensemble.values()])
 #                print('ECC = ',self.ecc[:,i,j])
 #                print('Selection = ',selection)
 #                print('Assim = ',[field.data[i,j] for field in self.newlocalfield.values()])
+                #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
     def plot_one_pixel(self, x, y):
         model = [values.rr.data[x][y] for values in self.ensemble.values()]
-        self.SCGD_shape_PDF(model, self.parameters.mu.data[x][y], k=self.parameters.k.data[x][y], theta=self.parameters.theta.data[x][y],delta=self.parameters.delta.data[x][y], plot_distribution=True)
+        #self.SCGD_shape_PDF(model, self.parameters.mu.data[x][y], k=self.parameters.k.data[x][y], theta=self.parameters.theta.data[x][y],delta=self.parameters.delta.data[x][y], plot_distribution=True)
+        self.weighting(model, self.parameters.mu.data[x][y], self.parameters.sigma.data[x][y], plot_distribution=True)
 
     @speedtest
     def output(self, localfields, globalfields):
