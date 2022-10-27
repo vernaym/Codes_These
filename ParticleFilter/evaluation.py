@@ -237,15 +237,16 @@ class Evaluation(object):
             # 0h and 23h.
             # solution : shift time serie by 7h, compute 24h accumulations and
             # shift back !
-            print(simulation.time.data[23])
+            #print(simulation.time.data[127*24-1])
+            #print(simulation.time.data[126*24])
             simulation['time'] = simulation.time-np.timedelta64(7, 'h')
             toto=simulation.loc[{'lat':44.99, 'lon':6.01, 'member':1}].rr.data
             simulation = simulation.resample(time='D').sum(dim='time')  # !!! VERY SLOW !!!
             tata=simulation.loc[{'lat':44.99, 'lon':6.01, 'member':1}].rr.data
-            print(toto[:24])
-            print(np.sum(toto[:24]), tata[0])
+            #print(toto[126*24:127*24-1])
+            #print(np.sum(toto[126*24:127*24-1]), tata[126])
             simulation['time'] = simulation.time+np.timedelta64(30, 'h')
-            print(simulation.time.data[0])
+            #print(simulation.time.data[126])
             #import pdb
             #pdb.set_trace()
 
@@ -293,7 +294,7 @@ class Evaluation(object):
 
         data = dict(antilope=list(), raw=list())
         experiments = dict(
-#                LD0      = 'Assimilation_locale_2021080106_2022070106.nc',
+                LD0      = 'Assimilation_locale_2021080106_2022070106.nc',
                 LH0      = 'Assimilation_locale_2021080106_2022070106_hourly.nc',
 #                LDM      = 'Assimilation_locale_2021073106_2022070106_avec_masque.nc',
             )
@@ -302,6 +303,7 @@ class Evaluation(object):
         scores_list = ['rmse', 'bias', 'brier']
         scores = dict()
         dates = self.data.date
+        #dates = dates[:10]
         for num_poste in self.data.num_poste.data:
 #            num_poste = row['num_poste']
 #            lat       = row['lat']
@@ -310,13 +312,17 @@ class Evaluation(object):
             lat = self.data.loc[{'num_poste':num_poste}].lat
             lon = self.data.loc[{'num_poste':num_poste}].lon
             obs = self.data.loc[{'num_poste':num_poste}].obs.data
+            #obs = obs[:10]
             data['antilope'].append(antilope.sel({'lat':nearest(antilope.lat, lat), 'lon':nearest(antilope.lon, lon)}).loc[{'time':dates}].rr.data)
             data['raw'].append(raw.sel({'lat':nearest(raw.lat, lat), 'lon':nearest(raw.lon, lon)}).loc[{'time':dates}].rr.data)
             for xpid,filename in experiments.items():
                 if xpid not in data.keys():
                     data[xpid] = list()
-                simu = self.read_simu(os.path.join(datadir, filename))
+                # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                simu = self.read_simu(os.path.join(datadir, filename))  # TODO : read simulations outside this loop !!
+                # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                 data[xpid].append(simu.sel({'lat':nearest(simu.lat, lat), 'lon':nearest(simu.lon, lon)}).loc[{'time':dates}].rr.data)
+            self.temporal_plot(dates, data['LH0'][-1], obs, num_poste, raw=data['raw'][-1], antilope=data['antilope'][-1], simu2=data['LD0'][-1])
 
             for product in data.keys():
                 if product not in scores.keys():
@@ -374,12 +380,32 @@ class Evaluation(object):
             ax.set_xticklabels([''] + products)
             fig.savefig(f'{savedir}/{score}.pdf', formatout='pdf',  bbox_inches='tight')
 
-    def temporal_plot(self, time, simu, obs, num_poste):
+    def temporal_plot(self, time, simu, obs, num_poste, raw=None, antilope=None, simu2=None):
 
-        # TODO : add ANTILOPE value and raw ensemble
-        fig = plt.figure(figsize=(14,6))
-        plt.plot(time, obs, marker='.', linestyle='', color='k')
-        plt.violinplot(simu, positions=mpl.dates.date2num(time))
+        def add_label(violin, label):
+            import matplotlib.patches as mpatches
+            color = violin["bodies"][0].get_facecolor().flatten()
+            labels.append((mpatches.Patch(color=color), label))
+
+        # TODO : when plotting only 1 simulation and the raw ensemble, use asymetric violinplot (sns):
+        # https://stackoverflow.com/questions/64646449/how-to-create-asymmetric-violin-plot-in-python-using-matplotlib
+
+        labels = []
+        fig, ax = plt.subplots(figsize=(14,9))
+        ref, = plt.plot(time, obs, marker='.', linestyle='', color='k')
+        labels.append((ref, 'Nivometeo reference'))
+        if antilope is not None:
+            antpe, = plt.plot(time, antilope, marker='+', linestyle='', color='red')
+            labels.append((antpe, 'Antilope'))
+        positions = mpl.dates.date2num(time)
+        add_label(plt.violinplot(np.transpose(simu), positions=positions), 'Hourly assimilation')
+        if raw is not None:
+            add_label(plt.violinplot(np.transpose(raw), positions=positions), 'Raw ensemble')
+        if simu2 is not None:
+            add_label(plt.violinplot(np.transpose(simu2), positions=positions), 'Daily assimilation')
+        ax.set_xlabel('Date')
+        ax.set_ylabel('24 hour precipitation (mm)')
+        plt.legend(*zip(*labels))
         fig.savefig(f'{savedir}/{num_poste}.pdf', formatout='pdf',  bbox_inches='tight')
         #plt.show()
 
