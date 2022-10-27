@@ -26,6 +26,11 @@ from mpl_toolkits.mplot3d.proj3d import proj_transform
 import time
 
 ##############################################################################################
+# TODO : Save number of selected members for each pixel
+# TODO : localisation : build a bigger ensemble by taking into account values of
+# neighboring pixels in space and time
+# TODO : plot one specific point
+# TODO : Add option to switch on/off the observation error mask
 ##############################################################################################
 
 datadir = '/home/vernaym/These/DATA'
@@ -43,12 +48,15 @@ timestep = dict(hourly=1, daily=24)
 
 norm = plt.Normalize()
 
+zoom = dict(num_poste=73306403, lat=45.160833, lon=6.463500)
+
 landmarks = {
         "Alpe d'Huez" : dict(lon=6.070, lat=45.092, alt=1800, marker='o'),
         "Les 2 Alpes" : dict(lon=6.127, lat=45.013, alt=1800, marker='o'),
         "Lautaret"    : dict(lon=6.408, lat=45.038, alt=2058, marker='X'),
         "La Meije"    : dict(lon=6.311, lat=45.008, alt=3500, marker='^'),  # real alt = 3984
         "Pic Blanc"   : dict(lon=6.131, lat=45.128, alt=3000, marker='^'),  # real alt = 3333
+        "Valloire"    : dict(lon=6.463500, lat=45.160833, alt=3000, marker='p'),
     }
 
 def parse_command_line():
@@ -134,6 +142,9 @@ def read_ensemble(datebegin, dateend, frequency, domain='GrandesRousses'):
         if not os.path.exists(filename):
             print(f'WARNING : file {filename} does not exist, using default file')
             filename = os.path.join(datadir, f'aspearome_{member:03d}_2021080106_2022070106_GrandesRousses.nc')
+        if not os.path.exists(filename):
+            print(f'WARNING : no file named {filename} under {datadir}, using default file aspearome_{member:03d}_2021073106_2022070106_GrandesRousses_{frequency}.nc')
+            filename = os.path.join(datadir, f'aspearome_{member:03d}_2021073106_2022070106_GrandesRousses_{frequency}.nc')
         model = xr.open_dataset(filename).clip(0)  # Avoid <0 values
         # Extract domain of interest :
         model = model.where((model.lon>=lonmin-0.25) & (model.lon<=lonmax+0.25) & (model.lat>=latmin-0.25) & (model.lat<=latmax+0.25), drop=True)
@@ -275,13 +286,13 @@ def finalize_fig(figure, imm, label, outname):
     #print(f'Saving figures took {(t3-t2)*1000.}ms')
 
 def read_obs(args):
-    filename = f'ANTILOPE{suffix[args.frequency]}_{args.datebegin.strftime("%Y%m%d%H")}_{args.dateend.strftime("%Y%m%d%H")}_{args.domain}.nc'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'), args.domain)
+    filename = f'ANTILOPE{suffix[args.frequency]}_{args.datebegin.strftime("%Y%m%d%H")}_{args.dateend.strftime("%Y%m%d%H")}_{args.domain}.nc'
     if not os.path.exists(filename):
         print(f'WARNING : file {filename} does not exist, looking for it under {datadir}')
         filename = os.path.join(datadir, filename)
     if not os.path.exists(filename):
         print(f'WARNING : no file named {filename} under {datadir}, using default file ANTILOPEQ_2021080106_2022070106_GrandesRousses.nc')
-        filename = os.path.join(datadir, f'ANTILOPE{suffix[args.frequency]}_2021080106_2022070106_GrandesRousses.nc')
+        filename = os.path.join(datadir, f'ANTILOPE{suffix[args.frequency]}_2021073106_2022070106_GrandesRousses.nc')
     if os.path.exists(filename):
         antilope = xr.open_dataset(filename)
         antilope = antilope.transpose('lat', 'lon', 'time')  # TODO : Fix the dataset in the generation script
@@ -303,6 +314,16 @@ class ParticleFilter(object):
             os.makedirs(self.date_str)
         #goto(self.date_str)
         self.nline, self.ncol = np.shape(obs.rr.data)
+
+        # To look at one specific point
+        #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        # TODO : retourner les bons indices
+        #self.zoom_lat = nearest(obs.lat, zoom['lat'])
+        #self.zoom_lon = nearest(obs.lon, zoom['lon'])
+        #self.zoom_x = index(self.zoom_lat)
+        #self.zoom_y = index(self.zoom_lon)
+        #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
         self.radar = obs
         self.rrmin = 0.
         self.rrmax = max(
@@ -445,7 +466,8 @@ class ParticleFilter(object):
         # Observation error
         # Import multiplicative mask to increase observation error where necessary
         mask = xr.open_dataset(os.path.join(datadir, "mask_error_antilope_GrandesRousses.nc"))
-        parameters['sigma'] = (0.261 + 0.263 * parameters['mu'])*mask.mask  # According to the linear regression of ANTILOPE RMSE vs ANTILOPE RR
+        #parameters['sigma'] = (0.261 + 0.263 * parameters['mu'])*mask.mask  # According to the linear regression of ANTILOPE RMSE vs ANTILOPE RR
+        parameters['sigma'] = (0.261 + 0.263 * parameters['mu'])  # According to the linear regression of ANTILOPE RMSE vs ANTILOPE RR
         # shift of the gamma PDF ==> this defines the weight given to 0mm forecats (=0 if delta=0) !!
         parameters = parameters.assign(delta=lambda x: 10/x.mu)  # TODO : find a better shift than 10/mu
         parameters.delta.data[np.isinf(parameters.delta.data)] = 0  # Si l'obs est nulle on veut imposer une PDF exponentielle décroissante (k=1) sans translation
@@ -667,7 +689,40 @@ class ParticleFilter(object):
 
         return localfields, globalfields
 
+def nearest(array, value):
+            # Find element of "array" the closer to "value"
+            return float(array[np.abs(array - value).argmin()].data)
 
+def plot_chrono(time, obs, raw, assim):
+    fig = plt.figure()
+    obs = obs.sel({'lat':nearest(obs.lat, zoom['lat']), 'lon':nearest(obs.lon, zoom['lon'])}).sel(time=time)
+    #plt.plot(time, np.cumsum(obs.rr.data), label='Antilope', color='k')
+    plt.plot(time, obs.rr.data, label='Antilope', color='k')
+#    fig1,ax1 = plt.subplots((4,4))nrows=2, ncols=2, figsize=(16,7)
+#    fig2,ax2 = plt.subplots((4,4))
+#    i = 0
+#    j = 0
+    for member in assim.member.data:
+        chrono_raw = raw[member].sel({'lat':nearest(raw[member].lat, zoom['lat']), 'lon':nearest(raw[member].lon, zoom['lon'])}).sel(time=time)
+        if member == 1:
+            rawlabel = 'Raw ensemble'
+            assimlabel = 'After assimilation'
+        else:
+            rawlabel = None
+            assimlabel = None
+        #plt.plot(time, np.cumsum(chrono_raw.rr.data), color='sandybrown', label=rawlabel)
+        plt.plot(time, chrono_raw.rr.data, color='sandybrown', label=rawlabel)
+        chrono_assim = assim.sel({'lat':nearest(assim.lat, zoom['lat']), 'lon':nearest(assim.lon, zoom['lon']), 'member':member}).sel(time=time)
+        #plt.plot(time, np.cumsum(chrono_assim.data), color='skyblue', label=assimlabel)
+        plt.plot(time, chrono_assim.data, color='skyblue', label=assimlabel)
+#        j = j + 1
+#        if j==4:
+#            j = 0
+#            i = i + 1
+#    fig1.savefig("Chronologie_raw.pdf", format='pdf')
+#    fig2.savefig("Chronologie_assim.pdf", format='pdf')
+    plt.legend()
+    plt.savefig(f"Chronologie_{time[0].strftime('%Y%m%d%H')}_{time[-1].strftime('%Y%m%d%H')}.pdf", format='pdf')
 
 if __name__ == "__main__":
     args = parse_command_line()
@@ -705,6 +760,8 @@ if __name__ == "__main__":
         pf.selection()  # Global and local selections
 
         localfields, globalfields = pf.output(localfields, globalfields)
+
+    plot_chrono(extract_period, antilope, pearome, localfields)
 
     localfields.to_netcdf(f"Assimilation_locale_{args.datebegin.strftime('%Y%m%d%H')}_{args.dateend.strftime('%Y%m%d%H')}.nc")
     globalfields.to_netcdf(f"Assimilation_globale_{args.datebegin.strftime('%Y%m%d%H')}_{args.dateend.strftime('%Y%m%d%H')}.nc")
