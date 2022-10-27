@@ -15,6 +15,7 @@ import argparse
 import matplotlib as mpl
 #matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 #from snowtools.scores.ensemble import EnsembleScores
 
@@ -40,15 +41,16 @@ coords = dict(
 
 domain = 'GrandesRousses'
 
-savedir = "/home/vernaym/These/figures"
+savedir = "/home/vernaym/These/figures/evaluation"
 
 class Evaluation(object):
 
-    def __init__(self):
+    def __init__(self, threshold):
         #self.data = xr.Dataset()
 #        self.ensemble = ensemble  # DataArray(lat,lon,time,member)
         self.Ne = 16  # TODO : à definir dynamiquement
         self.scores = None
+        self.threshold = threshold  # threshold to use as event detenction in the breier score
 
     def ensemble_attributes(self):
         disp = self.dispersion()
@@ -89,23 +91,23 @@ class Evaluation(object):
             rmse = np.sqrt(np.nanmean(np.square(simu.mean() - obs)))
         return rmse
 
-    def brier_skill_score(self, simu, ref, obs, threshold):
+    def brier_skill_score(self, simu, ref, obs):
         """  BSS = 1 - BS / BSref  """
-        return 1 - self.brier_score(simu, obs, threshold=threshold) / self.brier_score(ref, obs, threshold=threshold)
+        return 1 - self.brier_score(simu, obs) / self.brier_score(ref, obs)
 
-    def brier(self, simu, obs, threshold=1):
+    def brier(self, simu, obs):
 
         if np.shape(simu) == np.shape(obs):  # "Simulation" déterministe
-            psimu = np.where(simu>=threshold, 1, 0)
+            psimu = np.where(simu>=self.threshold, 1, 0)
         else:  # Simulation d'ensemble
-            psimu  = np.count_nonzero(simu>=threshold, axis=1) / self.Ne
-        fobs   = np.where(obs>=threshold, 1, 0)
+            psimu  = np.count_nonzero(simu>=self.threshold, axis=1) / self.Ne
+        fobs   = np.where(obs>=self.threshold, 1, 0)
         brier = np.nanmean((psimu-fobs)**2)
         #print('Brier=',brier)
 
         return brier
 
-    def ROC(self, simu, obs, threshold):
+    def ROC(self, simu, obs):
         """ Here "probability" is the forecasted probability above which the
         event is considered well forecasted by the ensemble.
         We built the contingency table :
@@ -142,7 +144,7 @@ class Evaluation(object):
         plt.legend()
         plt.show()
 
-    def brier_decomposition(self, simu, obs, threshold, nb_cat=17):
+    def brier_decomposition(self, simu, obs,nb_cat=17):
 
         # TODO : la décomposition du score de Brier devrait donner le même résultat
         # que le calcul direct (BS=BSfiab-BSres+BSunc), mais ce n'est pas le cas...
@@ -151,14 +153,14 @@ class Evaluation(object):
         freq_occ = list()
         proba    = list()
         for Nm in range(nb_cat):
-            Ni = np.count_nonzero(np.count_nonzero(simu>=threshold, axis=0)==Nm)
+            Ni = np.count_nonzero(np.count_nonzero(simu>=self.threshold, axis=0)==Nm)
             if Ni > 0:
                 proba.append(Nm/self.Ne)
                 catsize.append(Ni)
-                freq_occ.append(np.count_nonzero(obs[np.count_nonzero(simu>=threshold, axis=0)==Nm]>=threshold)/Ni)
+                freq_occ.append(np.count_nonzero(obs[np.count_nonzero(simu>=self.threshold, axis=0)==Nm]>=self.threshold)/Ni)
         ndays = len(obs)
         fiability   = self.fiability(proba, catsize, freq_occ, ndays)
-        global_freq_obs = np.count_nonzero(obs[obs>=threshold]) / ndays
+        global_freq_obs = np.count_nonzero(obs[obs>=self.threshold]) / ndays
         resolution  = self.resolution(proba, catsize, freq_occ, global_freq_obs, ndays)
         uncertainty = self.uncertainty(global_freq_obs)
 
@@ -261,7 +263,6 @@ class Evaluation(object):
         def nearest(array, value):
             # Find element of "array" the closer to "value"
             return float(array[np.abs(array - value).argmin()].data)
-        threshold = 1
 
         # To Extract specific values where evaluation data (obs nivometeo) is available
         pos = 1
@@ -325,12 +326,14 @@ class Evaluation(object):
                     data[xpid] = list()
                 data[xpid].append(simus[xpid].sel({'lat':nearest(simus[xpid].lat, lat), 'lon':nearest(simus[xpid].lon, lon)}).loc[{'time':dates}].rr.data)
             self.temporal_plot(dates, data['LH0'][-1], obs, num_poste, raw=data['raw'][-1], antilope=data['antilope'][-1], simu2=data['LD0'][-1])
+            idx=5
+            self.plot_assimilation(data['raw'][-1][idx], data['LD0'][-1][idx], data['antilope'][-1][idx], 'LD0', num_poste, np.datetime_as_string(dates.data[idx], unit='D'))
 
             for product in data.keys():
                 if product not in scores.keys():
                     scores[product] = {score:list() for score in scores_list}
                 for score_name, score in scores[product].items():
-                    score.append(getattr(self, score_name)(data[product][0], obs, threshold=threshold))
+                    score.append(getattr(self, score_name)(data[product][0], obs))
 
         self.data['antilope'] = (('num_poste', 'date'), data['antilope'])
         self.data['raw'] = (('num_poste', 'date', 'member'), data['raw'])
@@ -380,7 +383,10 @@ class Evaluation(object):
                 plt.violinplot(x[~np.isnan(x)], showmeans=True, positions=[pos])
                 pos += 1
             ax.set_xticklabels([''] + products)
-            fig.savefig(f'{savedir}/{score}.pdf', formatout='pdf',  bbox_inches='tight')
+            if score == 'brier':
+                fig.savefig(f'{savedir}/{score}_{self.threshold}.pdf', formatout='pdf',  bbox_inches='tight')
+            else:
+                fig.savefig(f'{savedir}/{score}.pdf', formatout='pdf',  bbox_inches='tight')
 
     def temporal_plot(self, time, simu, obs, num_poste, raw=None, antilope=None, simu2=None):
 
@@ -389,8 +395,6 @@ class Evaluation(object):
             color = violin["bodies"][0].get_facecolor().flatten()
             labels.append((mpatches.Patch(color=color), label))
 
-        # TODO : when plotting only 1 simulation and the raw ensemble, use asymetric violinplot (sns):
-        # https://stackoverflow.com/questions/64646449/how-to-create-asymmetric-violin-plot-in-python-using-matplotlib
 
         labels = []
         fig, ax = plt.subplots(figsize=(14,9))
@@ -409,13 +413,31 @@ class Evaluation(object):
         ax.set_ylabel('24 hour precipitation (mm)')
         plt.legend(*zip(*labels))
         fig.savefig(f'{savedir}/{num_poste}.pdf', formatout='pdf',  bbox_inches='tight')
+        plt.close()
         #plt.show()
+
+    def plot_assimilation(self, raw, assim, obs, xpid, num_poste, date, ref=None):
+        """ References :
+        https://stackoverflow.com/questions/64646449/how-to-create-asymmetric-violin-plot-in-python-using-matplotlib
+        https://seaborn.pydata.org/generated/seaborn.violinplot.html
+        """
+        fig, ax = plt.subplots()
+        data = pd.DataFrame({'raw':raw, 'assim':assim})
+        data = data.melt()
+        data['dummy'] = 0
+        sns.violinplot(data=data, split=True, y='value', hue='variable', x='dummy', inner="stick", palette=['sandybrown', 'skyblue'])
+        plt.plot(obs, marker='_', markersize=30, markeredgewidth=3, color='red')
+        if ref is not None:
+            plt.plot(obs, marker='_', markersize=30, markeredgewidth=3, color='dark')
+        fig.savefig(f'{savedir}/assim_{xpid}_{num_poste}_{date}.pdf', formatout='pdf',  bbox_inches='tight')
+
+        #sns.violinplot(data=data, y='24 hour precipitation (mm)', split=True, hue='Simulation')
 
     def eval_simu(self):
         pass
 
 if __name__ == "__main__":
 
-    evaluation = Evaluation()
+    evaluation = Evaluation(threshold=10)
     #evaluation.ensemble_attributes()
     evaluation.plot_scores()
