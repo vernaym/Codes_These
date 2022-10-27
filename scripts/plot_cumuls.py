@@ -335,7 +335,25 @@ def plot(data, vmin, vmax):
 
     fig.savefig(os.path.join(savedir, 'CUMULS_{0:s}_{1:s}.pdf'.format(args.datebegin.strftime('%Y%m%d'), args.dateend.strftime('%Y%m%d'))))
 
-def plot_antilope(antilope):
+def plot_ensemble(ensemble, product):
+    fig,ax = plt.subplots(nrows=4, ncols=4, figsize=(16,7))
+    i = 0
+    j = 0
+    for member in ensemble.member.data:
+        cumul = ensemble.loc[{'member':member}].sum('time').rr
+        cumul.plot(ax=ax[i,j])
+        j = j + 1
+        if j==4:
+            j = 0
+            i = i + 1
+    fig.savefig(f"{savedir}/Cumul_{product}.pdf", format='pdf')
+    j = j + 1
+    if j==2:
+        j = 0
+        i = i + 1
+    return i, j
+
+def plot_deterministe(antilope):
 
     fig, ax = plt.subplots(figsize=(12,6))
     antilope.rr_cumul.plot(ax=ax, cbar_kwargs={"label":'Total precipitation between {0:s} and {1:s} (mm)'.format(args.datebegin.strftime('%Y%m%d'), args.dateend.strftime('%Y%m%d'))}, cmap=plt.cm.coolwarm)
@@ -385,7 +403,7 @@ if __name__ == "__main__":
         #antilopevsarome = (antilope / np.max(antilope.rr_cumul)) / (arome / np.max(arome.rr_cumul))
         vmax = max([np.max(antilope.rr_cumul), np.max(panthere.rr_cumul), np.max(arome.rr_cumul)])
         vmin = min([np.min(antilope.rr_cumul), np.min(panthere.rr_cumul), np.min(arome.rr_cumul)])
-        mask = xr.where((antilopevsarome.rr_cumul>=1.5) | (antilopevsarome.rr_cumul<=0.75), 5, 1)
+        mask = xr.where((antilopevsarome.rr_cumul>=1.5) | (antilopevsarome.rr_cumul<=0.75), 2, 1)
         print(mask)
         data = dict(
             ANTILOPE = antilope,
@@ -405,8 +423,16 @@ if __name__ == "__main__":
         vmax = np.max(antilope.rr_cumul)
         vmin = np.min(antilope.rr_cumul)
 
-
-    plot_antilope(antilope)
+    experiments = dict(
+            LD0      = 'Assimilation_locale_2021080106_2022070106.nc',
+            LH0      = 'Assimilation_locale_2021080106_2022070106_hourly.nc',
+            LDM      = 'Assimilation_locale_2021073106_2022070106_avec_masque.nc',
+        )
+    for xpid, filename in experiments.items():
+        ensemble = xr.open_dataset(os.path.join(datadir, filename))
+        ensemble = ensemble.where((ensemble.lon>=lonmin) & (ensemble.lon<=lonmax) & (ensemble.lat<=latmax) & (ensemble.lat>=latmin), drop=True)
+        plot_ensemble(ensemble, xpid)
+    plot_deterministe(antilope)
 
 
 
