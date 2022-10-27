@@ -34,7 +34,7 @@ coords = dict(
     alp = ['46875', '43125', '4500', '8500'],
     pyr = ['43500', '42000', '-2000', '3500'],
     cor = ['43000', '41000', '8000', '10500'],
-    GrandesRousses = ['45250', '44750', '6000', '6500'],
+    GrandesRousses = ['45240', '44990', '6010', '6490'],
     ange = ['45240', '44990', '6010', '6490']
 )
 
@@ -296,8 +296,13 @@ class Evaluation(object):
         experiments = dict(
                 LD0      = 'Assimilation_locale_2021080106_2022070106.nc',
                 LH0      = 'Assimilation_locale_2021080106_2022070106_hourly.nc',
-#                LDM      = 'Assimilation_locale_2021073106_2022070106_avec_masque.nc',
+                LDM      = 'Assimilation_locale_2021073106_2022070106_avec_masque.nc',
             )
+
+        simus = dict()
+        for xpid,filename in experiments.items():
+            simus[xpid] = self.read_simu(os.path.join(datadir, filename))
+
 
 
         scores_list = ['rmse', 'bias', 'brier']
@@ -318,10 +323,7 @@ class Evaluation(object):
             for xpid,filename in experiments.items():
                 if xpid not in data.keys():
                     data[xpid] = list()
-                # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-                simu = self.read_simu(os.path.join(datadir, filename))  # TODO : read simulations outside this loop !!
-                # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-                data[xpid].append(simu.sel({'lat':nearest(simu.lat, lat), 'lon':nearest(simu.lon, lon)}).loc[{'time':dates}].rr.data)
+                data[xpid].append(simus[xpid].sel({'lat':nearest(simus[xpid].lat, lat), 'lon':nearest(simus[xpid].lon, lon)}).loc[{'time':dates}].rr.data)
             self.temporal_plot(dates, data['LH0'][-1], obs, num_poste, raw=data['raw'][-1], antilope=data['antilope'][-1], simu2=data['LD0'][-1])
 
             for product in data.keys():
