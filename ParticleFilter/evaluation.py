@@ -47,14 +47,14 @@ experiments = dict(
         LD0      = 'Assimilation_locale_2021073106_2022070106_daily.nc',
         LDM      = 'Assimilation_locale_2021073106_2022070106_daily_avec_masque.nc',
         LH0      = 'Assimilation_locale_2021073106_2022070106_hourly.nc',
-        #LHM      = 'Assimilation_locale_2021073106_2022070106_hourly_avec_masque.nc',
+        LHM      = 'Assimilation_locale_2021073106_2022070106_hourly_avec_masque.nc',
     )
 
 xpid_label = dict(
         LD0      = 'Daily assimilation without mask',
         LDM      = 'Daily assimilation with mask',
         LH0      = 'Hourly assimilation without mask',
-        #LHM      = 'Hourly assimilation with mask',
+        LHM      = 'Hourly assimilation with mask',
     )
 
 
@@ -437,7 +437,7 @@ class Evaluation(object):
 
 
         labels = []
-        fig, ax = plt.subplots(figsize=(14,9))
+        fig, ax = plt.subplots(figsize=(100,9))
         ref, = plt.plot(time, obs, marker='.', linestyle='', color='k')
         labels.append((ref, 'Nivometeo reference'))
         if antilope is not None:
