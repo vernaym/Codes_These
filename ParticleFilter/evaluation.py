@@ -101,7 +101,7 @@ class Evaluation(object):
     def rmse(self, simu, obs, **kw):
 
         if np.shape(simu) == np.shape(obs):  # "Simulation" déterministe
-            rmse = np.sqrt(np.nanmean(simu-obs))
+            rmse = np.sqrt(np.nanmean(simu-obs)) if np.nanmean(simu-obs) > 0 else np.nan
         else:  # Simulation d'ensemble
             rmse = np.sqrt(np.nanmean(np.square(simu.mean() - obs)))
         return rmse
@@ -338,6 +338,7 @@ class Evaluation(object):
             lat = self.data.loc[{'num_poste':num_poste}].lat
             lon = self.data.loc[{'num_poste':num_poste}].lon
             obs = self.data.loc[{'num_poste':num_poste}].obs.data
+            # TODO : remove stations with too many nan or only 0
             #obs = obs[:10]
             data['antilope'].append(antilope.sel({'lat':nearest(antilope.lat, lat), 'lon':nearest(antilope.lon, lon)}).loc[{'time':dates}].rr.data)
             data['raw'].append(raw.sel({'lat':nearest(raw.lat, lat), 'lon':nearest(raw.lon, lon)}).loc[{'time':dates}].rr.data)
@@ -415,6 +416,9 @@ class Evaluation(object):
             print(products)
             for product in products:
                 x = self.scores.loc[{'score':score}][product].data
+                for idx, poste in enumerate(self.scores.num_poste.data):
+                    plt.text(pos, x[idx], str(poste), fontsize=6)
+                # TODO : Add horizontal bars corresponding to each element
                 plt.violinplot(x[~np.isnan(x)], showmeans=True, positions=[pos])
                 pos += 1
             ax.set_xticklabels([''] + products)

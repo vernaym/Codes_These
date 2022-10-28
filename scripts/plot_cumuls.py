@@ -289,12 +289,15 @@ def add_scores():
         else:
             return '^'
     scores["marker"] = scores.apply(set_marker, axis=1)  # axis=1 makes sure that function is applied to each row
-    for marker, d in scores.groupby('marker'):
-        sc = plt.scatter(d['lons'], d['lats'], c=d['ratio'], cmap=cmap, norm=norm, marker=marker, s=150, edgecolors='black')
+    for marker, info in scores.groupby('marker'):
+        sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=150, edgecolors='black')
+        labels = [str(num_poste) for num_poste in info['num_poste']]
+        for idx, label in enumerate(labels):
+            txt = plt.text(info['lons'].data[idx], info['lats'].data[idx], label)
 
 def add_radar_positions(ax):
     radars = dict(
-    	moucherotte = dict(lat=45.14776, lon=5.63933, alt=1920,name='Moucherotte'),
+        moucherotte = dict(lat=45.14776, lon=5.63933, alt=1920,name='Moucherotte'),
         colombis    = dict(lat=44.49664, lon=6.21729, alt=1742, name='Colombis'),
         ladole      = dict(lat=46.42565, lon=6.10001, alt=1677, name='La Dole'),
     )
@@ -424,14 +427,16 @@ if __name__ == "__main__":
         vmin = np.min(antilope.rr_cumul)
 
     experiments = dict(
-            LD0      = 'Assimilation_locale_2021080106_2022070106.nc',
-            LH0      = 'Assimilation_locale_2021080106_2022070106_hourly.nc',
-            LDM      = 'Assimilation_locale_2021073106_2022070106_avec_masque.nc',
+            LD0      = 'Assimilation_locale_2021073106_2022070106_daily.nc',
+            LH0      = 'Assimilation_locale_2021073106_2022070106_hourly.nc',
+            LDM      = 'Assimilation_locale_2021073106_2022070106_daily_avec_masque.nc',
+            LHM      = 'Assimilation_locale_2021073106_2022070106_hourly_avec_masque.nc',
         )
     for xpid, filename in experiments.items():
         ensemble = xr.open_dataset(os.path.join(datadir, filename))
         ensemble = ensemble.where((ensemble.lon>=lonmin) & (ensemble.lon<=lonmax) & (ensemble.lat<=latmax) & (ensemble.lat>=latmin), drop=True)
         plot_ensemble(ensemble, xpid)
+        #plot_ensemble_mean(ensemble, xpid)
     plot_deterministe(antilope)
 
 
