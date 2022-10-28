@@ -413,7 +413,7 @@ class Evaluation(object):
             fig,ax = plt.subplots()
             pos = 1
             products = [var for var in self.scores.data_vars]
-            print(products)
+            #print(products)
             for product in products:
                 x = self.scores.loc[{'score':score}][product].data
                 for idx, poste in enumerate(self.scores.num_poste.data):
@@ -459,6 +459,9 @@ class Evaluation(object):
         ax.set_xlabel('Date')
         ax.set_ylabel('24 hour precipitation (mm)')
         plt.legend(*zip(*labels))
+        plt.axhline(y=0, linewidth=1, color='k')
+        for rr in range(10, 170, 10):
+            plt.axhline(y=rr, linewidth=0.1, color='k', linestyle='dotted')
         fig.savefig(f'{savedir}/{num_poste}.pdf', formatout='pdf',  bbox_inches='tight')
         plt.close()
         #plt.show()
