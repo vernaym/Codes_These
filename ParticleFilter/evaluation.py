@@ -122,7 +122,7 @@ class Evaluation(object):
 
         return brier
 
-    def ROC(self, simu, obs):
+    def ROC(self, simu, obs, product, ax, threshold=10):
         """ Here "probability" is the forecasted probability above which the
         event is considered well forecasted by the ensemble.
         We built the contingency table :
@@ -133,31 +133,44 @@ class Evaluation(object):
 
         Then the success rate is a/(a=c) and the false alarm rate is b/(b+d)
         """
-        #for threshold in [1, 5, 10, 20]:
+        simu = simu[~np.isnan(obs)]
+        obs  = obs[~np.isnan(obs)]
+
+        #linestyle_map = {1:':', 10:'-', 20:'--'}
+        #color = next(ax._get_lines.prop_cycler)['color']
+
         succes_rate = list()
         false_alarm = list()
-        for seuil in range(1, self.Ne+1):
-            # Pour un dépassement de seuil :
-#                a = np.count_nonzero(np.where((obs>=threshold) & (np.count_nonzero(simu>=threshold, axis=0)>=seuil)))
-#                b = np.count_nonzero(np.where((obs<threshold) & (np.count_nonzero(simu>=threshold, axis=0)>=seuil)))
-#                c = np.count_nonzero(np.where((obs>=threshold) & (np.count_nonzero(simu>=threshold, axis=0)<seuil)))
-#                d = np.count_nonzero(np.where((obs<threshold) & (np.count_nonzero(simu>=threshold, axis=0)<seuil)))
-            # Pour un intervalle :
-            a = np.count_nonzero(np.where((obs>=1) & (obs<5) & (np.count_nonzero((simu>=1) & (simu<5), axis=0)>=seuil)))
-            b = np.count_nonzero(np.where(((obs<1) | (obs>=5)) & (np.count_nonzero((simu>=1) & (simu<5), axis=0)>=seuil)))
-            c = np.count_nonzero(np.where((obs>=1) & (obs<5) & (np.count_nonzero((simu>=1) & (simu<5), axis=0)<seuil)))
-            d = np.count_nonzero(np.where(((obs<1) | (obs>=5)) & (np.count_nonzero((simu>=1) & (simu<5), axis=0)<seuil)))
-            #print(a,b,c,d)
+        if np.shape(simu) == np.shape(obs):
+            a = np.count_nonzero(np.where((obs>=threshold) & (simu>=threshold)))
+            b = np.count_nonzero(np.where((obs<threshold) & (simu>=threshold)))
+            c = np.count_nonzero(np.where((obs>=threshold) & (simu<threshold)))
+            d = np.count_nonzero(np.where((obs<threshold) & (simu<threshold)))
             succes_rate.append(a/(a+c) if a>0 else 0)
             false_alarm.append(b/(b+d) if b>0 else 0)
-            #print(a/(a+c) if a>0 else 0)
-            #print(b/(b+d) if b>0 else 0)
-            #plt.plot(false_alarm, succes_rate, label=f"Threshold={threshold}mm")
-        plt.plot(false_alarm, succes_rate)
-        plt.xlim([0, 1])
-        plt.ylim([0, 1])
-        plt.legend()
-        plt.show()
+        else:
+            for seuil in range(1, self.Ne+1):
+                # Pour un dépassement de seuil :
+                a = np.count_nonzero(np.where((obs>=threshold) & (np.count_nonzero(simu>=threshold, axis=1)>=seuil)))
+                b = np.count_nonzero(np.where((obs<threshold) & (np.count_nonzero(simu>=threshold, axis=1)>=seuil)))
+                c = np.count_nonzero(np.where((obs>=threshold) & (np.count_nonzero(simu>=threshold, axis=1)<seuil)))
+                d = np.count_nonzero(np.where((obs<threshold) & (np.count_nonzero(simu>=threshold, axis=1)<seuil)))
+#            # Pour un intervalle :
+#            a = np.count_nonzero(np.where((obs>=1) & (obs<5) & (np.count_nonzero((simu>=1) & (simu<5), axis=1)>=seuil)))
+#            b = np.count_nonzero(np.where(((obs<1) | (obs>=5)) & (np.count_nonzero((simu>=1) & (simu<5), axis=1)>=seuil)))
+#            c = np.count_nonzero(np.where((obs>=1) & (obs<5) & (np.count_nonzero((simu>=1) & (simu<5), axis=1)<seuil)))
+#            d = np.count_nonzero(np.where(((obs<1) | (obs>=5)) & (np.count_nonzero((simu>=1) & (simu<5), axis=1)<seuil)))
+
+                succes_rate.append(a/(a+c) if a>0 else 0)
+                false_alarm.append(b/(b+d) if b>0 else 0)
+
+        #plt.plot(false_alarm, succes_rate, label=product, linestyle=linestyle_map[threshold])
+        if np.shape(simu) == np.shape(obs):
+            ax.plot(false_alarm, succes_rate, marker = '+', markersize=12, linestyle='', label=product, color='k')
+        else:
+            ax.plot(false_alarm, succes_rate, label=product)
+
+        return (false_alarm, succes_rate)
 
     def brier_decomposition(self, simu, obs,nb_cat=17):
 
@@ -313,8 +326,6 @@ class Evaluation(object):
         for xpid,filename in experiments.items():
             simus[xpid] = self.read_simu(os.path.join(datadir, filename))
 
-
-
         scores_list = ['rmse', 'bias', 'brier']
         scores = dict()
         dates = self.data.date
@@ -349,6 +360,19 @@ class Evaluation(object):
         self.data['raw'] = (('num_poste', 'date', 'member'), data['raw'])
         for xpid in experiments.keys():
             self.data[xpid] = (('num_poste', 'date', 'member'), data[xpid])
+
+        for threshold in [1, 10, 20]:
+            fig,ax = plt.subplots()
+            ax.set_title(f'Threshold={threshold}mm')
+            for product in ['raw'] + [xpid for xpid in experiments.keys()]:
+                self.ROC(self.data[product].data.reshape(-1, 16), self.data.obs.data.flatten(), product, ax, threshold=threshold)
+            self.ROC(self.data['antilope'].data.flatten(), self.data.obs.data.flatten(), 'antilope', ax, threshold=threshold)
+            ax.set_xlim([0, 0.5])
+            ax.set_ylim([0.5, 1])
+            ax.set_xlabel('False alarm rate')
+            ax.set_ylabel('Sucess rate')
+            ax.legend()
+            fig.savefig(f'{savedir}/ROC_threshold_{threshold}mm.pdf', format='pdf')
 
         tmp = {"score":{"dims": ("score"), "data":scores_list}, "num_poste":{"dims": ("num_poste"), "data":self.data.num_poste.data}}
         tmp.update({key:{"dims": ("score", "num_poste"), "data":[value[score] for score in scores_list]} for key,value in scores.items()})
