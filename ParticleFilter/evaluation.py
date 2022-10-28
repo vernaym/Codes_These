@@ -43,6 +43,21 @@ domain = 'GrandesRousses'
 
 savedir = "/home/vernaym/These/figures/evaluation"
 
+experiments = dict(
+        LD0      = 'Assimilation_locale_2021073106_2022070106_daily.nc',
+        LDM      = 'Assimilation_locale_2021073106_2022070106_daily_avec_masque.nc',
+        LH0      = 'Assimilation_locale_2021073106_2022070106_hourly.nc',
+        #LHM      = 'Assimilation_locale_2021073106_2022070106_hourly_avec_masque.nc',
+    )
+
+xpid_label = dict(
+        LD0      = 'Daily assimilation without mask',
+        LDM      = 'Daily assimilation with mask',
+        LH0      = 'Hourly assimilation without mask',
+        #LHM      = 'Hourly assimilation with mask',
+    )
+
+
 class Evaluation(object):
 
     def __init__(self, threshold):
@@ -294,12 +309,6 @@ class Evaluation(object):
         self.data['member'] = np.arange(1,17)
 
         data = dict(antilope=list(), raw=list())
-        experiments = dict(
-                LD0      = 'Assimilation_locale_2021080106_2022070106.nc',
-                LH0      = 'Assimilation_locale_2021080106_2022070106_hourly.nc',
-                LDM      = 'Assimilation_locale_2021073106_2022070106_avec_masque.nc',
-            )
-
         simus = dict()
         for xpid,filename in experiments.items():
             simus[xpid] = self.read_simu(os.path.join(datadir, filename))
@@ -325,9 +334,10 @@ class Evaluation(object):
                 if xpid not in data.keys():
                     data[xpid] = list()
                 data[xpid].append(simus[xpid].sel({'lat':nearest(simus[xpid].lat, lat), 'lon':nearest(simus[xpid].lon, lon)}).loc[{'time':dates}].rr.data)
-            self.temporal_plot(dates, data['LH0'][-1], obs, num_poste, raw=data['raw'][-1], antilope=data['antilope'][-1], simu2=data['LD0'][-1])
-            idx=5
-            self.plot_assimilation(data['raw'][-1][idx], data['LD0'][-1][idx], data['antilope'][-1][idx], 'LD0', num_poste, np.datetime_as_string(dates.data[idx], unit='D'))
+            #self.temporal_plot(dates, data['LH0'][-1], obs, num_poste, raw=data['raw'][-1], antilope=data['antilope'][-1], simu2=data['LD0'][-1])
+            self.temporal_plot(dates, data['LH0'][-1], obs, num_poste, raw=data['raw'][-1], antilope=data['antilope'][-1], simu2=data['LDM'][-1])
+            idx=10
+            #self.plot_assimilation(data['raw'][-1][:idx], data['LD0'][-1][:idx], data['antilope'][-1][:idx], 'LD0', num_poste, np.datetime_as_string(dates.data[:idx], unit='D'))
 
             for product in data.keys():
                 if product not in scores.keys():
@@ -378,6 +388,7 @@ class Evaluation(object):
             fig,ax = plt.subplots()
             pos = 1
             products = [var for var in self.scores.data_vars]
+            print(products)
             for product in products:
                 x = self.scores.loc[{'score':score}][product].data
                 plt.violinplot(x[~np.isnan(x)], showmeans=True, positions=[pos])
@@ -389,10 +400,15 @@ class Evaluation(object):
                 fig.savefig(f'{savedir}/{score}.pdf', formatout='pdf',  bbox_inches='tight')
 
     def temporal_plot(self, time, simu, obs, num_poste, raw=None, antilope=None, simu2=None):
+        # TODO : add flexibility in the number and oreder of simulations (use dict !)
 
-        def add_label(violin, label):
+        def add_label(violin, label, color=None):
             import matplotlib.patches as mpatches
-            color = violin["bodies"][0].get_facecolor().flatten()
+            if color is None:
+                color = violin["bodies"][0].get_facecolor().flatten()
+            else:
+                violin["bodies"][0].set_facecolor(color)
+                violin["bodies"][0].set_edgecolor(color)
             labels.append((mpatches.Patch(color=color), label))
 
 
@@ -404,10 +420,13 @@ class Evaluation(object):
             antpe, = plt.plot(time, antilope, marker='+', linestyle='', color='red')
             labels.append((antpe, 'Antilope'))
         positions = mpl.dates.date2num(time)
-        add_label(plt.violinplot(np.transpose(simu), positions=positions), 'Hourly assimilation')
         if raw is not None:
+            #add_label(plt.violinplot(np.transpose(raw), positions=positions), 'Raw ensemble', color='sandybrown')
             add_label(plt.violinplot(np.transpose(raw), positions=positions), 'Raw ensemble')
+        add_label(plt.violinplot(np.transpose(simu), positions=positions), 'Hourly assimilation')
+        #add_label(plt.violinplot(np.transpose(simu), positions=positions), 'Hourly assimilation', color='limegreen')
         if simu2 is not None:
+            #add_label(plt.violinplot(np.transpose(simu2), positions=positions), 'Daily assimilation', color='skyblue')
             add_label(plt.violinplot(np.transpose(simu2), positions=positions), 'Daily assimilation')
         ax.set_xlabel('Date')
         ax.set_ylabel('24 hour precipitation (mm)')
@@ -441,3 +460,4 @@ if __name__ == "__main__":
     evaluation = Evaluation(threshold=10)
     #evaluation.ensemble_attributes()
     evaluation.plot_scores()
+
