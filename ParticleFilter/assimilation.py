@@ -8,6 +8,7 @@ from datetime import datetime,timedelta
 import pandas as pd  # Version 0.25.3
 import numpy as np
 import xarray as xr
+import glob
 #import copy
 
 import argparse
@@ -49,6 +50,8 @@ timestep = dict(hourly=1, daily=24)
 norm = plt.Normalize()
 
 zoom = dict(num_poste=73306403, lat=45.160833, lon=6.463500)
+zoom = dict(num_poste=73173400, lat=45.227667, lon=6.404000)
+zoom = dict(num_poste=38020400, lat=45.057167, lon=6.076333)
 
 landmarks = {
         "Alpe d'Huez" : dict(lon=6.070, lat=45.092, alt=1800, marker='o'),
@@ -135,6 +138,14 @@ def goto(path):
     os.chdir(path)
 
 def read_ensemble(datebegin, dateend, frequency, domain='GrandesRousses'):
+    filenames = [os.path.join(datadir, f'aspearome_{mb:03d}_2021073106_2022070106_GrandesRousses_{frequency}.nc') for mb in range(1,17)]
+    pearome = xr.open_mfdataset(filenames, combine='nested', concat_dim='member').compute()
+    pearome['member'] = np.arange(1,17)
+
+    return pearome
+
+def read_ensemble_old(datebegin, dateend, frequency, domain='GrandesRousses'):
+
     pearome = dict()
     for member in range(1,17):
         filename = f'aspearome_{member:03d}_{datebegin}_{dateend}_{domain}_{frequency}.nc'
@@ -306,27 +317,23 @@ def read_obs(args):
 
 class ParticleFilter(object):
 
-    def __init__(self, date, obs, ensemble, plot):
+    def __init__(self, period, obs, ensemble, plot, frequency):
 
-        self.date = date
-        self.date_str = date.strftime('%Y%m%d%H')
-        if not os.path.exists(self.date_str):
-            os.makedirs(self.date_str)
         #goto(self.date_str)
-        self.nline, self.ncol = np.shape(obs.rr.data)
+        #self.nline, self.ncol = np.shape(obs.rr.data)
+        self.period = period
+        self.frequency = frequency
 
         # To look at one specific point
         self.zoom_x = np.argwhere(obs.lat.data == nearest(obs.lat, zoom['lat']))[0][0]
         self.zoom_y = np.argwhere(obs.lon.data == nearest(obs.lon, zoom['lon']))[0][0]
+        self.zoom_lon = nearest(obs.lon, zoom['lon'])
+        self.zoom_lat = nearest(obs.lat, zoom['lat'])
 
-        self.radar = obs
-        self.rrmin = 0.
-        self.rrmax = max(
-                np.nanmax([mod.rr for mod in ensemble.values()]),
-                np.nanmax(radar.rr.data)
-                )
+        self.radar = obs.transpose('lon','lat','time')
         self.ensemble = ensemble
-        self.Ne = len(self.ensemble)
+        self.members = self.ensemble.member
+        self.Ne = len(self.members)
         self.plot = plot
 
         # Plot observation field
@@ -535,9 +542,11 @@ class ParticleFilter(object):
         #SCGD_shape_PDF(Y, k=k, theta=theta, delta=delta, plot_parameters=False)
         #-----------------------------------------------------------------------
 
-    def resample(self, weights):
+#    @speedtest
+    def resample(self, weights, Ne):
+        """ Ne is the number of members to draw for the new enesmble """
         import random
-        Ne = len(weights)
+        #Ne = len(self.members)
         step = 1/Ne
         # Sort particules on [0,1[ according to their weight
         cumulated_weights = np.cumsum(weights, axis=0)
@@ -547,17 +556,20 @@ class ParticleFilter(object):
         rdm = random.uniform(0, step)
         #rdm = np.random.random_sample(np.shape(cumulated_weights[0]))*step
         while rdm <= 1:
-            # Select particle in wich rdm falls
+            # Select particle indicies in wich rdm falls
             #selected_particles.append(np.searchsorted(cumulated_weights, rdm)+1)
-            selected_particles.append(np.apply_along_axis(lambda a: a.searchsorted(rdm), axis=0, arr=cumulated_weights)+1)
+            #selected_particles.append(np.apply_along_axis(lambda a: a.searchsorted(rdm), axis=0, arr=cumulated_weights)+1)
+            selected_particles.append(int(np.apply_along_axis(lambda a: a.searchsorted(rdm), axis=0, arr=cumulated_weights)))  # add index value (int)
             # Go 1 step forward and start again
             rdm += step
         return selected_particles
 
     def normal_dist(self, x , mean , sd):
+        # TODO : check why sum(norm) >> 1
         prob_density = (np.pi*sd) * np.exp(-0.5*((x-mean)/sd)**2)
         return prob_density
 
+#    @speedtest
     def weighting(self, x, mu, sigma, plot_distribution=False, plot_parameters=False, **kw):
 
         draw = self.normal_dist(x, mu, sigma)
@@ -581,40 +593,152 @@ class ParticleFilter(object):
             plt.ylabel('Weight')
             plt.legend(loc ="upper right")
             fig.savefig(f"distribution.pdf", format='pdf')
+            plt.close('all')
 
         return draw
 
     @speedtest
-    def raw_weighting(self):
+    def run(self):
+        """ 
+        Main Particle Filter method that loop over the assimilation dates and grid points.
+        TODO : compléter la doc sur la méthode
+        """
+
         if self.plot:
             # On profite de la loop sur les membres pour tracer les ensembles bruts avant et après interpolation
             fig1, axes1 = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
             fig2, axes2 = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
         i = 0
         j = 0
-        self.weight = dict()
-        self.wpixel = dict()
-        for member, model in self.ensemble.items():
-            # Weighting
-            #----------
-            #self.wpixel[member] = self.SCGD_shape_PDF(model.rr, self.parameters.mu.data, k=self.parameters.k.data, theta=self.parameters.theta.data, delta=self.parameters.delta.data)
-            self.wpixel[member] = self.weighting(model.rr, self.parameters.mu.data, self.parameters.sigma.data)
-            self.wpixel[member].name = 'weight'
-            self.weight[member] = np.sum(self.wpixel[member].data)
 
-            if self.plot:
-                # Plot interpolated model field
-                im1 = plot_field(model.rr, axes1[i,j], self.rrmin, self.rrmax, title=f'member {member:03d}')
-                # Plot raw model field  (do it now to avoid another loop)
-                im2 = plot_field(raw_ensemble[member].rr, axes2[i,j], self.rrmin, self.rrmax, title=f'member {member:03d}')
-            j = j + 1
-            if j==4:
-                j = 0
-                i = i + 1
+        # Initialisation of output fields
+        nlon, nlat = len(self.radar.lon), len(self.radar.lat)
 
-        if self.plot:
-            finalize_fig(fig1, im1, label='24-hour precipitation (mm)', outname=f'{self.date_str}/MODEL_interp_{self.date_str}.pdf')
-            finalize_fig(fig2, im2, label='24-hour precipitation (mm)', outname=f'{self.date_str}/MODEL_raw_{self.date_str}.pdf')
+        null  = np.empty((nlon, nlat, len(self.period)))
+        self.newlocalfield = {m:null.copy() for m in range(1, self.Ne+1)}
+        self.nb_out_raw = np.zeros((nlon, nlat))  # Count number of obs outside raw ensemble
+        self.nb_out_loc = np.zeros((nlon, nlat))  # Count number of obs outside localized ensemble
+        self.inflation = np.zeros((nlon, nlat))  # Count number of time inflation was used
+        for idd,date in enumerate(self.period):
+            print(date)
+            t1 = time.time()
+            if self.frequency == 'hourly':
+                assimilation_period = [date + timedelta(hours=dt) for dt in range(-2,3)]
+            else:
+                assimilation_period = [date]
+            localized_period = self.ensemble.sel({'time':assimilation_period})  # On réduit le dataset pour gagner du temps ensuite
+            #obs = self.radar.sel(time=date)
+            #raw = self.ensemble.sel(time=date)
+            self.date_str = date.strftime('%Y%m%d%H')
+            if not os.path.exists(self.date_str):
+                os.makedirs(self.date_str)
+            #weights = np.zeros((nlon, nlat))  # Not working with localization
+            # Loop over the domain's pixels
+            # TODO : avec la localisation on ne peut pas traiter les pixels sur les bords du domaine,
+            # il faut donc une verrue pour tronquer le domaine
+            # WARNING : virer les pixels du bord des visualisation/evaluations ensuite
+            xloc = 3
+            yloc = 3
+            for idx,lon in enumerate(self.radar.lon.data[xloc:-xloc]):
+                idx = idx + xloc
+                localisation_lon = [self.radar.lon.data[idx+dlon] for dlon in range(-xloc,xloc+1)]
+                localized_lon = localized_period.sel({'lon':localisation_lon})
+                for idy,lat in enumerate(self.radar.lat.data[yloc:-yloc]):
+                    idy = idy + yloc
+                    localisation_lat = [self.radar.lat.data[idy+dlat] for dlat in range(-yloc,yloc+1)]
+                    localized = localized_lon.sel({'lon':localisation_lon})
+                    raw_localized = localized.rr.data.flatten()  # "Super ensemble"
+
+                    #obs, raw, raw_localized, parameters = self.select_data(date, lon, lat, idx, idy, assimilation_period)
+                    obs, raw, parameters = self.select_data(date, lon, lat)
+
+                    # Is the observation outside the ensemble ?
+                    if (np.min(raw) > obs) or (np.max(raw) < obs):
+                        self.nb_out_raw[idx, idy] += 1
+                    if (np.min(raw_localized) > obs) or (np.max(raw_localized) < obs):
+                        self.nb_out_loc[idx, idy] += 1
+
+                    # 2. Weighting
+                    #-------------
+                    #self.weighting(raw.rr.data.flatten(), parameters.mu.data, parameters.sigma.data)
+                    #sigma = parameters.sigma.data/2.
+                    #weights = self.weighting(raw_localized, parameters.mu.data, sigma, plot_distribution=True)
+                    #weights = self.weighting(raw_localized, parameters.mu.data, parameters.sigma.data, plot_distribution=True)
+                    weights = self.weighting(raw_localized, parameters.mu.data, parameters.sigma.data)
+
+                    # 2.b. Inflation
+                    #---------------
+                    # BUT : lorsque l'obs est en dehors de l'ensemble, on augmente l'erreur d'obs pour assurer qu'un 
+                    # nombre suffisant de membres est selectionné.
+                    # TODO : s'assurer que c'est bien compatible avec la technique de localisation
+                    while np.max(weights) < 0.2:  # TODO : mieux définir le critère d'inflation
+                        weights = self.weighting(raw_localized, parameters.mu.data, parameters.sigma.data*2)  # TODO : choisir comment adapter l'erreur d'obs
+                        self.inflation[idx, idy] += 1
+                    weights = weights / np.sum(weights)
+
+                    # 3. Resampling
+                    #--------------
+                    # ECC is the order of members indicies (from 0 to 15 !) sorted by increasing precipitation
+                    selection_locale = self.resample(weights, self.Ne)  # Idicies of selected particles from the "super-ensemble"
+                    tmp = np.sort(raw_localized[selection_locale])
+
+                    # 4. ECC for consistency with raw members
+                    #----------------------------------------
+                    ecc = np.argsort(self.ensemble.sel({'time':date, 'lon':lon, 'lat':lat}).rr.data, axis=0)
+                    new = tmp[ecc]
+                    # To plot the posterior distribution:
+                    # self.weighting(new, parameters.mu.data, parameters.sigma.data, plot_distribution=True)
+
+                    # TODO : remplir une liste plutot que boucler
+                    for member, field in self.newlocalfield.items():
+                        field[idx,idy,idd]  = new[member-1]  # fill new member
+
+            if self.plot:  # Not with localisation
+                plot_weights(date, weights)
+            t2 = time.time()
+            print('Time for one iteration : ',(t2-t1)*1000.0)
+
+    @speedtest
+    def plot_weights(self, date, weights):
+        # TODO : find a way to plot weights...
+        pass
+
+#    @speedtest
+    def select_data(self, date, lon, lat):
+
+        # TODO : améliorer la performance de cette méthode (~2ms * nombre de pixel * nombre de dates...)
+        # TODO : Extraire un domaine légèrement plus grand que le domaine couvert par l'assimilation pour
+        # appliquer le localisation aux points en hors du domaine
+        # TODO : untiliser une distance (cerle) plutot qu'on rectangle pour la localisation
+        # TODO : passer les paramètres de localisation (rayon, fenetre temporelle) en argument pour plus
+        # de flexibilité (etude de sensibilité, dépendance à la situation,...)
+        #if (lon == self.zoom_lon) and (lat == self.zoom_lat):
+        # 1. Localisation
+        #----------------
+        t1 = time.time()
+        #localisation_lon = [self.radar.lon.data[idx+dlon] for dlon in range(-3,4)]
+        #localisation_lat = [self.radar.lat.data[idy+dlat] for dlat in range(-3,4)]
+        #localisation_lon = [self.radar.lon.data[idx]]
+        #localisation_lat = [self.radar.lat.data[idy]]
+        # TODO : la lecture de l'ensemble localizé représente >50% du temps pour une itération de date
+        #raw_localized = self.ensemble.sel({'time':assimilation_period, 'lon':localisation_lon, 'lat':localisation_lat})
+        # TODO : drop data before "assimilation_period[0]" to reduce the time 
+        t2 = time.time()
+        #print((t2-t1)*1000.0)
+        t3 = time.time()
+        #print((t3-t2)*1000.0)
+        raw = self.ensemble.sel({'time':date, 'lon':lon, 'lat':lat}).rr.data
+        t4 = time.time()
+        #print((t4-t3)*1000.0)
+        obs = self.radar.sel({'time':date, 'lon':lon, 'lat':lat})
+        t5 = time.time()
+        #print((t5-t4)*1000.0)
+        parameters = self.parameters.sel({'time':date, 'lon':lon, 'lat':lat})
+        t6 = time.time()
+        #print((t6-t5)*1000.0)
+
+        #return obs, raw, raw_localized, parameters
+        return obs, raw, parameters
 
     def selection(self):
         self.global_selection()
@@ -693,33 +817,75 @@ class ParticleFilter(object):
 
     @speedtest
     def output(self, localfields, globalfields):
+
+#        assim_stats = xr.Dataset(
+#                name   = ['out_raw', 'out_loc', 'inflation'],
+#                variable   = [self.nb_out_raw, self.nb_out_loc, self.inflation],
+#                dims   = ["lon", "lat"],
+#                coords = dict(lon=self.radar.lon, lat=self.radar.lat),
+#                attrs  = dict(description="Number of assimilation step when the observation was outside the ensemble and inlfation used"),
+#            )
+#        assim_stats.to_netcdf(f"nb_obs_outside_ensemble_{self.period[0].strftime('%Y%m%d%H')}_{self.period[-1].strftime('%Y%m%d%H')}_{self.frequency}.nc")
+        out_raw = xr.DataArray(
+                name   = 'out_raw',
+                data   = self.nb_out_raw,
+                dims   = ["lon", "lat"],
+                coords = dict(lon=self.radar.lon, lat=self.radar.lat),
+                attrs  = dict(description="Number of assimilation step when the observation was outside the raw ensemble"),
+            )
+        out_raw.to_netcdf(f"nb_obs_outside_raw_ensemble_{self.period[0].strftime('%Y%m%d%H')}_{self.period[-1].strftime('%Y%m%d%H')}_{self.frequency}.nc")
+        out_loc = xr.DataArray(
+                name   = 'out_loc',
+                data   = self.nb_out_loc,
+                dims   = ["lon", "lat"],
+                coords = dict(lon=self.radar.lon, lat=self.radar.lat),
+                attrs  = dict(description="Number of assimilation step when the observation was outside the localized ensemble"),
+            )
+        out_loc.to_netcdf(f"nb_obs_outside_localized_ensemble_{self.period[0].strftime('%Y%m%d%H')}_{self.period[-1].strftime('%Y%m%d%H')}_{self.frequency}.nc")
+        inflation = xr.DataArray(
+                name   = 'inflation',
+                data   = self.inflation,
+                dims   = ["lon", "lat"],
+                coords = dict(lon=self.radar.lon, lat=self.radar.lat),
+                attrs  = dict(description="Number of assimilation step when inlfation was used"),
+            )
+        inflation.to_netcdf(f"inflation_{self.period[0].strftime('%Y%m%d%H')}_{self.period[-1].strftime('%Y%m%d%H')}_{self.frequency}.nc")
+
         # This method takes ~3.5 s but most of the time (~3.3s) is spent
         # while saving figures.
 
+        # TODO : trouver un moyen de plotter les champs de poids
+
         if self.plot:
-            fig1, ax1 = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
+            #fig1, ax1 = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
             fig2, ax2 = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
-            fig3, axes3 = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
+            #fig3, axes3 = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
         i = 0
         j = 0
         for m in range(1, self.Ne+1):
             #t1 = time.time()
-            localfields.loc[{'time':self.date, 'member':m}] = self.newlocalfield[m]  # self.newlocalfield is a numpy array
+            #localfields.loc[{'time':self.date, 'member':m}] = self.newlocalfield[m]  # self.newlocalfield is a numpy array
+            localfields.loc[{'member':m}] = self.newlocalfield[m]  # self.newlocalfield is a numpy array
             #t2 = time.time()
             #print(f'Wrinting localfields took {(t2-t1)*1000.}ms')
-            globalfields.loc[{'time':self.date, 'member':m}] = self.ensemble[self.selection_globale[m-1]].rr.data  # self.ensemble is a DataArray
+            #globalfields.loc[{'time':self.date, 'member':m}] = self.ensemble[self.selection_globale[m-1]].rr.data  # self.ensemble is a DataArray
             #t3 = time.time()
             #print(f'Wrinting globalfields took {(t3-t2)*1000.}ms')
 
             if self.plot:
+                self.rrmin = 0.
+                self.rrmax = max(
+                        np.nanmax(self.ensemble.sel(time=date).rr.data),
+                        np.nanmax(self.radar.sel(time=date).rr.data)
+                        )
                 # Plot local weight fields
                 vmin = 0
                 #vmax = 0.25  # TODO : vmax=f(sigma) [peut être renvoyé par la fonction de la PDF comme le max de probabilité]
                 #vmax = np.max(gamma_shape_PDF(parameters.mu.data, k=parameters.k.data, theta=parameters.theta.data))
-                vmax = max([np.max(ww.data) for ww in self.local_weights.values()])
-                im3 = plot_field(self.local_weights[m], axes3[i,j], vmin, vmax, title=f'member {m:03d}, total weight={self.weight[m]:.3f}', cmap=plt.cm.Greys)
+                #vmax = max([np.max(ww.data) for ww in self.local_weights.values()])
+                #im3 = plot_field(self.local_weights[m], axes3[i,j], vmin, vmax, title=f'member {m:03d}, total weight={self.weight[m]:.3f}', cmap=plt.cm.Greys)
 
-                im1 = plot_field(globalfields.loc[{'time':self.date, 'member':m}], ax1[i,j], self.rrmin, self.rrmax, title=f'Member {self.selection_globale[m-1]:03d}')
+                #im1 = plot_field(globalfields.loc[{'time':self.date, 'member':m}], ax1[i,j], self.rrmin, self.rrmax, title=f'Member {self.selection_globale[m-1]:03d}')
                 im2 = plot_field(localfields.loc[{'time':self.date, 'member':m}], ax2[i,j], self.rrmin, self.rrmax, title=f'New member {m:03d}')
                 #t4 = time.time()
                 #print(f'Plotting took {(t4-t3)*1000.}ms')
@@ -729,9 +895,9 @@ class ParticleFilter(object):
                 i = i + 1
 
         if self.plot:
-            finalize_fig(fig1, im1, label='24-hour precipitation (mm)', outname=f'{self.date_str}/ASSIM_globale_{self.date_str}.pdf')
+            #finalize_fig(fig1, im1, label='24-hour precipitation (mm)', outname=f'{self.date_str}/ASSIM_globale_{self.date_str}.pdf')
             finalize_fig(fig2, im2, label='24-hour precipitation (mm)', outname=f'{self.date_str}/ASSIM_locale_{self.date_str}.pdf')
-            finalize_fig(fig3, im3, label='Weight', outname=f'{self.date_str}/WEIGHTS_{self.date_str}.pdf')
+            #finalize_fig(fig3, im3, label='Weight', outname=f'{self.date_str}/WEIGHTS_{self.date_str}.pdf')
             #t5 = time.time()
             #print(f'Finalisation of figures took {(t5-t4)*1000.}ms')
 
@@ -784,7 +950,7 @@ if __name__ == "__main__":
     pearome = read_ensemble(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'), args.frequency)
     localfields = xr.DataArray(
             name   = 'rr',
-            dims   = ["lat", "lon", "time", "member"],
+            dims   = ["lon", "lat", "time", "member"],
             coords = dict(lon=antilope.lon, lat=antilope.lat, time=extract_period, member=range(1,17)),
             attrs  = dict(description="24 hour precipitation",units="mm"),
         )
@@ -798,23 +964,19 @@ if __name__ == "__main__":
     # TODO : on doit peut être pouvoir se passer de la boucle temporelle en utilisant les fonctionalités de xarray
     #date = args.datebegin
     #while date <= args.dateend:
-    for date in extract_period:
-        print(date)
-        radar           = antilope.sel(time=date)
-        raw_ensemble    = {k:v.sel(time=date) for k,v in pearome.items()}
-        interp_ensemble = {k:v.interp(lon=radar.lon, lat=radar.lat) for k,v in raw_ensemble.items()}
+    #r date in extract_period:
+    interp_ensemble = pearome.interp(lon=antilope.lon, lat=antilope.lat).clip(0)  # Avoid <0 precipitation values
+    pf = ParticleFilter(extract_period, antilope, interp_ensemble, args.plot, args.frequency)
+    pf.pdf_parameters()
+    pf.run()  # Compute weight fields before normalisation + plot raw/interp fields
+    #pf.selection()  # Global and local selections
 
-        pf = ParticleFilter(date, radar, interp_ensemble, args.plot)
-        pf.pdf_parameters()
-        pf.raw_weighting()  # Compute weight fields before normalisation + plot raw/interp fields
-        pf.selection()  # Global and local selections
-
-        localfields, globalfields = pf.output(localfields, globalfields)
+    localfields, globalfields = pf.output(localfields, globalfields)
 
 #    plot_chrono(extract_period, antilope, pearome, localfields)
 
     localfields.to_netcdf(f"Assimilation_locale_{args.datebegin.strftime('%Y%m%d%H')}_{args.dateend.strftime('%Y%m%d%H')}_{args.frequency}.nc")
-    globalfields.to_netcdf(f"Assimilation_globale_{args.datebegin.strftime('%Y%m%d%H')}_{args.dateend.strftime('%Y%m%d%H')}_{args.frequency}.nc")
+    #globalfields.to_netcdf(f"Assimilation_globale_{args.datebegin.strftime('%Y%m%d%H')}_{args.dateend.strftime('%Y%m%d%H')}_{args.frequency}.nc")
 
 #        date = date + timedelta(days=1)
 
