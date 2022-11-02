@@ -55,7 +55,9 @@ pearome_desc = {member:'PG1PEAROM{0:03d}'.format(member) for member in range(1,1
 # TODO : assurer que les points de grilles du sous domaines (coordonnées + pas lat/lon) sont
 # bien confondus aves les points de la grille native pour éviter une interpolation
 coords = dict(
-    alp = ['47000', '43000', '4500', '8500'],
+    #alp = ['47000', '43000', '4500', '8500'],
+    #alp = ['46450', '44100', '5400', '7200'],  # extaction ANTILOPE
+    alp = ['46800', '43700', '5000', '7600'],  # To take into account localisation
     pyr = ['43500', '42000', '-2000', '3500'],
     cor = ['43000', '41000', '8000', '11500'],
     GrandesRousses = ['45250', '44750', '6000', '6500']
@@ -399,31 +401,35 @@ class PrecipitationExtractor(object):
             print(os.environ["DMT_DATE_PIVOT"])
             self.get_data(date)
 
+        if len(self.missing_grib) > 0:
+            with open('missing_grib', 'w') as f:
+                for m in self.missing_grib:
+                    f.write('{0:s}\n'.format(m))
+
         if self.args.read:
+
             rr = xr.DataArray(
                 data = np.transpose(self.rr, (1,2,0)),  # Pour passer la dimension temporelle en dernier : (lon, lat, time)
                 name = 'rr',
                 dims=["lat", "lon", "time"],
                 #coords=dict(lon=self.lon[0], lat=self.lat[:,0], time=self.timecoord, reference_time=reference_time,),
                 coords=dict(lon=self.lon[0], lat=self.lat[:,0], time=self.timecoord, reference_time=self.timecoord[0],),
-                attrs=dict(description="24 hour precipitation",units="mm/24h"),  # TODO : modifier le cumul
+                attrs=dict(description="Precipitation",units="mm"),
             )
 
             datedeb = self.args.datebegin-timedelta(hours=24)
-            if self.member is not None:
-                outname = '{0:s}_{1:03d}_{2:s}_{3:s}_{4:s}.nc'.format(self.args.model, self.member, datedeb.strftime('%Y%m%d%H'), self.args.dateend.strftime('%Y%m%d%H'), self.domain)
-            else:
+            if self.member is None:
                 outname = '{0:s}_{1:s}_{2:s}_{3:s}.nc'.format(self.args.model, datedeb.strftime('%Y%m%d%H'), self.args.dateend.strftime('%Y%m%d%H'), self.domain)
-            # WARNING : DO NOT WORK ON GUPPY !
+                rr.to_netcdf(outname)
+                return None
+            else:
+                return rr
+            # WARNING : DOES NOT WORK ON GUPPY !
             # Transfert the extracted files locally and rerun this script
-            rr.to_netcdf(outname)
-
             #cumul.dump_to_nc('CUMUL_{0:s}_{1:s}_{2:s}_{3:s}.nc'.format(args.model, args.datebegin.strftime("%Y%m%d%H"), args.dateend.strftime("%Y%m%d%H"), domain), variablename="rr_cumul")
+        else:
+            return None
 
-        if len(self.missing_grib) > 0:
-            with open('missing_grib', 'w') as f:
-                for m in self.missing_grib:
-                    f.write('{0:s}\n'.format(m))
 
     def read_nivometeo_coords():
         metadata = pd.read_csv(os.path.join(datadir, 'postes_nivometeo.csv'), sep=';')
@@ -472,9 +478,15 @@ if __name__ == "__main__":
             elif args.pdt == 1:
                 #dt = 1
                 echeances = range(9, 34)
+            precipitation = dict()
             for member in range(1, 17):
                 precip = PrecipitationExtractor(args, echeances, domain, timecoord, member=member)
-                precip.extract(datespivot)
+                precipitation[member] = precip.extract(datespivot)
+            goto(workdir)
+            datedeb = args.datebegin-timedelta(hours=24)
+            outname = '{0:s}_{1:s}_{2:s}_{3:s}.nc'.format(args.model, datedeb.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'), domain)
+            data = xr.concat([arr for arr in precipitation.values()], pd.Index(precipitation.keys(), name="member")).transpose('lat', 'lon', 'time', 'member')
+            data.to_netcdf(outname)
         else:
             echeance = 24
             # AROME data are extracted from hendrix : 24h forecasts lead times provide the previous 24h precipitation accumulation
