@@ -40,7 +40,8 @@ ech = 24
 
 # Liste des coordonnées attendues par la commande dap3: lat_max, lat_min, lon_max, lon_min
 coords = dict(
-    alp = ['46875', '43125', '4500', '8500'],
+    #alp = ['46875', '43125', '4500', '8500'],
+    alp = ['46450', '44100', '5400', '7200'],
     pyr = ['43500', '42000', '-2000', '3500'],
     cor = ['43000', '41000', '8000', '10500'],
     GrandesRousses = ['45250', '44750', '6000', '6500'],
@@ -111,7 +112,7 @@ def get_date(a_string):
         return date
 
 def date_range(start, end, dt):
-    start = start.replace(hour=6)
+    start = start
     dates = list()
     while start <= end:
         dates.append(start)
