@@ -35,7 +35,8 @@ coords = dict(
     alp = ['46875', '43125', '4500', '8500'],
     pyr = ['43500', '42000', '-2000', '3500'],
     cor = ['43000', '41000', '8000', '10500'],
-    GrandesRousses = ['45240', '44990', '6010', '6490'],
+    #GrandesRousses = ['45240', '44990', '6010', '6490'],
+    GrandesRousses = ['45210', '45020', '6040', '6460'],  # TODO : modifier quand les bords du domaines seront inclus dans la localisation
     ange = ['45240', '44990', '6010', '6490']
 )
 
@@ -44,17 +45,23 @@ domain = 'GrandesRousses'
 savedir = "/home/vernaym/These/figures/evaluation"
 
 experiments = dict(
+        GD0      = 'Assimilation_globale_2021073106_2022070106_daily.nc',
         LD0      = 'Assimilation_locale_2021073106_2022070106_daily.nc',
         LDM      = 'Assimilation_locale_2021073106_2022070106_daily_avec_masque.nc',
+        LDML     = 'Assimilation_locale_2021073106_2022070106_daily_avec_masque_et_localisation.nc',
         LH0      = 'Assimilation_locale_2021073106_2022070106_hourly.nc',
         LHM      = 'Assimilation_locale_2021073106_2022070106_hourly_avec_masque.nc',
+        LHML     = 'Assimilation_locale_2021080106_2022063006_hourly_avec_localisation.nc',
     )
 
 xpid_label = dict(
+        GD0      = 'Global daily assimilation',
         LD0      = 'Daily assimilation without mask',
         LDM      = 'Daily assimilation with mask',
+        LDML     = 'Daily assimilation with mask and localization',
         LH0      = 'Hourly assimilation without mask',
         LHM      = 'Hourly assimilation with mask',
+        LHML     = 'Hourly assimilation with mask and localization',
     )
 
 
@@ -172,7 +179,7 @@ class Evaluation(object):
 
         return (false_alarm, succes_rate)
 
-    def brier_decomposition(self, simu, obs,nb_cat=17):
+    def brier_decomposition(self, simu, obs, nb_cat=17):
 
         # TODO : la décomposition du score de Brier devrait donner le même résultat
         # que le calcul direct (BS=BSfiab-BSres+BSunc), mais ce n'est pas le cas...
@@ -185,26 +192,30 @@ class Evaluation(object):
             if Ni > 0:
                 proba.append(Nm/self.Ne)
                 catsize.append(Ni)
+                print(simu, obs)
+                # TODO : problème avec les dimensions de "simu" lorsque simu est un ensemble...
                 freq_occ.append(np.count_nonzero(obs[np.count_nonzero(simu>=self.threshold, axis=0)==Nm]>=self.threshold)/Ni)
         ndays = len(obs)
-        fiability   = self.fiability(proba, catsize, freq_occ, ndays)
         global_freq_obs = np.count_nonzero(obs[obs>=self.threshold]) / ndays
-        resolution  = self.resolution(proba, catsize, freq_occ, global_freq_obs, ndays)
-        uncertainty = self.uncertainty(global_freq_obs)
 
-        return fiability, resolution, uncertainty
+        return proba, catsize, freq_occ, global_freq_obs
 
-    def fiability(self, proba, catsize, freq_occ, ndays):
+    def fiability(self, simu, obs):
+        ndays = len(obs)
+        proba, catsize, freq_occ, global_freq_occ = self.brier_decomposition(simu, obs)
         fiability = 1/ndays*np.sum([Ni*(proba-focc)**2 for (proba, Ni, focc) in zip(proba, catsize, freq_occ)])
         print('Fiability=',fiability)
         return fiability
 
-    def resolution(self, proba, catsize, freq_occ, global_freq_obs, ndays):
+    def resolution(self, simu, obs):
+        ndays = len(obs)
+        proba, catsize, freq_occ, global_freq_obs = self.brier_decomposition(simu, obs)
         resolution = 1/ndays*np.sum([Ni*(focc-global_freq_obs)**2 for (proba, Ni, focc) in zip(proba, catsize, freq_occ)])
         print('Resolution=',resolution)
         return resolution
 
-    def uncertainty(self, global_freq_obs):
+    def uncertainty(self, simu, obs):
+        proba, catsize, freq_occ, global_freq_obs = self.brier_decomposition(simu, obs)
         uncertainty =  global_freq_obs*(1-global_freq_obs)**2
         print('Uncertainty=',uncertainty)
         return uncertainty
@@ -244,7 +255,7 @@ class Evaluation(object):
 
     def read_raw_ensemble(self):
         filenames = [os.path.join(datadir, f'aspearome_{mb:03d}_2021073106_2022070106_GrandesRousses_daily.nc') for mb in range(1,17)]
-        raw = xr.open_mfdataset(filenames, combine='nested', concat_dim='member').compute()
+        raw = xr.open_mfdataset(filenames, combine='nested', concat_dim='member').compute().clip(0)
         raw['member']=np.arange(1,17)
         raw = raw.transpose('lat', 'lon', 'time', 'member')  # transpose data to put dimension in the same order as assimilated fields
 
@@ -270,9 +281,9 @@ class Evaluation(object):
             #print(simulation.time.data[127*24-1])
             #print(simulation.time.data[126*24])
             simulation['time'] = simulation.time-np.timedelta64(7, 'h')
-            toto=simulation.loc[{'lat':44.99, 'lon':6.01, 'member':1}].rr.data
+            #toto=simulation.loc[{'lat':44.99, 'lon':6.01, 'member':1}].rr.data
             simulation = simulation.resample(time='D').sum(dim='time')  # !!! VERY SLOW !!!
-            tata=simulation.loc[{'lat':44.99, 'lon':6.01, 'member':1}].rr.data
+            #tata=simulation.loc[{'lat':44.99, 'lon':6.01, 'member':1}].rr.data
             #print(toto[126*24:127*24-1])
             #print(np.sum(toto[126*24:127*24-1]), tata[126])
             simulation['time'] = simulation.time+np.timedelta64(30, 'h')
@@ -326,6 +337,7 @@ class Evaluation(object):
         for xpid,filename in experiments.items():
             simus[xpid] = self.read_simu(os.path.join(datadir, filename))
 
+        #scores_list = ['rmse', 'bias', 'brier', 'fiability', 'resolution', 'uncertainty']
         scores_list = ['rmse', 'bias', 'brier']
         scores = dict()
         dates = self.data.date
@@ -347,13 +359,14 @@ class Evaluation(object):
                     data[xpid] = list()
                 data[xpid].append(simus[xpid].sel({'lat':nearest(simus[xpid].lat, lat), 'lon':nearest(simus[xpid].lon, lon)}).loc[{'time':dates}].rr.data)
             #self.temporal_plot(dates, data['LH0'][-1], obs, num_poste, raw=data['raw'][-1], antilope=data['antilope'][-1], simu2=data['LD0'][-1])
-            self.temporal_plot(dates, data['LH0'][-1], obs, num_poste, raw=data['raw'][-1], antilope=data['antilope'][-1], simu2=data['LDM'][-1])
+            self.temporal_plot(dates, data['LDML'][-1], obs, num_poste, raw=data['raw'][-1], antilope=data['antilope'][-1], simu2=data['LDM'][-1])
             idx=10
             #self.plot_assimilation(data['raw'][-1][:idx], data['LD0'][-1][:idx], data['antilope'][-1][:idx], 'LD0', num_poste, np.datetime_as_string(dates.data[:idx], unit='D'))
 
             for product in data.keys():
                 if product not in scores.keys():
                     scores[product] = {score:list() for score in scores_list}
+                print(product, np.min(data[product]))
                 for score_name, score in scores[product].items():
                     score.append(getattr(self, score_name)(data[product][0], obs))
 
