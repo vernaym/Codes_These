@@ -21,9 +21,14 @@ import seaborn as sns
 
 
 ##############################################################################################
+# USAGE : p evaluation.py $domain
 ##############################################################################################
 
+#domain = 'GrandesRousses'
+domain = sys.argv[1]
+
 datadir = '/home/vernaym/These/DATA'
+workdir = '/home/vernaym/workdir/ASSIMILATION/'
 
 latmax = 45.240
 latmin = 44.990
@@ -40,18 +45,18 @@ coords = dict(
     ange = ['45240', '44990', '6010', '6490']
 )
 
-domain = 'GrandesRousses'
 
-savedir = "/home/vernaym/These/figures/evaluation"
+savedir = f"/home/vernaym/These/figures/evaluation/{domain}"
 
 experiments = dict(
-        GD0      = 'Assimilation_globale_2021073106_2022070106_daily.nc',
-        LD0      = 'Assimilation_locale_2021073106_2022070106_daily.nc',
-        LDM      = 'Assimilation_locale_2021073106_2022070106_daily_avec_masque.nc',
-        LDML     = 'Assimilation_locale_2021073106_2022070106_daily_avec_masque_et_localisation.nc',
-        LH0      = 'Assimilation_locale_2021073106_2022070106_hourly.nc',
-        LHM      = 'Assimilation_locale_2021073106_2022070106_hourly_avec_masque.nc',
-        LHML     = 'Assimilation_locale_2021080106_2022063006_hourly_avec_localisation.nc',
+#        GD0      = 'Assimilation_globale_2021073106_2022070106_daily.nc',
+#        LD0      = 'Assimilation_locale_2021073106_2022070106_daily.nc',
+#        LDM      = 'Assimilation_locale_2021073106_2022070106_daily_avec_masque.nc',
+#        LDML     = 'Assimilation_locale_2021073106_2022070106_daily_avec_masque_et_localisation.nc',
+#        LH0      = 'Assimilation_locale_2021073106_2022070106_hourly.nc',
+#        LHM      = 'Assimilation_locale_2021073106_2022070106_hourly_avec_masque.nc',
+#        LHML     = 'Assimilation_locale_2021080106_2022063006_hourly_avec_localisation.nc',
+        LDLA     = 'XP06_assimilation_quotidienne_ponctuelle_avec_localisation/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
     )
 
 xpid_label = dict(
@@ -62,6 +67,7 @@ xpid_label = dict(
         LH0      = 'Hourly assimilation without mask',
         LHM      = 'Hourly assimilation with mask',
         LHML     = 'Hourly assimilation with mask and localization',
+        LDLA     = 'Daily assimilation without mask, with localization'
     )
 
 
@@ -263,11 +269,11 @@ class Evaluation(object):
 
     def read_simu(self, filename):
         if not os.path.exists(filename):
-            print(f'WARNING : file {filename} does not exist, looking for it under {datadir}')
-            filename = os.path.join(datadir, filename)
+            print(f'WARNING : file {filename} does not exist, looking for it under {workdir}')
+            filename = os.path.join(workdir, filename)
 
         if os.path.exists(filename):
-            simulation =  xr.open_dataset(os.path.join(datadir, filename))
+            simulation =  xr.open_dataset(filename)
         else:
             print(f'ERROR : file {filename} does not exist')
             sys.exit(1)
@@ -335,13 +341,14 @@ class Evaluation(object):
         data = dict(antilope=list(), raw=list())
         simus = dict()
         for xpid,filename in experiments.items():
-            simus[xpid] = self.read_simu(os.path.join(datadir, filename))
+            simus[xpid] = self.read_simu(os.path.join(workdir, filename))
 
         #scores_list = ['rmse', 'bias', 'brier', 'fiability', 'resolution', 'uncertainty']
         scores_list = ['rmse', 'bias', 'brier']
         scores = dict()
         dates = self.data.date
         #dates = dates[:10]
+        liste_postes = np.array([])
         for num_poste in self.data.num_poste.data:
 #            num_poste = row['num_poste']
 #            lat       = row['lat']
@@ -350,25 +357,31 @@ class Evaluation(object):
             lat = self.data.loc[{'num_poste':num_poste}].lat
             lon = self.data.loc[{'num_poste':num_poste}].lon
             obs = self.data.loc[{'num_poste':num_poste}].obs.data
-            # TODO : remove stations with too many nan or only 0
-            #obs = obs[:10]
-            data['antilope'].append(antilope.sel({'lat':nearest(antilope.lat, lat), 'lon':nearest(antilope.lon, lon)}).loc[{'time':dates}].rr.data)
-            data['raw'].append(raw.sel({'lat':nearest(raw.lat, lat), 'lon':nearest(raw.lon, lon)}).loc[{'time':dates}].rr.data)
-            for xpid,filename in experiments.items():
-                if xpid not in data.keys():
-                    data[xpid] = list()
-                data[xpid].append(simus[xpid].sel({'lat':nearest(simus[xpid].lat, lat), 'lon':nearest(simus[xpid].lon, lon)}).loc[{'time':dates}].rr.data)
-            #self.temporal_plot(dates, data['LH0'][-1], obs, num_poste, raw=data['raw'][-1], antilope=data['antilope'][-1], simu2=data['LD0'][-1])
-            self.temporal_plot(dates, data['LDML'][-1], obs, num_poste, raw=data['raw'][-1], antilope=data['antilope'][-1], simu2=data['LDM'][-1])
-            idx=10
-            #self.plot_assimilation(data['raw'][-1][:idx], data['LD0'][-1][:idx], data['antilope'][-1][:idx], 'LD0', num_poste, np.datetime_as_string(dates.data[:idx], unit='D'))
+            if len(obs[~np.isnan(obs)]) >= 100:  # Filter stations with too few observations
+                liste_postes = np.append(liste_postes, num_poste)
+                #obs = obs[:10]
+                data['antilope'].append(antilope.sel({'lat':nearest(antilope.lat, lat), 'lon':nearest(antilope.lon, lon)}).loc[{'time':dates}].rr.data)
+                data['raw'].append(raw.sel({'lat':nearest(raw.lat, lat), 'lon':nearest(raw.lon, lon)}).loc[{'time':dates}].rr.data)
+                for xpid,filename in experiments.items():
+                    if xpid not in data.keys():
+                        data[xpid] = list()
+                    if domain == 'GrandesRousses':  # gridded data
+                        data[xpid].append(simus[xpid].sel({'lat':nearest(simus[xpid].lat, lat), 'lon':nearest(simus[xpid].lon, lon)}).loc[{'time':dates}].rr.data)
+                    else:
+                        data[xpid].append(simus[xpid].sel({'num_poste':num_poste}).loc[{'time':dates}].rr.data)
+                #self.temporal_plot(dates, data['LH0'][-1], obs, num_poste, raw=data['raw'][-1], antilope=data['antilope'][-1], simu2=data['LD0'][-1])
+                #self.temporal_plot(dates, data['LDML'][-1], obs, num_poste, raw=data['raw'][-1], antilope=data['antilope'][-1], simu2=data['LDM'][-1])
+                self.temporal_plot(dates, data['LDLA'][-1], obs, num_poste, raw=data['raw'][-1], antilope=data['antilope'][-1])
+                idx=10
+                #self.plot_assimilation(data['raw'][-1][:idx], data['LD0'][-1][:idx], data['antilope'][-1][:idx], 'LD0', num_poste, np.datetime_as_string(dates.data[:idx], unit='D'))
 
-            for product in data.keys():
-                if product not in scores.keys():
-                    scores[product] = {score:list() for score in scores_list}
-                print(product, np.min(data[product]))
-                for score_name, score in scores[product].items():
-                    score.append(getattr(self, score_name)(data[product][0], obs))
+                for product in data.keys():
+                    if product not in scores.keys():
+                        scores[product] = {score:list() for score in scores_list}
+                    for score_name, score in scores[product].items():
+                        score.append(getattr(self, score_name)(data[product][0], obs))
+            else:
+                self.data = self.data.where(self.data.num_poste!=num_poste, drop=True)  # Drop station
 
         self.data['antilope'] = (('num_poste', 'date'), data['antilope'])
         self.data['raw'] = (('num_poste', 'date', 'member'), data['raw'])
@@ -388,7 +401,7 @@ class Evaluation(object):
             ax.legend()
             fig.savefig(f'{savedir}/ROC_threshold_{threshold}mm.pdf', format='pdf')
 
-        tmp = {"score":{"dims": ("score"), "data":scores_list}, "num_poste":{"dims": ("num_poste"), "data":self.data.num_poste.data}}
+        tmp = {"score":{"dims": ("score"), "data":scores_list}, "num_poste":{"dims": ("num_poste"), "data":liste_postes}}
         tmp.update({key:{"dims": ("score", "num_poste"), "data":[value[score] for score in scores_list]} for key,value in scores.items()})
         self.scores = xr.Dataset.from_dict(tmp)
         self.scores.to_netcdf(os.path.join(datadir, 'scores.nc'))
