@@ -20,6 +20,7 @@ from matplotlib import cm
 from mpl_toolkits.mplot3d import Axes3D  # F401 unused import --> to ignore !
 from matplotlib.text import Annotation
 from matplotlib import offsetbox
+import seaborn as sns
 
 from mpl_toolkits.mplot3d import proj3d
 from mpl_toolkits.mplot3d.proj3d import proj_transform
@@ -147,15 +148,15 @@ def read_ensemble(datebegin, dateend, frequency, domain):
     # - réduire la durée au maximum ?
     # - Réduire la periode des fichiers (mensuel/journalier) ?  ==> plusieur lectures
     filenames = [os.path.join(datadir, f"aspearome_{mb:03d}_2021102806_2022060206_{domain}_hourly.nc") for mb in range(1,17)]
-    #filenames = [os.path.join(datadir, f"aspearome_{mb:03d}_2021102806_2022060206_{domain}_hourly.nc") for mb in range(1,2)]
 
-    # open_mfdataset returns a dask.array<chunksize=(...), meta=np.ndarray> object and does not read the data directly in order to avoid a memory
-    # overload. the compute() method effectively load data into memory so it must be called as late as possible to reduce memory use as well as
+    # open_mfdataset returns a dask.array<chunksize=(...), meta=np.ndarray> object that divides arrays into many small pieces, called chunks, 
+    # each of which is presumed to be small enough to fit into memory in order to avoid a memory overload. 
+    # The compute() method effectively load data into memory so it must be called as late as possible to reduce memory use as well as
     # running time.
+    # See : https://docs.xarray.dev/en/stable/user-guide/dask.html
     #pearome = xr.open_mfdataset(filenames, combine='nested', concat_dim='member').compute()  # Impossible avec des fichiers trop volumineux
     pearome = xr.open_mfdataset(filenames, combine='nested', concat_dim='member')
     pearome['member'] = np.arange(1,17)
-    #pearome['member'] = np.arange(1,2)
     if frequency == 'daily':
         # Convert hourly precipitation into 24h precipitation between 6h J-1 and 6h J
         # Problem : the xarray tools to do that allows only accumulations between
@@ -664,7 +665,13 @@ class ParticleFilter(object):
             plt.xlabel('Precipitation (mm)')
             plt.ylabel('Weight')
             plt.legend(loc ="upper right")
-            fig.savefig(f"distribution.pdf", format='pdf')
+            filename = "distribution"
+            if "num_poste" in kw.keys():
+                filename = '_'.join([filename, str(kw['num_poste'])])
+            if 'date' in kw.keys():
+                filename = '_'.join([filename, kw['date'].strftime('%Y%m%d%H')])
+
+            fig.savefig(f"{filename}.pdf", format='pdf')
             plt.close('all')
 
         return draw
@@ -753,6 +760,7 @@ class ParticleFilter(object):
 
 #    @speedtest
     def ponctual_assimilation(self, date, idd, localized_period, obs_date, raw_date, parameters_date):
+        stop = False
         xloc = 3  # TODO : à paramétriser
         yloc = 3  # TODO : à paramétriser
         assimilation_points = zip(self.nivometeo.num_poste.data, np.max(self.nivometeo.lat, axis=1).data, np.max(self.nivometeo.lon, axis=1).data)
@@ -767,9 +775,16 @@ class ParticleFilter(object):
             localisation_lat = [self.radar.lat.data[idy+dlat] for dlat in range(-yloc,yloc+1)]  # Latitudes to consider for localisation. TODO : use a circle
             localisation_lon = [self.radar.lon.data[idx+dlon] for dlon in range(-xloc,xloc+1)]  #Longitudes to consider for localisation. TODO : use a circle
             raw_localized = localized_period.sel({'lat':localisation_lat, 'lon':localisation_lon})
-            raw_localized = raw_localized.rr.data.flatten()  # "Super ensemble"
+            if self.frequency == 'hourly':
+                import pdb
+                pdb.set_trace()
+                t1 = time.time()
+                raw_localized.compute()  # Load data now
+                t2 = time.time()
+                print(f'reading "raw_localized" took {(t2-t1)*1000.}ms')
             obs = obs_date.sel({'lat':lat, 'lon':lon})
-            raw = raw_date.sel({'lat':lat, 'lon':lon})
+            raw = raw_localized.sel({'time':date, 'lat':lat, 'lon':lon})
+            raw_localized = raw_localized.rr.data.flatten()  # "Super ensemble"
             parameters = parameters_date.sel({'lat':lat, 'lon':lon})
 
             # Is the observation outside the ensemble ?
@@ -778,14 +793,14 @@ class ParticleFilter(object):
             if (np.min(raw_localized) > obs) or (np.max(raw_localized) < obs):
                 self.nb_out_loc[idp] += 1
 
-            new, inflation = self.assimilation(date, obs, raw, raw_localized, parameters, lat, lon, idx, idy)
+            new, inflation = self.assimilation(date, obs, raw, raw_localized, parameters, lat, lon, idx, idy, num_poste=num_poste)
 
             self.inflation[idp] = inflation
             for member, field in self.newlocalfield.items():
                 field[idp,idd]  = new[member-1]  # fill new member
 
 #    @speedtest
-    def assimilation(self, date, obs, raw, raw_localized, parameters, lat, lon, idx, idy):
+    def assimilation(self, date, obs, raw, raw_localized, parameters, lat, lon, idx, idy, num_poste=None):
 
         nb_new_member = 0
         sigma = float(parameters.sigma.data)/2.
@@ -824,7 +839,27 @@ class ParticleFilter(object):
         # To plot the posterior distribution:
         # self.weighting(new, parameters.mu.data, parameters.sigma.data, plot_distribution=True)
 
+        # To plot data for one specific point / date
+        #if num_poste == 74134400:
+            #self.plot_assimilation(raw.rr.data, new, obs.rr, num_poste, date)
+            #self.weighting(raw_localized, parameters.mu.data, sigma, plot_distribution=True, num_poste=num_poste, date=date)
+
         return new, inflation
+
+    def plot_assimilation(self, raw, assim, obs, num_poste, date):
+        """ References :
+        https://stackoverflow.com/questions/64646449/how-to-create-asymmetric-violin-plot-in-python-using-matplotlib
+        https://seaborn.pydata.org/generated/seaborn.violinplot.html
+        """
+        fig, ax = plt.subplots()
+        data = pd.DataFrame({'raw':raw, 'assim':assim})
+        data = data.melt()
+        data['dummy'] = 0
+        sns.violinplot(data=data, split=True, y='value', hue='variable', x='dummy', inner="stick", palette=['sandybrown', 'skyblue'])
+        plt.plot(obs, marker='_', markersize=30, markeredgewidth=3, color='red')
+        # TODO : ploter l'obs nivometeo correspondante...
+        fig.savefig(f'assim_{num_poste}_{date}.pdf', formatout='pdf',  bbox_inches='tight')
+
 
     @speedtest
     def run(self):
@@ -852,15 +887,16 @@ class ParticleFilter(object):
         time_selection_sequentielle = 0
         for idd,date in enumerate(self.period):
             print(date)
+            # On réduit le dataset maintenant pour gagner du temps ensuite
             if self.frequency == 'hourly':
                 assimilation_period = [date + timedelta(hours=dt) for dt in range(-2,3)]
+                localized_period = self.ensemble.sel({'time':assimilation_period})  # Do not load data now (crash) !
             else:
                 assimilation_period = [date]
-            # On réduit le dataset pour gagner du temps ensuite
-            t1 = time.time()
-            localized_period = self.ensemble.sel({'time':assimilation_period}).compute()  # Load data into memory now ==> very slow
-            t2 = time.time()
-            print(f'reading "raw_localized" took {(t2-t1)*1000.}ms')
+                t1 = time.time()
+                localized_period = self.ensemble.sel({'time':assimilation_period}).compute()  # Load data into memory now ==> very slow
+                t2 = time.time()
+                print(f'reading "raw_localized" took {(t2-t1)*1000.}ms')
             obs_date = self.radar.sel(time=date)
             raw_date = localized_period.sel(time=date)
             parameters_date = self.parameters.sel({'time':date})
