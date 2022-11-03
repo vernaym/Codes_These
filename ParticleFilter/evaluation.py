@@ -255,14 +255,36 @@ class Evaluation(object):
 #        return dict(zip(np.array(subdata['poste_nivo.num_poste']), zip(np.array(subdata['poste_nivo.lat_dg']), np.array(subdata['poste_nivo.lon_dg']))))
 #
     def read_antilope(self):
-        filename = 'ANTILOPEQ_2021073106_2022070106_GrandesRousses.nc'
+        #filename = 'ANTILOPEQ_2021073106_2022070106_GrandesRousses.nc'
+        filename = 'ANTILOPEH_2021103000_2022060200_alp.nc'
         antilope = xr.open_dataset(os.path.join(datadir, filename))
+        if filename.startswith('ANTILOPEH'):
+            # Convert hourly precipitation into 24h precipitation between 6h J-1 and 6h J
+            # Problem : the xarray tools to do that allows only accumulations between
+            # 0h and 23h.
+            # solution : shift time serie by 7h, compute 24h accumulations and
+            # shift back !
+            antilope['time'] = antilope.time-np.timedelta64(7, 'h')
+            antilope = antilope.resample(time='D').sum(dim='time')  # !!! VERY SLOW !!!
+            antilope['time'] = antilope.time+np.timedelta64(30, 'h')
+
         return antilope
 
     def read_raw_ensemble(self):
-        filenames = [os.path.join(datadir, f'aspearome_{mb:03d}_2021073106_2022070106_GrandesRousses_daily.nc') for mb in range(1,17)]
-        raw = xr.open_mfdataset(filenames, combine='nested', concat_dim='member').compute().clip(0)
+        #filenames = [os.path.join(datadir, f'aspearome_{mb:03d}_2021073106_2022070106_GrandesRousses_daily.nc') for mb in range(1,17)]
+        filenames = [os.path.join(datadir, f'aspearome_{mb:03d}_2021102806_2022060206_alp_hourly.nc') for mb in range(1,17)]
+        #raw = xr.open_mfdataset(filenames, combine='nested', concat_dim='member').compute().clip(0)
+        raw = xr.open_mfdataset(filenames, combine='nested', concat_dim='member')
         raw['member']=np.arange(1,17)
+        # Convert hourly precipitation into 24h precipitation between 6h J-1 and 6h J
+        # Problem : the xarray tools to do that allows only accumulations between
+        # 0h and 23h.
+        # solution : shift time serie by 7h, compute 24h accumulations and
+        # shift back !
+        raw['time'] = raw.time-np.timedelta64(7, 'h')
+        raw = raw.resample(time='D').sum(dim='time')  # !!! VERY SLOW !!!
+        raw['time'] = raw.time+np.timedelta64(30, 'h')
+        raw.compute().clip(0)
         raw = raw.transpose('lat', 'lon', 'time', 'member')  # transpose data to put dimension in the same order as assimilated fields
 
         return raw
@@ -306,8 +328,14 @@ class Evaluation(object):
 #            return
 
         def nearest(array, value):
-            # Find element of "array" the closer to "value"
-            return float(array[np.abs(array - value).argmin()].data)
+            """ Find element of "array" the closer to 'value' """
+            # Security to ensure that the station is within the simulated domain.
+            if np.abs(array - value).data.min() < 0.1:
+                return float(array[np.abs(array - value).argmin()].data)
+            else:
+                print(f'ERROR : no corresponding pixel found for value {value}')
+                import pdb
+                pdb.set_trace()
 
         # To Extract specific values where evaluation data (obs nivometeo) is available
         pos = 1
@@ -358,6 +386,7 @@ class Evaluation(object):
             lon = self.data.loc[{'num_poste':num_poste}].lon
             obs = self.data.loc[{'num_poste':num_poste}].obs.data
             if len(obs[~np.isnan(obs)]) >= 100:  # Filter stations with too few observations
+                print(num_poste)
                 liste_postes = np.append(liste_postes, num_poste)
                 #obs = obs[:10]
                 data['antilope'].append(antilope.sel({'lat':nearest(antilope.lat, lat), 'lon':nearest(antilope.lon, lon)}).loc[{'time':dates}].rr.data)
@@ -374,6 +403,10 @@ class Evaluation(object):
                 self.temporal_plot(dates, data['LDLA'][-1], obs, num_poste, raw=data['raw'][-1], antilope=data['antilope'][-1])
                 idx=10
                 #self.plot_assimilation(data['raw'][-1][:idx], data['LD0'][-1][:idx], data['antilope'][-1][:idx], 'LD0', num_poste, np.datetime_as_string(dates.data[:idx], unit='D'))
+
+                if num_poste == 74134400:
+                    date=np.datetime64("2022-02-17T06:00")
+                    antilope.sel({'lat':nearest(antilope.lat, lat), 'lon':nearest(antilope.lon, lon)}).loc[{'time':np.datetime64("2022-02-17T06:00")}].rr.data
 
                 for product in data.keys():
                     if product not in scores.keys():
@@ -474,10 +507,11 @@ class Evaluation(object):
             antpe, = plt.plot(time, antilope, marker='+', linestyle='', color='red')
             labels.append((antpe, 'Antilope'))
         positions = mpl.dates.date2num(time)
+        add_label(plt.violinplot(np.transpose(simu), positions=positions), 'Assimilation')
         if raw is not None:
             #add_label(plt.violinplot(np.transpose(raw), positions=positions), 'Raw ensemble', color='sandybrown')
-            add_label(plt.violinplot(np.transpose(raw), positions=positions), 'Raw ensemble')
-        add_label(plt.violinplot(np.transpose(simu), positions=positions), 'Hourly assimilation')
+            #add_label(plt.violinplot(np.transpose(raw), positions=positions), 'Raw ensemble')
+            add_label(plt.violinplot(raw, positions=positions), 'Raw ensemble')
         #add_label(plt.violinplot(np.transpose(simu), positions=positions), 'Hourly assimilation', color='limegreen')
         if simu2 is not None:
             #add_label(plt.violinplot(np.transpose(simu2), positions=positions), 'Daily assimilation', color='skyblue')
@@ -504,7 +538,7 @@ class Evaluation(object):
         sns.violinplot(data=data, split=True, y='value', hue='variable', x='dummy', inner="stick", palette=['sandybrown', 'skyblue'])
         plt.plot(obs, marker='_', markersize=30, markeredgewidth=3, color='red')
         if ref is not None:
-            plt.plot(obs, marker='_', markersize=30, markeredgewidth=3, color='dark')
+            plt.plot(ref, marker='_', markersize=30, markeredgewidth=3, color='dark')
         fig.savefig(f'{savedir}/assim_{xpid}_{num_poste}_{date}.pdf', formatout='pdf',  bbox_inches='tight')
 
         #sns.violinplot(data=data, y='24 hour precipitation (mm)', split=True, hue='Simulation')
