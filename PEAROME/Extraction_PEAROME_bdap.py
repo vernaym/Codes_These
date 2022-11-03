@@ -390,6 +390,7 @@ class PrecipitationExtractor(object):
         self.missing_grib = list()
         reference_time = pd.Timestamp(self.args.datebegin)
         #cumul = None
+
         for date in datespivot:
             if self.member is not None:  # Extraction de la pearome depuis la BDAP
                 self.origin = 'bdap'
@@ -423,6 +424,9 @@ class PrecipitationExtractor(object):
                 rr.to_netcdf(outname)
                 return None
             else:
+                # On sauvegarde un fichier par member (beaucoup plus rapide)
+                outname = '{0:s}_{1:03d}_{2:s}_{3:s}_{4:s}.nc'.format(self.args.model, self.member, datedeb.strftime('%Y%m%d%H'), self.args.dateend.strftime('%Y%m%d%H'), self.domain)
+                rr.to_netcdf(outname)
                 return rr
             # WARNING : DOES NOT WORK ON GUPPY !
             # Transfert the extracted files locally and rerun this script
@@ -484,15 +488,16 @@ if __name__ == "__main__":
                 precipitation[member] = precip.extract(datespivot)
             goto(workdir)
             datedeb = args.datebegin-timedelta(hours=24)
-            outname = '{0:s}_{1:s}_{2:s}_{3:s}.nc'.format(args.model, datedeb.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'), domain)
-            data = xr.concat([arr for arr in precipitation.values()], pd.Index(precipitation.keys(), name="member")).transpose('lat', 'lon', 'time', 'member')
-            data.to_netcdf(outname)
+            # Fichier trop gros sur les Alpes ==> "Processus arrêté"
+            #outname = '{0:s}_{1:s}_{2:s}_{3:s}.nc'.format(args.model, datedeb.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'), domain)
+            #data = xr.concat([arr for arr in precipitation.values()], pd.Index(precipitation.keys(), name="member")).transpose('lat', 'lon', 'time', 'member')
+            #data.to_netcdf(outname)
         else:
             echeance = 24
             # AROME data are extracted from hendrix : 24h forecasts lead times provide the previous 24h precipitation accumulation
             extract_period = date_range(args.datebegin, args.dateend, dt=24)
             timecoord = extract_period[:-1]
             precip = PrecipitationExtractor(args, echeance, domain, timecoord)
-            precip.extract()
+            precip.extract(extract_period)
 
 
