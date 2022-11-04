@@ -37,6 +37,12 @@ map_massifs = dict(
 
 nb_obs_min = 60
 
+coords = dict(
+    #alp = ['46875', '43125', '4500', '8500'],
+    alpes = dict(latmin=43.8, latmax=46.45, lonmin=5.4, lonmax=7.8),
+    pyrenees = dict(latmin=42.0, latmax=43.5, lonmin=-2.0, lonmax=3.5),
+    #cor = ['43000', '41000', '8000', '10500'],
+)
 #subdomain_map = dict(
 #    1 = dict(name='North-West Alps', massifs=[1, 2, 3, 4, 5, 7, 8]),
 #    2 = dict(name='North-East Alps', massifs=[6, 9, 10, 11, 13]),
@@ -125,7 +131,7 @@ def goto(path):
 
 def add_radar_positions(ax):
     radars = dict(
-    	moucherotte  = dict(lat=45.14776, lon=5.63933, alt=1920,name='Moucherotte'),
+        moucherotte  = dict(lat=45.14776, lon=5.63933, alt=1920,name='Moucherotte'),
         colombis     = dict(lat=44.49664, lon=6.21729, alt=1742, name='Colombis'),
         ladole       = dict(lat=46.42565, lon=6.10001, alt=1677, name='La Dole'),
         #collobrieres = dict(lat=43.22, lon=6.37, alt=641, name='Collobrières'),
@@ -562,8 +568,12 @@ def plot_massif(mydf, massif=None, subdomain=None, error=0.2, **kw):
         fig.save(f'{filename}.svg', formatout='svg', bbox_inches='tight')
         fig.close()
 
-def plot_obs(lat, lon, alt, datebegin, dateend):
+def plot_obs(lat, lon, alt, num_poste, datebegin, dateend):
     for domain in ['alpes', 'pyrenees']:
+        latmin = coords[domain]['latmin']
+        latmax = coords[domain]['latmax']
+        lonmin = coords[domain]['lonmin']
+        lonmax = coords[domain]['lonmax']
         print(domain)
         # Plot stations on the map
         class_ = getattr(cartopy, f'Map_{domain}')
@@ -573,12 +583,15 @@ def plot_obs(lat, lon, alt, datebegin, dateend):
         else:
             shrink = 1
             mappos = [0.06, 0.06, 0.98, 0.92]
-        fig = class_(mappos=mappos)
+        fig = class_(mappos=mappos, width=20, height=24)
         fig.init_massifs()
         #myplot = fig.addpoints(lon, lat, marker='D', color=alt)
         ax = fig.fig.axes[0]
         add_radar_positions(ax)
         sc = fig.map.scatter(lon, lat, c=alt, marker="^", s=150)
+        for idx,poste in enumerate(num_poste):
+            if lon[idx]>=lonmin and lon[idx]<=lonmax and lat[idx]<=latmax and lat[idx]>=latmin:
+                txt = plt.text(lon[idx], lat[idx], str(int(poste)))
         plt.colorbar(sc, label='Elevation (m)', shrink=shrink)
         plt.tight_layout()
         fig.save(f'obs_{domain}_{datebegin}_{dateend}.svg', formatout='svg', bbox_inches='tight')
@@ -827,7 +840,7 @@ if __name__ == "__main__":
         daily_scatterplot(workdf, args.datebegin, args.dateend, subdomain=args.subdomain, suffix=suffix, product=args.product)
     else:
         # 1. Plot rain-gauges informations
-        plot_obs(lats.to_numpy(), lons.to_numpy(), elevations.to_numpy(), args.datebegin.strftime('%Y%m%d'), args.dateend.strftime('%Y%m%d'))
+        plot_obs(lats.to_numpy(), lons.to_numpy(), elevations.to_numpy(), num_poste.to_numpy(), args.datebegin.strftime('%Y%m%d'), args.dateend.strftime('%Y%m%d'))
         # 2. Raw sactter plot of all availbale stations
         raw_scatterplot(df_stat['rr_nivometeo'].to_numpy(), df_stat[f'rr_{args.product}'].to_numpy(), df_stat['elevation'].to_numpy(), args.datebegin, args.dateend, suffix=suffix, product=args.product)
         # 3. Scatter plot with stations sorted by elevation range
