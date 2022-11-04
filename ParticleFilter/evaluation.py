@@ -5,6 +5,7 @@
 
 import os, sys
 import glob
+import time
 from datetime import datetime,timedelta
 import numpy as np
 import xarray as xr
@@ -79,6 +80,7 @@ class Evaluation(object):
         self.Ne = 16  # TODO : à definir dynamiquement
         self.scores = None
         self.threshold = threshold  # threshold to use as event detenction in the breier score
+        self.lpn = None
 
     def ensemble_attributes(self):
         disp = self.dispersion()
@@ -248,6 +250,12 @@ class Evaluation(object):
 
         return nivometeo.to_xarray()
 
+    def read_lpn(self):
+        lpn = pd.read_csv(os.path.join(datadir, 'LPN_nivometeo_20210801_20220801.csv'), sep=';', parse_dates=['H_NIVO.DAT'], dtype={'H_NIVO.NUM_POSTE':int, 'H_NIVO.ALTI_LPNX':int})
+        lpn.rename(columns={'H_NIVO.ALTI_LPNX':'LPNX', 'H_NIVO.NUM_POSTE':'num_poste', 'H_NIVO.DAT':'date'}, inplace=True)
+
+        return lpn
+
 #    def read_nivometeo_coords(self, domain):
 #        metadata = pd.read_csv(os.path.join(datadir, 'postes_nivometeo.csv'), sep=';')
 #        latmax, latmin, lonmin, lonmax = np.array(coords[domain]).astype(float)/1000.
@@ -284,7 +292,8 @@ class Evaluation(object):
         raw['time'] = raw.time-np.timedelta64(7, 'h')
         raw = raw.resample(time='D').sum(dim='time')  # !!! VERY SLOW !!!
         raw['time'] = raw.time+np.timedelta64(30, 'h')
-        raw.compute().clip(0)
+        raw = raw.compute().clip(0)  # TODO : try without computing (seems towork !)
+        #raw = raw.clip(0)  # TODO : try without computing (seems towork !)
         raw = raw.transpose('lat', 'lon', 'time', 'member')  # transpose data to put dimension in the same order as assimilated fields
 
         return raw
@@ -322,10 +331,6 @@ class Evaluation(object):
         return simulation
 
     def evaluate(self):
-
-#        if os.path.exists(os.path.join(datadir, 'scores.nc')):
-#            self.scores = xr.open_dataset(os.path.join(datadir, 'scores.nc'))
-#            return
 
         def nearest(array, value):
             """ Find element of "array" the closer to 'value' """
@@ -377,20 +382,29 @@ class Evaluation(object):
         dates = self.data.date
         #dates = dates[:10]
         liste_postes = np.array([])
-        for num_poste in self.data.num_poste.data:
+        for idx, num_poste in enumerate(self.data.num_poste.data):
+            print(f'Station {idx+1}/{len(self.data.num_poste.data)}')
 #            num_poste = row['num_poste']
 #            lat       = row['lat']
 #            lon       = row['lon']
 #            dates     = self.data[self.data['num_poste']==num_poste]['date'].values
-            lat = self.data.loc[{'num_poste':num_poste}].lat
-            lon = self.data.loc[{'num_poste':num_poste}].lon
-            obs = self.data.loc[{'num_poste':num_poste}].obs.data
+            t1 = time.time()
+            tmp = self.data.loc[{'num_poste':num_poste}]
+            lat = tmp.lat
+            lon = tmp.lon
+            obs = tmp.obs.data
+            alti = tmp.alti.data.max()
+            t2 = time.time()
+            print(f'Reading obs informations took {(t2-t1)*1000.}ms')
             if len(obs[~np.isnan(obs)]) >= 100:  # Filter stations with too few observations
-                print(num_poste)
                 liste_postes = np.append(liste_postes, num_poste)
                 #obs = obs[:10]
                 data['antilope'].append(antilope.sel({'lat':nearest(antilope.lat, lat), 'lon':nearest(antilope.lon, lon)}).loc[{'time':dates}].rr.data)
+                t3 = time.time()
+                print(f'Reading antilope informations took {(t3-t2)*1000.}ms')
                 data['raw'].append(raw.sel({'lat':nearest(raw.lat, lat), 'lon':nearest(raw.lon, lon)}).loc[{'time':dates}].rr.data)
+                t4 = time.time()
+                print(f'Reading raw ensemble took {(t4-t3)*1000.}ms')
                 for xpid,filename in experiments.items():
                     if xpid not in data.keys():
                         data[xpid] = list()
@@ -398,28 +412,44 @@ class Evaluation(object):
                         data[xpid].append(simus[xpid].sel({'lat':nearest(simus[xpid].lat, lat), 'lon':nearest(simus[xpid].lon, lon)}).loc[{'time':dates}].rr.data)
                     else:
                         data[xpid].append(simus[xpid].sel({'num_poste':num_poste}).loc[{'time':dates}].rr.data)
+                    t5 = time.time()
+                    print(f'Reading simulation {xpid} took {(t5-t4)*1000.}ms')
                 #self.temporal_plot(dates, data['LH0'][-1], obs, num_poste, raw=data['raw'][-1], antilope=data['antilope'][-1], simu2=data['LD0'][-1])
                 #self.temporal_plot(dates, data['LDML'][-1], obs, num_poste, raw=data['raw'][-1], antilope=data['antilope'][-1], simu2=data['LDM'][-1])
-                self.temporal_plot(dates, data['LDLA'][-1], obs, num_poste, raw=data['raw'][-1], antilope=data['antilope'][-1])
+                #self.temporal_plot(dates, data['LDLA'][-1], obs, num_poste, alti, raw=data['raw'][-1], antilope=data['antilope'][-1])
+                t6 = time.time()
+                print(f'Temporal plot took {(t6-t5)*1000.}ms')
                 idx=10
                 #self.plot_assimilation(data['raw'][-1][:idx], data['LD0'][-1][:idx], data['antilope'][-1][:idx], 'LD0', num_poste, np.datetime_as_string(dates.data[:idx], unit='D'))
 
-                if num_poste == 74134400:
-                    date=np.datetime64("2022-02-17T06:00")
-                    antilope.sel({'lat':nearest(antilope.lat, lat), 'lon':nearest(antilope.lon, lon)}).loc[{'time':np.datetime64("2022-02-17T06:00")}].rr.data
+#                if num_poste == 74134400:
+#                    date=np.datetime64("2022-02-17T06:00")
+#                    antilope.sel({'lat':nearest(antilope.lat, lat), 'lon':nearest(antilope.lon, lon)}).loc[{'time':np.datetime64("2022-02-17T06:00")}].rr.data
 
+                #if not os.path.exists(os.path.join(datadir, 'scores.nc')):
                 for product in data.keys():
                     if product not in scores.keys():
                         scores[product] = {score:list() for score in scores_list}
                     for score_name, score in scores[product].items():
                         score.append(getattr(self, score_name)(data[product][0], obs))
+                    t7 = time.time()
+                    print(f'Computing score for simulation {xpid} took {(t7-t6)*1000.}ms')
+                t7 = time.time()
             else:
                 self.data = self.data.where(self.data.num_poste!=num_poste, drop=True)  # Drop station
+
+#        if os.path.exists(os.path.join(datadir, 'scores.nc')):
+#            self.scores = xr.open_dataset(os.path.join(datadir, 'scores.nc'))
+#            return
+
+        # TODO : optimiser le calcul des scores !
 
         self.data['antilope'] = (('num_poste', 'date'), data['antilope'])
         self.data['raw'] = (('num_poste', 'date', 'member'), data['raw'])
         for xpid in experiments.keys():
             self.data[xpid] = (('num_poste', 'date', 'member'), data[xpid])
+        t8 = time.time()
+        print(f'Filling self.data took {(t8-t7)*1000.}ms')
 
         for threshold in [1, 10, 20]:
             fig,ax = plt.subplots()
@@ -433,11 +463,15 @@ class Evaluation(object):
             ax.set_ylabel('Sucess rate')
             ax.legend()
             fig.savefig(f'{savedir}/ROC_threshold_{threshold}mm.pdf', format='pdf')
+        t9 = time.time()
+        print(f'Ploting ROC curves took {(t9-t8)*1000.}ms')
 
         tmp = {"score":{"dims": ("score"), "data":scores_list}, "num_poste":{"dims": ("num_poste"), "data":liste_postes}}
         tmp.update({key:{"dims": ("score", "num_poste"), "data":[value[score] for score in scores_list]} for key,value in scores.items()})
         self.scores = xr.Dataset.from_dict(tmp)
         self.scores.to_netcdf(os.path.join(datadir, 'scores.nc'))
+        t10 = time.time()
+        print(f'Saving scores took {(t10-t9)*1000.}ms')
 
 #        self.rmse(simu[num_poste], obs[num_poste], num_poste)
 #        fiability, resolution, uncertainty = self.brier_decomposition(simu[num_poste], obs[num_poste], threshold)
@@ -472,56 +506,76 @@ class Evaluation(object):
             fig,ax = plt.subplots()
             pos = 1
             products = [var for var in self.scores.data_vars]
-            #print(products)
+            self.labels = []
             for product in products:
                 x = self.scores.loc[{'score':score}][product].data
                 for idx, poste in enumerate(self.scores.num_poste.data):
-                    plt.text(pos, x[idx], str(poste), fontsize=6)
+                    if not np.isnan(x[idx]):
+                        plt.text(pos, x[idx], str(int(poste)), fontsize=6)
+                    else:
+                        print(f'{score} of product {product} not available for poste {str(int(poste))}')
                 # TODO : Add horizontal bars corresponding to each element
-                plt.violinplot(x[~np.isnan(x)], showmeans=True, positions=[pos])
+                self.add_label(plt.violinplot(x[~np.isnan(x)], showmeans=True, positions=[pos]), product)
                 pos += 1
             ax.set_xticklabels([''] + products)
+            ax.set_xticks(range(len(products)+2))
+            #ax.legend(*zip(*self.labels))
             if score == 'brier':
                 fig.savefig(f'{savedir}/{score}_{self.threshold}.pdf', formatout='pdf',  bbox_inches='tight')
             else:
                 fig.savefig(f'{savedir}/{score}.pdf', formatout='pdf',  bbox_inches='tight')
 
-    def temporal_plot(self, time, simu, obs, num_poste, raw=None, antilope=None, simu2=None):
+    def add_label(self, violin, label, color=None):
+        """ Customize violinplot by adding a label"""
+        import matplotlib.patches as mpatches
+        if color is None:
+            color = violin["bodies"][0].get_facecolor().flatten()
+        else:
+            violin["bodies"][0].set_facecolor(color)
+            violin["bodies"][0].set_edgecolor(color)
+        self.labels.append((mpatches.Patch(color=color), label))
+
+    def temporal_plot(self, time, simu, obs, num_poste, alti, raw=None, antilope=None, simu2=None):
         # TODO : add flexibility in the number and oreder of simulations (use dict !)
 
-        def add_label(violin, label, color=None):
-            import matplotlib.patches as mpatches
-            if color is None:
-                color = violin["bodies"][0].get_facecolor().flatten()
-            else:
-                violin["bodies"][0].set_facecolor(color)
-                violin["bodies"][0].set_edgecolor(color)
-            labels.append((mpatches.Patch(color=color), label))
+        if self.lpn is None:
+            self.lpn = self.read_lpn()
+        lpn = self.lpn.loc[self.lpn['num_poste']==num_poste]
+        diff_alti_lpn = lpn.LPNX - alti
 
 
-        labels = []
+
+        self.labels = []
         fig, ax = plt.subplots(figsize=(100,9))
         ref, = plt.plot(time, obs, marker='.', linestyle='', color='k')
-        labels.append((ref, 'Nivometeo reference'))
+        self.labels.append((ref, 'Nivometeo reference'))
         if antilope is not None:
             antpe, = plt.plot(time, antilope, marker='+', linestyle='', color='red')
-            labels.append((antpe, 'Antilope'))
+            self.labels.append((antpe, 'Antilope'))
         positions = mpl.dates.date2num(time)
-        add_label(plt.violinplot(np.transpose(simu), positions=positions), 'Assimilation')
+        self.add_label(plt.violinplot(np.transpose(simu), positions=positions), 'Assimilation')
         if raw is not None:
             #add_label(plt.violinplot(np.transpose(raw), positions=positions), 'Raw ensemble', color='sandybrown')
             #add_label(plt.violinplot(np.transpose(raw), positions=positions), 'Raw ensemble')
-            add_label(plt.violinplot(raw, positions=positions), 'Raw ensemble')
+            self.add_label(plt.violinplot(np.transpose(raw), positions=positions), 'Raw ensemble')
         #add_label(plt.violinplot(np.transpose(simu), positions=positions), 'Hourly assimilation', color='limegreen')
         if simu2 is not None:
             #add_label(plt.violinplot(np.transpose(simu2), positions=positions), 'Daily assimilation', color='skyblue')
-            add_label(plt.violinplot(np.transpose(simu2), positions=positions), 'Daily assimilation')
+            self.add_label(plt.violinplot(np.transpose(simu2), positions=positions), 'Daily assimilation')
         ax.set_xlabel('Date')
         ax.set_ylabel('24 hour precipitation (mm)')
-        plt.legend(*zip(*labels))
-        plt.axhline(y=0, linewidth=1, color='k')
-        for rr in range(10, 170, 10):
-            plt.axhline(y=rr, linewidth=0.1, color='k', linestyle='dotted')
+        ax.legend(*zip(*self.labels))
+        ax.axhline(y=0, linewidth=1, color='k')
+        rrmax = int(np.ceil(max([np.nanmax(obs), np.nanmax(simu), np.nanmax(raw), np.nanmax(antilope)])))+10
+        for rr in range(10, rrmax, 10):
+            ax.axhline(y=rr, linewidth=0.1, color='k', linestyle='dotted')
+        ax.set_ylim(-rrmax, rrmax)
+
+        # make a plot with different y-axis using second axis object
+        ax2=ax.twinx()
+        ax2.plot(lpn.date, diff_alti_lpn, color="blue", marker="*", linestyle='')
+        ax2.set_ylabel("Difference between LPN max and station elevation (m)", color="blue", fontsize=14)
+
         fig.savefig(f'{savedir}/{num_poste}.pdf', formatout='pdf',  bbox_inches='tight')
         plt.close()
         #plt.show()
