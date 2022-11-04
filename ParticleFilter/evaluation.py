@@ -25,6 +25,11 @@ import seaborn as sns
 # USAGE : p evaluation.py $domain
 ##############################################################################################
 
+# TODO : lire https://www.researchgate.net/publication/238024585_A_New_Verification_Method_to_Ensure_Consistent_Ensemble_Forecasts_through_Calibrated_Precipitation_Downscaling_Models
+# pour voir si la méthode de vérification peut s'appliquer
+# TODO : Use the "Tukey’s plotting positions", which avoids probabilities 0 and 1 : P(t) = (n+2/3) / (M+4/3)
+# --> see https://www.ecmwf.int/sites/default/files/elibrary/2010/10725-diagnosis-ensemble-forecasting-systems.pdf
+
 #domain = 'GrandesRousses'
 domain = sys.argv[1]
 
@@ -58,6 +63,7 @@ experiments = dict(
 #        LHM      = 'Assimilation_locale_2021073106_2022070106_hourly_avec_masque.nc',
 #        LHML     = 'Assimilation_locale_2021080106_2022063006_hourly_avec_localisation.nc',
         LDLA     = 'XP06_assimilation_quotidienne_ponctuelle_avec_localisation/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
+        LHLA     = 'XP07_assimilation_horaire_ponctuelle_avec_localisation/Assimilation_locale_2021120106_2022050106_hourly_alp.nc',
     )
 
 xpid_label = dict(
@@ -68,7 +74,8 @@ xpid_label = dict(
         LH0      = 'Hourly assimilation without mask',
         LHM      = 'Hourly assimilation with mask',
         LHML     = 'Hourly assimilation with mask and localization',
-        LDLA     = 'Daily assimilation without mask, with localization'
+        LDLA     = 'Daily assimilation without mask, with localization',
+        LHLA     = 'Hourly assimilation without mask, with localization',
     )
 
 
@@ -97,6 +104,9 @@ class Evaluation(object):
 
     def bias(self, simu, obs, **kw):
 
+        simu = simu[~np.isnan(obs)]
+        obs = obs[~np.isnan(obs)]
+
         if np.shape(simu) == np.shape(obs):  # "Simulation" déterministe
             bias = simu - obs
         else:  # Simulation s'ensmble
@@ -115,6 +125,9 @@ class Evaluation(object):
 
     def rmse(self, simu, obs, **kw):
 
+        simu = simu[~np.isnan(obs)]
+        obs = obs[~np.isnan(obs)]
+
         if np.shape(simu) == np.shape(obs):  # "Simulation" déterministe
             rmse = np.sqrt(np.nanmean(simu-obs)) if np.nanmean(simu-obs) > 0 else np.nan
         else:  # Simulation d'ensemble
@@ -127,10 +140,15 @@ class Evaluation(object):
 
     def brier(self, simu, obs):
 
+        # TODO : verifier le calcul du score de brier
+        simu = simu[~np.isnan(obs)]
+        obs = obs[~np.isnan(obs)]
+
         if np.shape(simu) == np.shape(obs):  # "Simulation" déterministe
             psimu = np.where(simu>=self.threshold, 1, 0)
         else:  # Simulation d'ensemble
             psimu  = np.count_nonzero(simu>=self.threshold, axis=1) / self.Ne
+            #psimu  = (np.count_nonzero(simu>=self.threshold, axis=1)+ 2/3) / (self.Ne+4/3)  # Tukey's plotting position
         fobs   = np.where(obs>=self.threshold, 1, 0)
         brier = np.nanmean((psimu-fobs)**2)
         #print('Brier=',brier)
@@ -138,7 +156,8 @@ class Evaluation(object):
         return brier
 
     def ROC(self, simu, obs, product, ax, threshold=10):
-        """ Here "probability" is the forecasted probability above which the
+        """ 
+        Here "probability" is the forecasted probability above which the
         event is considered well forecasted by the ensemble.
         We built the contingency table :
             - a = forecasted and observed
@@ -146,13 +165,15 @@ class Evaluation(object):
             - c = observed but not forecasted
             - d = Not forecasted and not observed
 
-        Then the success rate is a/(a=c) and the false alarm rate is b/(b+d)
+        Then the success rate is a/(a+c) and the false alarm rate is b/(b+d)
         """
         simu = simu[~np.isnan(obs)]
         obs  = obs[~np.isnan(obs)]
 
         #linestyle_map = {1:':', 10:'-', 20:'--'}
         #color = next(ax._get_lines.prop_cycler)['color']
+
+        # TODO : Use Tukey's plotting probabilities 
 
         succes_rate = list()
         false_alarm = list()
@@ -166,18 +187,18 @@ class Evaluation(object):
         else:
             for seuil in range(1, self.Ne+1):
                 # Pour un dépassement de seuil :
-                a = np.count_nonzero(np.where((obs>=threshold) & (np.count_nonzero(simu>=threshold, axis=1)>=seuil)))
-                b = np.count_nonzero(np.where((obs<threshold) & (np.count_nonzero(simu>=threshold, axis=1)>=seuil)))
-                c = np.count_nonzero(np.where((obs>=threshold) & (np.count_nonzero(simu>=threshold, axis=1)<seuil)))
-                d = np.count_nonzero(np.where((obs<threshold) & (np.count_nonzero(simu>=threshold, axis=1)<seuil)))
+                a = len(np.where((obs>=threshold) & (np.count_nonzero(simu>=threshold, axis=1)>=seuil))[0])
+                b = len(np.where((obs<threshold) & (np.count_nonzero(simu>=threshold, axis=1)>=seuil))[0])
+                c = len(np.where((obs>=threshold) & (np.count_nonzero(simu>=threshold, axis=1)<seuil))[0])
+                d = len(np.where((obs<threshold) & (np.count_nonzero(simu>=threshold, axis=1)<seuil))[0])
 #            # Pour un intervalle :
 #            a = np.count_nonzero(np.where((obs>=1) & (obs<5) & (np.count_nonzero((simu>=1) & (simu<5), axis=1)>=seuil)))
 #            b = np.count_nonzero(np.where(((obs<1) | (obs>=5)) & (np.count_nonzero((simu>=1) & (simu<5), axis=1)>=seuil)))
 #            c = np.count_nonzero(np.where((obs>=1) & (obs<5) & (np.count_nonzero((simu>=1) & (simu<5), axis=1)<seuil)))
 #            d = np.count_nonzero(np.where(((obs<1) | (obs>=5)) & (np.count_nonzero((simu>=1) & (simu<5), axis=1)<seuil)))
 
-                succes_rate.append(a/(a+c) if a>0 else 0)
-                false_alarm.append(b/(b+d) if b>0 else 0)
+                succes_rate.append(a/(a+c) if a+c>0 else np.nan)  # a+c=0 if the event is never observed
+                false_alarm.append(b/(b+d) if b+d>0 else np.nan)  # b+d= 0 if the event is always observed
 
         #plt.plot(false_alarm, succes_rate, label=product, linestyle=linestyle_map[threshold])
         if np.shape(simu) == np.shape(obs):
@@ -187,7 +208,16 @@ class Evaluation(object):
 
         return (false_alarm, succes_rate)
 
-    def brier_decomposition(self, simu, obs, nb_cat=17):
+    def reliability_diagram(self, simu, obs, product, ax):
+        ndays = len(obs)
+        simu = simu[~np.isnan(obs)]
+        obs = obs[~np.isnan(obs)]
+        proba, catsize, freq_occ, global_freq_occ = self.probability_classes(simu, obs)
+        # TODO : taille du marker proportionelle au nombre de prevision dans une categorie
+        ax.plot(proba, freq_occ, marker=None, linestyle='-', label=f'{product}')
+        ax.scatter(proba, freq_occ, catsize)
+
+    def probability_classes(self, simu, obs, nb_cat=17):
 
         # TODO : la décomposition du score de Brier devrait donner le même résultat
         # que le calcul direct (BS=BSfiab-BSres+BSunc), mais ce n'est pas le cas...
@@ -196,34 +226,41 @@ class Evaluation(object):
         freq_occ = list()
         proba    = list()
         for Nm in range(nb_cat):
-            Ni = np.count_nonzero(np.count_nonzero(simu>=self.threshold, axis=0)==Nm)
+            Ni = np.count_nonzero(np.count_nonzero(simu>=self.threshold, axis=1)==Nm)
             if Ni > 0:
                 proba.append(Nm/self.Ne)
                 catsize.append(Ni)
-                print(simu, obs)
                 # TODO : problème avec les dimensions de "simu" lorsque simu est un ensemble...
-                freq_occ.append(np.count_nonzero(obs[np.count_nonzero(simu>=self.threshold, axis=0)==Nm]>=self.threshold)/Ni)
+                freq_occ.append(np.count_nonzero(obs[np.count_nonzero(simu>=self.threshold, axis=1)==Nm]>=self.threshold)/Ni)
         ndays = len(obs)
         global_freq_obs = np.count_nonzero(obs[obs>=self.threshold]) / ndays
 
-        return proba, catsize, freq_occ, global_freq_obs
+        return np.array(proba), np.array(catsize), np.array(freq_occ), global_freq_obs
 
-    def fiability(self, simu, obs):
+    def reliability(self, simu, obs):
+        simu = simu[~np.isnan(obs)]
+        obs = obs[~np.isnan(obs)]
         ndays = len(obs)
-        proba, catsize, freq_occ, global_freq_occ = self.brier_decomposition(simu, obs)
-        fiability = 1/ndays*np.sum([Ni*(proba-focc)**2 for (proba, Ni, focc) in zip(proba, catsize, freq_occ)])
-        print('Fiability=',fiability)
-        return fiability
+        proba, catsize, freq_occ, global_freq_occ = self.probability_classes(simu, obs)
+        reliability = 1/ndays*np.sum(catsize*(proba-freq_occ)**2)
+        #reliability = 1/ndays*np.sum([Ni*(proba-focc)**2 for (proba, Ni, focc) in zip(proba, catsize, freq_occ)])  # Equivalent
+        print('reliability=',reliability)
+        return reliability
 
     def resolution(self, simu, obs):
+        simu = simu[~np.isnan(obs)]
+        obs = obs[~np.isnan(obs)]
         ndays = len(obs)
-        proba, catsize, freq_occ, global_freq_obs = self.brier_decomposition(simu, obs)
-        resolution = 1/ndays*np.sum([Ni*(focc-global_freq_obs)**2 for (proba, Ni, focc) in zip(proba, catsize, freq_occ)])
+        proba, catsize, freq_occ, global_freq_obs = self.probability_classes(simu, obs)
+        resolution = 1/ndays*np.sum(catsize*(freq_occ-global_freq_obs)**2)
+        #resolution = 1/ndays*np.sum([Ni*(focc-global_freq_obs)**2 for (Ni, focc) in zip(catsize, freq_occ)])  # Equivalent
         print('Resolution=',resolution)
         return resolution
 
     def uncertainty(self, simu, obs):
-        proba, catsize, freq_occ, global_freq_obs = self.brier_decomposition(simu, obs)
+        simu = simu[~np.isnan(obs)]
+        obs = obs[~np.isnan(obs)]
+        proba, catsize, freq_occ, global_freq_obs = self.probability_classes(simu, obs)
         uncertainty =  global_freq_obs*(1-global_freq_obs)**2
         print('Uncertainty=',uncertainty)
         return uncertainty
@@ -376,7 +413,7 @@ class Evaluation(object):
         for xpid,filename in experiments.items():
             simus[xpid] = self.read_simu(os.path.join(workdir, filename))
 
-        #scores_list = ['rmse', 'bias', 'brier', 'fiability', 'resolution', 'uncertainty']
+#        scores_list = ['reliability', 'resolution', 'uncertainty', 'rmse', 'bias', 'brier']
         scores_list = ['rmse', 'bias', 'brier']
         scores = dict()
         dates = self.data.date
@@ -431,7 +468,7 @@ class Evaluation(object):
                     if product not in scores.keys():
                         scores[product] = {score:list() for score in scores_list}
                     for score_name, score in scores[product].items():
-                        score.append(getattr(self, score_name)(data[product][0], obs))
+                        score.append(getattr(self, score_name)(data[product][-1][~np.isnan(obs)], obs[~np.isnan(obs)]))
                     t7 = time.time()
                     print(f'Computing score for simulation {xpid} took {(t7-t6)*1000.}ms')
                 t7 = time.time()
@@ -451,10 +488,22 @@ class Evaluation(object):
         t8 = time.time()
         print(f'Filling self.data took {(t8-t7)*1000.}ms')
 
+        fig,ax = plt.subplots()
+        for product in ['raw'] + [xpid for xpid in experiments.keys()]:
+            self.reliability_diagram(self.data[product].data.reshape(-1, 16), self.data.obs.data.flatten(), product, ax)
+        ax.plot([0,1], [0,1], linestyle=':', color='k')
+        ax.set_xlim([0, 1])
+        ax.set_ylim([0, 1])
+        ax.set_xlabel('Forecast Probability')
+        ax.set_ylabel('Observed Frequency')
+        ax.legend()
+        fig.savefig(f'{savedir}/reliability_diagram_{self.threshold}.pdf', format='pdf')
+
         for threshold in [1, 10, 20]:
             fig,ax = plt.subplots()
             ax.set_title(f'Threshold={threshold}mm')
             for product in ['raw'] + [xpid for xpid in experiments.keys()]:
+                # TODO : vérifier les données (virer les dates où obs=nan,...)
                 self.ROC(self.data[product].data.reshape(-1, 16), self.data.obs.data.flatten(), product, ax, threshold=threshold)
             self.ROC(self.data['antilope'].data.flatten(), self.data.obs.data.flatten(), 'antilope', ax, threshold=threshold)
             ax.set_xlim([0, 0.5])
@@ -474,8 +523,8 @@ class Evaluation(object):
         print(f'Saving scores took {(t10-t9)*1000.}ms')
 
 #        self.rmse(simu[num_poste], obs[num_poste], num_poste)
-#        fiability, resolution, uncertainty = self.brier_decomposition(simu[num_poste], obs[num_poste], threshold)
-#        print('BSfiab+BSres+BSunc=',fiability-resolution+uncertainty)
+#        reliability, resolution, uncertainty = self.brier_decomposition(simu[num_poste], obs[num_poste], threshold)
+#        print('BSfiab+BSres+BSunc=',reliability-resolution+uncertainty)
 #        brier       = self.brier_score(simu[num_poste], obs[num_poste], threshold)
 #                nearest_lat = nearest(self.ensemble.lat, lat)
 #                nearest_lon = nearest(self.ensemble.lon, lon)
@@ -485,8 +534,8 @@ class Evaluation(object):
 #                # Select corresponding simulations
 #                simu[num_poste] = np.transpose(self.ensemble.sel({'lat':nearest_lat, 'lon':nearest_lon}).loc[{'time':dates[num_poste]}].rr.data)
 #                self.rmse(simu[num_poste], obs[num_poste], num_poste)
-#                fiability, resolution, uncertainty = self.brier_decomposition(simu[num_poste], obs[num_poste], threshold)
-#                print('BSfiab+BSres+BSunc=',fiability-resolution+uncertainty)
+#                reliability, resolution, uncertainty = self.brier_decomposition(simu[num_poste], obs[num_poste], threshold)
+#                print('BSfiab+BSres+BSunc=',reliability-resolution+uncertainty)
 #                brier       = self.brier_score(simu[num_poste], obs[num_poste], threshold)
 #                #self.temporal_plot(time, simu, obs, num_poste)
 #                #plt.violinplot(self.mean_error(simu, obs), positions=[pos])
@@ -503,7 +552,7 @@ class Evaluation(object):
         if self.scores is None:
             self.evaluate()
         for score in self.scores.score.data:
-            fig,ax = plt.subplots()
+            fig,ax = plt.subplots(figsize=(22,18))
             pos = 1
             products = [var for var in self.scores.data_vars]
             self.labels = []
