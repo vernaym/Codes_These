@@ -147,8 +147,9 @@ def read_ensemble(datebegin, dateend, frequency, domain):
     The "open_mfdataset" method uses dask parallelisation to optimise computation time. It breaks up the data into "chunks" so that
     operations can be parallelized more efficiently. By default, chunks will be chosen to load entire input files into memory at once,
     which results in memory crashes.
-    It is advised to specify small chunks (here 24 time step). It is not possible to chunk on lat/lon coordinates since there is an 
-    interpolation step early in the algorithm.
+    It is advised to specify small chunks (here a multiple of 24 time steps seem optimal : ~0.6s by date iteration vs >1.2 for other
+    chunk sizes.
+    It is not possible to chunk on lat/lon coordinates since there is an interpolation step early in the algorithm.
 
     Documentation :
     - open_mfdataset : https://docs.xarray.dev/en/stable/generated/xarray.open_mfdataset.html#id4
@@ -167,7 +168,8 @@ def read_ensemble(datebegin, dateend, frequency, domain):
     # running time.
     # See : https://docs.xarray.dev/en/stable/user-guide/dask.html
     #pearome = xr.open_mfdataset(filenames, combine='nested', concat_dim='member').compute()  # Impossible avec des fichiers trop volumineux
-    # TODO : optimiser le temps de calcul en testant different "chunks"
+
+    # Chunks of a multiple of 24 time steps seem optimal (~0.6s by iteration vs >1.2 for other chunk sizes)
     pearome = xr.open_mfdataset(filenames, combine='nested', concat_dim='member', chunks={'time': 24})  # Setting chunks is critical (read the doc !)
     pearome['member'] = np.arange(1,17)
     if frequency == 'daily':
@@ -203,24 +205,6 @@ def read_nivometeo_obs(domain='alp'):
 
     return nivometeo.to_xarray()
 
-def read_ensemble_old(datebegin, dateend, frequency, domain='GrandesRousses'):
-
-    pearome = dict()
-    for member in range(1,17):
-        filename = f'aspearome_{member:03d}_{datebegin}_{dateend}_{domain}_{frequency}.nc'
-        filename = os.path.join(datadir, filename)
-        if not os.path.exists(filename):
-            print(f'WARNING : file {filename} does not exist, using default file')
-            filename = os.path.join(datadir, f'aspearome_{member:03d}_2021080106_2022070106_GrandesRousses.nc')
-        if not os.path.exists(filename):
-            print(f'WARNING : no file named {filename} under {datadir}, using default file aspearome_{member:03d}_2021073106_2022070106_GrandesRousses_{frequency}.nc')
-            filename = os.path.join(datadir, f'aspearome_{member:03d}_2021073106_2022070106_GrandesRousses_{frequency}.nc')
-        model = xr.open_dataset(filename).clip(0)  # Avoid <0 values
-        # Extract domain of interest :
-        model = model.where((model.lon>=lonmin-0.25) & (model.lon<=lonmax+0.25) & (model.lat>=latmin-0.25) & (model.lat<=latmax+0.25), drop=True)
-        pearome[member] = model
-
-    return pearome
 
 class Annotation3D(Annotation):
     """ From : https://datascience.stackexchange.com/questions/11430/how-to-annotate-labels-in-a-3d-matplotlib-scatter-plot"""
@@ -542,7 +526,7 @@ class ParticleFilter(object):
     def pdf_parameters(self):
         # I. Define PDF parameters
         #-------------
-        parameters = self.radar.copy()  # TODO : vérifier si ce n'est pas trop couteux (de toutes façon l'bs n'a pas de raison d'être modifiée)
+        parameters = self.radar.copy()  # TODO : vérifier si ce n'est pas trop couteux (de toutes façon l'obs n'a pas de raison d'être modifiée)
         parameters = parameters.rename({'rr':'mu'})  #  Mode=observation (WARNING : mu is NOT the mean) TODO : check if the ensemble after assimilation is not biased
 
         # Observation error
@@ -576,7 +560,6 @@ class ParticleFilter(object):
 
         self.parameters = parameters
 
-        # TODO : plot PDF for some pixels
         # gamma_shape_PDF(Y, k=k, theta=theta)
         if self.plot:
             self.plot_sigma()
@@ -650,9 +633,11 @@ class ParticleFilter(object):
             rdm += step
         return selected_particles
 
-    def normal_dist(self, x , mean , sd):
+    def normal_dist(self, sample, mean, sd):
         # TODO : check why sum(norm) >> 1
-        prob_density = (np.pi*sd) * np.exp(-0.5*((x-mean)/sd)**2)
+        #prob_density = (np.pi*sd) * np.exp(-0.5*((sample-mean)/sd)**2)
+        prob_density =  np.exp(-0.5*((sample-mean)/sd)**2) / (sd*np.sqrt(2*np.pi))
+
         return prob_density
 
 #    @speedtest
@@ -771,7 +756,7 @@ class ParticleFilter(object):
         if self.plot:  # Not with localisation
             plot_weights(date, weights)
 
-#    @speedtest
+    @speedtest
     def ponctual_assimilation(self, date, idd, localized_period, obs_date, raw_date, parameters_date):
         stop = False
         xloc = 3  # TODO : à paramétriser
@@ -781,6 +766,7 @@ class ParticleFilter(object):
         self.nb_out_loc = np.zeros(self.nposte)  # Count number of obs outside localized ensemble
         self.inflation = np.zeros(self.nposte)  # Count number of time inflation was used
         for idp, (num_poste, lat, lon) in enumerate(assimilation_points):
+            #print(num_poste)
             lat = nearest(self.radar.lat, lat)  # Latitude of the corresponding antilope pixel
             lon = nearest(self.radar.lon, lon)  # Longitude of the corresponding antilope pixel
             idy = np.where(self.radar.lat.data==lat)[0][0]  # index of the corresponding antilope pixel latitude
@@ -788,13 +774,11 @@ class ParticleFilter(object):
             localisation_lat = [self.radar.lat.data[idy+dlat] for dlat in range(-yloc,yloc+1)]  # Latitudes to consider for localisation. TODO : use a circle
             localisation_lon = [self.radar.lon.data[idx+dlon] for dlon in range(-xloc,xloc+1)]  #Longitudes to consider for localisation. TODO : use a circle
             raw_localized = localized_period.sel({'lat':localisation_lat, 'lon':localisation_lon})
-            print('DBUG0')
             if self.frequency == 'hourly':
                 t1 = time.time()
                 raw_localized.compute()  # Load data now
                 t2 = time.time()
-                print(f'reading "raw_localized" took {(t2-t1)*1000.}ms')
-            print('DBUG1')
+                #print(f'reading "raw_localized" took {(t2-t1)*1000.}ms')
             obs = obs_date.sel({'lat':lat, 'lon':lon})
             raw = raw_localized.sel({'time':date, 'lat':lat, 'lon':lon})
             raw_localized = raw_localized.rr.data.flatten()  # "Super ensemble"
