@@ -716,10 +716,6 @@ class ParticleFilter(object):
         xloc = 3  # TODO : à paramétriser
         yloc = 3  # TODO : à paramétriser
 
-        self.nb_out_raw = np.zeros((self.nlon, self.nlat))  # Count number of obs outside raw ensemble
-        self.nb_out_loc = np.zeros((self.nlon, self.nlat))  # Count number of obs outside localized ensemble
-        self.inflation = np.zeros((self.nlon, self.nlat))  # Count number of time inflation was used
-
         #for idx,lon in enumerate(self.radar.lon.data[xloc:-xloc]):  # TODO : rajouter les bords du domaines
         for idx,lon in enumerate(self.radar.lon.data):
 #            obs_lon = obs_date.sel(lon=lon)
@@ -769,8 +765,11 @@ class ParticleFilter(object):
                     self.nb_out_loc[idx, idy] += 1
 
                 new, inflation = self.assimilation(date, raw, raw_localized, parameters, lat, lon, idx, idy)
+                if inflation >= 2:
+                    print(f'Iteration {inflation} for pixel ({idx}, {idy})')
 
-                self.inflation[idx,idy] = inflation
+                self.inflation[idx,idy] += int(inflation)
+
                 # TODO : remplir une liste plutot que boucler
                 for member, field in self.newlocalfield.items():
                     field[idx,idy,idd]  = new[member-1]  # fill new member
@@ -784,9 +783,6 @@ class ParticleFilter(object):
         xloc = 3  # TODO : à paramétriser
         yloc = 3  # TODO : à paramétriser
         assimilation_points = zip(self.nivometeo.num_poste.data, np.max(self.nivometeo.lat, axis=1).data, np.max(self.nivometeo.lon, axis=1).data)
-        self.nb_out_raw = np.zeros(self.nposte)  # Count number of obs outside raw ensemble
-        self.nb_out_loc = np.zeros(self.nposte)  # Count number of obs outside localized ensemble
-        self.inflation = np.zeros(self.nposte)  # Count number of time inflation was used
         for idp, (num_poste, lat, lon) in enumerate(assimilation_points):
             #print(num_poste)
             lat = nearest(self.radar.lat, lat)  # Latitude of the corresponding antilope pixel
@@ -822,8 +818,11 @@ class ParticleFilter(object):
                 self.nb_out_loc[idp] += 1
 
             new, inflation = self.assimilation(date, raw, raw_localized, parameters, lat, lon, idx, idy, num_poste=num_poste)
+            if inflation >= 2:
+                print(f'Iteration {inflation} for station {num_poste}')
 
-            self.inflation[idp] = inflation
+            self.inflation[idp] += int(inflation)
+
             for member, field in self.newlocalfield.items():
                 field[idp,idd]  = new[member-1]  # fill new member
 
@@ -855,9 +854,6 @@ class ParticleFilter(object):
             # ECC is the order of members indicies (from 0 to 15 !) sorted by increasing precipitation
             selection_locale = self.resample(weights, self.Ne)  # Idicies of selected particles from the "super-ensemble"
             nb_new_member = len(np.unique(selection_locale))
-
-            if inflation >= 2:
-                print(f'Iteration {inflation} for pixel ({idx}, {idy})')
 
         tmp = np.sort(raw_localized[selection_locale])
 
@@ -908,9 +904,15 @@ class ParticleFilter(object):
         if self.gridded:
             self.nlon, self.nlat = len(self.radar.lon), len(self.radar.lat)
             null  = np.empty((self.nlon, self.nlat, len(self.period)))  # 2D (lat/lon) field
+            self.nb_out_raw = np.zeros((self.nlon, self.nlat))  # Count number of obs outside raw ensemble
+            self.nb_out_loc = np.zeros((self.nlon, self.nlat))  # Count number of obs outside localized ensemble
+            self.inflation = np.zeros((self.nlon, self.nlat))  # Count number of time inflation was used
         else:
             self.nposte = len(self.nivometeo.num_poste)
             null = np.empty((self.nposte, len(self.period)))
+            self.nb_out_raw = np.zeros(self.nposte)  # Count number of obs outside raw ensemble
+            self.nb_out_loc = np.zeros(self.nposte)  # Count number of obs outside localized ensemble
+            self.inflation = np.zeros(self.nposte)  # Count number of time inflation was used
         self.newlocalfield = {m:null.copy() for m in range(1, self.Ne+1)}
         time_selection_unique = 0
         time_selection_sequentielle = 0
@@ -924,7 +926,7 @@ class ParticleFilter(object):
             t1 = time.time()
             localized_period = self.ensemble.sel({'time':assimilation_period}).compute()  # Load data into memory now
             t2 = time.time()
-            print(f'reading "raw_localized" took {(t2-t1)*1000.}ms')
+            #print(f'reading "raw_localized" took {(t2-t1)*1000.}ms')
 #            obs_date = self.radar.sel(time=date)
 #            if self.frequency == 'hourly' and self.localisation:
 #                raw_date = localized_period.sel(time=date)
@@ -1023,6 +1025,11 @@ class ParticleFilter(object):
             outname1 = '_'.join([outname1, 'mask'])
             outname2 = '_'.join([outname2, 'mask'])
             outname3 = '_'.join([outname3, 'mask'])
+        if self.gridded:
+            for (outname, field) in zip([outname1, outname2, outname3], [out_raw, out_loc, inflation]):
+                fig, ax = plt.subplots()
+                field.plot(ax=ax, cmap=plt.cm.Greys)
+                fig.savefig(f'{outname}.pdf', format='pdf', bbox_inches='tight')
         out_raw.to_netcdf(f"{outname1}.nc")
         out_loc.to_netcdf(f"{outname2}.nc")
         inflation.to_netcdf(f"{outname3}.nc")
@@ -1117,8 +1124,8 @@ def plot_chrono(time, obs, raw, assim):
     plt.savefig(f"Chronologie_{time[0].strftime('%Y%m%d%H')}_{time[-1].strftime('%Y%m%d%H')}.pdf", format='pdf')
 
 if __name__ == "__main__":
+    t0 = time.time()
     args = parse_command_line()
-
     #goto(args.workdir)
     extract_period = date_range(args.datebegin, args.dateend, dt=timestep[args.frequency])
 
@@ -1165,3 +1172,5 @@ if __name__ == "__main__":
     localfields.to_netcdf(f"{outname}.nc")
     #globalfields.to_netcdf(f"Assimilation_globale_{args.datebegin.strftime('%Y%m%d%H')}_{args.dateend.strftime('%Y%m%d%H')}_{args.frequency}.nc")
 
+    tfin = time.time()
+    print(f'Total execution time : {(tfin-t0)*1000./60.} minutes')
