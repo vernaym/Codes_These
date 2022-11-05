@@ -39,6 +39,14 @@ domain_coords = dict(
         alp            = dict(latmax=46.450, latmin=44.100, lonmin=5.400, lonmax=7.200),
 )
 
+landmarks = {
+        "Alpe d'Huez" : dict(lon=6.070, lat=45.092, alt=1800, marker='o'),
+        "Les 2 Alpes" : dict(lon=6.127, lat=45.013, alt=1800, marker='o'),
+        "Lautaret"    : dict(lon=6.408, lat=45.038, alt=2058, marker='X'),
+        "La Meije"    : dict(lon=6.311, lat=45.008, alt=3500, marker='^'),  # real alt = 3984
+        "Pic Blanc"   : dict(lon=6.131, lat=45.128, alt=3000, marker='^'),  # real alt = 3333
+    }
+
 suffix = dict(hourly='H', daily='Q')
 timestep = dict(hourly=1, daily=24)
 
@@ -353,8 +361,6 @@ def read_obs(args):
             filename = os.path.join(datadir, f'ANTILOPEH_2021103000_2022060200_alp.nc')
     if os.path.exists(filename):
         antilope = xr.open_dataset(filename)
-        antilope = antilope.transpose('lat', 'lon', 'time')  # TODO : Fix the dataset in the generation script
-        # WARNING :  la commande suivante réduit sensibement le domaine, attention aux comparaisons entre figures (en particulier avec les CUMULS)
         latmax = domain_coords[args.domain]['latmax']
         latmin = domain_coords[args.domain]['latmin']
         lonmin = domain_coords[args.domain]['lonmin']
@@ -391,7 +397,8 @@ class ParticleFilter(object):
         self.zoom_lon = nearest(obs.lon, zoom['lon'])
         self.zoom_lat = nearest(obs.lat, zoom['lat'])
 
-        self.radar = obs.transpose('lon','lat','time')
+        #self.radar = obs.transpose('lon','lat','time')
+        self.radar = obs
         self.ensemble = ensemble
         self.members = self.ensemble.member
         self.Ne = len(self.members)
@@ -760,19 +767,19 @@ class ParticleFilter(object):
 
                 # Is the observation outside the ensemble ?
                 if (np.min(raw) > obs) or (np.max(raw) < obs):
-                    self.nb_out_raw[idx, idy] += 1
+                    self.nb_out_raw[idy, idx] += 1
                 if (np.min(raw_localized) > obs) or (np.max(raw_localized) < obs):
-                    self.nb_out_loc[idx, idy] += 1
+                    self.nb_out_loc[idy, idx] += 1
 
                 new, inflation = self.assimilation(date, raw, raw_localized, parameters, lat, lon, idx, idy)
                 if inflation >= 2:
                     print(f'Iteration {inflation} for pixel ({idx}, {idy})')
 
-                self.inflation[idx,idy] += int(inflation)
+                self.inflation[idy,idx] += int(inflation)
 
                 # TODO : remplir une liste plutot que boucler
                 for member, field in self.newlocalfield.items():
-                    field[idx,idy,idd]  = new[member-1]  # fill new member
+                    field[idy,idx,idd]  = new[member-1]  # fill new member
 
         if self.plot:  # Not with localisation
             plot_weights(date, weights)
@@ -903,10 +910,10 @@ class ParticleFilter(object):
         # Initialisation of output fields
         if self.gridded:
             self.nlon, self.nlat = len(self.radar.lon), len(self.radar.lat)
-            null  = np.empty((self.nlon, self.nlat, len(self.period)))  # 2D (lat/lon) field
-            self.nb_out_raw = np.zeros((self.nlon, self.nlat))  # Count number of obs outside raw ensemble
-            self.nb_out_loc = np.zeros((self.nlon, self.nlat))  # Count number of obs outside localized ensemble
-            self.inflation = np.zeros((self.nlon, self.nlat))  # Count number of time inflation was used
+            null  = np.empty((self.nlat, self.nlon, len(self.period)))  # 2D (lat/lon) field
+            self.nb_out_raw = np.zeros((self.nlat, self.nlon))  # Count number of obs outside raw ensemble
+            self.nb_out_loc = np.zeros((self.nlat, self.nlon))  # Count number of obs outside localized ensemble
+            self.inflation = np.zeros((self.nlat, self.nlon))  # Count number of time inflation was used
         else:
             self.nposte = len(self.nivometeo.num_poste)
             null = np.empty((self.nposte, len(self.period)))
@@ -964,6 +971,12 @@ class ParticleFilter(object):
         #self.SCGD_shape_PDF(model, self.parameters.mu.data[x][y], k=self.parameters.k.data[x][y], theta=self.parameters.theta.data[x][y],delta=self.parameters.delta.data[x][y], plot_distribution=True)
         self.weighting(model, self.parameters.mu.data[x][y], self.parameters.sigma.data[x][y], plot_distribution=True)
 
+    def add_landmarks(self, ax):
+        # Add landmarks
+        for landmark, infos in landmarks.items():
+            ax.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='red', markersize=5)
+            ax.annotate(landmark, (infos['lon']+0.003, infos['lat']+0.003), color='red', fontsize=12)
+
     @speedtest
     def output(self, localfields, globalfields):
         # This method takes ~3.5 s but most of the time (~3.3s) is spent
@@ -974,21 +987,21 @@ class ParticleFilter(object):
             out_raw = xr.DataArray(
                     name   = 'out_raw',
                     data   = self.nb_out_raw,
-                    dims   = ["lon", "lat"],
+                    dims   = ["lat", "lon"],
                     coords = dict(lon=self.radar.lon, lat=self.radar.lat),
                     attrs  = dict(description="Number of assimilation step when the observation was outside the raw ensemble"),
                 )
             out_loc = xr.DataArray(
                     name   = 'out_loc',
                     data   = self.nb_out_loc,
-                    dims   = ["lon", "lat"],
+                    dims   = ["lat", "lon"],
                     coords = dict(lon=self.radar.lon, lat=self.radar.lat),
                     attrs  = dict(description="Number of assimilation step when the observation was outside the localized ensemble"),
                 )
             inflation = xr.DataArray(
                     name   = 'inflation',
                     data   = self.inflation,
-                    dims   = ["lon", "lat"],
+                    dims   = ["lat", "lon"],
                     coords = dict(lon=self.radar.lon, lat=self.radar.lat),
                     attrs  = dict(description="Number of assimilation step when inlfation was used"),
                 )
@@ -1027,8 +1040,9 @@ class ParticleFilter(object):
             outname3 = '_'.join([outname3, 'mask'])
         if self.gridded:
             for (outname, field) in zip([outname1, outname2, outname3], [out_raw, out_loc, inflation]):
-                fig, ax = plt.subplots()
+                fig, ax = plt.subplots(figsize=(12,6))
                 field.plot(ax=ax, cmap=plt.cm.Greys)
+                self.add_landmarks(ax)
                 fig.savefig(f'{outname}.pdf', format='pdf', bbox_inches='tight')
         out_raw.to_netcdf(f"{outname1}.nc")
         out_loc.to_netcdf(f"{outname2}.nc")
@@ -1134,13 +1148,13 @@ if __name__ == "__main__":
     if args.gridded:
         localfields = xr.DataArray(
                 name   = 'rr',
-                dims   = ["lon", "lat", "time", "member"],  # TODO homogénéiser l'ordre des coordonnées
+                dims   = ["lat", "lon", "time", "member"],
                 coords = dict(lon=antilope.lon, lat=antilope.lat, time=extract_period, member=range(1,17)),
                 attrs  = dict(description="24 hour precipitation",units="mm"),
             )
         globalfields = xr.DataArray(
                 name   = 'rr',
-                dims   = ["lat", "lon", "time", "member"],  # TODO homogénéiser l'ordre des coordonnées
+                dims   = ["lat", "lon", "time", "member"],
                 coords = dict(lon=antilope.lon, lat=antilope.lat, time=extract_period, member=range(1,17)),
                 attrs  = dict(description="24 hour precipitation",units="mm"),
             )
