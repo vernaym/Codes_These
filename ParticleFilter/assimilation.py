@@ -156,7 +156,10 @@ def read_ensemble(datebegin, dateend, frequency, domain):
 
     #filenames = [os.path.join(datadir, f"aspearome_{mb:03d}_{datebegin}_{dateend}_{domain}_{frequency}.nc") for mb in range(1,17)]
     #filenames = [os.path.join(datadir, f"aspearome_{mb:03d}_2021073106_2022070106_{domain}_{frequency}.nc") for mb in range(1,17)]
-    filenames = [os.path.join(datadir, f"aspearome_{mb:03d}_2021102806_2022060206_{domain}_hourly.nc") for mb in range(1,17)]
+    if domain == 'alp':
+        filenames = [os.path.join(datadir, f"aspearome_{mb:03d}_2021102806_2022060206_{domain}_hourly.nc") for mb in range(1,17)]
+    elif domain == 'GrandesRousses':
+        filenames = [os.path.join(datadir, f"aspearome_{mb:03d}_2021073106_2022070106_{domain}_hourly.nc") for mb in range(1,17)]
 
     # open_mfdataset returns a dask.array<chunksize=(...), meta=np.ndarray> object that divides arrays into many small pieces, called chunks, 
     # each of which is presumed to be small enough to fit into memory in order to avoid a memory overload. 
@@ -342,10 +345,12 @@ def read_obs(args):
         print(f'WARNING : file {filename} does not exist, looking for it under {datadir}')
         filename = os.path.join(datadir, filename)
     if not os.path.exists(filename):
-        #print(f'WARNING : no file named {filename} under {datadir}, using default file ANTILOPEQ_2021080106_2022070106_GrandesRousses.nc')
-        #filename = os.path.join(datadir, f'ANTILOPE{suffix[args.frequency]}_2021073106_2022070106_GrandesRousses.nc')
-        print(f'WARNING : no file named {filename} under {datadir}, using default file ANTILOPEH_2021103000_2022060200_alp.nc')
-        filename = os.path.join(datadir, f'ANTILOPEH_2021103000_2022060200_alp.nc')
+        if args.domain == 'GrandesRousses':
+            print(f'WARNING : no file named {filename} under {datadir}, using default file ANTILOPEQ_2021080106_2022070106_GrandesRousses.nc')
+            filename = os.path.join(datadir, f'ANTILOPE{suffix[args.frequency]}_2021073106_2022070106_GrandesRousses.nc')
+        elif args.domain == 'alp':
+            print(f'WARNING : no file named {filename} under {datadir}, using default file ANTILOPEH_2021103000_2022060200_alp.nc')
+            filename = os.path.join(datadir, f'ANTILOPEH_2021103000_2022060200_alp.nc')
     if os.path.exists(filename):
         antilope = xr.open_dataset(filename)
         antilope = antilope.transpose('lat', 'lon', 'time')  # TODO : Fix the dataset in the generation script
