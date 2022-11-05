@@ -723,30 +723,42 @@ class ParticleFilter(object):
         xloc = 3  # TODO : à paramétriser
         yloc = 3  # TODO : à paramétriser
 
-        #for idx,lon in enumerate(self.radar.lon.data[xloc:-xloc]):  # TODO : rajouter les bords du domaines
-        for idx,lon in enumerate(self.radar.lon.data):
-#            obs_lon = obs_date.sel(lon=lon)
-#            raw_lon = raw_date.sel(lon=lon)
+#        if self.localisation:
+#            assim_lat = self.radar.lat.data[yloc:-yloc]
+#            assim_lon = self.radar.lon.data[xloc:-xloc]
+#        else:
+        assim_lat = self.radar.lat.data
+        assim_lon = self.radar.lon.data
+        for idx,lon in enumerate(assim_lon):
             parameters_lon = parameters_date.sel(lon=lon)
             if self.localisation:
-                idx = idx + xloc
-                localisation_lon = [self.radar.lon.data[idx+dlon] for dlon in range(-xloc,xloc+1)]  # TODO : modifier la zone de localisation (--> cerlce)
+                #idx = idx + xloc
+                localisation_lon = np.array(
+                        [self.radar.lon.data[idx+dlon] if idx+dlon>=0 and idx+dlon<len(assim_lon) else np.nan
+                            for dlon in range(-xloc,xloc+1)]
+                    )  # TODO : modifier la zone de localisation (--> cerlce)
+                # On enlève les valeurs manquantes (pour les points en bord de domaine)
+                # ==> la localisation est réduite en bordure de domaine !
+                localisation_lon = localisation_lon[~np.isnan(localisation_lon)]
                 localized_lon = localized_period.sel({'lon':localisation_lon})
             else:
                 localized_lon = localized_period.sel({'lon':lon})
 
-            #for idy,lat in enumerate(self.radar.lat.data[yloc:-yloc]):  # TODO : rajouter les bords du domaines
-            for idy,lat in enumerate(self.radar.lat.data):
-#                obs = obs_lon.sel({'lat':lat})
-#                raw = raw_lon.sel({'lat':lat}).rr.data
+            for idy,lat in enumerate(assim_lat):
                 parameters = parameters_lon.sel(lat=lat)
                 obs = parameters.mu.data
                 if self.localisation:
-                    idy = idy + yloc
-                    localisation_lat = [self.radar.lat.data[idy+dlat] for dlat in range(-yloc,yloc+1)]  # TODO : modifier la zone de localisation (--> cerlce)
-                    localized_lat = localized_lon.sel({'lat':localisation_lat})
+                    #idy = idy + yloc
+                    localisation_lat = np.array(
+                            [self.radar.lat.data[idy+dlat] if idy+dlat>=0 and idy+dlat<len(assim_lat) else np.nan
+                                for dlat in range(-yloc,yloc+1)]
+                        )  # TODO : modifier la zone de localisation (--> cerlce)
+                    # On enlève les valeurs manquantes (pour les points en bord de domaine)
+                    # ==> la localisation est réduite en bordure de domaine !
+                    localisation_lat = localisation_lat[~np.isnan(localisation_lat)]
+                    raw_localized = localized_lon.sel({'lat':localisation_lat})
                     raw = raw_localized.sel({'time':date, 'lat':lat, 'lon':lon}).rr.data
-                    raw_localized = localized_lat.rr.data.flatten()  # "Super ensemble"
+                    raw_localized = raw_localized.rr.data.flatten()  # "Super ensemble"
                 else:
                     raw_localized = localized_lon.sel({'lat':lat}).rr.data.flatten()
                     raw = raw_localized
@@ -760,10 +772,6 @@ class ParticleFilter(object):
                 # Total time for sequential selection :  217705.75380325317
                 # BUT the sequential selectionis far more efficient since there are fewer calls
                 ##############################################################################################################################
-
-                # Data selection already done before to optimse running time
-                #obs, raw, raw_localized, parameters = self.select_data(date, lon, lat, assimilation_period, localisation_lat, localisation_lon)
-                #obs, raw, parameters = self.select_data(date, lon, lat)
 
                 # Is the observation outside the ensemble ?
                 if (np.min(raw) > obs) or (np.max(raw) < obs):
@@ -1187,4 +1195,4 @@ if __name__ == "__main__":
     #globalfields.to_netcdf(f"Assimilation_globale_{args.datebegin.strftime('%Y%m%d%H')}_{args.dateend.strftime('%Y%m%d%H')}_{args.frequency}.nc")
 
     tfin = time.time()
-    print(f'Total execution time : {(tfin-t0)*1000./60.} minutes')
+    print(f'Total execution time : {(tfin-t0)/60.} minutes')
