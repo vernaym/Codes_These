@@ -114,7 +114,7 @@ def get_date(a_string):
                 try:
                     date = datetime.strptime(a_string, '%y%m%d%H').replace(minute=0, second=0, microsecond=0)
                 except ValueError:
-                    print('The start date provided is not in a good format (YYYYMMDDHH or YYMMDDHH or YYYYMMDDHHMM or YYMMDD or YYYYMMDD)')
+                    print(f'The date {a_string} provided is not in a good format (YYYYMMDDHH or YYMMDDHH or YYYYMMDDHHMM or YYMMDD or YYYYMMDD)')
                     raise
     finally:
         return date
@@ -707,7 +707,7 @@ class ParticleFilter(object):
         return t2-t1
 
 #    @speedtest
-    def gridded_assimilation(self, date, idd, localized_period, raw_date, parameters_date):
+    def gridded_assimilation(self, date, idd, localized_period, parameters_date):
         """ Loop over all the domain's pixels."""
         # TODO : avec la localisation on ne peut pas traiter les pixels sur les bords du domaine,
         # il faut donc une verrue pour tronquer le domaine
@@ -736,7 +736,7 @@ class ParticleFilter(object):
             for idy,lat in enumerate(self.radar.lat.data):
 #                obs = obs_lon.sel({'lat':lat})
 #                raw = raw_lon.sel({'lat':lat}).rr.data
-                parameters = parameters_lon.sel({'lat':lat})
+                parameters = parameters_lon.sel(lat=lat)
                 obs = parameters.mu.data
                 if self.localisation:
                     idy = idy + yloc
@@ -747,7 +747,6 @@ class ParticleFilter(object):
                 else:
                     raw_localized = localized_lon.sel({'lat':lat}).rr.data.flatten()
                     raw = raw_localized
-
 
                 ##############################################################################################################################
                 # Speed test
@@ -769,7 +768,7 @@ class ParticleFilter(object):
                 if (np.min(raw_localized) > obs) or (np.max(raw_localized) < obs):
                     self.nb_out_loc[idx, idy] += 1
 
-                new, inflation = self.assimilation(date, obs, raw, raw_localized, parameters, lat, lon, idx, idy)
+                new, inflation = self.assimilation(date, raw, raw_localized, parameters, lat, lon, idx, idy)
 
                 self.inflation[idx,idy] = inflation
                 # TODO : remplir une liste plutot que boucler
