@@ -321,8 +321,8 @@ def plot3D(X, Y, Z, colors, date):
     plt.savefig(f'{date}/OBS_3D_{date}.pdf', format='pdf')
 
 
-#def plot_field(field, ax, vmin, vmax, title, cmap=plt.cm.YlGnBu):
-def plot_field(field, ax, vmin, vmax, title, cmap='viridis'):
+def plot_field(field, ax, vmin, vmax, title, cmap=plt.cm.YlGnBu):
+#def plot_field(field, ax, vmin, vmax, title, cmap='viridis'):
     im = field.plot(ax=ax, add_colorbar=False, vmin=vmin, vmax=vmax, cmap=cmap)
     for landmark, infos in landmarks.items():
         ax.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='red', markersize=4)
@@ -552,7 +552,10 @@ class ParticleFilter(object):
         if self.mask is not None:
             #try:
             #mask = xr.open_dataset(os.path.join(datadir, f"mask_error_antilope_{self.domain}.nc"))
-            mask = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask", f"mask{self.mask}_loc10_{self.domain}.nc"))
+            if self.mask in [3,4]:
+                mask = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask", f"mask{self.mask}_loc10_{self.domain}.nc"))
+            else:
+                mask = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask", f"mask{self.mask}_loc10_seuil0.6_{self.domain}.nc"))
             parameters['sigma'] = (0.261 + 0.263 * parameters['mu'])*mask.mask  # According to the linear regression of ANTILOPE RMSE vs ANTILOPE RR
 #            except FileNotFoundError as e:
 #                print(e)
@@ -668,7 +671,7 @@ class ParticleFilter(object):
         return prob_density
 
 #    @speedtest
-    def weighting(self, x, mu, sigma, plot_distribution=False, plot_parameters=False, **kw):
+    def weighting(self, x, mu, sigma, obs, plot_distribution=False, **kw):
 
         draw = self.normal_dist(x, mu, sigma)
 
@@ -686,7 +689,7 @@ class ParticleFilter(object):
             ax.plot(y[(y>0) & (y<ymax)], norm[(y>0) & (y<ymax)],
                     label=f'Norm(mu={mu:0.2},sigma={sigma:0.2})', color=color)
             plt.axvline(x=0, color='k', linestyle='-', linewidth=0.5)
-            plt.axvline(x=mu, color='k', linestyle='--', label=f'Observation : {mu:0.2}')
+            plt.axvline(x=obs, color='k', linestyle='--', label=f'Observation : {mu:0.2}')
             plt.xlabel('Precipitation (mm)')
             plt.ylabel('Weight')
             plt.legend(loc ="upper right")
@@ -753,7 +756,7 @@ class ParticleFilter(object):
 
             for idy,lat in enumerate(assim_lat):
                 parameters = parameters_lon.sel(lat=lat)
-                obs = parameters.mu.data
+                obs = parameters.rr.data
                 if self.localisation:
                     #idy = idy + yloc
                     localisation_lat = np.array(
@@ -831,7 +834,7 @@ class ParticleFilter(object):
                 raw_localized = raw_localized.rr.data.flatten()
                 raw = raw_localized
             parameters = parameters_date.sel({'lat':lat, 'lon':lon})
-            obs = parameters.mu.data
+            obs = parameters.rr.data
 
             # Is the observation outside the ensemble ?
             if (np.min(raw) > obs) or (np.max(raw) < obs):
@@ -853,7 +856,9 @@ class ParticleFilter(object):
 
         nb_new_member = 0
         sigma = float(parameters.sigma.data)/2.
-        obs = parameters.mu.data
+        obs = parameters.rr.data
+        mu = parameters.mu.data
+
         inflation = 0
         while ((nb_new_member < 4) and (inflation <= 8)):  # Security to avoid infinite loops
 
@@ -868,7 +873,7 @@ class ParticleFilter(object):
             # 2.b Weighting
             #-------------
             #weights = self.weighting(raw_localized, parameters.mu.data, sigma, plot_distribution=True)
-            weights = self.weighting(raw_localized, parameters.mu.data, sigma)  # parameters.mu.data is the observations !
+            weights = self.weighting(raw_localized, mu, sigma, obs)  # parameters.mu.data is the observations !
             weights = weights / np.sum(weights)
 
             # 3. Resampling
@@ -893,7 +898,7 @@ class ParticleFilter(object):
 
         return new, inflation
 
-    def plot_assimilation(self, raw, assim, obs, num_poste, date):
+    def plot_assimilation(self, raw, assim, parameters, num_poste, date):
         """ References :
         https://stackoverflow.com/questions/64646449/how-to-create-asymmetric-violin-plot-in-python-using-matplotlib
         https://seaborn.pydata.org/generated/seaborn.violinplot.html
@@ -903,7 +908,7 @@ class ParticleFilter(object):
         data = data.melt()
         data['dummy'] = 0
         sns.violinplot(data=data, split=True, y='value', hue='variable', x='dummy', inner="stick", palette=['sandybrown', 'skyblue'])
-        plt.plot(obs, marker='_', markersize=30, markeredgewidth=3, color='red')
+        plt.plot(parameters.rr.data, marker='_', markersize=30, markeredgewidth=3, color='red')
         # TODO : ploter l'obs nivometeo correspondante...
         fig.savefig(f'assim_{num_poste}_{date}.pdf', formatout='pdf',  bbox_inches='tight')
 
@@ -984,7 +989,7 @@ class ParticleFilter(object):
     def plot_one_pixel(self, x, y):
         model = [values.rr.data[x][y] for values in self.ensemble.values()]
         #self.SCGD_shape_PDF(model, self.parameters.mu.data[x][y], k=self.parameters.k.data[x][y], theta=self.parameters.theta.data[x][y],delta=self.parameters.delta.data[x][y], plot_distribution=True)
-        self.weighting(model, self.parameters.mu.data[x][y], self.parameters.sigma.data[x][y], plot_distribution=True)
+        self.weighting(model, self.parameters.mu.data[x][y], self.parameters.sigma.data[x][y], self.parameters.rr.data[x][y], plot_distribution=True)
 
     def add_landmarks(self, ax):
         # Add landmarks
