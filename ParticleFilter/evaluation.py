@@ -31,7 +31,10 @@ import seaborn as sns
 # --> see https://www.ecmwf.int/sites/default/files/elibrary/2010/10725-diagnosis-ensemble-forecasting-systems.pdf
 
 #domain = 'GrandesRousses'
-domain = sys.argv[1]
+if len(sys.argv) == 1:
+    domain = 'alp'  # default value
+else:
+    domain = sys.argv[1]
 
 datadir = '/home/vernaym/These/DATA'
 workdir = '/home/vernaym/workdir/ASSIMILATION/'
@@ -55,15 +58,19 @@ coords = dict(
 savedir = f"/home/vernaym/These/figures/evaluation/{domain}"
 
 experiments = dict(
-#        GD0      = 'Assimilation_globale_2021073106_2022070106_daily.nc',
-#        LD0      = 'Assimilation_locale_2021073106_2022070106_daily.nc',
-#        LDM      = 'Assimilation_locale_2021073106_2022070106_daily_avec_masque.nc',
-#        LDML     = 'Assimilation_locale_2021073106_2022070106_daily_avec_masque_et_localisation.nc',
+        #GD0      = 'Assimilation_globale_2021073106_2022070106_daily.nc',
+        LD0      = 'XP00_assimilation_quotiedienne_sans_masque_sans_localisation/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
+        LDM      = 'XP02_assimilation_quotidienne_avec_masque/Assimilation_locale_2021120106_2022050106_daily_alp_mask4.nc',
+        LDML     = 'XP05_assimilation_quotidienne_avec_masque_et_localisation/Assimilation_locale_2021120106_2022050106_daily_alp_localisation_mask4.nc',
+        LDMD     = 'XP06_assimilation_quotidienne_avec_masque_et_debiaisage/Assimilation_locale_2021120106_2022050106_daily_alp_mask4_debiasing.nc',
+        LDMD0    = 'XP09_assimilation_quotidienne_avec_masque_et_debiaisage_ratio_moyen/Assimilation_locale_2021120106_2022050106_daily_alp_mask4_debiasing.nc',
+        LDMLD    = 'XP08_assimilation_quotidienne_avec_masque_localisation_et_debiaisage/Assimilation_locale_2021120106_2022050106_daily_alp_localisation_mask4_debiasing.nc',
+        LHMD     = 'XP03_assimilation_horaire_avec_masque_et_debiaisage/Assimilation_locale_2021120106_2022050106_hourly_alp_mask4_debiasing.nc',
 #        LH0      = 'Assimilation_locale_2021073106_2022070106_hourly.nc',
 #        LHM      = 'Assimilation_locale_2021073106_2022070106_hourly_avec_masque.nc',
 #        LHML     = 'Assimilation_locale_2021080106_2022063006_hourly_avec_localisation.nc',
-        LDLA     = 'XP06_assimilation_quotidienne_ponctuelle_avec_localisation/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
-        LHLA     = 'XP07_assimilation_horaire_ponctuelle_avec_localisation/Assimilation_locale_2021120106_2022050106_hourly_alp.nc',
+#        LDLA     = 'XP06_assimilation_quotidienne_ponctuelle_avec_localisation/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
+#        LHLA     = 'XP07_assimilation_horaire_ponctuelle_avec_localisation/Assimilation_locale_2021120106_2022050106_hourly_alp.nc',
     )
 
 xpid_label = dict(
@@ -71,11 +78,13 @@ xpid_label = dict(
         LD0      = 'Daily assimilation without mask',
         LDM      = 'Daily assimilation with mask',
         LDML     = 'Daily assimilation with mask and localization',
+        LDMD     = 'Daily assimilation with mask and debiasing',
+        LDMD0    = 'Daily assimilation with mask and uniform debiasing',
+        LDMLD    = 'Daily assimilation with mask and localization and debiasing',
+        LHMD     = 'Hourly assimilation with mask and debiasing',
+        LHMDL     = 'Hourly assimilation with mask, debiasing and localization',
         LH0      = 'Hourly assimilation without mask',
         LHM      = 'Hourly assimilation with mask',
-        LHML     = 'Hourly assimilation with mask and localization',
-        LDLA     = 'Daily assimilation without mask, with localization',
-        LHLA     = 'Hourly assimilation without mask, with localization',
     )
 
 
@@ -97,12 +106,12 @@ class Evaluation(object):
         return  self.ensemble.mean(axis=3).rr.data
 
     def mean_error(self, simu, obs):
-        return simu.mean() - obs
+        return simu.mean(axis=1) - obs
 
     def median_error(self, simu, obs):
-        return simu.median() - obs
+        return simu.median(axis=1) - obs
 
-    def bias(self, simu, obs, **kw):
+    def bias(self, simu, obs, *args, **kw):
 
         simu = simu[~np.isnan(obs)]
         obs = obs[~np.isnan(obs)]
@@ -123,7 +132,7 @@ class Evaluation(object):
 
         return disp
 
-    def rmse(self, simu, obs, **kw):
+    def rmse(self, simu, obs, *args, **kw):
 
         simu = simu[~np.isnan(obs)]
         obs = obs[~np.isnan(obs)]
@@ -131,14 +140,14 @@ class Evaluation(object):
         if np.shape(simu) == np.shape(obs):  # "Simulation" déterministe
             rmse = np.sqrt(np.nanmean(simu-obs)) if np.nanmean(simu-obs) > 0 else np.nan
         else:  # Simulation d'ensemble
-            rmse = np.sqrt(np.nanmean(np.square(simu.mean() - obs)))
+            rmse = np.sqrt(np.nanmean(np.square(simu.mean(axis=1) - obs)))
         return rmse
 
-    def brier_skill_score(self, simu, ref, obs):
+    def brier_skill_score(self, simu, obs, ref):
         """  BSS = 1 - BS / BSref  """
         return 1 - self.brier_score(simu, obs) / self.brier_score(ref, obs)
 
-    def brier(self, simu, obs):
+    def brier(self, simu, obs, *args):
 
         # TODO : verifier le calcul du score de brier
         simu = simu[~np.isnan(obs)]
@@ -208,6 +217,9 @@ class Evaluation(object):
 
         return (false_alarm, succes_rate)
 
+    def rank_historam(self, simu, obs, *args):
+        pass
+
     def reliability_diagram(self, simu, obs, product, ax):
         ndays = len(obs)
         simu = simu[~np.isnan(obs)]
@@ -237,7 +249,7 @@ class Evaluation(object):
 
         return np.array(proba), np.array(catsize), np.array(freq_occ), global_freq_obs
 
-    def reliability(self, simu, obs):
+    def reliability(self, simu, obs, *args):
         simu = simu[~np.isnan(obs)]
         obs = obs[~np.isnan(obs)]
         ndays = len(obs)
@@ -247,7 +259,7 @@ class Evaluation(object):
         print('reliability=',reliability)
         return reliability
 
-    def resolution(self, simu, obs):
+    def resolution(self, simu, obs, *args):
         simu = simu[~np.isnan(obs)]
         obs = obs[~np.isnan(obs)]
         ndays = len(obs)
@@ -257,7 +269,7 @@ class Evaluation(object):
         print('Resolution=',resolution)
         return resolution
 
-    def uncertainty(self, simu, obs):
+    def uncertainty(self, simu, obs, *args):
         simu = simu[~np.isnan(obs)]
         obs = obs[~np.isnan(obs)]
         proba, catsize, freq_occ, global_freq_obs = self.probability_classes(simu, obs)
@@ -414,7 +426,7 @@ class Evaluation(object):
             simus[xpid] = self.read_simu(os.path.join(workdir, filename))
 
 #        scores_list = ['reliability', 'resolution', 'uncertainty', 'rmse', 'bias', 'brier']
-        scores_list = ['rmse', 'bias', 'brier']
+        scores_list = ['rmse', 'bias', 'brier', 'brier_skill_score']
         scores = dict()
         dates = self.data.date
         #dates = dates[:10]
@@ -453,7 +465,7 @@ class Evaluation(object):
                     print(f'Reading simulation {xpid} took {(t5-t4)*1000.}ms')
                 #self.temporal_plot(dates, data['LH0'][-1], obs, num_poste, raw=data['raw'][-1], antilope=data['antilope'][-1], simu2=data['LD0'][-1])
                 #self.temporal_plot(dates, data['LDML'][-1], obs, num_poste, raw=data['raw'][-1], antilope=data['antilope'][-1], simu2=data['LDM'][-1])
-                #self.temporal_plot(dates, data['LDLA'][-1], obs, num_poste, alti, raw=data['raw'][-1], antilope=data['antilope'][-1])
+                #self.temporal_plot(dates, data['LDMLD'][-1], obs, num_poste, alti, raw=data['raw'][-1], antilope=data['antilope'][-1])
                 t6 = time.time()
                 print(f'Temporal plot took {(t6-t5)*1000.}ms')
                 idx=10
@@ -468,9 +480,14 @@ class Evaluation(object):
                     if product not in scores.keys():
                         scores[product] = {score:list() for score in scores_list}
                     for score_name, score in scores[product].items():
-                        score.append(getattr(self, score_name)(data[product][-1][~np.isnan(obs)], obs[~np.isnan(obs)]))
+                        if score_name != 'brier_skill_score':
+                            score.append(getattr(self, score_name)(data[product][-1][~np.isnan(obs)], obs[~np.isnan(obs)]))
                     t7 = time.time()
                     print(f'Computing score for simulation {xpid} took {(t7-t6)*1000.}ms')
+                    if product not in ['antilope', 'raw']:
+                        scores[product]['brier_skill_score'].append(1-scores[product]['brier'][-1]/scores['raw']['brier'][-1])
+                    else:
+                        scores[product]['brier_skill_score'].append(np.nan)
                 t7 = time.time()
             else:
                 self.data = self.data.where(self.data.num_poste!=num_poste, drop=True)  # Drop station
@@ -557,19 +574,32 @@ class Evaluation(object):
             products = [var for var in self.scores.data_vars]
             self.labels = []
             for product in products:
-                x = self.scores.loc[{'score':score}][product].data
-                for idx, poste in enumerate(self.scores.num_poste.data):
-                    if not np.isnan(x[idx]):
-                        plt.text(pos, x[idx], str(int(poste)), fontsize=6)
-                    else:
-                        print(f'{score} of product {product} not available for poste {str(int(poste))}')
-                # TODO : Add horizontal bars corresponding to each element
-                self.add_label(plt.violinplot(x[~np.isnan(x)], showmeans=True, positions=[pos]), product)
-                pos += 1
-            ax.set_xticklabels([''] + products)
-            ax.set_xticks(range(len(products)+2))
+                if score == 'brier_skill_score' and product in ['antilope', 'raw']:
+                    pass
+                else:
+                    x = self.scores.loc[{'score':score}][product].data
+                    for idx, poste in enumerate(self.scores.num_poste.data):
+                        if not np.isnan(x[idx]):
+                            plt.text(pos, x[idx], str(int(poste)), fontsize=6)
+                        else:
+                            print(f'{score} of product {product} not available for poste {str(int(poste))}')
+                    # TODO : Add horizontal bars corresponding to each element
+                    self.add_label(plt.violinplot(x[~np.isnan(x)], showmeans=True, positions=[pos]), product)
+                    if score == 'bias':
+                        plt.axhline(color='k')
+                    pos += 1
+            if score == 'brier_skill_score':
+                ax.set_xticklabels([''] + products[2:])
+                ax.set_xticks(range(len(products)))
+            else:
+                ax.set_xticklabels([''] + products)
+                ax.set_xticks(range(len(products)+2))
+            if score in ['brier', 'brier_skill_score']:
+                ax.set_ylabel(f'{score}')
+            else:
+                ax.set_ylabel(f'{score} (mm)')
             #ax.legend(*zip(*self.labels))
-            if score == 'brier':
+            if score in ['brier', 'brier_skill_score']:
                 fig.savefig(f'{savedir}/{score}_{self.threshold}.pdf', formatout='pdf',  bbox_inches='tight')
             else:
                 fig.savefig(f'{savedir}/{score}.pdf', formatout='pdf',  bbox_inches='tight')
