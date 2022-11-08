@@ -57,34 +57,68 @@ coords = dict(
 
 savedir = f"/home/vernaym/These/figures/evaluation/{domain}"
 
-experiments = dict(
+all_experiments = dict(
         #GD0      = 'Assimilation_globale_2021073106_2022070106_daily.nc',
         LD0      = 'XP00_assimilation_quotiedienne_sans_masque_sans_localisation/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
-        LDM      = 'XP02_assimilation_quotidienne_avec_masque/Assimilation_locale_2021120106_2022050106_daily_alp_mask4.nc',
-        LDML     = 'XP05_assimilation_quotidienne_avec_masque_et_localisation/Assimilation_locale_2021120106_2022050106_daily_alp_localisation_mask4.nc',
-        LDMD     = 'XP06_assimilation_quotidienne_avec_masque_et_debiaisage/Assimilation_locale_2021120106_2022050106_daily_alp_mask4_debiasing.nc',
-        LDMD0    = 'XP09_assimilation_quotidienne_avec_masque_et_debiaisage_ratio_moyen/Assimilation_locale_2021120106_2022050106_daily_alp_mask4_debiasing.nc',
-        LDMLD    = 'XP08_assimilation_quotidienne_avec_masque_localisation_et_debiaisage/Assimilation_locale_2021120106_2022050106_daily_alp_localisation_mask4_debiasing.nc',
-        LHMD     = 'XP03_assimilation_horaire_avec_masque_et_debiaisage/Assimilation_locale_2021120106_2022050106_hourly_alp_mask4_debiasing.nc',
-#        LH0      = 'Assimilation_locale_2021073106_2022070106_hourly.nc',
-#        LHM      = 'Assimilation_locale_2021073106_2022070106_hourly_avec_masque.nc',
-#        LHML     = 'Assimilation_locale_2021080106_2022063006_hourly_avec_localisation.nc',
-#        LDLA     = 'XP06_assimilation_quotidienne_ponctuelle_avec_localisation/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
-#        LHLA     = 'XP07_assimilation_horaire_ponctuelle_avec_localisation/Assimilation_locale_2021120106_2022050106_hourly_alp.nc',
+        LDM4      = 'XP02_assimilation_quotidienne_avec_masque/Assimilation_locale_2021120106_2022050106_daily_alp_mask4.nc',
+        LDM3     = 'XP10_assimilation_quotidienne_avec_masque3/Assimilation_locale_2021120106_2022050106_daily_alp_mask3.nc',
+        LDM1     = 'XP11_assimilation_quotidienne_avec_masque1/Assimilation_locale_2021120106_2022050106_daily_alp_mask1.nc',
+        LDM2     = 'XP12_assimilation_quotidienne_avec_masque2/Assimilation_locale_2021120106_2022050106_daily_alp_mask2.nc',
+        LDM4L     = 'XP05_assimilation_quotidienne_avec_masque_et_localisation/Assimilation_locale_2021120106_2022050106_daily_alp_localisation_mask4.nc',
+        LDM4D     = 'XP06_assimilation_quotidienne_avec_masque_et_debiaisage/Assimilation_locale_2021120106_2022050106_daily_alp_mask4_debiasing.nc',
+        LDM4D_BIS = 'XP09_assimilation_quotidienne_avec_masque_et_debiaisage_ratio_moyen/Assimilation_locale_2021120106_2022050106_daily_alp_mask4_debiasing.nc',
+        LDM4LD    = 'XP08_assimilation_quotidienne_avec_masque_localisation_et_debiaisage/Assimilation_locale_2021120106_2022050106_daily_alp_localisation_mask4_debiasing.nc',
+        LHM4D     = 'XP03_assimilation_horaire_avec_masque_et_debiaisage/Assimilation_locale_2021120106_2022050106_hourly_alp_mask4_debiasing.nc',
+        LHM4DL    = 'XP07_assimilation_horaire_avec_masque_localisation_et_debiaisage/Assimilation_locale_2021120106_2022050106_hourly_alp_localisation_mask4_debiasing.nc',
     )
 
+mask_experiments = dict(
+        #GD0      = 'Assimilation_globale_2021073106_2022070106_daily.nc',
+        LD0      = 'XP00_assimilation_quotiedienne_sans_masque_sans_localisation/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
+        LDM4     = 'XP02_assimilation_quotidienne_avec_masque/Assimilation_locale_2021120106_2022050106_daily_alp_mask4.nc',
+        LDM3     = 'XP10_assimilation_quotidienne_avec_masque3/Assimilation_locale_2021120106_2022050106_daily_alp_mask3.nc',
+        LDM1     = 'XP11_assimilation_quotidienne_avec_masque1/Assimilation_locale_2021120106_2022050106_daily_alp_mask1.nc',
+        LDM2     = 'XP12_assimilation_quotidienne_avec_masque2/Assimilation_locale_2021120106_2022050106_daily_alp_mask2.nc',
+    )
+
+daily_experiments = dict(
+        LD0      = 'XP00_assimilation_quotiedienne_sans_masque_sans_localisation/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
+        LDM4      = 'XP02_assimilation_quotidienne_avec_masque/Assimilation_locale_2021120106_2022050106_daily_alp_mask4.nc',
+        LDM4D     = 'XP06_assimilation_quotidienne_avec_masque_et_debiaisage/Assimilation_locale_2021120106_2022050106_daily_alp_mask4_debiasing.nc',
+        LDM4L     = 'XP05_assimilation_quotidienne_avec_masque_et_localisation/Assimilation_locale_2021120106_2022050106_daily_alp_localisation_mask4.nc',
+        LDM4LD    = 'XP08_assimilation_quotidienne_avec_masque_localisation_et_debiaisage/Assimilation_locale_2021120106_2022050106_daily_alp_localisation_mask4_debiasing.nc',
+    )
+
+hourly_experiments = dict(
+        LD0      = 'XP00_assimilation_quotiedienne_sans_masque_sans_localisation/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
+        LDM4LD   = 'XP08_assimilation_quotidienne_avec_masque_localisation_et_debiaisage/Assimilation_locale_2021120106_2022050106_daily_alp_localisation_mask4_debiasing.nc',
+        LHM4D    = 'XP03_assimilation_horaire_avec_masque_et_debiaisage/Assimilation_locale_2021120106_2022050106_hourly_alp_mask4_debiasing.nc',
+        #LHM4DL   = 'XP07_assimilation_horaire_avec_masque_localisation_et_debiaisage/Assimilation_locale_2021120106_2022050106_hourly_alp_localisation_mask4_debiasing.nc',
+    )
+
+
+#experiments = mask_experiments
+experiments = daily_experiments
+#experiments = hourly_experiments
+
+
+
 xpid_label = dict(
-        GD0      = 'Global daily assimilation',
-        LD0      = 'Daily assimilation without mask',
-        LDM      = 'Daily assimilation with mask',
-        LDML     = 'Daily assimilation with mask and localization',
-        LDMD     = 'Daily assimilation with mask and debiasing',
-        LDMD0    = 'Daily assimilation with mask and uniform debiasing',
-        LDMLD    = 'Daily assimilation with mask and localization and debiasing',
-        LHMD     = 'Hourly assimilation with mask and debiasing',
-        LHMDL     = 'Hourly assimilation with mask, debiasing and localization',
-        LH0      = 'Hourly assimilation without mask',
-        LHM      = 'Hourly assimilation with mask',
+        antilope  = 'ANTILOPE',
+        raw       = 'Raw PEAROME ensemble',
+        GD0       = 'Global daily assimilation',
+        LD0       = 'Daily assimilation without mask',
+        LDM4      = 'Daily assimilation with mask4',
+        LDM3      = 'Daily assimilation with mask3',
+        LDM1      = 'Daily assimilation with mask1',
+        LDM2      = 'Daily assimilation with mask2',
+        LDM4L     = 'Daily assimilation with mask4 and localization',
+        LDM4D     = 'Daily assimilation with mask4 and debiasing',
+        LDM4D_BIS = 'Daily assimilation with mask4 and uniform debiasing',
+        LDM4LD    = 'Daily assimilation with mask4 and localization and debiasing',
+        LHM4D     = 'Hourly assimilation with mask4 and debiasing',
+        LH0       = 'Hourly assimilation without mask',
+        LHM       = 'Hourly assimilation with mask',
     )
 
 
@@ -217,8 +251,13 @@ class Evaluation(object):
 
         return (false_alarm, succes_rate)
 
-    def rank_historam(self, simu, obs, *args):
-        pass
+    def rank_histogram(self, simu, obs, product, ax, *args):
+        simu = simu[obs>0]
+        obs = obs[obs>0]
+        position = np.array([])
+        for idx, obs in enumerate(obs):
+            position = np.append(position, np.searchsorted(simu[idx], obs, side='right'))
+        ax.hist(position, bins=range(18))
 
     def reliability_diagram(self, simu, obs, product, ax):
         ndays = len(obs)
@@ -348,9 +387,10 @@ class Evaluation(object):
         return raw
 
     def read_simu(self, filename):
-        if not os.path.exists(filename):
-            print(f'WARNING : file {filename} does not exist, looking for it under {workdir}')
-            filename = os.path.join(workdir, filename)
+
+#        if not os.path.exists(filename):
+#            print(f'WARNING : file {filename} does not exist, looking for it under {workdir}')
+#            filename = os.path.join(workdir, filename)
 
         if os.path.exists(filename):
             simulation =  xr.open_dataset(filename)
@@ -380,6 +420,10 @@ class Evaluation(object):
         return simulation
 
     def evaluate(self):
+
+#        if os.path.exists(os.path.join(datadir, 'scores.nc')):
+#            self.scores = xr.open_dataset(os.path.join(datadir, 'scores.nc'))
+#            return
 
         def nearest(array, value):
             """ Find element of "array" the closer to 'value' """
@@ -505,16 +549,19 @@ class Evaluation(object):
         t8 = time.time()
         print(f'Filling self.data took {(t8-t7)*1000.}ms')
 
-        fig,ax = plt.subplots()
+        fig1,ax1 = plt.subplots()
         for product in ['raw'] + [xpid for xpid in experiments.keys()]:
-            self.reliability_diagram(self.data[product].data.reshape(-1, 16), self.data.obs.data.flatten(), product, ax)
-        ax.plot([0,1], [0,1], linestyle=':', color='k')
-        ax.set_xlim([0, 1])
-        ax.set_ylim([0, 1])
-        ax.set_xlabel('Forecast Probability')
-        ax.set_ylabel('Observed Frequency')
-        ax.legend()
-        fig.savefig(f'{savedir}/reliability_diagram_{self.threshold}.pdf', format='pdf')
+            self.reliability_diagram(self.data[product].data.reshape(-1, 16), self.data.obs.data.flatten(), product, ax1)
+            fig2,ax2 = plt.subplots()
+            self.rank_histogram(self.data[product].data.reshape(-1, 16), self.data.obs.data.flatten(), product, ax2)
+            fig2.savefig(f'{savedir}/rank_histogram_{product}.pdf', format='pdf')
+        ax1.plot([0,1], [0,1], linestyle=':', color='k')
+        ax1.set_xlim([0, 1])
+        ax1.set_ylim([0, 1])
+        ax1.set_xlabel('Forecast Probability')
+        ax1.set_ylabel('Observed Frequency')
+        ax1.legend()
+        fig1.savefig(f'{savedir}/reliability_diagram_{self.threshold}.pdf', format='pdf')
 
         for threshold in [1, 10, 20]:
             fig,ax = plt.subplots()
@@ -584,7 +631,7 @@ class Evaluation(object):
                         else:
                             print(f'{score} of product {product} not available for poste {str(int(poste))}')
                     # TODO : Add horizontal bars corresponding to each element
-                    self.add_label(plt.violinplot(x[~np.isnan(x)], showmeans=True, positions=[pos]), product)
+                    self.add_label(plt.violinplot(x[~np.isnan(x)], showmeans=True, positions=[pos]), xpid_label[product])
                     if score == 'bias':
                         plt.axhline(color='k')
                     pos += 1
@@ -598,7 +645,7 @@ class Evaluation(object):
                 ax.set_ylabel(f'{score}')
             else:
                 ax.set_ylabel(f'{score} (mm)')
-            #ax.legend(*zip(*self.labels))
+            ax.legend(*zip(*self.labels))
             if score in ['brier', 'brier_skill_score']:
                 fig.savefig(f'{savedir}/{score}_{self.threshold}.pdf', formatout='pdf',  bbox_inches='tight')
             else:
