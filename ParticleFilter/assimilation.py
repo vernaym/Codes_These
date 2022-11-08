@@ -72,7 +72,8 @@ def parse_command_line():
     parser.add_argument('-e', '--dateend', help = 'Final date of extraction (default=datebegin)')
     parser.add_argument('-d', '--domain', help='Domain of the file', choices=['alp', 'pyr', 'cor', 'GrandesRousses'], default='GrandesRousses')
     parser.add_argument('-w', '--workdir', help='Runing directory', default='/home/vernaym/workdir/ASSIMILATION')
-    parser.add_argument('-m', '--mask', help='Switch observation error mask on/off', action='store_true')
+    parser.add_argument('-m', '--mask', help='Switch observation error mask on/off', choices=[1,2,3,4], default=None, type=int)
+    parser.add_argument('-c', '--debiasing', help='Apply bias correction to observation', action='store_true')
     parser.add_argument('-t', '--threshold', default=None, help='Threshold of precipitation (mm) to apply in the data to consider', type=int)
     parser.add_argument('-p', '--plot', action='store_true', default=False, help='Plot assimilated fields')
     parser.add_argument('-f', '--frequency', choices=['hourly', 'daily'], help='Assimilation frequency')
@@ -384,7 +385,7 @@ def read_obs(args):
 
 class ParticleFilter(object):
 
-    def __init__(self, period, obs, ensemble, nivometeo, plot, frequency, gridded, localisation, mask, domain):
+    def __init__(self, period, obs, ensemble, nivometeo, plot, frequency, gridded, localisation, mask, debiasing, domain):
 
         #goto(self.date_str)
         #self.nline, self.ncol = np.shape(obs.rr.data)
@@ -412,6 +413,7 @@ class ParticleFilter(object):
         self.nivometeo = nivometeo
         self.localisation = localisation
         self.mask = mask
+        self.debiasing = debiasing
         self.domain = domain
 
     # Definition of gamma distribution
@@ -538,20 +540,25 @@ class ParticleFilter(object):
         # I. Define PDF parameters
         #-------------
         parameters = self.radar.copy()  # TODO : vérifier si ce n'est pas trop couteux (de toutes façon l'obs n'a pas de raison d'être modifiée)
-        parameters = parameters.rename({'rr':'mu'})  # TODO : check if the ensemble after assimilation is not biased
+        if self.debiasing:
+            mask = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask", f"estimated_ratio_{self.domain}.nc"))
+            parameters['mu'] = parameters['rr'] / mask.ratio  # TODO : check if the ensemble after assimilation is not biased
+            #parameters['mu'] = parameters['rr'] / 0.825  # Mean antilope/ref ratio
+        else:
+            parameters['mu'] = parameters['rr']  # TODO : check if the ensemble after assimilation is not biased
 
         # Observation error
         # Import multiplicative mask to increase observation error where necessary
-        # MASK NOT YET AVAILABLE FOR THE WHOLE ALP DOMAIN ==> TODO
-        if self.mask:
-            try:
-                mask = xr.open_dataset(os.path.join(datadir, f"mask_error_antilope_{self.domain}.nc"))
-                parameters['sigma'] = (0.261 + 0.263 * parameters['mu'])*mask.mask  # According to the linear regression of ANTILOPE RMSE vs ANTILOPE RR
-            except FileNotFoundError as e:
-                print(e)
-                print('WARNING : no observation error mask')
-                self.mask = False
-                parameters['sigma'] = (0.261 + 0.263 * parameters['mu'])  # No mask
+        if self.mask is not None:
+            #try:
+            #mask = xr.open_dataset(os.path.join(datadir, f"mask_error_antilope_{self.domain}.nc"))
+            mask = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask", f"mask{self.mask}_loc10_{self.domain}.nc"))
+            parameters['sigma'] = (0.261 + 0.263 * parameters['mu'])*mask.mask  # According to the linear regression of ANTILOPE RMSE vs ANTILOPE RR
+#            except FileNotFoundError as e:
+#                print(e)
+#                print('WARNING : no observation error mask')
+#                self.mask = None
+#                parameters['sigma'] = (0.261 + 0.263 * parameters['mu'])  # No mask
         else:
             parameters['sigma'] = (0.261 + 0.263 * parameters['mu'])  # According to the linear regression of ANTILOPE RMSE vs ANTILOPE RR
 
@@ -1042,10 +1049,14 @@ class ParticleFilter(object):
             outname1 = '_'.join([outname1, 'localisation'])
             outname2 = '_'.join([outname3, 'localisation'])
             outname3 = '_'.join([outname3, 'localisation'])
-        if self.mask:
-            outname1 = '_'.join([outname1, 'mask'])
-            outname2 = '_'.join([outname2, 'mask'])
-            outname3 = '_'.join([outname3, 'mask'])
+        if self.mask is not None:
+            outname1 = '_'.join([outname1, f'mask{self.mask}'])
+            outname2 = '_'.join([outname2, f'mask{self.mask}'])
+            outname3 = '_'.join([outname3, f'mask{self.mask}'])
+        if self.debiasing:
+            outname1 = '_'.join([outname1, 'debiasing'])
+            outname2 = '_'.join([outname2, 'debiasing'])
+            outname3 = '_'.join([outname3, 'debiasing'])
         if self.gridded:
             for (outname, field) in zip([outname1, outname2, outname3], [out_raw, out_loc, inflation]):
                 fig, ax = plt.subplots(figsize=(12,6))
@@ -1099,8 +1110,10 @@ class ParticleFilter(object):
             figname = f'{self.date_str}/ASSIM_locale_{self.date_str}'
             if self.localisation:
                 figname = '_'.join([figname, 'localisation'])
-            if self.mask:
-                figname = '_'.join([figname, 'mask'])
+            if self.mask is not None:
+                figname = '_'.join([figname, f'mask{self.mask}'])
+            if self.debiasing:
+                figname = '_'.join([figname, 'debiasing'])
             finalize_fig(fig2, im2, label='24-hour precipitation (mm)', outname=f'{figname}.pdf')
             #finalize_fig(fig3, im3, label='Weight', outname=f'{self.date_str}/WEIGHTS_{self.date_str}.pdf')
             #t5 = time.time()
@@ -1178,7 +1191,7 @@ if __name__ == "__main__":
         globalfields = None
 
     interp_ensemble = pearome.interp(lon=antilope.lon, lat=antilope.lat).clip(0)  # Avoid <0 precipitation values
-    pf = ParticleFilter(extract_period, antilope, interp_ensemble, nivometeo, args.plot, args.frequency, args.gridded, args.localisation, args.mask, args.domain)
+    pf = ParticleFilter(extract_period, antilope, interp_ensemble, nivometeo, args.plot, args.frequency, args.gridded, args.localisation, args.mask, args.debiasing, args.domain)
     mask = pf.pdf_parameters()
     pf.run()  # Compute weight fields before normalisation + plot raw/interp fields
     #pf.selection()  # Global and local selections
@@ -1189,8 +1202,10 @@ if __name__ == "__main__":
     outname = f"Assimilation_locale_{args.datebegin.strftime('%Y%m%d%H')}_{args.dateend.strftime('%Y%m%d%H')}_{args.frequency}_{args.domain}"
     if args.localisation:
         outname = '_'.join([outname, 'localisation'])
-    if mask:
-        outname = '_'.join([outname, 'mask'])
+    if mask is not None:
+        outname = '_'.join([outname, f'mask{mask}'])
+    if args.debiasing:
+        outname = '_'.join([outname, f'debiasing'])
     localfields.to_netcdf(f"{outname}.nc")
     #globalfields.to_netcdf(f"Assimilation_globale_{args.datebegin.strftime('%Y%m%d%H')}_{args.dateend.strftime('%Y%m%d%H')}_{args.frequency}.nc")
 
