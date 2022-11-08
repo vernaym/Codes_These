@@ -195,6 +195,7 @@ def make_mask(field):
     #null = np.empty((len(field.lat), len(field.lon)))
     maxdiff  = np.zeros((len(field.lat), len(field.lon)))
     weight = np.zeros((len(field.lat), len(field.lon)))
+    weight2 = np.zeros((len(field.lat), len(field.lon)))
     directional_diff = np.zeros((len(field.lat), len(field.lon)))
     estimated_bias = np.zeros((len(field.lat), len(field.lon)))
     estimated_rmse = np.zeros((len(field.lat), len(field.lon)))
@@ -221,7 +222,7 @@ def make_mask(field):
 #            #  - Si on est trop loin (>0.1°) on prend la valeur moyenne
 #            #  - sinon on pondère chaque score avec la distance au point
             scores['dist'] = np.sqrt((lat-scores.lats)**2+(lon-scores.lons)**2)
-            tmp = scores[scores['dist']<=0.1]  #select nearest scores (TODO : choix de la distance à valider)
+            tmp = scores[scores['dist']<=1]  #select nearest scores (TODO : choix de la distance à valider)
             if len(tmp)==0:  # Aucune info proche --> on prend les valeurs moyennes
                 estimated_bias[idy,idx] = scores.biais.mean()
                 estimated_rmse[idy, idx] = scores.rmse.mean()
@@ -268,7 +269,10 @@ def make_mask(field):
             variability = (maxloc-minloc)/meanloc  # Measures the local variability in the neighboring
             anomaly = (pixel_value-meanloc)/pixel_value  # Measures the "anlomaly" on the pixel against its neighbors
             weight[idy,idx] = variability * anomaly
-            #weight[idy,idx] = variability * anomaly / (estimated_ratio[idy,idx]-1)  # estimated_ratio-1 ~ (antilope-ref)/ref
+            if estimated_ratio[idy,idx] >= 1:
+                weight2[idy,idx] = variability * anomaly * estimated_ratio[idy,idx]
+            else:
+                weight2[idy,idx] = variability * anomaly / estimated_ratio[idy,idx]
             #weight[idy,idx] = variability*np.abs(maxloc-pixel_value)*np.abs(pixel_value-minloc)  # TODO : add a pondertion according to neigboring ratios ?
 
 #            if tmp.dist.min() <= 0.01:  # On est sur un pixel connu --> on prend ses scores
@@ -399,9 +403,9 @@ def make_mask(field):
         fig, ax = plt.subplots(figsize=(14,16))
     elif domain == 'GrandesRousses':
         fig, ax = plt.subplots(figsize=(12,6))
-    ratio.plot(ax=ax)
+    ratio.plot(ax=ax, cmap=plt.cm.coolwarm)
     add_scores(scores)
-    fig.savefig(os.path.join(savedir, f'estimated_ratio.pdf'), format='pdf', layout='tight')
+    fig.savefig(os.path.join(savedir, f'estimated_ratio_{domain}.pdf'), format='pdf', layout='tight')
 
 #    estimated_ratio = np.where(estimated_ratio>=1.5, 4, estimated_ratio)
 #    estimated_ratio = np.where((estimated_ratio>1.1) & (estimated_ratio<1.5), 3, estimated_ratio)
@@ -418,10 +422,13 @@ def make_mask(field):
     cmap = matplotlib.colors.LinearSegmentedColormap.from_list("", ["black", "blue", "green", "orange", "red"], 5)
     thresholds = [0., 0.5, 0.80, 1.2, 1.5, 10]
     norm = matplotlib.colors.BoundaryNorm(thresholds, cmap.N)
-    fig, ax = plt.subplots(figsize=(14,16))
+    if domain == 'alp':
+        fig, ax = plt.subplots(figsize=(14,16))
+    elif domain == 'GrandesRousses':
+        fig, ax = plt.subplots(figsize=(12,6))
     ratio.plot(ax=ax, cmap=cmap, norm=norm)
     add_scores(scores)
-    fig.savefig(os.path.join(savedir, f'estimated_ratio_categories.pdf'), format='pdf', layout='tight')
+    fig.savefig(os.path.join(savedir, f'estimated_ratio_categories_{domain}.pdf'), format='pdf', layout='tight')
 
 def krigeage_scores(field):
     variogram  = 'exponential'  # The same as for ANTILOPE without RADAR data
