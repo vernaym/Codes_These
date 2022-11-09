@@ -93,7 +93,7 @@ hourly_experiments = dict(
         LD0      = 'XP00_assimilation_quotiedienne_sans_masque_sans_localisation/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
         LDM4LD   = 'XP08_assimilation_quotidienne_avec_masque_localisation_et_debiaisage/Assimilation_locale_2021120106_2022050106_daily_alp_localisation_mask4_debiasing.nc',
         LHM4D    = 'XP03_assimilation_horaire_avec_masque_et_debiaisage/Assimilation_locale_2021120106_2022050106_hourly_alp_mask4_debiasing.nc',
-        #LHM4DL   = 'XP07_assimilation_horaire_avec_masque_localisation_et_debiaisage/Assimilation_locale_2021120106_2022050106_hourly_alp_localisation_mask4_debiasing.nc',
+        LHM4DL   = 'XP07_assimilation_horaire_avec_masque_localisation_et_debiaisage/Assimilation_locale_2021120106_2022050106_hourly_alp_localisation_mask4_debiasing.nc',
     )
 
 
@@ -117,8 +117,7 @@ xpid_label = dict(
         LDM4D_BIS = 'Daily assimilation with mask4 and uniform debiasing',
         LDM4LD    = 'Daily assimilation with mask4 and localization and debiasing',
         LHM4D     = 'Hourly assimilation with mask4 and debiasing',
-        LH0       = 'Hourly assimilation without mask',
-        LHM       = 'Hourly assimilation with mask',
+        LHM4DL    = 'Hourly assimilation with mask4 and localization and debiasing',
     )
 
 
@@ -560,7 +559,7 @@ class Evaluation(object):
         ax1.set_ylim([0, 1])
         ax1.set_xlabel('Forecast Probability')
         ax1.set_ylabel('Observed Frequency')
-        ax1.legend()
+        ax1.legend(fontsize=14)
         fig1.savefig(f'{savedir}/reliability_diagram_{self.threshold}.pdf', format='pdf')
 
         for threshold in [1, 10, 20]:
@@ -574,7 +573,7 @@ class Evaluation(object):
             ax.set_ylim([0.5, 1])
             ax.set_xlabel('False alarm rate')
             ax.set_ylabel('Sucess rate')
-            ax.legend()
+            ax.legend(fontsize=14)
             fig.savefig(f'{savedir}/ROC_threshold_{threshold}mm.pdf', format='pdf')
         t9 = time.time()
         print(f'Ploting ROC curves took {(t9-t8)*1000.}ms')
@@ -632,20 +631,20 @@ class Evaluation(object):
                             print(f'{score} of product {product} not available for poste {str(int(poste))}')
                     # TODO : Add horizontal bars corresponding to each element
                     self.add_label(plt.violinplot(x[~np.isnan(x)], showmeans=True, positions=[pos]), xpid_label[product])
-                    if score == 'bias':
+                    if score in ['bias', 'brier_skill_score']:
                         plt.axhline(color='k')
                     pos += 1
             if score == 'brier_skill_score':
-                ax.set_xticklabels([''] + products[2:])
+                ax.set_xticklabels([''] + products[2:], fontsize=14)
                 ax.set_xticks(range(len(products)))
             else:
-                ax.set_xticklabels([''] + products)
+                ax.set_xticklabels([''] + products, fontsize=14)
                 ax.set_xticks(range(len(products)+2))
             if score in ['brier', 'brier_skill_score']:
-                ax.set_ylabel(f'{score}')
+                ax.set_ylabel(f'{score}', fontsize=14)
             else:
-                ax.set_ylabel(f'{score} (mm)')
-            ax.legend(*zip(*self.labels))
+                ax.set_ylabel(f'{score} (mm)', fontsize=14)
+            ax.legend(*zip(*self.labels), fontsize=14)
             if score in ['brier', 'brier_skill_score']:
                 fig.savefig(f'{savedir}/{score}_{self.threshold}.pdf', formatout='pdf',  bbox_inches='tight')
             else:
@@ -690,7 +689,7 @@ class Evaluation(object):
             self.add_label(plt.violinplot(np.transpose(simu2), positions=positions), 'Daily assimilation')
         ax.set_xlabel('Date')
         ax.set_ylabel('24 hour precipitation (mm)')
-        ax.legend(*zip(*self.labels))
+        ax.legend(*zip(*self.labels), fontsize=14)
         ax.axhline(y=0, linewidth=1, color='k')
         rrmax = int(np.ceil(max([np.nanmax(obs), np.nanmax(simu), np.nanmax(raw), np.nanmax(antilope)])))+10
         for rr in range(10, rrmax, 10):
