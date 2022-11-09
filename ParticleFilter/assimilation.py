@@ -405,10 +405,6 @@ class ParticleFilter(object):
         self.Ne = len(self.members)
         self.plot = plot
 
-        # Plot observation field
-        if self.plot:
-            self.plot_obs()
-
         self.gridded = gridded
         self.nivometeo = nivometeo
         self.localisation = localisation
@@ -502,13 +498,11 @@ class ParticleFilter(object):
         #draw[np.where(x<0)] = 0  # x is already a precipitation field with >0 values
         return draw
 
-    def plot_obs(self):
-        #mnt = xr.open_dataset(os.path.join(datadir, "MNT_GrandesRousses.nc"))
+    def plot_obs(self, field):
         mnt = xr.open_dataset('/home/vernaym/QGIS/MNT/DEM_ALPES_WGS84_250m_bilinear.nc')  # Pour tracer sur toutes les Alpes
         # Plot ANTILOPE precipitation field
         fig = plt.figure(figsize=(18,8))
-        #radar.transpose('lat', 'lon').rr.plot(vmin=rrmin, vmax=rrmax, cbar_kwargs={'label': "24 hour precipitation (mm)"})  # quadmesh object
-        radar.rr.plot(vmin=self.rrmin, vmax=self.rrmax, cbar_kwargs={'label': "24 hour precipitation (mm)"})  # quadmesh object
+        field.rr.plot(vmin=0, vmax=self.rrmax, cbar_kwargs={'label': "24 hour precipitation (mm)"})  # quadmesh object
         # Add landmarks
         for landmark, infos in landmarks.items():
             plt.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='red', markersize=10)
@@ -588,19 +582,16 @@ class ParticleFilter(object):
 
         self.parameters = parameters
 
-        # gamma_shape_PDF(Y, k=k, theta=theta)
-        if self.plot:
-            self.plot_sigma()
-            #self.plot_parameters()
-
         return self.mask
 
     def plot_sigma(self):
         fig, ax = plt.subplots(figsize=(14,6))
-        cmap = 'nipy_spectral'
-        im = self.parameters['sigma'].plot(ax=ax[i,j], cmap=cmap, cbar_kwargs=dict(label='Standard deviation (mm)'))
+        cmap = plt.cm.YlGnBu
+        import pdb
+        pdb.set_trace()
+        im = self.parameters['sigma'].plot(ax=ax, cmap=cmap, cbar_kwargs=dict(label='Standard deviation (mm)'))
         for landmark, infos in landmarks.items():
-                ax[i,j].plot(infos['lon'], infos['lat'], marker=infos['marker'], color='red', markersize=4)
+                ax.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='red', markersize=4)
         fig.tight_layout()
         fig.savefig(f"{self.date_str}/PDF_std_{self.date_str}.pdf", format='pdf')
 
@@ -799,8 +790,8 @@ class ParticleFilter(object):
                 for member, field in self.newlocalfield.items():
                     field[idy,idx,idd]  = new[member-1]  # fill new member
 
-        if self.plot:  # Not with localisation
-            plot_weights(date, weights)
+#        if self.plot:  # Not with localisation
+#            plot_weights(date, weights)
 
     @speedtest
     def ponctual_assimilation(self, date, idd, localized_period, parameters_date):
@@ -892,13 +883,16 @@ class ParticleFilter(object):
         # self.weighting(new, parameters.mu.data, parameters.sigma.data, plot_distribution=True)
 
         # To plot data for one specific point / date
-        #if num_poste == 74134400:
-            #self.plot_assimilation(raw.rr.data, new, obs.rr, num_poste, date)
-            #self.weighting(raw_localized, parameters.mu.data, sigma, plot_distribution=True, num_poste=num_poste, date=date)
+#        if num_poste == 73150400:
+#            import pdb
+#            pdb.set_trace()
+        #if self.plot:
+        #    self.plot_assimilation(raw, new, obs, num_poste, date)
+        #    self.weighting(raw_localized, parameters.mu.data, sigma, obs, plot_distribution=True, num_poste=num_poste, date=date)
 
         return new, inflation
 
-    def plot_assimilation(self, raw, assim, parameters, num_poste, date):
+    def plot_assimilation(self, raw, assim, obs, num_poste, date):
         """ References :
         https://stackoverflow.com/questions/64646449/how-to-create-asymmetric-violin-plot-in-python-using-matplotlib
         https://seaborn.pydata.org/generated/seaborn.violinplot.html
@@ -908,10 +902,12 @@ class ParticleFilter(object):
         data = data.melt()
         data['dummy'] = 0
         sns.violinplot(data=data, split=True, y='value', hue='variable', x='dummy', inner="stick", palette=['sandybrown', 'skyblue'])
-        plt.plot(parameters.rr.data, marker='_', markersize=30, markeredgewidth=3, color='red')
+        plt.plot(obs, marker='_', markersize=30, markeredgewidth=3, color='red')
         # TODO : ploter l'obs nivometeo correspondante...
-        fig.savefig(f'assim_{num_poste}_{date}.pdf', formatout='pdf',  bbox_inches='tight')
-
+        if num_poste == None:
+            fig.savefig(f'assim_{date}.pdf', formatout='pdf',  bbox_inches='tight')
+        else:
+            fig.savefig(f'assim_{num_poste}_{date}.pdf', formatout='pdf',  bbox_inches='tight')
 
     @speedtest
     def run(self):
@@ -969,6 +965,17 @@ class ParticleFilter(object):
                 self.gridded_assimilation(date, idd, localized_period, parameters_date)
             else:
                 self.ponctual_assimilation(date, idd, localized_period, parameters_date)
+
+            if self.plot:
+
+                tmp = parameters_date.sel({'time':date})
+                self.plot_sigma(tmp.sigma)
+                self.rrmin = 0.
+                self.rrmax = max(
+                        np.nanmax(localized_period.rr.data),
+                        np.nanmax(tmp.rr.data)
+                        )
+                self.plot_obs(tmp.rr.data)
 
     @speedtest
     def plot_weights(self, date, weights):
@@ -1087,28 +1094,6 @@ class ParticleFilter(object):
             #globalfields.loc[{'time':self.date, 'member':m}] = self.ensemble[self.selection_globale[m-1]].rr.data  # self.ensemble is a DataArray
             #t3 = time.time()
             #print(f'Wrinting globalfields took {(t3-t2)*1000.}ms')
-
-            if self.plot:
-                self.rrmin = 0.
-                self.rrmax = max(
-                        np.nanmax(self.ensemble.sel(time=date).rr.data),
-                        np.nanmax(self.radar.sel(time=date).rr.data)
-                        )
-                # Plot local weight fields
-                vmin = 0
-                #vmax = 0.25  # TODO : vmax=f(sigma) [peut être renvoyé par la fonction de la PDF comme le max de probabilité]
-                #vmax = np.max(gamma_shape_PDF(parameters.mu.data, k=parameters.k.data, theta=parameters.theta.data))
-                #vmax = max([np.max(ww.data) for ww in self.local_weights.values()])
-                #im3 = plot_field(self.local_weights[m], axes3[i,j], vmin, vmax, title=f'member {m:03d}, total weight={self.weight[m]:.3f}', cmap=plt.cm.Greys)
-
-                #im1 = plot_field(globalfields.loc[{'time':self.date, 'member':m}], ax1[i,j], self.rrmin, self.rrmax, title=f'Member {self.selection_globale[m-1]:03d}')
-                im2 = plot_field(localfields.loc[{'time':self.date, 'member':m}], ax2[i,j], self.rrmin, self.rrmax, title=f'New member {m:03d}')
-                #t4 = time.time()
-                #print(f'Plotting took {(t4-t3)*1000.}ms')
-            j = j + 1
-            if j==4:
-                j = 0
-                i = i + 1
 
         if self.plot:
             #finalize_fig(fig1, im1, label='24-hour precipitation (mm)', outname=f'{self.date_str}/ASSIM_globale_{self.date_str}.pdf')
