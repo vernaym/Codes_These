@@ -77,7 +77,7 @@ def parse_command_line():
     parser.add_argument('-t', '--threshold', default=None, help='Threshold of precipitation (mm) to apply in the data to consider', type=int)
     parser.add_argument('-p', '--plot', action='store_true', default=False, help='Plot assimilated fields')
     parser.add_argument('-f', '--frequency', choices=['hourly', 'daily'], help='Assimilation frequency')
-    parser.add_argument('-l', '--localisation', action='store_true', help='Switch localisation on')
+    parser.add_argument('-l', '--localisation', default=None, help='Spatial localisation distance (switch localisation on).', type=int)
     parser.add_argument('-g', '--gridded', default=False, action='store_true', help='Gridded assimilation if True, or assimilation only at nivometeo locations if False')
 
     args = parser.parse_args()
@@ -717,27 +717,16 @@ class ParticleFilter(object):
 #    @speedtest
     def gridded_assimilation(self, date, idd, localized_period, parameters_date):
         """ Loop over all the domain's pixels."""
-        # TODO : avec la localisation on ne peut pas traiter les pixels sur les bords du domaine,
-        # il faut donc une verrue pour tronquer le domaine
-        # WARNING : virer les pixels du bord des visualisation/evaluations ensuite
 
-        xloc = 3  # TODO : à paramétriser
-        yloc = 3  # TODO : à paramétriser
-
-#        if self.localisation:
-#            assim_lat = self.radar.lat.data[yloc:-yloc]
-#            assim_lon = self.radar.lon.data[xloc:-xloc]
-#        else:
         assim_lat = self.radar.lat.data
         assim_lon = self.radar.lon.data
         for idx,lon in enumerate(assim_lon):
             parameters_lon = parameters_date.sel(lon=lon)
-            if self.localisation:
-                #idx = idx + xloc
+            if self.localisation is not None:
                 localisation_lon = np.array(
                         [self.radar.lon.data[idx+dlon] if idx+dlon>=0 and idx+dlon<len(assim_lon) else np.nan
-                            for dlon in range(-xloc,xloc+1)]
-                    )  # TODO : modifier la zone de localisation (--> cerlce)
+                            for dlon in range(-self.localisation, self.localisation+1)]
+                    )
                 # On enlève les valeurs manquantes (pour les points en bord de domaine)
                 # ==> la localisation est réduite en bordure de domaine !
                 localisation_lon = localisation_lon[~np.isnan(localisation_lon)]
@@ -749,11 +738,10 @@ class ParticleFilter(object):
                 parameters = parameters_lon.sel(lat=lat)
                 obs = parameters.rr.data
                 if self.localisation:
-                    #idy = idy + yloc
                     localisation_lat = np.array(
                             [self.radar.lat.data[idy+dlat] if idy+dlat>=0 and idy+dlat<len(assim_lat) else np.nan
-                                for dlat in range(-yloc,yloc+1)]
-                        )  # TODO : modifier la zone de localisation (--> cerlce)
+                                for dlat in range(-self.localisation,self.localisation+1)]
+                        )
                     # On enlève les valeurs manquantes (pour les points en bord de domaine)
                     # ==> la localisation est réduite en bordure de domaine !
                     localisation_lat = localisation_lat[~np.isnan(localisation_lat)]
@@ -796,8 +784,7 @@ class ParticleFilter(object):
     @speedtest
     def ponctual_assimilation(self, date, idd, localized_period, parameters_date):
         stop = False
-        xloc = 3  # TODO : à paramétriser
-        yloc = 3  # TODO : à paramétriser
+
         assimilation_points = zip(self.nivometeo.num_poste.data, np.max(self.nivometeo.lat, axis=1).data, np.max(self.nivometeo.lon, axis=1).data)
         for idp, (num_poste, lat, lon) in enumerate(assimilation_points):
             #print(num_poste)
@@ -805,9 +792,11 @@ class ParticleFilter(object):
             lon = nearest(self.radar.lon, lon)  # Longitude of the corresponding antilope pixel
             idy = np.where(self.radar.lat.data==lat)[0][0]  # index of the corresponding antilope pixel latitude
             idx = np.where(self.radar.lon.data==lon)[0][0]  # index of the corresponding antilope pixel longitude
-            if self.localisation:
-                localisation_lat = [self.radar.lat.data[idy+dlat] for dlat in range(-yloc,yloc+1)]  # Latitudes to consider for localisation. TODO : use a circle
-                localisation_lon = [self.radar.lon.data[idx+dlon] for dlon in range(-xloc,xloc+1)]  #Longitudes to consider for localisation. TODO : use a circle
+            if self.localisation is not None:
+                localisation_lat = np.array([self.radar.lat.data[idy+dlat] if idy+dlat>=0 and idy+dlat<len(self.radar.lat) else np.nan for dlat in range(-self.localisation, self.localisation+1)])
+                localisation_lon = np.array([self.radar.lon.data[idx+dlon] if idx+dlon>=0 and idx+dlon<len(self.radar.lon) else np.nan for dlon in range(-self.localisation, self.localisation+1)])
+                localisation_lat = localisation_lat[~np.isnan(localisation_lat)]
+                localisation_lon = localisation_lon[~np.isnan(localisation_lon)]
             else:
                 localisation_lat = lat
                 localisation_lon = lon
@@ -818,7 +807,7 @@ class ParticleFilter(object):
                 t2 = time.time()
                 #print(f'reading "raw_localized" took {(t2-t1)*1000.}ms')
 #            obs = obs_date.sel({'lat':lat, 'lon':lon})
-            if self.localisation:
+            if self.localisation is not None:
                 raw = raw_localized.sel({'time':date, 'lat':lat, 'lon':lon}).rr.data
                 raw_localized = raw_localized.rr.data.flatten()  # "Super ensemble"
             else:
@@ -942,7 +931,7 @@ class ParticleFilter(object):
         for idd,date in enumerate(self.period):
             print(date)
             # On réduit le dataset maintenant pour gagner du temps ensuite
-            if self.frequency == 'hourly' and self.localisation:
+            if self.frequency == 'hourly' and self.localisation is not None:
                 assimilation_period = [date + timedelta(hours=dt) for dt in range(-2,3)]
             else:
                 assimilation_period = [date]
@@ -1057,10 +1046,10 @@ class ParticleFilter(object):
         outname1 = f"nb_obs_outside_raw_ensemble_{self.period[0].strftime('%Y%m%d%H')}_{self.period[-1].strftime('%Y%m%d%H')}_{self.frequency}"
         outname2 = f"nb_obs_outside_localized_ensemble_{self.period[0].strftime('%Y%m%d%H')}_{self.period[-1].strftime('%Y%m%d%H')}_{self.frequency}"
         outname3 = f"inflation_{self.period[0].strftime('%Y%m%d%H')}_{self.period[-1].strftime('%Y%m%d%H')}_{self.frequency}"
-        if self.localisation:
-            outname1 = '_'.join([outname1, 'localisation'])
-            outname2 = '_'.join([outname3, 'localisation'])
-            outname3 = '_'.join([outname3, 'localisation'])
+        if self.localisation is not None:
+            outname1 = '_'.join([outname1, f'localisation{self.localisation}'])
+            outname2 = '_'.join([outname3, f'localisation{self.localisation}'])
+            outname3 = '_'.join([outname3, f'localisation{self.localisation}'])
         if self.mask is not None:
             outname1 = '_'.join([outname1, f'mask{self.mask}'])
             outname2 = '_'.join([outname2, f'mask{self.mask}'])
@@ -1098,8 +1087,8 @@ class ParticleFilter(object):
         if self.plot:
             #finalize_fig(fig1, im1, label='24-hour precipitation (mm)', outname=f'{self.date_str}/ASSIM_globale_{self.date_str}.pdf')
             figname = f'{self.date_str}/ASSIM_locale_{self.date_str}'
-            if self.localisation:
-                figname = '_'.join([figname, 'localisation'])
+            if self.localisation is not None:
+                figname = '_'.join([figname, f'localisation{self.localisation}'])
             if self.mask is not None:
                 figname = '_'.join([figname, f'mask{self.mask}'])
             if self.debiasing:
@@ -1190,8 +1179,8 @@ if __name__ == "__main__":
 
 #    plot_chrono(extract_period, antilope, pearome, localfields)
     outname = f"Assimilation_locale_{args.datebegin.strftime('%Y%m%d%H')}_{args.dateend.strftime('%Y%m%d%H')}_{args.frequency}_{args.domain}"
-    if args.localisation:
-        outname = '_'.join([outname, 'localisation'])
+    if args.localisation is not None:
+        outname = '_'.join([outname, f'localisation{args.localisation}'])
     if mask is not None:
         outname = '_'.join([outname, f'mask{mask}'])
     if args.debiasing:
