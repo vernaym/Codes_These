@@ -5,6 +5,7 @@
 
 import os, sys
 from datetime import datetime,timedelta
+import time
 import numpy as np
 import xarray as xr
 import pandas as pd
@@ -177,7 +178,8 @@ def plot(antilope):
         elif domain == 'GrandesRousses':
             fig, ax = plt.subplots(figsize=(12,6))
 
-        antilope.rr_cumul.plot(ax=ax, cbar_kwargs={"label":'Total precipitation between 2021080106 and 2022070106 (mm)'}, cmap=plt.cm.coolwarm)
+        #antilope.rr_cumul.plot(ax=ax, cbar_kwargs={"label":'Total precipitation between 2021080106 and 2022070106 (mm)'}, cmap=plt.cm.coolwarm)
+        antilope.rr_cumul.plot(ax=ax, cbar_kwargs={"label":'Total precipitation between 2021080106 and 2022070106 (mm)'}, cmap=plt.cm.YlGnBu)
         add_landmarks(ax)
         add_radar_positions(ax)
         fic_score = os.path.join(datadir, 'scores_2021110106_2022043006_alpes_10.csv')
@@ -196,6 +198,7 @@ def make_mask(field):
     fic_score = os.path.join(datadir, 'scores_2021110106_2022043006_alpes_10.csv')
     scores = pd.read_csv(fic_score, sep=';')
 
+    maxloc = 30
     loc = 10
     seuil = 0.6
     #null = np.empty((len(field.lat), len(field.lon)))
@@ -221,6 +224,7 @@ def make_mask(field):
         west = west[~np.isnan(west)]
         localisation_lon = np.concatenate([west, east])
         for idy,lat in enumerate(field.lat.data):
+            t1 = time.time()
 
 ##            if lon == 6.14 and lat == 45.13:
 ##                import pdb
@@ -247,7 +251,11 @@ def make_mask(field):
             meanloc = np.mean(neighbours)
             variability = (maxloc-minloc)/meanloc  # Measures the local variability in the neighboring
             anomaly = (pixel_value-meanloc)/pixel_value  # Measures the "anlomaly" on the pixel against its neighbors
+            t2 = time.time()
+            #print(f'reading neighbour values took {(t2-t1)*1000.}ms')
             # TODO : si zone homogène mais score mauvais, trouver un moyen d'augmenter le poid
+            # TODO : agrandir itérativement la zone de localisation tant que la variabilité reste faible et appliquer
+            # le score le plus proche à la plus grande zone homogène possible
             # TODO : Utiliser SPAZM pour estimer le champs de biais.
 #            # TODO : essayer un krigeage des scores plutot
 #            # On veut estimer le biais et l'erreur du pixel en fonction des 3 points connus les plus proches :
@@ -268,6 +276,8 @@ def make_mask(field):
 #            else:
 #                correlation_dist = 1  # Sinon on lisse au maximum pour que chaque score n'influe réellement que son voisinage immédiat
             tmp = scores[scores['dist']<=correlation_dist]  #select nearest scores (TODO : choix de la distance à valider)
+            t3 = time.time()
+            #print(f'reading neighbour scores took {(t3-t2)*1000.}ms')
             if len(tmp)==0:  # Aucune info proche --> on prend les valeurs moyennes
                 estimated_bias[idy,idx] = scores.biais.mean()
                 estimated_rmse[idy, idx] = scores.rmse.mean()
@@ -324,6 +334,8 @@ def make_mask(field):
             tmp = np.array([westmax,eastmax,northmax,southmax])
             tmp = tmp[~np.isnan(tmp)]
             directional_diff[idy,idx] = np.count_nonzero(tmp<-0.1) + 1
+            t4 = time.time()
+            #print(f'End of the loop took {(t4-t3)*1000.}ms')
 
             # To see the result for the max of the field
 #            if lon == 6.04 and lat == 45.20:
@@ -394,7 +406,7 @@ def make_mask(field):
     #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     # TODO : le mask doit être clippé à 1 (c'est un facteur !)
     #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    weight = np.clip(np.abs(weight).clip(0.1)*10, 0, 10)
+    weight = np.clip(np.abs(weight).clip(0.1)*10, 1, 5)
     mask3 = xr.DataArray(
         name   = 'mask',
         data   = weight,
@@ -439,7 +451,7 @@ def make_mask(field):
     #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     # TODO : le mask doit être clippé à 1 (c'est un facteur !)
     #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    weight2 = np.clip(np.abs(weight2).clip(0.1)*10, 0, 10)
+    weight2 = np.clip(np.abs(weight2).clip(0.1)*10, 1, 5)
     mask4 = xr.DataArray(
         name   = 'mask',
         data   = weight2,
