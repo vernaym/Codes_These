@@ -198,8 +198,7 @@ def make_mask(field):
     fic_score = os.path.join(datadir, 'scores_2021110106_2022043006_alpes_10.csv')
     scores = pd.read_csv(fic_score, sep=';')
 
-    maxloc = 30
-    loc = 10
+    loc = 50  # TODO : comprendre pourquoi le "trou" en haut à doite augmente...
     seuil = 0.6
     #null = np.empty((len(field.lat), len(field.lon)))
     maxdiff  = np.zeros((len(field.lat), len(field.lon)))
@@ -209,9 +208,19 @@ def make_mask(field):
     estimated_bias = np.zeros((len(field.lat), len(field.lon)))
     estimated_rmse = np.zeros((len(field.lat), len(field.lon)))
     estimated_ratio = np.zeros((len(field.lat), len(field.lon)))
+    variability = np.zeros((len(field.lat), len(field.lon)))
+    variability2 = np.zeros((len(field.lat), len(field.lon)))
+    anomaly = np.zeros((len(field.lat), len(field.lon)))
     #for idx,lon in enumerate(field.lon.data[::-1]):
+    t1 = time.time()
+    t2 = time.time()
+    t3 = time.time()
+    t4 = time.time()
     for idx,lon in enumerate(field.lon.data):
         print(f'Lon {idx+1}/{len(field.lon)}')
+        print(f'reading neighbour values took {(t2-t1)*1000.}ms')
+        print(f'reading neighbour scores took {(t3-t2)*1000.}ms')
+        print(f'End of the loop took {(t4-t3)*1000.}ms')
         east = np.array(
                 [field.lon.data[idx+dlon] if idx+dlon<len(field.lon.data) else np.nan
                     for dlon in range(1, loc+1)]  # On ne veut pas "lon" dans localisation_lon
@@ -223,6 +232,7 @@ def make_mask(field):
             )
         west = west[~np.isnan(west)]
         localisation_lon = np.concatenate([west, east])
+        neighbours_lon = field.sel({'lon':localisation_lon})
         for idy,lat in enumerate(field.lat.data):
             t1 = time.time()
 
@@ -245,14 +255,17 @@ def make_mask(field):
 #                    for dlat in range(-loc,loc+1)]
 #            )
             pixel_value = field.sel({'lon':lon, 'lat':lat}).rr_cumul.data
-            neighbours  = field.sel({'lon':localisation_lon, 'lat':localisation_lat}).rr_cumul.data
+            #neighbours  = field.sel({'lon':localisation_lon, 'lat':localisation_lat}).rr_cumul.data
+            neighbours  = neighbours_lon.sel({'lat':localisation_lat}).rr_cumul.data
             maxloc = np.max(neighbours)
             minloc = np.min(neighbours)
             meanloc = np.mean(neighbours)
-            variability = (maxloc-minloc)/meanloc  # Measures the local variability in the neighboring
-            anomaly = (pixel_value-meanloc)/pixel_value  # Measures the "anlomaly" on the pixel against its neighbors
+            # TODO : redefine variability field
+            # TODO : comprendre pourquoi le "trou" en haut à doite augmente...
+            variability[idy,idx] = (maxloc-minloc)/meanloc  # Measures the local variability in the neighboring
+            variability2[idy,idx] = maxloc-minloc  # Measures the local variability in the neighboring
+            anomaly[idy,idx] = (pixel_value-meanloc)/pixel_value  # Measures the "anlomaly" on the pixel against its neighbors. WARNING : donne plus de poid aux anomalies <0 !
             t2 = time.time()
-            #print(f'reading neighbour values took {(t2-t1)*1000.}ms')
             # TODO : si zone homogène mais score mauvais, trouver un moyen d'augmenter le poid
             # TODO : agrandir itérativement la zone de localisation tant que la variabilité reste faible et appliquer
             # le score le plus proche à la plus grande zone homogène possible
@@ -277,7 +290,6 @@ def make_mask(field):
 #                correlation_dist = 1  # Sinon on lisse au maximum pour que chaque score n'influe réellement que son voisinage immédiat
             tmp = scores[scores['dist']<=correlation_dist]  #select nearest scores (TODO : choix de la distance à valider)
             t3 = time.time()
-            #print(f'reading neighbour scores took {(t3-t2)*1000.}ms')
             if len(tmp)==0:  # Aucune info proche --> on prend les valeurs moyennes
                 estimated_bias[idy,idx] = scores.biais.mean()
                 estimated_rmse[idy, idx] = scores.rmse.mean()
@@ -300,12 +312,12 @@ def make_mask(field):
                 estimated_ratio[idy,idx] = tmp.ponderation.sum()
 
             # TODO : trouver un moyen pour que "weight"/"weight2" soit normalisé entre 1 et 10 par exemple
-            #
-            weight[idy,idx] = variability * anomaly
+            # TODO : faire un porduit matricielle en dehors de la boucle maintenant que variability et anomaly sont des matrices
+            weight[idy,idx] = variability[idy,idx] * anomaly[idy, idx]
             if estimated_ratio[idy,idx] >= 1:
-                weight2[idy,idx] = variability * anomaly * estimated_ratio[idy,idx]
+                weight2[idy,idx] = variability[idy,idx] * anomaly[idy,idx] * estimated_ratio[idy,idx]
             else:
-                weight2[idy,idx] = variability * anomaly / estimated_ratio[idy,idx]
+                weight2[idy,idx] = variability[idy,idx] * anomaly[idy,idx] / estimated_ratio[idy,idx]
             #weight[idy,idx] = variability*np.abs(maxloc-pixel_value)*np.abs(pixel_value-minloc)  # TODO : add a pondertion according to neigboring ratios ?
 
 #            if tmp.dist.min() <= 0.01:  # On est sur un pixel connu --> on prend ses scores
@@ -323,17 +335,17 @@ def make_mask(field):
 
             # TODO : considérer 4 max (1 par cadran par exemple) pour éviter de fausser les résultats autour d'un pixel isolé très arrosé
             # et durcir le seuil (-0.4 par exemple)
-            westloc = field.sel({'lon':west, 'lat':lat}).rr_cumul.data if len(west)>0 else np.array([])
-            eastloc = field.sel({'lon':east, 'lat':lat}).rr_cumul.data if len(east)>0 else np.array([])
-            northloc = field.sel({'lon':lon, 'lat':north}).rr_cumul.data if len(north)>0 else np.array([])
-            southloc = field.sel({'lon':lon, 'lat':south}).rr_cumul.data if len(south)>0 else np.array([])
-            westmax = (pixel_value-np.max(westloc))/pixel_value if len(west)>0 else np.nan
-            eastmax = (pixel_value-np.max(eastloc))/pixel_value if len(east)>0 else np.nan
-            northmax = (pixel_value-np.max(northloc))/pixel_value if len(north)>0 else np.nan
-            southmax = (pixel_value-np.max(southloc))/pixel_value if len(south)>0 else np.nan
-            tmp = np.array([westmax,eastmax,northmax,southmax])
-            tmp = tmp[~np.isnan(tmp)]
-            directional_diff[idy,idx] = np.count_nonzero(tmp<-0.1) + 1
+#            westloc = field.sel({'lon':west, 'lat':lat}).rr_cumul.data if len(west)>0 else np.array([])
+#            eastloc = field.sel({'lon':east, 'lat':lat}).rr_cumul.data if len(east)>0 else np.array([])
+#            northloc = field.sel({'lon':lon, 'lat':north}).rr_cumul.data if len(north)>0 else np.array([])
+#            southloc = field.sel({'lon':lon, 'lat':south}).rr_cumul.data if len(south)>0 else np.array([])
+#            westmax = (pixel_value-np.max(westloc))/pixel_value if len(west)>0 else np.nan
+#            eastmax = (pixel_value-np.max(eastloc))/pixel_value if len(east)>0 else np.nan
+#            northmax = (pixel_value-np.max(northloc))/pixel_value if len(north)>0 else np.nan
+#            southmax = (pixel_value-np.max(southloc))/pixel_value if len(south)>0 else np.nan
+#            tmp = np.array([westmax,eastmax,northmax,southmax])
+#            tmp = tmp[~np.isnan(tmp)]
+#            directional_diff[idy,idx] = np.count_nonzero(tmp<-0.1) + 1
             t4 = time.time()
             #print(f'End of the loop took {(t4-t3)*1000.}ms')
 
@@ -342,186 +354,67 @@ def make_mask(field):
 #                import pdb
 #                pdb.set_trace()
 
-
-    output = xr.DataArray(
-        name   = 'maxdiff',
-        data   = maxdiff,
+    def to_xarray(array):
+        output = xr.DataArray(
+        #name   = 'maxdiff',
+        data   = array,
         dims   = ["lat", "lon"],
         coords = dict(lon=field.lon, lat=field.lat),
-        attrs  = dict(description="Difference between each pixel cumul and the max of its neighbours"),
-    )
-    #output.plot()
+        #attrs  = dict(description="Difference between each pixel cumul and the max of its neighbours"),
+        )
+        return output
+
+    def plot_and_save(field, name, cmap=plt.cm.Greys):
+        if domain == 'alp':
+            fig, ax = plt.subplots(figsize=(14,16))
+        elif domain == 'GrandesRousses':
+            fig, ax = plt.subplots(figsize=(12,6))
+        field.plot(ax=ax, cmap=cmap)
+        add_scores(scores)
+        add_radar_positions(ax)
+        fig.savefig(os.path.join(savedir, f'{name}.pdf'), format='pdf', layout='tight')
+        mask1.to_netcdf(os.path.join(savedir, f'{name}.nc'))
+
+
     maskarray = np.where(maxdiff>-seuil, 1, 2)
-    mask1 = xr.DataArray(
-        name   = 'mask',
-        data   = maskarray,
-        dims   = ["lat", "lon"],
-        coords = dict(lon=field.lon, lat=field.lat),
-    )
-    if domain == 'alp':
-        fig, ax = plt.subplots(figsize=(14,16))
-    elif domain == 'GrandesRousses':
-        fig, ax = plt.subplots(figsize=(12,6))
-    mask1.plot(ax=ax, cmap=plt.cm.Greys)
-    add_scores(scores)
-    add_radar_positions(ax)
-    name = f'mask1_loc{loc}_seuil{seuil}_{domain}'
-    fig.savefig(os.path.join(savedir, f'{name}.pdf'), format='pdf', layout='tight')
-    mask1.to_netcdf(os.path.join(savedir, f'{name}.nc'))
+    mask1 = to_xarray(maskarray)
+    plot_and_save(mask1, f'mask1_loc{loc}_seuil{seuil}_{domain}')
 
-    mask2 = xr.DataArray(
-        name   = 'mask',
-        data   = directional_diff,
-        dims   = ["lat", "lon"],
-        coords = dict(lon=field.lon, lat=field.lat),
-    )
-    if domain == 'alp':
-        fig, ax = plt.subplots(figsize=(14,16))
-    elif domain == 'GrandesRousses':
-        fig, ax = plt.subplots(figsize=(12,6))
-    mask2.plot(ax=ax, cmap=plt.cm.Greys)
-    add_scores(scores)
-    add_radar_positions(ax)
-    name = f'mask2_loc{loc}_seuil{seuil}_{domain}'
-    fig.savefig(os.path.join(savedir, f'{name}.pdf'), format='pdf', layout='tight')
-    mask2.to_netcdf(os.path.join(savedir, f'{name}.nc'))
+#    mask2 = to_xarray(directional_diff)
+#    plot_and_save(mask2, f'mask2_loc{loc}_seuil{seuil}_{domain}')
 
-    weight_array = xr.DataArray(
-        name   = 'mask',
-        data   = weight,
-        dims   = ["lat", "lon"],
-        coords = dict(lon=field.lon, lat=field.lat),
-    )
-    if domain == 'alp':
-        fig, ax = plt.subplots(figsize=(14,16))
-    elif domain == 'GrandesRousses':
-        fig, ax = plt.subplots(figsize=(12,6))
-    weight_array.plot(ax=ax, cmap=plt.cm.PuOr)
-    add_scores(scores)
-    add_radar_positions(ax)
-    name = f'weight_loc{loc}_{domain}'
-    fig.savefig(os.path.join(savedir, f'{name}.pdf'), format='pdf', layout='tight')
-    weight_array.to_netcdf(os.path.join(savedir, f'{name}.nc'))
+    weight_array = to_xarray(weight)
+    plot_and_save(weight_array, f'weight_loc{loc}_{domain}', cmap=plt.cm.PuOr)
 
     #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     # TODO : le mask doit être clippé à 1 (c'est un facteur !)
     #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     weight = np.clip(np.abs(weight).clip(0.1)*10, 1, 5)
-    mask3 = xr.DataArray(
-        name   = 'mask',
-        data   = weight,
-        dims   = ["lat", "lon"],
-        coords = dict(lon=field.lon, lat=field.lat),
-    )
-    if domain == 'alp':
-        fig, ax = plt.subplots(figsize=(14,16))
-    elif domain == 'GrandesRousses':
-        fig, ax = plt.subplots(figsize=(12,6))
-    #mask3.plot(ax=ax, cmap=plt.cm.YlOrBr)
-    mask3.plot(ax=ax, cmap=plt.cm.Greys)
-    add_scores(scores)
-    add_radar_positions(ax)
-    name = f'mask3_loc{loc}_{domain}'
-    fig.savefig(os.path.join(savedir, f'{name}.pdf'), format='pdf', layout='tight')
-    mask3.to_netcdf(os.path.join(savedir, f'{name}.nc'))
+    mask3 = to_xarray(weight)
+    plot_and_save(mask3, f'mask3_loc{loc}_{domain}')
 
-    weight2_array = xr.DataArray(
-        name   = 'mask',
-        data   = weight2,
-        dims   = ["lat", "lon"],
-        coords = dict(lon=field.lon, lat=field.lat),
-    )
-    if domain == 'alp':
-        fig, ax = plt.subplots(figsize=(14,16))
-    elif domain == 'GrandesRousses':
-        fig, ax = plt.subplots(figsize=(12,6))
-    weight2_array.plot(ax=ax, cmap=plt.cm.PuOr)
-    add_scores(scores)
-    add_radar_positions(ax)
-    name = f'weight2_loc{loc}_{domain}'
-    fig.savefig(os.path.join(savedir, f'{name}.pdf'), format='pdf', layout='tight')
-    weight2_array.to_netcdf(os.path.join(savedir, f'{name}.nc'))
-
-    # Transform weight into a mask factor
-#    weight = np.where(np.abs(weight)>=0.3, 4, weight)
-#    weight = np.where((np.abs(weight)>=0.2) & (np.abs(weight)<0.3), 3, weight)
-#    weight = np.where((np.abs(weight)>=0.1) & (np.abs(weight)<0.2), 2, weight)
-#    weight = np.where(np.abs(weight)<0.1, 1, weight)
+    weight2_array = to_xarray(weight2)
+    plot_and_save(weight2_array, f'weight2_loc{loc}_{domain}', cmap=plt.cm.PuOr)
 
     #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     # TODO : le mask doit être clippé à 1 (c'est un facteur !)
     #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     weight2 = np.clip(np.abs(weight2).clip(0.1)*10, 1, 5)
-    mask4 = xr.DataArray(
-        name   = 'mask',
-        data   = weight2,
-        dims   = ["lat", "lon"],
-        coords = dict(lon=field.lon, lat=field.lat),
-    )
-    if domain == 'alp':
-        fig, ax = plt.subplots(figsize=(14,16))
-    elif domain == 'GrandesRousses':
-        fig, ax = plt.subplots(figsize=(12,6))
-    #mask3.plot(ax=ax, cmap=plt.cm.YlOrBr)
-    mask4.plot(ax=ax, cmap=plt.cm.Greys)
-    add_scores(scores)
-    add_radar_positions(ax)
-    name = f'mask4_loc{loc}_{domain}'
-    fig.savefig(os.path.join(savedir, f'{name}.pdf'), format='pdf', layout='tight')
-    mask3.to_netcdf(os.path.join(savedir, f'{name}.nc'))
+    mask4 = to_xarray(weight2)
+    plot_and_save(mask4, f'mask4_loc{loc}_{domain}')
 
-    ratio = xr.DataArray(
-        name   = 'ratio',
-        data   = estimated_ratio,
-        dims   = ["lat", "lon"],
-        coords = dict(lon=field.lon, lat=field.lat),
-    )
-    if domain == 'alp':
-        fig, ax = plt.subplots(figsize=(14,16))
-    elif domain == 'GrandesRousses':
-        fig, ax = plt.subplots(figsize=(12,6))
-    ratio.plot(ax=ax, cmap=plt.cm.coolwarm)
-    add_scores(scores)
-    fig.savefig(os.path.join(savedir, f'estimated_ratio_{domain}.pdf'), format='pdf', layout='tight')
-    ratio.to_netcdf(os.path.join(savedir, f'estimated_ratio_{domain}.nc'))
+    ratio = to_xarray(estimated_ratio)
+    plot_and_save(ratio, f'estimated_ratio_{domain}', cmap=plt.cm.coolwarm)
 
-#    estimated_ratio = np.where(estimated_ratio>=1.5, 4, estimated_ratio)
-#    estimated_ratio = np.where((estimated_ratio>1.1) & (estimated_ratio<1.5), 3, estimated_ratio)
-#    estimated_ratio = np.where((estimated_ratio>=0.90) & (estimated_ratio<=1.1), 2, estimated_ratio)
-#    estimated_ratio = np.where((estimated_ratio>0.5) & (estimated_ratio<0.9), 1, estimated_ratio)
-#    estimated_ratio = np.where(estimated_ratio<=0.5, 0, estimated_ratio)
+    variability = to_xarray(variability)
+    plot_and_save(variability, f'variability_loc{loc}_{domain}', cmap=plt.cm.coolwarm)
 
-    ratio = xr.DataArray(
-        name   = 'ratio_category',
-        data   = estimated_ratio,
-        dims   = ["lat", "lon"],
-        coords = dict(lon=field.lon, lat=field.lat),
-    )
-    cmap = matplotlib.colors.LinearSegmentedColormap.from_list("", ["black", "blue", "green", "orange", "red"], 5)
-    thresholds = [0., 0.5, 0.80, 1.2, 1.5, 10]
-    norm = matplotlib.colors.BoundaryNorm(thresholds, cmap.N)
-    if domain == 'alp':
-        fig, ax = plt.subplots(figsize=(14,16))
-    elif domain == 'GrandesRousses':
-        fig, ax = plt.subplots(figsize=(12,6))
-    ratio.plot(ax=ax, cmap=cmap, norm=norm)
-    add_scores(scores)
-    fig.savefig(os.path.join(savedir, f'estimated_ratio_categories_{domain}.pdf'), format='pdf', layout='tight')
+    variability2 = to_xarray(variability2)
+    plot_and_save(variability2, f'variability2_loc{loc}_{domain}', cmap=plt.cm.coolwarm)
 
-    bias = xr.DataArray(
-        name   = 'bias',
-        data   = estimated_bias,
-        dims   = ["lat", "lon"],
-        coords = dict(lon=field.lon, lat=field.lat),
-    )
-    if domain == 'alp':
-        fig, ax = plt.subplots(figsize=(14,16))
-    elif domain == 'GrandesRousses':
-        fig, ax = plt.subplots(figsize=(12,6))
-    bias.plot(ax=ax, cmap=plt.cm.coolwarm)
-    add_scores(scores)
-    fig.savefig(os.path.join(savedir, f'estimated_bias_{domain}.pdf'), format='pdf', layout='tight')
-    bias.to_netcdf(os.path.join(savedir, f'estimated_bias_{domain}.nc'))
+    anomaly = to_xarray(anomaly)
+    plot_and_save(anomaly, f'anomaly_loc{loc}_{domain}', cmap=plt.cm.coolwarm)
+
 
 def krigeage_scores(field):
     variogram  = 'exponential'  # The same as for ANTILOPE without RADAR data
