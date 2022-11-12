@@ -29,6 +29,7 @@ import seaborn as sns
 # pour voir si la méthode de vérification peut s'appliquer
 # TODO : Use the "Tukey’s plotting positions", which avoids probabilities 0 and 1 : P(t) = (n+2/3) / (M+4/3)
 # --> see https://www.ecmwf.int/sites/default/files/elibrary/2010/10725-diagnosis-ensemble-forecasting-systems.pdf
+# TODO : Réorganiser le code avec un module "score" séparé qui puisse être appellé par différents scirpts
 
 #domain = 'GrandesRousses'
 if len(sys.argv) == 1:
@@ -82,24 +83,28 @@ mask_experiments = dict(
     )
 
 daily_experiments = dict(
-        LD0      = 'XP00_assimilation_quotiedienne_sans_masque_sans_localisation/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
+        LD0       = 'XP00_assimilation_quotiedienne_sans_masque_sans_localisation/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
         LDM4      = 'XP02_assimilation_quotidienne_avec_masque/Assimilation_locale_2021120106_2022050106_daily_alp_mask4.nc',
         LDM4D     = 'XP06_assimilation_quotidienne_avec_masque_et_debiaisage/Assimilation_locale_2021120106_2022050106_daily_alp_mask4_debiasing.nc',
+        LDM4D_BIS = 'XP09_assimilation_quotidienne_avec_masque_et_debiaisage_ratio_moyen/Assimilation_locale_2021120106_2022050106_daily_alp_mask4_debiasing.nc',
         LDM4L     = 'XP05_assimilation_quotidienne_avec_masque_et_localisation/Assimilation_locale_2021120106_2022050106_daily_alp_localisation_mask4.nc',
         LDM4LD    = 'XP08_assimilation_quotidienne_avec_masque_localisation_et_debiaisage/Assimilation_locale_2021120106_2022050106_daily_alp_localisation_mask4_debiasing.nc',
+
     )
 
 hourly_experiments = dict(
-        LD0      = 'XP00_assimilation_quotiedienne_sans_masque_sans_localisation/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
         LDM4LD   = 'XP08_assimilation_quotidienne_avec_masque_localisation_et_debiaisage/Assimilation_locale_2021120106_2022050106_daily_alp_localisation_mask4_debiasing.nc',
+        LH0      = 'XP01_assimilation_horaire_sans_masque_sans_localisation/Assimilation_locale_2021120106_2022050106_hourly_alp.nc',
         LHM4D    = 'XP03_assimilation_horaire_avec_masque_et_debiaisage/Assimilation_locale_2021120106_2022050106_hourly_alp_mask4_debiasing.nc',
         LHM4DL   = 'XP07_assimilation_horaire_avec_masque_localisation_et_debiaisage/Assimilation_locale_2021120106_2022050106_hourly_alp_localisation_mask4_debiasing.nc',
+        LHM4DL20 = 'XP13_assimilation_horaire_avec_masque_debiaisage_et_localisation20/Assimilation_locale_2021120106_2022050106_hourly_alp_localisation20_mask4_debiasing.nc',
+        LHM4DL50 = 'XP14_assimilation_horaire_avec_masque_debiaisage_et_localisation50/Assimilation_locale_2021120106_2022050106_hourly_alp_localisation50_mask4_debiasing.nc',
     )
 
 
 #experiments = mask_experiments
-experiments = daily_experiments
-#experiments = hourly_experiments
+#experiments = daily_experiments
+experiments = hourly_experiments
 
 
 
@@ -107,7 +112,7 @@ xpid_label = dict(
         antilope  = 'ANTILOPE',
         raw       = 'Raw PEAROME ensemble',
         GD0       = 'Global daily assimilation',
-        LD0       = 'Daily assimilation without mask',
+        LD0       = 'Daily assimilation with no option',
         LDM4      = 'Daily assimilation with mask4',
         LDM3      = 'Daily assimilation with mask3',
         LDM1      = 'Daily assimilation with mask1',
@@ -116,8 +121,11 @@ xpid_label = dict(
         LDM4D     = 'Daily assimilation with mask4 and debiasing',
         LDM4D_BIS = 'Daily assimilation with mask4 and uniform debiasing',
         LDM4LD    = 'Daily assimilation with mask4 and localization and debiasing',
+        LH0       = 'Hourly assimilation with no option',
         LHM4D     = 'Hourly assimilation with mask4 and debiasing',
-        LHM4DL    = 'Hourly assimilation with mask4 and localization and debiasing',
+        LHM4DL    = 'Hourly assimilation with mask4 and localization7 and debiasing',
+        LHM4DL20  = 'Hourly assimilation with mask4 and localization20 and debiasing',
+        LHM4DL50  = 'Hourly assimilation with mask4 and localization50 and debiasing',
     )
 
 
@@ -255,8 +263,8 @@ class Evaluation(object):
         obs = obs[obs>0]
         position = np.array([])
         for idx, obs in enumerate(obs):
-            position = np.append(position, np.searchsorted(simu[idx], obs, side='right'))
-        ax.hist(position, bins=range(18))
+            position = np.append(position, np.searchsorted(np.sort(simu[idx]), obs, side='right'))
+        ax.hist(position, bins=range(np.shape(simu)[1]))
 
     def reliability_diagram(self, simu, obs, product, ax):
         ndays = len(obs)
@@ -369,7 +377,7 @@ class Evaluation(object):
         #filenames = [os.path.join(datadir, f'aspearome_{mb:03d}_2021073106_2022070106_GrandesRousses_daily.nc') for mb in range(1,17)]
         filenames = [os.path.join(datadir, f'aspearome_{mb:03d}_2021102806_2022060206_alp_hourly.nc') for mb in range(1,17)]
         #raw = xr.open_mfdataset(filenames, combine='nested', concat_dim='member').compute().clip(0)
-        raw = xr.open_mfdataset(filenames, combine='nested', concat_dim='member')
+        raw = xr.open_mfdataset(filenames, combine='nested', concat_dim='member', chunks={'time': 24})  # Setting chunks is critical (read the doc !)
         raw['member']=np.arange(1,17)
         # Convert hourly precipitation into 24h precipitation between 6h J-1 and 6h J
         # Problem : the xarray tools to do that allows only accumulations between
@@ -379,8 +387,8 @@ class Evaluation(object):
         raw['time'] = raw.time-np.timedelta64(7, 'h')
         raw = raw.resample(time='D').sum(dim='time')  # !!! VERY SLOW !!!
         raw['time'] = raw.time+np.timedelta64(30, 'h')
-        raw = raw.compute().clip(0)  # TODO : try without computing (seems towork !)
-        #raw = raw.clip(0)  # TODO : try without computing (seems towork !)
+        #raw = raw.compute().clip(0)  # TODO : try without computing (seems towork !)
+        raw = raw.clip(0)  # TODO : try without computing (seems towork !)
         raw = raw.transpose('lat', 'lon', 'time', 'member')  # transpose data to put dimension in the same order as assimilated fields
 
         return raw
@@ -458,20 +466,24 @@ class Evaluation(object):
 #        data = self.obs.loc[self.obs["Q.num_poste"].isin(liste_poste)]  # TODO a adapter
 #        self.stations = self.data[['num_poste', 'nom', 'lat', 'lon', 'alti']].drop_duplicates()
 
+        dates = self.data.date
+
         antilope = self.read_antilope()
+        antiloe = antilope.loc[{'time':dates}]
 
         raw = self.read_raw_ensemble()
+        raw = raw.loc[{'time':dates}]
+        raw.compute()
         self.data['member'] = np.arange(1,17)
 
         data = dict(antilope=list(), raw=list())
         simus = dict()
         for xpid,filename in experiments.items():
-            simus[xpid] = self.read_simu(os.path.join(workdir, filename))
+            simus[xpid] = self.read_simu(os.path.join(workdir, filename)).loc[{'time':dates}]
 
 #        scores_list = ['reliability', 'resolution', 'uncertainty', 'rmse', 'bias', 'brier']
         scores_list = ['rmse', 'bias', 'brier', 'brier_skill_score']
         scores = dict()
-        dates = self.data.date
         #dates = dates[:10]
         liste_postes = np.array([])
         for idx, num_poste in enumerate(self.data.num_poste.data):
@@ -491,19 +503,19 @@ class Evaluation(object):
             if len(obs[~np.isnan(obs)]) >= 100:  # Filter stations with too few observations
                 liste_postes = np.append(liste_postes, num_poste)
                 #obs = obs[:10]
-                data['antilope'].append(antilope.sel({'lat':nearest(antilope.lat, lat), 'lon':nearest(antilope.lon, lon)}).loc[{'time':dates}].rr.data)
+                data['antilope'].append(antilope.sel({'lat':nearest(antilope.lat, lat), 'lon':nearest(antilope.lon, lon)}).rr.data)
                 t3 = time.time()
                 print(f'Reading antilope informations took {(t3-t2)*1000.}ms')
-                data['raw'].append(raw.sel({'lat':nearest(raw.lat, lat), 'lon':nearest(raw.lon, lon)}).loc[{'time':dates}].rr.data)
+                data['raw'].append(raw.sel({'lat':nearest(raw.lat, lat), 'lon':nearest(raw.lon, lon)}).rr.data)
                 t4 = time.time()
                 print(f'Reading raw ensemble took {(t4-t3)*1000.}ms')
                 for xpid,filename in experiments.items():
                     if xpid not in data.keys():
                         data[xpid] = list()
                     if domain == 'GrandesRousses':  # gridded data
-                        data[xpid].append(simus[xpid].sel({'lat':nearest(simus[xpid].lat, lat), 'lon':nearest(simus[xpid].lon, lon)}).loc[{'time':dates}].rr.data)
+                        data[xpid].append(simus[xpid].sel({'lat':nearest(simus[xpid].lat, lat), 'lon':nearest(simus[xpid].lon, lon)}).rr.data)
                     else:
-                        data[xpid].append(simus[xpid].sel({'num_poste':num_poste}).loc[{'time':dates}].rr.data)
+                        data[xpid].append(simus[xpid].sel({'num_poste':num_poste}).rr.data)
                     t5 = time.time()
                     print(f'Reading simulation {xpid} took {(t5-t4)*1000.}ms')
                 #self.temporal_plot(dates, data['LH0'][-1], obs, num_poste, raw=data['raw'][-1], antilope=data['antilope'][-1], simu2=data['LD0'][-1])
@@ -523,6 +535,7 @@ class Evaluation(object):
                     if product not in scores.keys():
                         scores[product] = {score:list() for score in scores_list}
                     for score_name, score in scores[product].items():
+                        # TODO : calculer le score de brier pour différents seuils
                         if score_name != 'brier_skill_score':
                             score.append(getattr(self, score_name)(data[product][-1][~np.isnan(obs)], obs[~np.isnan(obs)]))
                     t7 = time.time()
