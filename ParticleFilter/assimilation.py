@@ -768,10 +768,12 @@ class ParticleFilter(object):
                 if (np.min(raw_localized) > obs) or (np.max(raw_localized) < obs):
                     self.nb_out_loc[idy, idx] += 1
 
-                new, inflation = self.assimilation(date, raw, raw_localized, parameters, lat, lon, idx, idy)
+                new, inflation, sigma = self.assimilation(date, raw, raw_localized, parameters, lat, lon, idx, idy)
+
+                self.erreur_obs[idy,idx,idd] = sigma
+
                 if inflation >= 2:
                     print(f'Iteration {inflation} for pixel ({idx}, {idy})')
-
                 self.inflation[idy,idx] += int(inflation)
 
                 # TODO : remplir une liste plutot que boucler
@@ -822,10 +824,12 @@ class ParticleFilter(object):
             if (np.min(raw_localized) > obs) or (np.max(raw_localized) < obs):
                 self.nb_out_loc[idp] += 1
 
-            new, inflation = self.assimilation(date, raw, raw_localized, parameters, lat, lon, idx, idy, num_poste=num_poste)
-            if inflation >= 2:
-                print(f'Iteration {inflation} for station {num_poste}')
+            new, inflation, sigma = self.assimilation(date, raw, raw_localized, parameters, lat, lon, idx, idy, num_poste=num_poste)
 
+            self.erreur_obs[idp,idd] = sigma
+
+            if inflation >= 2:
+                print(f'{inflation} iterations for station {num_poste}')
             self.inflation[idp] += int(inflation)
 
             for member, field in self.newlocalfield.items():
@@ -879,7 +883,7 @@ class ParticleFilter(object):
         #    self.plot_assimilation(raw, new, obs, num_poste, date)
         #    self.weighting(raw_localized, parameters.mu.data, sigma, obs, plot_distribution=True, num_poste=num_poste, date=date)
 
-        return new, inflation
+        return new, inflation, sigma
 
     def plot_assimilation(self, raw, assim, obs, num_poste, date):
         """ References :
@@ -926,6 +930,7 @@ class ParticleFilter(object):
             self.nb_out_loc = np.zeros(self.nposte)  # Count number of obs outside localized ensemble
             self.inflation = np.zeros(self.nposte)  # Count number of time inflation was used
         self.newlocalfield = {m:null.copy() for m in range(1, self.Ne+1)}
+        self.erreur_obs = null.copy()
         time_selection_unique = 0
         time_selection_sequentielle = 0
         for idd,date in enumerate(self.period):
@@ -947,8 +952,6 @@ class ParticleFilter(object):
             parameters_date = self.parameters.sel({'time':date})
 
             self.date_str = date.strftime('%Y%m%d%H')
-            if not os.path.exists(self.date_str):
-                os.makedirs(self.date_str)
 
             if self.gridded:
                 self.gridded_assimilation(date, idd, localized_period, parameters_date)
@@ -1021,6 +1024,13 @@ class ParticleFilter(object):
                     coords = dict(lon=self.radar.lon, lat=self.radar.lat),
                     attrs  = dict(description="Number of assimilation step when inlfation was used"),
                 )
+            erreur_obs = xr.DataArray(
+                    name   = 'erreur_obs',
+                    data   = self.erreur_obs,
+                    dims   = ["lat", "lon", "time"],
+                    coords = dict(lon=self.radar.lon, lat=self.radar.lat, time=self.period),
+                    attrs  = dict(description="Observation error"),
+                )
         else:
             out_raw = xr.DataArray(
                     name   = 'out_raw',
@@ -1043,9 +1053,17 @@ class ParticleFilter(object):
                     coords = dict(num_poste=self.nivometeo.num_poste.data),
                     attrs  = dict(description="Number of assimilation step when inlfation was used"),
                 )
+            erreur_obs = xr.DataArray(
+                    name   = 'erreur_obs',
+                    data   = self.erreur_obs,
+                    dims   = ["num_poste", "time"],
+                    coords = dict(num_poste=self.nivometeo.num_poste.data, time=self.period),
+                    attrs  = dict(description="Observation error"),
+                )
         outname1 = f"nb_obs_outside_raw_ensemble_{self.period[0].strftime('%Y%m%d%H')}_{self.period[-1].strftime('%Y%m%d%H')}_{self.frequency}"
         outname2 = f"nb_obs_outside_localized_ensemble_{self.period[0].strftime('%Y%m%d%H')}_{self.period[-1].strftime('%Y%m%d%H')}_{self.frequency}"
         outname3 = f"inflation_{self.period[0].strftime('%Y%m%d%H')}_{self.period[-1].strftime('%Y%m%d%H')}_{self.frequency}"
+        outname4 = f"observation_error_{self.period[0].strftime('%Y%m%d%H')}_{self.period[-1].strftime('%Y%m%d%H')}_{self.frequency}"
         if self.localisation is not None:
             outname1 = '_'.join([outname1, f'localisation{self.localisation}'])
             outname2 = '_'.join([outname3, f'localisation{self.localisation}'])
@@ -1059,6 +1077,7 @@ class ParticleFilter(object):
             outname2 = '_'.join([outname2, 'debiasing'])
             outname3 = '_'.join([outname3, 'debiasing'])
         if self.gridded:
+            #for (outname, field) in zip([outname1, outname2, outname3, outname4], [out_raw, out_loc, inflation, erreur_obs]):
             for (outname, field) in zip([outname1, outname2, outname3], [out_raw, out_loc, inflation]):
                 fig, ax = plt.subplots(figsize=(12,6))
                 field.plot(ax=ax, cmap=plt.cm.Greys)
@@ -1067,6 +1086,7 @@ class ParticleFilter(object):
         out_raw.to_netcdf(f"{outname1}.nc")
         out_loc.to_netcdf(f"{outname2}.nc")
         inflation.to_netcdf(f"{outname3}.nc")
+        erreur_obs.to_netcdf(f"{outname4}.nc")
 
         if self.plot:
             #fig1, ax1 = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
