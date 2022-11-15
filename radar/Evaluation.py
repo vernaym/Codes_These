@@ -390,7 +390,7 @@ def elevation_scatterplot(workdf, datebegin, dateend, suffix=None, **kw):
     #fig2.savefig('ratio_scatterplot_by_elevation_{0:s}_{1:s}.svg'.format(datebegin.strftime('%Y%m%d'), dateend.strftime('%Y%m%d')), bbox_inches='tight', format='svg')
     fig2.savefig(f'{filename2}.svg', format='svg', bbox_inches='tight')
 
-def plot_massif(mydf, massif=None, subdomain=None, error=0.2, **kw):
+def plot_massif(mydf, massif=None, subdomain=None, error=0.2, threshold=None, **kw):
     #mydf = mydf.loc[~mydf['rr'].isna()].loc[~mydf['rr_antilope'].isna()]
     mydf = mydf.loc[~mydf[f'rr_{kw["product"]}'].isna()].loc[~mydf['rr_nivometeo'].isna()]
     mydf['error'] = (mydf[f'rr_{kw["product"]}'] >= mydf['rr_nivometeo'] * (1-error)) & (mydf[f'rr_{kw["product"]}'] <= mydf['rr_nivometeo'] * (1+error))
@@ -408,7 +408,10 @@ def plot_massif(mydf, massif=None, subdomain=None, error=0.2, **kw):
     tmp['rmse']  = np.sqrt(mydf.groupby(['num_poste'])["diff"].mean())
     tmp['ratio'] = tmp['rr_radar'] / tmp['rr_nivometeo']
     tmp.replace([np.inf, -np.inf], np.nan, inplace=True)
-    tmp.to_csv('scores_{0:s}_{1:s}_{2:s}_{3:d}.csv'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'), domain, args.threshold), sep=';')
+    if threshold is not None:
+        tmp.to_csv('scores_{0:s}_{1:s}_{2:s}_{3:d}.csv'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'), domain, threshold), sep=';')
+    else:
+        tmp.to_csv('scores_{0:s}_{1:s}_{2:s}.csv'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'), domain), sep=';')
 
     #====================================== Creation de la palette ===================================
     #cmap = ListedColormap(sns.diverging_palette(240, 10, n=9).as_hex())
@@ -569,7 +572,8 @@ def plot_massif(mydf, massif=None, subdomain=None, error=0.2, **kw):
         fig.close()
 
 def plot_obs(lat, lon, alt, num_poste, datebegin, dateend):
-    for domain in ['alpes', 'pyrenees']:
+    #for domain in ['alpes', 'pyrenees']:
+    for domain in ['alpes']:
         latmin = coords[domain]['latmin']
         latmax = coords[domain]['latmax']
         lonmin = coords[domain]['lonmin']
@@ -853,7 +857,7 @@ if __name__ == "__main__":
         #for domain in ['alpes', 'pyrenees']:
         for domain in ['alpes']:
             plot_full_domain(domain, lats.to_numpy(), lons.to_numpy(), df_stat, suffix=suffix, product=args.product)
-            plot_massif(df.loc[df['massif_number'].isin(map_massifs[domain])], suffix=suffix, product=args.product, domain=domain)
+            plot_massif(df.loc[df['massif_number'].isin(map_massifs[domain])], suffix=suffix, product=args.product, domain=domain, threshold=args.threshold)
 
 
 
