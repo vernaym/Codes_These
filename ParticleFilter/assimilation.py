@@ -72,8 +72,8 @@ def parse_command_line():
     parser.add_argument('-e', '--dateend', help = 'Final date of extraction (default=datebegin)')
     parser.add_argument('-d', '--domain', help='Domain of the file', choices=['alp', 'pyr', 'cor', 'GrandesRousses'], default='GrandesRousses')
     parser.add_argument('-w', '--workdir', help='Runing directory', default='/home/vernaym/workdir/ASSIMILATION')
-    parser.add_argument('-m', '--mask', help='Switch observation error mask on/off', choices=[1,2,3,4], default=None, type=int)
-    parser.add_argument('-c', '--debiasing', help='Apply bias correction to observation', action='store_true')
+    parser.add_argument('-m', '--mask', help='Switch observation error mask on/off', choices=[1,2,3,4,5], default=None, type=int)
+    parser.add_argument('-c', '--debiasing', help='Apply bias correction to observation (0=constant bias, 1=pseudo-kriging, 2=estimation based on homogeneity)', default=None, type=int, choices=[1,2,3])
     parser.add_argument('-t', '--threshold', default=None, help='Threshold of precipitation (mm) to apply in the data to consider', type=int)
     parser.add_argument('-p', '--plot', action='store_true', default=False, help='Plot assimilated fields')
     parser.add_argument('-f', '--frequency', choices=['hourly', 'daily'], help='Assimilation frequency')
@@ -321,14 +321,17 @@ def plot3D(X, Y, Z, colors, date):
     plt.savefig(f'{date}/OBS_3D_{date}.pdf', format='pdf')
 
 
-def plot_field(field, ax, vmin, vmax, title, cmap=plt.cm.YlGnBu):
+def plot_field(field, ax, vmin, vmax, title=None, cmap=plt.cm.YlGnBu):
 #def plot_field(field, ax, vmin, vmax, title, cmap='viridis'):
+#    import pdb
+#    pdb.set_trace()
     im = field.plot(ax=ax, add_colorbar=False, vmin=vmin, vmax=vmax, cmap=cmap)
     for landmark, infos in landmarks.items():
         ax.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='red', markersize=4)
     ax.set_aspect('equal')
     ax.axis('off')
-    ax.set_title(title)
+    if title is not None:
+        ax.set_title(title)
 
     return im
 
@@ -502,7 +505,7 @@ class ParticleFilter(object):
         mnt = xr.open_dataset('/home/vernaym/QGIS/MNT/DEM_ALPES_WGS84_250m_bilinear.nc')  # Pour tracer sur toutes les Alpes
         # Plot ANTILOPE precipitation field
         fig = plt.figure(figsize=(18,8))
-        field.rr.plot(vmin=0, vmax=self.rrmax, cbar_kwargs={'label': "24 hour precipitation (mm)"})  # quadmesh object
+        field.rr.plot(vmin=0, vmax=self.rrmax, cmap=plt.cm.YlGnBu, cbar_kwargs={'label': "24 hour precipitation (mm)"})  # quadmesh object
         # Add landmarks
         for landmark, infos in landmarks.items():
             plt.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='red', markersize=10)
@@ -519,38 +522,53 @@ class ParticleFilter(object):
         fig.savefig(f'{self.date_str}/OBS_{self.date_str}.pdf', format='pdf')
 
         # Plot 3D ANTILOPE precipitation field
-        tmp = mnt.interp(lon=self.radar.lon, lat=self.radar.lat, method='nearest')  # Pour interpoller le MNT sur la grille ANTILOPE
-        # WARNING :  la commande suivante réduit sensibement le domaine, attention aux comparaisons entre figures (en particulier avec les CUMULS)
-        #tmp = tmp.where((tmp.lon>=lonmin) & (tmp.lon<=lonmax) & (tmp.lat>=latmin) & (tmp.lat<=latmax), drop=True)
-        X, Y = np.meshgrid(tmp['lon'].values, tmp['lat'].values)
-        Z = np.nan_to_num(tmp['Band1'].values)
-        # define pixel colors
-        #colors = plt.cm.coolwarm(norm(np.nan_to_num(radar.transpose('lat', 'lon').rr.data)))
-        colors = plt.cm.coolwarm(norm(np.nan_to_num(self.radar.rr.data)))
-        plot3D(X, Y, Z, colors, self.date_str)
+#        tmp = mnt.interp(lon=self.radar.lon, lat=self.radar.lat, method='nearest')  # Pour interpoller le MNT sur la grille ANTILOPE
+#        # WARNING :  la commande suivante réduit sensibement le domaine, attention aux comparaisons entre figures (en particulier avec les CUMULS)
+#        #tmp = tmp.where((tmp.lon>=lonmin) & (tmp.lon<=lonmax) & (tmp.lat>=latmin) & (tmp.lat<=latmax), drop=True)
+#        X, Y = np.meshgrid(tmp['lon'].values, tmp['lat'].values)
+#        Z = np.nan_to_num(tmp['Band1'].values)
+#        # define pixel colors
+#        #colors = plt.cm.coolwarm(norm(np.nan_to_num(radar.transpose('lat', 'lon').rr.data)))
+#        colors = plt.cm.coolwarm(norm(np.nan_to_num(self.radar.rr.data)))
+#        plot3D(X, Y, Z, colors, self.date_str)
 
     @speedtest
     def pdf_parameters(self):
         # I. Define PDF parameters
-        #-------------
+        #-------------------------
         parameters = self.radar.copy()  # TODO : vérifier si ce n'est pas trop couteux (de toutes façon l'obs n'a pas de raison d'être modifiée)
-        if self.debiasing:
+        if self.debiasing == 0:
+            ratio = 0.825  # Homogeneous debiasing based on the mean antilope/ref ratio
+        elif self.debiasing == 1:
             mask = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask", f"estimated_ratio_{self.domain}.nc"))
-            parameters['mu'] = parameters['rr'] / mask.ratio  # TODO : check if the ensemble after assimilation is not biased
-            #parameters['mu'] = parameters['rr'] / 0.825  # Mean antilope/ref ratio
+            ratio = mask.ratio
+        elif self.debiasing == 2:
+            mask = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask", f"estimated_ratio2_loc25_seuil_0.1_{self.domain}.nc"))
+            ratio = mask.ratio
         else:
-            parameters['mu'] = parameters['rr']  # TODO : check if the ensemble after assimilation is not biased
+            ratio = 1  # No debiasing
+        parameters['mu'] = parameters['rr'] / ratio  # TODO : check if the ensemble after assimilation is not biased
 
         # Observation error
         # Import multiplicative mask to increase observation error where necessary
         if self.mask is not None:
             #try:
             #mask = xr.open_dataset(os.path.join(datadir, f"mask_error_antilope_{self.domain}.nc"))
+            if self.mask in [1,2]:
+                mask = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask", f"mask{self.mask}_loc10_seuil0.6_{self.domain}.nc"))
+                parameters['sigma'] = (0.261 + 0.263 * parameters['rr'])*mask.mask  # According to the linear regression of ANTILOPE RMSE vs ANTILOPE RR
             if self.mask in [3,4]:
                 mask = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask", f"mask{self.mask}_loc10_{self.domain}.nc"))
-            else:
-                mask = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask", f"mask{self.mask}_loc10_seuil0.6_{self.domain}.nc"))
-            parameters['sigma'] = (0.261 + 0.263 * parameters['mu'])*mask.mask  # According to the linear regression of ANTILOPE RMSE vs ANTILOPE RR
+                parameters['sigma'] = (0.261 + 0.263 * parameters['rr'])*mask.mask  # According to the linear regression of ANTILOPE RMSE vs ANTILOPE RR
+            elif self.mask in [5]:
+                if self.debiasing is None:
+                    mask = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask", f"estimated_ratio2_loc25_seuil_0.1_{self.domain}.nc"))
+                    ratio = mask.ratio
+                # TODO : augmenter l'erreur d'observation
+                mask = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask", f"mask{self.mask}_loc25_seuil0.1_{self.domain}.nc"))
+                parameters['sigma'] = 0.261 * mask.mask + 0.263 * parameters['rr'] * (1+np.abs(1 - ratio))
+                #parameters['sigma'] = (0.261 + 0.263 * parameters['rr'] * (1+np.abs(1 - ratio))) * mask.mask
+
 #            except FileNotFoundError as e:
 #                print(e)
 #                print('WARNING : no observation error mask')
@@ -584,12 +602,11 @@ class ParticleFilter(object):
 
         return self.mask
 
-    def plot_sigma(self):
+    def plot_sigma(self, field):
         fig, ax = plt.subplots(figsize=(14,6))
-        cmap = plt.cm.YlGnBu
-        import pdb
-        pdb.set_trace()
-        im = self.parameters['sigma'].plot(ax=ax, cmap=cmap, cbar_kwargs=dict(label='Standard deviation (mm)'))
+        #cmap = plt.cm.YlGnBu
+        cmap = plt.cm.Greys
+        im = field['sigma'].plot(ax=ax, cmap=cmap, cbar_kwargs=dict(label='Standard deviation (mm)'))
         for landmark, infos in landmarks.items():
                 ax.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='red', markersize=4)
         fig.tight_layout()
@@ -631,6 +648,31 @@ class ParticleFilter(object):
 
         #SCGD_shape_PDF(Y, k=k, theta=theta, delta=delta, plot_parameters=False)
         #-----------------------------------------------------------------------
+
+    def plot_ensemble(ensemble, label):
+        fig,ax = plt.subplots(nrows=4, ncols=4, figsize=(16,7))
+        i = 0
+        j = 0
+        for member in ensemble.member.data:
+            member.plot(ax=ax[i,j], cmap=plt.cm.YlGnBu)
+            j = j + 1
+            if j==4:
+                j = 0
+                i = i + 1
+        fig.savefig(f"{self.date_str}/{label}_{self.date_str}.pdf", format='pdf')
+#    fig, ax = plt.subplots(figsize=(4,4))
+#    i = 0
+#    j = 0
+#    for member in ensemble:
+#        if member == 1 and label is not None:
+#            member.plot(ax[i,j], cmap=plt.cm.YlGnBu, label=rawlabel)
+#        else:
+#            member.plot(ax[i,j], cmap=plt.cm.YlGnBu)
+#        j = j + 1
+#        if j==4:
+#            j = 0
+#            i = i + 1
+#    plt.legend()
 
 #    @speedtest
     def resample(self, weights, Ne):
@@ -780,8 +822,43 @@ class ParticleFilter(object):
                 for member, field in self.newlocalfield.items():
                     field[idy,idx,idd]  = new[member-1]  # fill new member
 
-#        if self.plot:  # Not with localisation
-#            plot_weights(date, weights)
+        if self.plot:
+            fig1,ax1 = plt.subplots(nrows=4, ncols=4, figsize=(16,7))
+            fig2,ax2 = plt.subplots(nrows=4, ncols=4, figsize=(16,7))
+            i = 0
+            j = 0
+            raw = localized_period.sel({'time':date})
+            self.rrmin = 0.
+            self.rrmax = max(
+                    np.nanmax(raw.rr.data),
+                    np.nanmax(parameters_date.rr.data)
+                    )
+            #self.rrmax = np.nanmax(parameters_date.rr.data)
+            for member in range(1,17):
+                assim = xr.DataArray(
+                    name   = 'rr',
+                    data   = self.newlocalfield[member][:,:,0],
+                    dims   = ["lat", "lon"],
+                    coords = dict(lon=raw.lon, lat=raw.lat),
+                )
+                #raw.sel({'member':member}).rr.plot(ax=ax1[i,j], cmap=plt.cm.YlGnBu)
+                #im1 = plot_field(raw, ax1[i,j], self.rrmin, self.rrmax, title=f'Member {self.selection_globale[m-1]:03d}')
+                im1 = plot_field(raw.sel({'member':member}).rr, ax1[i,j], self.rrmin, self.rrmax)
+                #assim.plot(ax=ax2[i,j], cmap=plt.cm.YlGnBu)
+                im2 = plot_field(assim, ax2[i,j], self.rrmin, self.rrmax)
+                ax1[i,j].set_title(None)
+                ax2[i,j].set_title(None)
+                j = j + 1
+                if j==4:
+                    j = 0
+                    i = i + 1
+            if not os.path.exists(f'{self.date_str}'):
+                os.makedirs(f'{self.date_str}')
+            finalize_fig(fig1, im1, label='24-hour precipitation (mm)', outname=f'{self.date_str}/RAW_{self.date_str}.pdf')
+            finalize_fig(fig2, im2, label='24-hour precipitation (mm)', outname=f'{self.date_str}/ASSIM_{self.date_str}.pdf')
+#            fig1.savefig(f"{self.date_str}/RAW_{self.date_str}.pdf", format='pdf', layout='tight')
+#            fig2.savefig(f"{self.date_str}/ASSIM_{self.date_str}.pdf", format='pdf', layout='tight')
+            #plot_weights(date, weights)
 
     @speedtest
     def ponctual_assimilation(self, date, idd, localized_period, parameters_date):
@@ -871,7 +948,14 @@ class ParticleFilter(object):
         # 4. ECC for consistency with raw members
         #----------------------------------------
         ecc = np.argsort(raw, axis=0)
-        new = tmp[ecc]
+        new = np.empty(len(tmp))
+        new[:] = np.nan
+        for idx, value in enumerate(tmp):
+            new[ecc[idx]] = value
+
+        # TODO : virer la ligne suivante qui court-circuite l'ECC
+        #new = raw_localized[selection_locale]
+
         # To plot the posterior distribution:
         # self.weighting(new, parameters.mu.data, parameters.sigma.data, plot_distribution=True)
 
@@ -959,15 +1043,14 @@ class ParticleFilter(object):
                 self.ponctual_assimilation(date, idd, localized_period, parameters_date)
 
             if self.plot:
-
-                tmp = parameters_date.sel({'time':date})
-                self.plot_sigma(tmp.sigma)
+                self.plot_sigma(parameters_date)
                 self.rrmin = 0.
                 self.rrmax = max(
                         np.nanmax(localized_period.rr.data),
-                        np.nanmax(tmp.rr.data)
+                        np.nanmax(parameters_date.rr.data)
                         )
-                self.plot_obs(tmp.rr.data)
+                #self.rrmax = np.nanmax(parameters_date.rr.data)
+                self.plot_obs(parameters_date)
 
     @speedtest
     def plot_weights(self, date, weights):
@@ -1060,10 +1143,10 @@ class ParticleFilter(object):
                     coords = dict(num_poste=self.nivometeo.num_poste.data, time=self.period),
                     attrs  = dict(description="Observation error"),
                 )
-        outname1 = f"nb_obs_outside_raw_ensemble_{self.period[0].strftime('%Y%m%d%H')}_{self.period[-1].strftime('%Y%m%d%H')}_{self.frequency}"
-        outname2 = f"nb_obs_outside_localized_ensemble_{self.period[0].strftime('%Y%m%d%H')}_{self.period[-1].strftime('%Y%m%d%H')}_{self.frequency}"
-        outname3 = f"inflation_{self.period[0].strftime('%Y%m%d%H')}_{self.period[-1].strftime('%Y%m%d%H')}_{self.frequency}"
-        outname4 = f"observation_error_{self.period[0].strftime('%Y%m%d%H')}_{self.period[-1].strftime('%Y%m%d%H')}_{self.frequency}"
+        outname1 = f"nb_obs_outside_raw_ensemble_{self.period[0].strftime('%Y%m%d%H')}_{self.period[-1].strftime('%Y%m%d%H')}_{self.frequency}_{self.domain}"
+        outname2 = f"nb_obs_outside_localized_ensemble_{self.period[0].strftime('%Y%m%d%H')}_{self.period[-1].strftime('%Y%m%d%H')}_{self.frequency}_{self.domain}"
+        outname3 = f"inflation_{self.period[0].strftime('%Y%m%d%H')}_{self.period[-1].strftime('%Y%m%d%H')}_{self.frequency}_{self.domain}"
+        outname4 = f"observation_error_{self.period[0].strftime('%Y%m%d%H')}_{self.period[-1].strftime('%Y%m%d%H')}_{self.frequency}_{self.domain}"
         if self.localisation is not None:
             outname1 = '_'.join([outname1, f'localisation{self.localisation}'])
             outname2 = '_'.join([outname3, f'localisation{self.localisation}'])
@@ -1072,10 +1155,10 @@ class ParticleFilter(object):
             outname1 = '_'.join([outname1, f'mask{self.mask}'])
             outname2 = '_'.join([outname2, f'mask{self.mask}'])
             outname3 = '_'.join([outname3, f'mask{self.mask}'])
-        if self.debiasing:
-            outname1 = '_'.join([outname1, 'debiasing'])
-            outname2 = '_'.join([outname2, 'debiasing'])
-            outname3 = '_'.join([outname3, 'debiasing'])
+        if self.debiasing is not None:
+            outname1 = '_'.join([outname1, f'debiasing{self.debiasing}'])
+            outname2 = '_'.join([outname2, f'debiasing{self.debiasing}'])
+            outname3 = '_'.join([outname3, f'debiasing{self.debiasing}'])
         if self.gridded:
             #for (outname, field) in zip([outname1, outname2, outname3, outname4], [out_raw, out_loc, inflation, erreur_obs]):
             for (outname, field) in zip([outname1, outname2, outname3], [out_raw, out_loc, inflation]):
@@ -1088,10 +1171,10 @@ class ParticleFilter(object):
         inflation.to_netcdf(f"{outname3}.nc")
         erreur_obs.to_netcdf(f"{outname4}.nc")
 
-        if self.plot:
-            #fig1, ax1 = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
-            fig2, ax2 = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
-            #fig3, axes3 = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
+#        if self.plot:
+#            #fig1, ax1 = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
+#            fig2, ax2 = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
+#            #fig3, axes3 = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
         i = 0
         j = 0
         for m in range(1, self.Ne+1):
@@ -1104,19 +1187,19 @@ class ParticleFilter(object):
             #t3 = time.time()
             #print(f'Wrinting globalfields took {(t3-t2)*1000.}ms')
 
-        if self.plot:
-            #finalize_fig(fig1, im1, label='24-hour precipitation (mm)', outname=f'{self.date_str}/ASSIM_globale_{self.date_str}.pdf')
-            figname = f'{self.date_str}/ASSIM_locale_{self.date_str}'
-            if self.localisation is not None:
-                figname = '_'.join([figname, f'localisation{self.localisation}'])
-            if self.mask is not None:
-                figname = '_'.join([figname, f'mask{self.mask}'])
-            if self.debiasing:
-                figname = '_'.join([figname, 'debiasing'])
-            finalize_fig(fig2, im2, label='24-hour precipitation (mm)', outname=f'{figname}.pdf')
-            #finalize_fig(fig3, im3, label='Weight', outname=f'{self.date_str}/WEIGHTS_{self.date_str}.pdf')
-            #t5 = time.time()
-            #print(f'Finalisation of figures took {(t5-t4)*1000.}ms')
+#        if self.plot:
+#            #finalize_fig(fig1, im1, label='24-hour precipitation (mm)', outname=f'{self.date_str}/ASSIM_globale_{self.date_str}.pdf')
+#            figname = f'{self.date_str}/ASSIM_locale_{self.date_str}'
+#            if self.localisation is not None:
+#                figname = '_'.join([figname, f'localisation{self.localisation}'])
+#            if self.mask is not None:
+#                figname = '_'.join([figname, f'mask{self.mask}'])
+#            if self.debiasing is not None:
+#                figname = '_'.join([figname, f'debiasing{self.debiasing}'])
+#            finalize_fig(fig2, im2, label='24-hour precipitation (mm)', outname=f'{figname}.pdf')
+#            #finalize_fig(fig3, im3, label='Weight', outname=f'{self.date_str}/WEIGHTS_{self.date_str}.pdf')
+#            #t5 = time.time()
+#            #print(f'Finalisation of figures took {(t5-t4)*1000.}ms')
 
         plt.close('all')
 
@@ -1156,6 +1239,9 @@ def plot_chrono(time, obs, raw, assim):
 #    fig2.savefig("Chronologie_assim.pdf", format='pdf')
     plt.legend()
     plt.savefig(f"Chronologie_{time[0].strftime('%Y%m%d%H')}_{time[-1].strftime('%Y%m%d%H')}.pdf", format='pdf')
+
+
+
 
 if __name__ == "__main__":
     t0 = time.time()
@@ -1203,8 +1289,8 @@ if __name__ == "__main__":
         outname = '_'.join([outname, f'localisation{args.localisation}'])
     if mask is not None:
         outname = '_'.join([outname, f'mask{mask}'])
-    if args.debiasing:
-        outname = '_'.join([outname, f'debiasing'])
+    if args.debiasing is not None:
+        outname = '_'.join([outname, f'debiasing{args.debiasing}'])
     localfields.to_netcdf(f"{outname}.nc")
     #globalfields.to_netcdf(f"Assimilation_globale_{args.datebegin.strftime('%Y%m%d%H')}_{args.dateend.strftime('%Y%m%d%H')}_{args.frequency}.nc")
 
