@@ -148,11 +148,16 @@ def add_scores(scores, ax):
             return '^'
     scores_domain["marker"] = scores_domain.apply(set_marker, axis=1)  # axis=1 makes sure that function is applied to each row
     for marker, info in scores_domain.groupby('marker'):
-        #sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=150, edgecolors='black', alpha=0.5)
-        sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=350, edgecolors='black')
-        labels = [str(num_poste) for num_poste in info['num_poste']]
-#        for idx, label in enumerate(labels):
-#            txt = plt.text(info['lons'][idx], info['lats'][idx], label)
+        #sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=150, edgecolors='black', alpha=0.3)
+        sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=150, edgecolors='black', alpha=0.5)
+        #sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=350, edgecolors='black')
+        #labels = [str(num_poste) for num_poste in info['num_poste']]
+        labels = [str(np.around(ratio, decimals=2)) for ratio in info['ratio']]
+        # TODO : add score value
+        #for idx, label in enumerate(labels):
+        for idx in info.index:
+            txt = plt.text(info['lons'][idx], info['lats'][idx], np.around(info['ratio'][idx], decimals=2))
+            #txt = plt.text(info['lons'][idx], info['lats'][idx], info['num_poste'][idx])
     #ax.colorbar(sc, label=legend)
     #ax.colorbar(sc, label=legend, shrink=shrink, anchor=anchor)
     return sc
@@ -191,7 +196,7 @@ def add_cities(latmin, latmax, lonmin, lonmax):
     tmp = cities[(cities.population>25000) & (cities.lat>=latmin) & (cities.lat<=latmax) & (cities.lng>=lonmin) & (cities.lng<=lonmax)]
     plt.plot(tmp.lng, tmp.lat, marker='.', linestyle='')
     for idx in tmp.index:
-        plt.text(tmp.lng[idx]+0.01, tmp.lat[idx]+0.01, tmp.city[idx])
+        plt.text(tmp.lng[idx], tmp.lat[idx], tmp.city[idx], alpha=0.5)
 
 def plot(antilope):
 
@@ -204,11 +209,12 @@ def plot(antilope):
             fig, ax = plt.subplots(figsize=(12,6))
 
         #antilope.rr_cumul.plot(ax=ax, cbar_kwargs={"label":'Total precipitation between 2021080106 and 2022070106 (mm)'}, cmap=plt.cm.coolwarm)
-        #cml = antilope.rr_cumul.plot(ax=ax, cbar_kwargs={"label":'Total precipitation between 2021080106 and 2022070106 (mm)'}, cmap=plt.cm.YlGnBu)
-        cml = antilope.rr_cumul.plot(ax=ax, cmap=plt.cm.YlGnBu, add_colorbar=False, alpha=0.5)
+        cml = antilope.rr_cumul.plot(ax=ax, cmap=plt.cm.YlGnBu, add_colorbar=False)
+        #cml = antilope.rr_cumul.plot(ax=ax, cmap=plt.cm.YlGnBu, add_colorbar=False, alpha=0.5)
         #add_landmarks(ax)
         add_radar_positions(ax)
-        fic_score = os.path.join(datadir, 'scores_2021110106_2022043006_alpes_10.csv')
+        fic_score = os.path.join(datadir, 'scores_2021110106_2022043006_alpes_10.csv')  # WARNING : scores valid for precipitation >10mm
+        #fic_score = os.path.join(datadir, 'scores_2021110106_2022043006_alpes.csv')
         scores = pd.read_csv(fic_score, sep=';')
         sc = add_scores(scores, ax)
         add_boundaries()
@@ -220,10 +226,10 @@ def plot(antilope):
         cb = fig.colorbar(sc)
         cb.set_label(label='Mean ANTILOPE / rain-gauges ratio', size='large', weight='bold')
         cb2 = fig.colorbar(cml)
-        cb2.set_label(label='Total precipitation between 2021080106 and 2022070106 (mm)', size='large', weight='bold')
+        cb2.set_label(label='Total precipitation between \n 2021080106 and 2022070106 (mm)', size='large', weight='bold')
         #fig.legend()
-        fig.tight_layout()
-        fig.savefig(os.path.join(savedir, f'CUMUL_ANTILOPE_2021080106_2022070106_{domain}.pdf'))
+        #fig.tight_layout()
+        fig.savefig(os.path.join(savedir, f'CUMUL_ANTILOPE_2021080106_2022070106_{domain}.pdf'), layout='tight')
 
 def nearest(array, value):
     """ Find the closest element of 'array' to 'value'. """
@@ -267,15 +273,24 @@ def make_mask(field):
     Similarly a homogeneity analysis is used for a static increase of the observation
     error where the heterogeneity of precipitation accumulation is important.
 
-    
-
     """
 
-    # TODO ajouter les postes clim non utilisés par ANTILOPE temps réel
-    fic_score = os.path.join(datadir, 'scores_2021110106_2022043006_alpes_10.csv')
-    scores = pd.read_csv(fic_score, sep=';')
+    latmin = field.lat.data.min()
+    latmax = field.lat.data.max()
+    lonmin = field.lon.data.min()
+    lonmax = field.lon.data.max()
 
-    loc = 50
+    # TODO ajouter les postes clim non utilisés par ANTILOPE temps réel
+    fic_score = os.path.join(datadir, 'scores_2021110106_2022043006_alpes_10.csv')  # WARNING : scores valid for precipitation >10mm
+    #fic_score = os.path.join(datadir, 'scores_2021110106_2022043006_alpes.csv')  # Algorithme pas adapté aux socres sans seuil
+    scores = pd.read_csv(fic_score, sep=';')
+    scores = scores.loc[(scores.lats>=latmin) & (scores.lats<=latmax) & (scores.lons>=lonmin) & (scores.lons<=lonmax)]
+
+
+    # loc doit être faible (~10) pour avoir de bons résultats pour l'homogénéité, mais suffisament élevé (optimum vers 25, mauvais à 50) pour ne pas avoir un champs de biais estimé
+    # trop bruité (ruptures brutales,...)
+    # TODO : régler la localisation de façon dynamique en fonction de l'homogénéité
+    loc = 25
     # TODO : WARNING l'homogenetite est fausse sur les bords du domaine (pas le même nombre de pisxels considérés)
     # TODO : il faut normaliser par le nombre de pixels !
     seuil = 0.6
@@ -412,12 +427,16 @@ def make_mask(field):
                                 local_ratio = np.append(local_ratio, tmp.ratio[ind])
                                 inv_dist = np.append(inv_dist, tmp.inv_dist[ind])
 
+                    # TODO : revoir l'estimation du ratio pour ne pas introduire de structure spatiale
                     if len(local_ratio)>0:
                         # Si on a des scores dont le cumuls sont proches, on prend la moyenne des scores sans pondération de distance
                         # (l'hypothèse est que sur une zone homogène les scores sont équiprobables)
+                        # TODO : ajouter quand même un effet "lissant" pour éviter de faire apparaitre des cercles autour des points avec scores
+                        # si la distance de localisation est trop faible (<50)
                         #estimated_ratio2[idy, idx] = np.sum(local_ratio * inv_dist / np.sum(inv_dist))
                         estimated_ratio2[idy, idx] = np.mean(local_ratio)
                     elif len(tmp)>0:
+#                    if len(tmp)>0:
                         # Si on a aucun score dont le cumul est similaire, on prend le score dont le cumul
                         # est le plus proche et on pondère par le ratio estre les 2 cumuls.
                         # HYPOTHESE FORTE : le cumul "reel" là où on a pas d'observation indépendante est identique au cumul "réel" le plus proche
@@ -429,6 +448,8 @@ def make_mask(field):
                         nearest_cumul = tmp[tmp['diff_cumul']==np.min(tmp['diff_cumul'])]
                         # Le ratio estimé est le produit entre la ratio connu sur le pixel dont le cumul est le plus proche
                         # et le ratio des cumuls
+                        if len(nearest_cumul)>1:  # Securité
+                            nearest_cumul = nearest_cumul[nearest_cumul['dist']==np.min(nearest_cumul['dist'])]
                         estimated_ratio2[idy, idx] = nearest_cumul.ratio_cumul * nearest_cumul.ratio
                     else:
                         # Si on a aucune information assez proche, on met le ratio moyen
@@ -440,17 +461,17 @@ def make_mask(field):
 
                 neighbours = neighbours.where(~((neighbours.lat==lat)&(neighbours.lon==lon)))  # remove pixel value
 
-                maxloc = np.nanmax(neighbours.rr_cumul)
-                minloc = np.nanmin(neighbours.rr_cumul)
-                meanloc = np.nanmean(neighbours.rr_cumul)
-                # TODO : comprendre pourquoi le "trou" en haut à doite augmente...
-                variability[idy,idx] = (maxloc-minloc)/meanloc  # Measures the local variability in the neighboring
-                #variability2[idy,idx] = maxloc-minloc  # Measures the local variability in the neighboring
-                anomaly[idy,idx] = (pixel_value-meanloc)/pixel_value  # Measures the "anlomaly" on the pixel against its neighbors. WARNING : donne plus de poid aux anomalies <0 !
-
-                ############################################################################################################
-                # METHDOE D'IDENTIFICATION ITERATIVE
-                ############################################################################################################
+#                maxloc = np.nanmax(neighbours.rr_cumul)
+#                minloc = np.nanmin(neighbours.rr_cumul)
+#                meanloc = np.nanmean(neighbours.rr_cumul)
+#                # TODO : comprendre pourquoi le "trou" en haut à doite augmente...
+#                #variability[idy,idx] = (maxloc-minloc)/meanloc  # Measures the local variability in the neighboring
+#                #variability2[idy,idx] = maxloc-minloc  # Measures the local variability in the neighboring
+#                anomaly[idy,idx] = (pixel_value-meanloc)/pixel_value  # Measures the "anlomaly" on the pixel against its neighbors. WARNING : donne plus de poid aux anomalies <0 !
+#
+#                ############################################################################################################
+#                # METHDOE D'IDENTIFICATION ITERATIVE
+#                ############################################################################################################
 #                    totalvar = 0
 #                    emax = len(field.lon.data)-1-idx
 #                    wmax = idx
@@ -498,65 +519,64 @@ def make_mask(field):
 
 
                 t3 = time.time()
-                if len(tmp)==0:  # Aucune info proche --> on prend les valeurs moyennes
-                    estimated_bias[idy,idx] = scores.biais.mean()
-                    estimated_rmse[idy, idx] = scores.rmse.mean()
-                    estimated_ratio[idy,idx] = scores.ratio.mean()
-                elif tmp.dist.min() <= 0.01:  # On est sur un pixel connu --> on prend ses scores
-                    #print(tmp[tmp['dist']==tmp.dist.min()].num_poste)
-#                if int(tmp[tmp['dist']==tmp.dist.min()].num_poste) == 73173400:
-#                    import pdb
-#                    pdb.set_trace()
-                    estimated_bias[idy,idx] = float(tmp[tmp['dist']==tmp.dist.min()].biais)
-                    estimated_rmse[idy, idx] = float(tmp[tmp['dist']==tmp.dist.min()].rmse)
-                    estimated_ratio[idy,idx] = float(tmp[tmp['dist']==tmp.dist.min()].ratio)
-                else:  # On fait la moyenne des scores pondérée par la distance
-                    #tmp['inv_dist'] = 1/tmp.loc[:,'dist']  # equivalent
-                    tmp['ponderation'] = (tmp.biais*tmp.inv_dist)/tmp.inv_dist.sum()
-                    estimated_bias[idy,idx] = tmp.ponderation.sum()
-                    tmp['ponderation'] = (tmp.rmse*tmp.inv_dist)/tmp.inv_dist.sum()
-                    estimated_rmse[idy,idx] = tmp.ponderation.sum()
-                    tmp['ponderation'] = (tmp.ratio*tmp.inv_dist)/tmp.inv_dist.sum()
-                    estimated_ratio[idy,idx] = tmp.ponderation.sum()
-
-                # TODO : trouver un moyen pour que "weight"/"weight2" soit normalisé entre 1 et 10 par exemple
-                # TODO : faire un porduit matricielle en dehors de la boucle maintenant que variability et anomaly sont des matrices
-                #weight[idy,idx] = variability[idy,idx] * anomaly[idy, idx]
-                #weight[idy,idx] = anomaly[idy, idx] / homogeneous_size[idy,idx]
-                weight[idy,idx] = anomaly[idy, idx] * homogeneous_size[idy,idx]
-                if estimated_ratio[idy,idx] >= 1:
-                    weight2[idy,idx] = variability[idy,idx] * anomaly[idy,idx] * estimated_ratio[idy,idx]
-                else:
-                    weight2[idy,idx] = variability[idy,idx] * anomaly[idy,idx] / estimated_ratio[idy,idx]
-                #weight[idy,idx] = variability*np.abs(maxloc-pixel_value)*np.abs(pixel_value-minloc)  # TODO : add a pondertion according to neigboring ratios ?
-
-#            if tmp.dist.min() <= 0.01:  # On est sur un pixel connu --> on prend ses scores
-#                print(tmp[tmp['dist']==tmp.dist.min()].num_poste)
-#                if int(tmp[tmp['dist']==tmp.dist.min()].num_poste) == 5001400:
-#                    import pdb
-#                    pdb.set_trace()
-#            # To see the result around Alpe d'Huez
-#            if lon == 6.1 and lat == 45.11:
-#                import pdb
-#                pdb.set_trace()
-
-                #meandiff[idx,idy] = pixel_value-np.mean(neighbours)
-                maxdiff[idy,idx] = (pixel_value-maxloc)/pixel_value
-
-                # TODO : considérer 4 max (1 par cadran par exemple) pour éviter de fausser les résultats autour d'un pixel isolé très arrosé
-                # et durcir le seuil (-0.4 par exemple)
-#            westloc = field.sel({'lon':west, 'lat':lat}).rr_cumul.data if len(west)>0 else np.array([])
-#            eastloc = field.sel({'lon':east, 'lat':lat}).rr_cumul.data if len(east)>0 else np.array([])
-#            northloc = field.sel({'lon':lon, 'lat':north}).rr_cumul.data if len(north)>0 else np.array([])
-#            southloc = field.sel({'lon':lon, 'lat':south}).rr_cumul.data if len(south)>0 else np.array([])
-#            westmax = (pixel_value-np.max(westloc))/pixel_value if len(west)>0 else np.nan
-#            eastmax = (pixel_value-np.max(eastloc))/pixel_value if len(east)>0 else np.nan
-#            northmax = (pixel_value-np.max(northloc))/pixel_value if len(north)>0 else np.nan
-#            southmax = (pixel_value-np.max(southloc))/pixel_value if len(south)>0 else np.nan
-#            tmp = np.array([westmax,eastmax,northmax,southmax])
-#            tmp = tmp[~np.isnan(tmp)]
-#            directional_diff[idy,idx] = np.count_nonzero(tmp<-0.1) + 1
-                t4 = time.time()
+#                if len(tmp)==0:  # Aucune info proche --> on prend les valeurs moyennes
+#                    estimated_bias[idy,idx] = scores.biais.mean()
+#                    estimated_rmse[idy, idx] = scores.rmse.mean()
+#                    estimated_ratio[idy,idx] = scores.ratio.mean()
+#                elif tmp.dist.min() <= 0.01:  # On est sur un pixel connu --> on prend ses scores
+#                    #print(tmp[tmp['dist']==tmp.dist.min()].num_poste)
+##                if int(tmp[tmp['dist']==tmp.dist.min()].num_poste) == 73173400:
+##                    import pdb
+##                    pdb.set_trace()
+#                    estimated_bias[idy,idx] = float(tmp[tmp['dist']==tmp.dist.min()].biais)
+#                    estimated_rmse[idy, idx] = float(tmp[tmp['dist']==tmp.dist.min()].rmse)
+#                    estimated_ratio[idy,idx] = float(tmp[tmp['dist']==tmp.dist.min()].ratio)
+#                else:  # On fait la moyenne des scores pondérée par la distance
+#                    #tmp['inv_dist'] = 1/tmp.loc[:,'dist']  # equivalent
+#                    tmp['ponderation'] = (tmp.biais*tmp.inv_dist)/tmp.inv_dist.sum()
+#                    estimated_bias[idy,idx] = tmp.ponderation.sum()
+#                    tmp['ponderation'] = (tmp.rmse*tmp.inv_dist)/tmp.inv_dist.sum()
+#                    estimated_rmse[idy,idx] = tmp.ponderation.sum()
+#                    tmp['ponderation'] = (tmp.ratio*tmp.inv_dist)/tmp.inv_dist.sum()
+#                    estimated_ratio[idy,idx] = tmp.ponderation.sum()
+#
+#                # TODO : trouver un moyen pour que "weight"/"weight2" soit normalisé entre 1 et 10 par exemple
+#                # TODO : faire un porduit matricielle en dehors de la boucle maintenant que variability et anomaly sont des matrices
+#                #weight[idy,idx] = variability[idy,idx] * anomaly[idy, idx]
+#                #weight[idy,idx] = anomaly[idy, idx] / homogeneous_size[idy,idx]
+#                weight[idy,idx] = anomaly[idy, idx] * homogeneous_size[idy,idx]
+#                if estimated_ratio[idy,idx] >= 1:
+#                    weight2[idy,idx] = variability[idy,idx] * anomaly[idy,idx] * estimated_ratio[idy,idx]
+#                else:
+#                    weight2[idy,idx] = variability[idy,idx] * anomaly[idy,idx] / estimated_ratio[idy,idx]
+#                #weight[idy,idx] = variability*np.abs(maxloc-pixel_value)*np.abs(pixel_value-minloc)  # TODO : add a pondertion according to neigboring ratios ?
+#
+##            if tmp.dist.min() <= 0.01:  # On est sur un pixel connu --> on prend ses scores
+##                print(tmp[tmp['dist']==tmp.dist.min()].num_poste)
+##                if int(tmp[tmp['dist']==tmp.dist.min()].num_poste) == 5001400:
+##                    import pdb
+##                    pdb.set_trace()
+##            # To see the result around Alpe d'Huez
+##            if lon == 6.1 and lat == 45.11:
+##                import pdb
+##                pdb.set_trace()
+#
+#                #meandiff[idx,idy] = pixel_value-np.mean(neighbours)
+#                maxdiff[idy,idx] = (pixel_value-maxloc)/pixel_value
+#
+#                # TODO : considérer 4 max (1 par cadran par exemple) pour éviter de fausser les résultats autour d'un pixel isolé très arrosé
+#                # et durcir le seuil (-0.4 par exemple)
+##            westloc = field.sel({'lon':west, 'lat':lat}).rr_cumul.data if len(west)>0 else np.array([])
+##            eastloc = field.sel({'lon':east, 'lat':lat}).rr_cumul.data if len(east)>0 else np.array([])
+##            northloc = field.sel({'lon':lon, 'lat':north}).rr_cumul.data if len(north)>0 else np.array([])
+##            southloc = field.sel({'lon':lon, 'lat':south}).rr_cumul.data if len(south)>0 else np.array([])
+##            westmax = (pixel_value-np.max(westloc))/pixel_value if len(west)>0 else np.nan
+##            eastmax = (pixel_value-np.max(eastloc))/pixel_value if len(east)>0 else np.nan
+##            northmax = (pixel_value-np.max(northloc))/pixel_value if len(north)>0 else np.nan
+##            southmax = (pixel_value-np.max(southloc))/pixel_value if len(south)>0 else np.nan
+##            tmp = np.array([westmax,eastmax,northmax,southmax])
+##            tmp = tmp[~np.isnan(tmp)]
+##            directional_diff[idy,idx] = np.count_nonzero(tmp<-0.1) + 1
                 #print(f'End of the loop took {(t4-t3)*1000.}ms')
 
                 # To see the result for the max of the field
@@ -564,9 +584,11 @@ def make_mask(field):
 #                import pdb
 #                pdb.set_trace()
 
-    def to_xarray(array):
+                t4 = time.time()
+
+    def to_xarray(array, varname):
         output = xr.DataArray(
-        #name   = 'maxdiff',
+        name   = varname,
         data   = array,
         dims   = ["lat", "lon"],
         coords = dict(lon=field.lon, lat=field.lat),
@@ -586,63 +608,66 @@ def make_mask(field):
         field.plot(ax=ax, cmap=cmap, vmin=vmin, vmax=vmax)
         add_scores(scores, ax)
         add_radar_positions(ax)
+        add_boundaries()
+        add_cities(latmin, latmax, lonmin, lonmax)
         fig.savefig(os.path.join(savedir, f'{name}.pdf'), format='pdf', layout='tight')
         field.to_netcdf(os.path.join(savedir, f'{name}.nc'))
 
 
-    maskarray = np.where(maxdiff>-seuil, 1, 2)
-    mask1 = to_xarray(maskarray)
-    plot_and_save(mask1, f'mask1_loc{loc}_seuil{seuil}_{domain}')
+#    maskarray = np.where(maxdiff>-seuil, 1, 2)
+#    mask1 = to_xarray(maskarray, 'mask')
+#    plot_and_save(mask1, f'mask1_loc{loc}_seuil{seuil}_{domain}')
+#
+#    mask2 = to_xarray(directional_diff, 'mask')
+#    plot_and_save(mask2, f'mask2_loc{loc}_seuil{seuil}_{domain}')
+#
+##    weight = weight*10
+#    weight_array = to_xarray(weight, 'weight')
+#    plot_and_save(weight_array, f'weight_loc{loc}_{domain}', cmap=plt.cm.YlOrBr)
+#
+#    #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+#    # TODO : le mask doit être clippé à 1 (c'est un facteur !)
+#    #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+#    #weight = np.clip(np.abs(weight).clip(0.1)*10, 1, 5)
+#    #weight = np.clip(np.abs(weight), 1, 10)
+#    weight = np.abs(weight)*10
+#    mask3 = to_xarray(weight, 'weight')
+#    plot_and_save(mask3, f'mask3_loc{loc}_{domain}')
+#
+#    weight2_array = to_xarray(weight2, 'weight')
+#    plot_and_save(weight2_array, f'weight2_loc{loc}_{domain}', cmap=plt.cm.YlOrBr)
+#
+#    #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+#    # TODO : le mask doit être clippé à 1 (c'est un facteur !)
+#    #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+#    weight2 = np.clip(np.abs(weight2).clip(0.1)*10, 1, 5)
+#    mask4 = to_xarray(weight2, 'weight')
+#    plot_and_save(mask4, f'mask4_loc{loc}_{domain}')
+#
+#    ratio = to_xarray(estimated_ratio, 'ratio')
+#    plot_and_save(ratio, f'estimated_ratio_{domain}', cmap=plt.cm.coolwarm)
 
-    mask2 = to_xarray(directional_diff)
-    plot_and_save(mask2, f'mask2_loc{loc}_seuil{seuil}_{domain}')
-
-#    weight = weight*10
-    weight_array = to_xarray(weight)
-    plot_and_save(weight_array, f'weight_loc{loc}_{domain}', cmap=plt.cm.YlOrBr)
-
-    #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    # TODO : le mask doit être clippé à 1 (c'est un facteur !)
-    #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    #weight = np.clip(np.abs(weight).clip(0.1)*10, 1, 5)
-    #weight = np.clip(np.abs(weight), 1, 10)
-    weight = np.abs(weight)*10
-    mask3 = to_xarray(weight)
-    plot_and_save(mask3, f'mask3_loc{loc}_{domain}')
-
-    weight2_array = to_xarray(weight2)
-    plot_and_save(weight2_array, f'weight2_loc{loc}_{domain}', cmap=plt.cm.YlOrBr)
-
-    #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    # TODO : le mask doit être clippé à 1 (c'est un facteur !)
-    #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    weight2 = np.clip(np.abs(weight2).clip(0.1)*10, 1, 5)
-    mask4 = to_xarray(weight2)
-    plot_and_save(mask4, f'mask4_loc{loc}_{domain}')
-
-    ratio = to_xarray(estimated_ratio)
-    plot_and_save(ratio, f'estimated_ratio_{domain}', cmap=plt.cm.coolwarm)
-
-    ratio2 = to_xarray(estimated_ratio2)
+    ratio2 = to_xarray(estimated_ratio2, 'ratio')
     vmin = np.nanmin(ratio2)
     vmax = 2 - vmin
     plot_and_save(ratio2, f'estimated_ratio2_loc{loc}_seuil_{seuil_homogeneite}_{domain}', cmap=plt.cm.coolwarm, vmin=vmin, vmax=vmax)
 
-    variability = to_xarray(variability)
-    plot_and_save(variability, f'variability_loc{loc}_{domain}', cmap=plt.cm.coolwarm)
+#    variability = to_xarray(variability, 'variability')
+#    plot_and_save(variability, f'variability_loc{loc}_{domain}', cmap=plt.cm.coolwarm)
+#
+#    variability2 = to_xarray(variability2, 'variability')
+#    plot_and_save(variability2, f'variability2_loc{loc}_{domain}', cmap=plt.cm.coolwarm)
+#
+#    anomaly = to_xarray(anomaly, 'anomaly')
+#    plot_and_save(anomaly, f'anomaly_loc{loc}_{domain}', cmap=plt.cm.coolwarm)
 
-    variability2 = to_xarray(variability2)
-    plot_and_save(variability2, f'variability2_loc{loc}_{domain}', cmap=plt.cm.coolwarm)
-
-    anomaly = to_xarray(anomaly)
-    plot_and_save(anomaly, f'anomaly_loc{loc}_{domain}', cmap=plt.cm.coolwarm)
-
-    homegeneity = to_xarray(homogeneous_size)
+    homegeneity = to_xarray(homogeneous_size, 'homogeneity')
     #plot_and_save(homegeneity, f'homogeneity_loc{loc}_seuil{seuil_homogeneite}_{domain}', cmap=plt.cm.PuOr)  # TODO : change colorbar (not diverging)
     plot_and_save(homegeneity, f'homogeneity_loc{loc}_seuil{seuil_homogeneite}_{domain}', cmap=plt.cm.YlOrBr)  # TODO : change colorbar (not diverging)
 
     #mask5 = to_xarray(1+mask5*20/np.nanmax(mask5))  # On "normalise" entre 1 et 20 pour avoir une erreur d'observation comprise entre 0.261mm et 0.261*20~5mm
-    mask5 = to_xarray(np.clip(mask5, np.nanmin(mask5), 20))  # On plafonne (arbitrairement) le masque à 20 pour avoir une erreur d'observation comprise entre 0.261mm et 0.261*20~5mm
+    # TODO : augmenter l'erreur d'observation
+    mask5 = to_xarray(np.clip(mask5, np.nanmin(mask5), 20), 'mask')  # On plafonne (arbitrairement) le masque à 20 pour avoir une erreur d'observation comprise entre 0.261mm et 0.261*20~5mm
     # lorsque ANTILOPE observe 0mm
     plot_and_save(mask5, f'mask5_loc{loc}_seuil{seuil_homogeneite}_{domain}', cmap=plt.cm.Greys)  # TODO : change colorbar (not diverging)
 
