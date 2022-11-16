@@ -1149,7 +1149,7 @@ class ParticleFilter(object):
         outname4 = f"observation_error_{self.period[0].strftime('%Y%m%d%H')}_{self.period[-1].strftime('%Y%m%d%H')}_{self.frequency}_{self.domain}"
         if self.localisation is not None:
             outname1 = '_'.join([outname1, f'localisation{self.localisation}'])
-            outname2 = '_'.join([outname3, f'localisation{self.localisation}'])
+            outname2 = '_'.join([outname2, f'localisation{self.localisation}'])
             outname3 = '_'.join([outname3, f'localisation{self.localisation}'])
         if self.mask is not None:
             outname1 = '_'.join([outname1, f'mask{self.mask}'])
