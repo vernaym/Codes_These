@@ -126,11 +126,14 @@ def add_obs_nivometeo():
 
     return biais_antilope, lon, lat
 
-def add_scores(scores, ax):
-    cmap = matplotlib.colors.LinearSegmentedColormap.from_list("", ["black", "darkviolet", "green", "orange", "red"], 5)
-    thresholds = [0., 0.5, 0.80, 1.2, 1.5, 10]  # TODO : vérier la coéhrence des seuils entre les figures
-    #thresholds = [0., 0.5, 0.90, 1.1, 1.5, 10]
-    norm = matplotlib.colors.BoundaryNorm(thresholds, cmap.N)
+def add_scores(scores, ax, mycmap=None, vmin=None, vmax=None):
+    if mycmap is None:
+        cmap = matplotlib.colors.LinearSegmentedColormap.from_list("", ["black", "darkviolet", "green", "orange", "red"], 5)
+        thresholds = [0., 0.5, 0.80, 1.2, 1.5, 10]  # TODO : vérier la coéhrence des seuils entre les figures
+        #thresholds = [0., 0.5, 0.90, 1.1, 1.5, 10]
+        norm = matplotlib.colors.BoundaryNorm(thresholds, cmap.N)
+    else:
+        cmap = mycmap
 
     if domain == 'GrandesRousses':
         scores_domain = scores.loc[(scores.lons>=lonmin) & (scores.lons<=lonmax) & (scores.lats<=latmax) & (scores.lats>=latmin)]
@@ -148,15 +151,19 @@ def add_scores(scores, ax):
             return '^'
     scores_domain["marker"] = scores_domain.apply(set_marker, axis=1)  # axis=1 makes sure that function is applied to each row
     for marker, info in scores_domain.groupby('marker'):
-        #sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=150, edgecolors='black', alpha=0.3)
-        sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=150, edgecolors='black', alpha=0.5)
-        #sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=350, edgecolors='black')
+        if mycmap is None:
+            #sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=450, edgecolors='black', linewidth=3, alpha=1)
+            #sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=150, edgecolors='black', alpha=0.5)
+            sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=350, edgecolors='black', alpha=1)
+        else:
+            sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, vmin=vmin, vmax=vmax, marker=marker, s=300, edgecolors='black', alpha=1)
+
         #labels = [str(num_poste) for num_poste in info['num_poste']]
         labels = [str(np.around(ratio, decimals=2)) for ratio in info['ratio']]
         # TODO : add score value
         #for idx, label in enumerate(labels):
         for idx in info.index:
-            txt = plt.text(info['lons'][idx], info['lats'][idx], np.around(info['ratio'][idx], decimals=2))
+            txt = plt.text(info['lons'][idx], info['lats'][idx], np.around(info['ratio'][idx], decimals=2), fontsize=16)
             #txt = plt.text(info['lons'][idx], info['lats'][idx], info['num_poste'][idx])
     #ax.colorbar(sc, label=legend)
     #ax.colorbar(sc, label=legend, shrink=shrink, anchor=anchor)
@@ -166,7 +173,7 @@ def add_landmarks(ax):
     # Add landmarks
     for landmark, infos in landmarks.items():
         ax.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='red', markersize=5)
-        ax.annotate(landmark, (infos['lon']+0.003, infos['lat']+0.003), color='red', fontsize=12)
+        ax.annotate(landmark, (infos['lon']+0.003, infos['lat']+0.003), color='red', fontsize=20)
 
 def add_radar_positions(ax):
     radars = dict(
@@ -204,12 +211,21 @@ def plot(antilope):
     #if True:
 
         if domain == 'alp':
-            fig, ax = plt.subplots(figsize=(14,16))
+            fig, ax = plt.subplots(figsize=(16,16))
         elif domain == 'GrandesRousses':
-            fig, ax = plt.subplots(figsize=(12,6))
+            fig, ax = plt.subplots(figsize=(15,7))
+
+        cmap = plt.cm.YlGnBu
+        cmaplist = [cmap(i) for i in range(20, cmap.N+1)]
+        cmap = matplotlib.colors.LinearSegmentedColormap.from_list('Custom cmap', cmaplist, cmap.N-20)
+        # define the bins and normalize
+        bounds = np.arange(200, 1300, 100)
+        #norm = matplotlib.colors.BoundaryNorm(bounds, cmap.N)
+        norm = matplotlib.colors.BoundaryNorm(bounds, len(bounds)-2)
 
         #antilope.rr_cumul.plot(ax=ax, cbar_kwargs={"label":'Total precipitation between 2021080106 and 2022070106 (mm)'}, cmap=plt.cm.coolwarm)
-        cml = antilope.rr_cumul.plot(ax=ax, cmap=plt.cm.YlGnBu, add_colorbar=False)
+        #cml = antilope.rr_cumul.plot(ax=ax, cmap=plt.cm.YlGnBu, add_colorbar=False)
+        cml = antilope.rr_cumul.plot(ax=ax, cmap=cmap, norm=norm, add_colorbar=False)
         #cml = antilope.rr_cumul.plot(ax=ax, cmap=plt.cm.YlGnBu, add_colorbar=False, alpha=0.5)
         #add_landmarks(ax)
         add_radar_positions(ax)
@@ -224,12 +240,16 @@ def plot(antilope):
         lonmax = np.max(antilope.lon.data)
         add_cities(latmin, latmax, lonmin, lonmax)
         cb = fig.colorbar(sc)
-        cb.set_label(label='Mean ANTILOPE / rain-gauges ratio', size='large', weight='bold')
-        cb2 = fig.colorbar(cml)
-        cb2.set_label(label='Total precipitation between \n 2021080106 and 2022070106 (mm)', size='large', weight='bold')
+        #cb.set_label(label='Mean ANTILOPE / rain-gauges ratio', fontsize=22, weight='bold')
+        cb.set_label(label='Mean ANTILOPE / rain-gauges ratio', fontsize=22)
+        cb.ax.tick_params(labelsize=16)
+        cb2 = fig.colorbar(cml, extend='both')
+        cb2.set_label(label='Total precipitation between \n 2021080106 and 2022070106 (mm)', fontsize=22)
+        cb2.ax.tick_params(labelsize=16)
         #fig.legend()
         #fig.tight_layout()
         fig.savefig(os.path.join(savedir, f'CUMUL_ANTILOPE_2021080106_2022070106_{domain}.pdf'), layout='tight')
+        #sys.exit()
 
 def nearest(array, value):
     """ Find the closest element of 'array' to 'value'. """
@@ -290,12 +310,19 @@ def make_mask(field):
     # loc doit être faible (~10) pour avoir de bons résultats pour l'homogénéité, mais suffisament élevé (optimum vers 25, mauvais à 50) pour ne pas avoir un champs de biais estimé
     # trop bruité (ruptures brutales,...)
     # TODO : régler la localisation de façon dynamique en fonction de l'homogénéité
-    loc = 25
+    loc = 10
     # TODO : WARNING l'homogenetite est fausse sur les bords du domaine (pas le même nombre de pisxels considérés)
     # TODO : il faut normaliser par le nombre de pixels !
     seuil = 0.6
     seuil_homogeneite = 0.1
     null = np.empty((len(field.lat), len(field.lon)))
+    empty_field = xr.DataArray(
+        name   = 'empty',
+        data   = null,
+        dims   = ["lat", "lon"],
+        coords = dict(lon=field.lon, lat=field.lat),
+        #attrs  = dict(description="Difference between each pixel cumul and the max of its neighbours"),
+        )
     null[:] = np.nan
     maxdiff  = np.zeros((len(field.lat), len(field.lon)))
     weight = np.zeros((len(field.lat), len(field.lon)))
@@ -461,6 +488,18 @@ def make_mask(field):
 
                 neighbours = neighbours.where(~((neighbours.lat==lat)&(neighbours.lon==lon)))  # remove pixel value
 
+                #if (lon == 6.14 and lat == 45.13) or (lon == 6.2 and lat == 45.13):
+                if (lon == 6.1 and lat == 45.11) or (lon == 6.2 and lat == 45.13):
+                    print(homogeneous_size[idy,idx])
+                    fig, ax = plt.subplots(figsize=(12,6))
+                    vmin = np.nanmin(field.rr_cumul)
+                    vmax = np.nanmax(field.rr_cumul)
+                    empty_field.loc[{'lat':selec.lat, 'lon':selec.lon}]=selec.rr_cumul
+                    cml = empty_field.plot(ax=ax, cmap=plt.cm.YlGnBu, vmin=vmin, vmax=vmax)
+                    add_scores(scores, ax)
+                    fig.savefig(os.path.join(savedir, f'zone_homogene_{lon:.2f}_{lat:.2f}.pdf'), format='pdf', layout='tight')
+
+
 #                maxloc = np.nanmax(neighbours.rr_cumul)
 #                minloc = np.nanmin(neighbours.rr_cumul)
 #                meanloc = np.nanmean(neighbours.rr_cumul)
@@ -468,7 +507,7 @@ def make_mask(field):
 #                #variability[idy,idx] = (maxloc-minloc)/meanloc  # Measures the local variability in the neighboring
 #                #variability2[idy,idx] = maxloc-minloc  # Measures the local variability in the neighboring
 #                anomaly[idy,idx] = (pixel_value-meanloc)/pixel_value  # Measures the "anlomaly" on the pixel against its neighbors. WARNING : donne plus de poid aux anomalies <0 !
-#
+
 #                ############################################################################################################
 #                # METHDOE D'IDENTIFICATION ITERATIVE
 #                ############################################################################################################
@@ -513,12 +552,11 @@ def make_mask(field):
 #                niter += 1
 #
 #            print(niter)
-                ############################################################################################################
-                # METHDOE D'IDENTIFICATION ITERATIVE
-                ############################################################################################################
+#               ############################################################################################################
+#               # METHDOE D'IDENTIFICATION ITERATIVE
+#               ############################################################################################################
 
-
-                t3 = time.time()
+#                t3 = time.time()
 #                if len(tmp)==0:  # Aucune info proche --> on prend les valeurs moyennes
 #                    estimated_bias[idy,idx] = scores.biais.mean()
 #                    estimated_rmse[idy, idx] = scores.rmse.mean()
@@ -558,7 +596,7 @@ def make_mask(field):
 ##                    pdb.set_trace()
 ##            # To see the result around Alpe d'Huez
 ##            if lon == 6.1 and lat == 45.11:
-##                import pdb
+#                import pdb
 ##                pdb.set_trace()
 #
 #                #meandiff[idx,idy] = pixel_value-np.mean(neighbours)
@@ -577,14 +615,14 @@ def make_mask(field):
 ##            tmp = np.array([westmax,eastmax,northmax,southmax])
 ##            tmp = tmp[~np.isnan(tmp)]
 ##            directional_diff[idy,idx] = np.count_nonzero(tmp<-0.1) + 1
-                #print(f'End of the loop took {(t4-t3)*1000.}ms')
-
-                # To see the result for the max of the field
-#            if lon == 6.04 and lat == 45.20:
-#                import pdb
-#                pdb.set_trace()
-
-                t4 = time.time()
+#                #print(f'End of the loop took {(t4-t3)*1000.}ms')
+#
+#                # To see the result for the max of the field
+##            if lon == 6.04 and lat == 45.20:
+##                import pdb
+##                pdb.set_trace()
+#
+#                t4 = time.time()
 
     def to_xarray(array, varname):
         output = xr.DataArray(
@@ -605,11 +643,26 @@ def make_mask(field):
             vmin = np.nanmin(field)
         if vmax is None:
             vmax = np.nanmax(field)
-        field.plot(ax=ax, cmap=cmap, vmin=vmin, vmax=vmax)
-        add_scores(scores, ax)
+        if cmap == 'custom':
+            cmap = matplotlib.colors.LinearSegmentedColormap.from_list("", ["black", "darkviolet", "green", "orange", "red"], 5)
+            thresholds = [0., 0.5, 0.80, 1.2, 1.5, 10]  # TODO : vérier la coéhrence des seuils entre les figures
+            #thresholds = [0., 0.5, 0.90, 1.1, 1.5, 10]
+            norm = matplotlib.colors.BoundaryNorm(thresholds, cmap.N)
+            cml = field.plot(ax=ax, cmap=cmap, norm=norm, add_colorbar=False)
+        else:
+            cml = field.plot(ax=ax, cmap=cmap, vmin=vmin, vmax=vmax, add_colorbar=False)
+
+        if field.name == 'ratio':
+            # Plot scores with same cmap since it is the same information
+            add_scores(scores, ax, mycmap=cmap, vmin=vmin, vmax=vmax)
+        else:
+            add_scores(scores, ax)
         add_radar_positions(ax)
         add_boundaries()
         add_cities(latmin, latmax, lonmin, lonmax)
+        cb = fig.colorbar(cml)
+        cb.set_label(field.name, fontsize=24)
+        cb.ax.tick_params(labelsize=20)
         fig.savefig(os.path.join(savedir, f'{name}.pdf'), format='pdf', layout='tight')
         field.to_netcdf(os.path.join(savedir, f'{name}.nc'))
 
@@ -631,7 +684,7 @@ def make_mask(field):
 #    #weight = np.clip(np.abs(weight).clip(0.1)*10, 1, 5)
 #    #weight = np.clip(np.abs(weight), 1, 10)
 #    weight = np.abs(weight)*10
-#    mask3 = to_xarray(weight, 'weight')
+#    mask3 = to_xarray(weight, 'mask')
 #    plot_and_save(mask3, f'mask3_loc{loc}_{domain}')
 #
 #    weight2_array = to_xarray(weight2, 'weight')
@@ -641,16 +694,17 @@ def make_mask(field):
 #    # TODO : le mask doit être clippé à 1 (c'est un facteur !)
 #    #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 #    weight2 = np.clip(np.abs(weight2).clip(0.1)*10, 1, 5)
-#    mask4 = to_xarray(weight2, 'weight')
+#    mask4 = to_xarray(weight2, 'mask')
 #    plot_and_save(mask4, f'mask4_loc{loc}_{domain}')
 #
 #    ratio = to_xarray(estimated_ratio, 'ratio')
 #    plot_and_save(ratio, f'estimated_ratio_{domain}', cmap=plt.cm.coolwarm)
-
-    ratio2 = to_xarray(estimated_ratio2, 'ratio')
-    vmin = np.nanmin(ratio2)
-    vmax = 2 - vmin
-    plot_and_save(ratio2, f'estimated_ratio2_loc{loc}_seuil_{seuil_homogeneite}_{domain}', cmap=plt.cm.coolwarm, vmin=vmin, vmax=vmax)
+#
+#    ratio2 = to_xarray(estimated_ratio2, 'ratio')
+#    vmin = np.nanmin(ratio2)
+#    vmax = 2 - vmin
+#    plot_and_save(ratio2, f'estimated_ratio2_loc{loc}_seuil_{seuil_homogeneite}_{domain}', cmap=plt.cm.coolwarm, vmin=vmin, vmax=vmax)
+#    #plot_and_save(ratio2, f'estimated_ratio2_loc{loc}_seuil_{seuil_homogeneite}_{domain}', cmap='custom', vmin=vmin, vmax=vmax)
 
 #    variability = to_xarray(variability, 'variability')
 #    plot_and_save(variability, f'variability_loc{loc}_{domain}', cmap=plt.cm.coolwarm)
