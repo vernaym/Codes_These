@@ -73,12 +73,13 @@ def parse_command_line():
     parser.add_argument('-d', '--domain', help='Domain of the file', choices=['alp', 'pyr', 'cor', 'GrandesRousses'], default='GrandesRousses')
     parser.add_argument('-w', '--workdir', help='Runing directory', default='/home/vernaym/workdir/ASSIMILATION')
     parser.add_argument('-m', '--mask', help='Switch observation error mask on/off', choices=[1,2,3,4,5], default=None, type=int)
-    parser.add_argument('-c', '--debiasing', help='Apply bias correction to observation (0=constant bias, 1=pseudo-kriging, 2=estimation based on homogeneity)', default=None, type=int, choices=[1,2,3])
+    parser.add_argument('-c', '--debiasing', help='Apply bias correction to observation (0=constant bias, 1=pseudo-kriging, 2=estimation based on homogeneity)', default=None, type=int, choices=[0,1,2])
     parser.add_argument('-t', '--threshold', default=None, help='Threshold of precipitation (mm) to apply in the data to consider', type=int)
     parser.add_argument('-p', '--plot', action='store_true', default=False, help='Plot assimilated fields')
     parser.add_argument('-f', '--frequency', choices=['hourly', 'daily'], help='Assimilation frequency')
     parser.add_argument('-l', '--localisation', default=None, help='Spatial localisation distance (switch localisation on).', type=int)
     parser.add_argument('-g', '--gridded', default=False, action='store_true', help='Gridded assimilation if True, or assimilation only at nivometeo locations if False')
+    parser.add_argument('-y', '--likelyhood', default='normal', choices=['normal', 'gamma'], help='Likelihood distribution')
 
     args = parser.parse_args()
 
@@ -388,7 +389,7 @@ def read_obs(args):
 
 class ParticleFilter(object):
 
-    def __init__(self, period, obs, ensemble, nivometeo, plot, frequency, gridded, localisation, mask, debiasing, domain):
+    def __init__(self, period, obs, ensemble, nivometeo, plot, frequency, gridded, localisation, mask, debiasing, domain, likelyhood):
 
         #goto(self.date_str)
         #self.nline, self.ncol = np.shape(obs.rr.data)
@@ -414,6 +415,7 @@ class ParticleFilter(object):
         self.mask = mask
         self.debiasing = debiasing
         self.domain = domain
+        self.likelyhood = likelyhood
 
     # Definition of gamma distribution
     def gamma_shape_PDF(self, x, k=3., theta=1.):
@@ -703,24 +705,46 @@ class ParticleFilter(object):
 
         return prob_density
 
+    def gamma_dist(self, sample, mu, sd):
+        """ Definition of gamma distribution """
+        #import math  # math.gamma does not work with arrays
+        from scipy.special import gamma
+
+        k     = mu**2 / sd
+        theta = sd / mu
+
+        prob_density = sample**(k-1)*np.exp(-sample/theta)/(theta**k*gamma(k))
+        return prob_density
+
 #    @speedtest
     def weighting(self, x, mu, sigma, obs, plot_distribution=False, **kw):
 
-        draw = self.normal_dist(x, mu, sigma)
+        if self.likelyhood == 'normal':
+            draw = self.normal_dist(x, mu, sigma)
+        elif self.likelyhood == 'gamma':
+            draw = self.gamma_dist(x, mu, sigma)
 
         if plot_distribution:
             dy = 0.01
             num = np.max((mu+3*sigma)/dy).astype(int)
             y = np.linspace(0, mu+3*sigma, num=num)
-            norm = self.normal_dist(y, mu, sigma)
+            if self.likelyhood == 'normal':
+                norm = self.normal_dist(y, mu, sigma)
+            elif self.likelyhood == 'gamma':
+                gamma = self.gamma_dist(y, mu, sigma)
+
             fig,ax = plt.subplots()
             color = next(ax._get_lines.prop_cycler)['color']
             # Plot over a smaller range for better lisibility
             ymin = mu-3*sigma
             ymax = mu+3*sigma
             ax.plot(x, draw, linestyle='', marker='+', markersize=10.)
-            ax.plot(y[(y>0) & (y<ymax)], norm[(y>0) & (y<ymax)],
-                    label=f'Norm(mu={mu:0.2},sigma={sigma:0.2})', color=color)
+            if self.likelyhood == 'normal':
+                ax.plot(y[(y>0) & (y<ymax)], norm[(y>0) & (y<ymax)],
+                        label=f'Norm(mu={mu:0.2},sigma={sigma:0.2})', color=color)
+            elif self.likelyhood == 'gamma':
+                ax.plot(y[(y>0) & (y<ymax)], gamma[(y>0) & (y<ymax)],
+                        label=f'gamma(mu={mu:0.2},sigma={sigma:0.2})', color=color)
             plt.axvline(x=0, color='k', linestyle='-', linewidth=0.5)
             plt.axvline(x=obs, color='k', linestyle='--', label=f'Observation : {mu:0.2}')
             plt.xlabel('Precipitation (mm)')
@@ -1017,11 +1041,12 @@ class ParticleFilter(object):
         self.erreur_obs = null.copy()
         time_selection_unique = 0
         time_selection_sequentielle = 0
+        time_localisation = 6  # TODO : à passer en paramètre
         for idd,date in enumerate(self.period):
             print(date)
             # On réduit le dataset maintenant pour gagner du temps ensuite
             if self.frequency == 'hourly' and self.localisation is not None:
-                assimilation_period = [date + timedelta(hours=dt) for dt in range(-2,3)]
+                assimilation_period = [date + timedelta(hours=dt) for dt in range(-time_localisation,time_localisation+1)]
             else:
                 assimilation_period = [date]
             t1 = time.time()
@@ -1276,7 +1301,7 @@ if __name__ == "__main__":
         globalfields = None
 
     interp_ensemble = pearome.interp(lon=antilope.lon, lat=antilope.lat).clip(0)  # Avoid <0 precipitation values
-    pf = ParticleFilter(extract_period, antilope, interp_ensemble, nivometeo, args.plot, args.frequency, args.gridded, args.localisation, args.mask, args.debiasing, args.domain)
+    pf = ParticleFilter(extract_period, antilope, interp_ensemble, nivometeo, args.plot, args.frequency, args.gridded, args.localisation, args.mask, args.debiasing, args.domain, args.likelyhood)
     mask = pf.pdf_parameters()
     pf.run()  # Compute weight fields before normalisation + plot raw/interp fields
     #pf.selection()  # Global and local selections
