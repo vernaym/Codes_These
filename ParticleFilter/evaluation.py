@@ -35,7 +35,7 @@ import seaborn as sns
 if len(sys.argv) == 2:
     domain = 'alp'  # default value
     xpid = sys.argv[1]
-elif len(sys.argv) == 1:
+elif len(sys.argv) == 3:
     domain = sys.argv[2]
     xpid = sys.argv[1]
 
@@ -61,33 +61,44 @@ coords = dict(
 
 all_experiments = dict(
         #GD0      = 'Assimilation_globale_2021073106_2022070106_daily.nc',
-        LD0       = 'XP00_assimilation_quotidienne_sans_masque_sans_localisation/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
-        LDM4      = 'XP02_assimilation_quotidienne_avec_masque/Assimilation_locale_2021120106_2022050106_daily_alp_mask4.nc',
-        LDM3      = 'XP10_assimilation_quotidienne_avec_masque3/Assimilation_locale_2021120106_2022050106_daily_alp_mask3.nc',
-        LDM1      = 'XP11_assimilation_quotidienne_avec_masque1/Assimilation_locale_2021120106_2022050106_daily_alp_mask1.nc',
-        LDM2      = 'XP12_assimilation_quotidienne_avec_masque2/Assimilation_locale_2021120106_2022050106_daily_alp_mask2.nc',
-        LDD2      = 'XP20_assimilation_quotidienne_avec_debiaisage2/Assimilation_locale_2021120106_2022050106_daily_alp_debiasing2.nc',
-        LDM4L     = 'XP05_assimilation_quotidienne_avec_masque_et_localisation/Assimilation_locale_2021120106_2022050106_daily_alp_localisation_mask4.nc',
-        LDM4D     = 'XP06_assimilation_quotidienne_avec_masque_et_debiaisage/Assimilation_locale_2021120106_2022050106_daily_alp_mask4_debiasing.nc',
-        LDM4D_BIS = 'XP09_assimilation_quotidienne_avec_masque_et_debiaisage_ratio_moyen/Assimilation_locale_2021120106_2022050106_daily_alp_mask4_debiasing.nc',
-        LDM4LD    = 'XP08_assimilation_quotidienne_avec_masque_localisation_et_debiaisage/Assimilation_locale_2021120106_2022050106_daily_alp_localisation_mask4_debiasing.nc',
-        LHM4D     = 'XP03_assimilation_horaire_avec_masque_et_debiaisage/Assimilation_locale_2021120106_2022050106_hourly_alp_mask4_debiasing.nc',
-        LHM4DL    = 'XP07_assimilation_horaire_avec_masque_localisation_et_debiaisage/Assimilation_locale_2021120106_2022050106_hourly_alp_localisation_mask4_debiasing.nc',
-        LDM5D2    = 'XP15_assimilation_quotidienne_avec_masque5_et_debiaisage2/Assimilation_locale_2021120106_2022050106_daily_alp_mask5_debiasing2.nc',
-        LHM5D2    = 'XP16_assimilation_horaire_avec_masque5_et_debiaisage2/Assimilation_locale_2021120106_2022050106_hourly_alp_mask5_debiasing2.nc',
-        LDM5      = 'XP17_assimilation_quotidienne_avec_masque5/Assimilation_locale_2021120106_2022050106_daily_alp_mask5.nc',
-        LDM5D2L5  = 'XP18_assimilation_quotidienne_avec_masque5_et_debiaisage2_et_localisation5/Assimilation_locale_2021120106_2022050106_daily_alp_localisation5_mask5_debiasing2.nc',  # WARNING : erreur_obs * 10
-        LHM5D2L5  = 'XP19_assimilation_horaire_avec_masque5_debiaisage2_localisation5/Assimilation_locale_2021120106_2022050106_hourly_alp_localisation5_mask5_debiasing2.nc',
+        LD0         = 'XP00_assimilation_quotidienne_sans_masque_sans_localisation/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
+        LD0G        = 'XP24_assimilation_quotidienne_loi_gamma/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
+        LDM4        = 'XP02_assimilation_quotidienne_avec_masque/Assimilation_locale_2021120106_2022050106_daily_alp_mask4.nc',
+        LDM3        = 'XP10_assimilation_quotidienne_avec_masque3/Assimilation_locale_2021120106_2022050106_daily_alp_mask3.nc',
+        LDM1        = 'XP11_assimilation_quotidienne_avec_masque1/Assimilation_locale_2021120106_2022050106_daily_alp_mask1.nc',
+        LDM2        = 'XP12_assimilation_quotidienne_avec_masque2/Assimilation_locale_2021120106_2022050106_daily_alp_mask2.nc',
+        LDD0        = 'XP21_assimilation_quotidienne_avec_debiaisage_uniforme/Assimilation_locale_2021120106_2022050106_daily_alp_debiasing0.nc',
+        LDD1        = 'XP22_assimilation_quotidienne_avec_debiaisage1/Assimilation_locale_2021120106_2022050106_daily_alp_debiasing1.nc',
+        LDD2        = 'XP20_assimilation_quotidienne_avec_debiaisage2/Assimilation_locale_2021120106_2022050106_daily_alp_debiasing2.nc',
+        LDM4L       = 'XP05_assimilation_quotidienne_avec_masque_et_localisation/Assimilation_locale_2021120106_2022050106_daily_alp_localisation_mask4.nc',
+        LDM4D       = 'XP06_assimilation_quotidienne_avec_masque_et_debiaisage/Assimilation_locale_2021120106_2022050106_daily_alp_mask4_debiasing.nc',
+        LDM4D_BIS   = 'XP09_assimilation_quotidienne_avec_masque_et_debiaisage_ratio_moyen/Assimilation_locale_2021120106_2022050106_daily_alp_mask4_debiasing.nc',
+        LDM4LD      = 'XP08_assimilation_quotidienne_avec_masque_localisation_et_debiaisage/Assimilation_locale_2021120106_2022050106_daily_alp_localisation_mask4_debiasing.nc',
+        LH0         = 'XP01_assimilation_horaire_sans_masque_sans_localisation/Assimilation_locale_2021120106_2022050106_hourly_alp.nc',
+        LH0G        = 'XP26_assimilation_horaire_loi_gamma/Assimilation_locale_2021120106_2022050106_hourly_alp.nc',
+        LHM4D       = 'XP03_assimilation_horaire_avec_masque_et_debiaisage/Assimilation_locale_2021120106_2022050106_hourly_alp_mask4_debiasing.nc',
+        LHM4DL      = 'XP07_assimilation_horaire_avec_masque_localisation_et_debiaisage/Assimilation_locale_2021120106_2022050106_hourly_alp_localisation_mask4_debiasing.nc',
+        LDM5D2      = 'XP15_assimilation_quotidienne_avec_masque5_et_debiaisage2/Assimilation_locale_2021120106_2022050106_daily_alp_mask5_debiasing2.nc',
+        LHM5D2      = 'XP16_assimilation_horaire_avec_masque5_et_debiaisage2/Assimilation_locale_2021120106_2022050106_hourly_alp_mask5_debiasing2.nc',
+        LDM5        = 'XP17_assimilation_quotidienne_avec_masque5/Assimilation_locale_2021120106_2022050106_daily_alp_mask5.nc',
+        LDM5D2L5    = 'XP18_assimilation_quotidienne_avec_masque5_et_debiaisage2_et_localisation5/Assimilation_locale_2021120106_2022050106_daily_alp_localisation5_mask5_debiasing2.nc',
+        LGDM5D2L5   = 'XP25_assimilation_quotidienne_loi_gamma_mask5_localisation5_debiaising2/Assimilation_locale_2021120106_2022050106_daily_alp_localisation5_mask5_debiasing2.nc',
+        LHM5D2L5    = 'XP19_assimilation_horaire_avec_masque5_debiaisage2_localisation5/Assimilation_locale_2021120106_2022050106_hourly_alp_localisation5_mask5_debiasing2.nc',
+        LGHM5D2L5    = 'XP27_assimilation_horaire_mask5_localization5_debiasing2_gamma_likelyhood/Assimilation_locale_2021120106_2022050106_hourly_alp_localisation5_mask5_debiasing2.nc',
+        LHM4DL20    = 'XP13_assimilation_horaire_avec_masque_debiaisage_et_localisation20/Assimilation_locale_2021120106_2022050106_hourly_alp_localisation20_mask4_debiasing.nc',
+        LHM4DL50    = 'XP14_assimilation_horaire_avec_masque_debiaisage_et_localisation50/Assimilation_locale_2021120106_2022050106_hourly_alp_localisation50_mask4_debiasing.nc',
+        LHM4DLS20T6 = 'XP23_assimilation_horaire_avec_masque4_debiaisage1_localisation_20-6/Assimilation_locale_2021120106_2022050106_hourly_alp_localisation20_mask4_debiasing1.nc',
     )
 
 mask_experiments = dict(
         #GD0      = 'Assimilation_globale_2021073106_2022070106_daily.nc',
         LD0      = 'XP00_assimilation_quotidienne_sans_masque_sans_localisation/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
-        LDM4     = 'XP02_assimilation_quotidienne_avec_masque/Assimilation_locale_2021120106_2022050106_daily_alp_mask4.nc',
-        LDM3     = 'XP10_assimilation_quotidienne_avec_masque3/Assimilation_locale_2021120106_2022050106_daily_alp_mask3.nc',
-        LDM1     = 'XP11_assimilation_quotidienne_avec_masque1/Assimilation_locale_2021120106_2022050106_daily_alp_mask1.nc',
-        LDM2     = 'XP12_assimilation_quotidienne_avec_masque2/Assimilation_locale_2021120106_2022050106_daily_alp_mask2.nc',
+        #LDM4     = 'XP02_assimilation_quotidienne_avec_masque/Assimilation_locale_2021120106_2022050106_daily_alp_mask4.nc',
+        #LDM3     = 'XP10_assimilation_quotidienne_avec_masque3/Assimilation_locale_2021120106_2022050106_daily_alp_mask3.nc',
+        #LDM1     = 'XP11_assimilation_quotidienne_avec_masque1/Assimilation_locale_2021120106_2022050106_daily_alp_mask1.nc',
+        #LDM2     = 'XP12_assimilation_quotidienne_avec_masque2/Assimilation_locale_2021120106_2022050106_daily_alp_mask2.nc',
         LDM5     = 'XP17_assimilation_quotidienne_avec_masque5/Assimilation_locale_2021120106_2022050106_daily_alp_mask5.nc',
+        LDM5D2    = 'XP15_assimilation_quotidienne_avec_masque5_et_debiaisage2/Assimilation_locale_2021120106_2022050106_daily_alp_mask5_debiasing2.nc',
     )
 
 daily_experiments = dict(
@@ -104,21 +115,54 @@ daily_experiments = dict(
     )
 
 hourly_experiments = dict(
-        LDM4LD   = 'XP08_assimilation_quotidienne_avec_masque_localisation_et_debiaisage/Assimilation_locale_2021120106_2022050106_daily_alp_localisation_mask4_debiasing.nc',
-        LH0      = 'XP01_assimilation_horaire_sans_masque_sans_localisation/Assimilation_locale_2021120106_2022050106_hourly_alp.nc',
-        LHM4D    = 'XP03_assimilation_horaire_avec_masque_et_debiaisage/Assimilation_locale_2021120106_2022050106_hourly_alp_mask4_debiasing.nc',
+        LH0         = 'XP01_assimilation_horaire_sans_masque_sans_localisation/Assimilation_locale_2021120106_2022050106_hourly_alp.nc',
+        LH0G        = 'XP26_assimilation_horaire_loi_gamma/Assimilation_locale_2021120106_2022050106_hourly_alp.nc',
+        LHM4D       = 'XP03_assimilation_horaire_avec_masque_et_debiaisage/Assimilation_locale_2021120106_2022050106_hourly_alp_mask4_debiasing.nc',
+        LHM4DL      = 'XP07_assimilation_horaire_avec_masque_localisation_et_debiaisage/Assimilation_locale_2021120106_2022050106_hourly_alp_localisation_mask4_debiasing.nc',
+        LHM5D2      = 'XP16_assimilation_horaire_avec_masque5_et_debiaisage2/Assimilation_locale_2021120106_2022050106_hourly_alp_mask5_debiasing2.nc',
+        LHM5D2L5    = 'XP19_assimilation_horaire_avec_masque5_debiaisage2_localisation5/Assimilation_locale_2021120106_2022050106_hourly_alp_localisation5_mask5_debiasing2.nc',
+        LGHM5D2L5    = 'XP27_assimilation_horaire_mask5_localization5_debiasing2_gamma_likelyhood/Assimilation_locale_2021120106_2022050106_hourly_alp_localisation5_mask5_debiasing2.nc',
+        LHM4DLS20T6 = 'XP23_assimilation_horaire_avec_masque4_debiaisage1_localisation_20-6/Assimilation_locale_2021120106_2022050106_hourly_alp_localisation20_mask4_debiasing1.nc',
+    )
+
+localisation_experiments = dict(
         LHM4DL   = 'XP07_assimilation_horaire_avec_masque_localisation_et_debiaisage/Assimilation_locale_2021120106_2022050106_hourly_alp_localisation_mask4_debiasing.nc',
         LHM4DL20 = 'XP13_assimilation_horaire_avec_masque_debiaisage_et_localisation20/Assimilation_locale_2021120106_2022050106_hourly_alp_localisation20_mask4_debiasing.nc',
         LHM4DL50 = 'XP14_assimilation_horaire_avec_masque_debiaisage_et_localisation50/Assimilation_locale_2021120106_2022050106_hourly_alp_localisation50_mask4_debiasing.nc',
-        LHM5D2   = 'XP16_assimilation_horaire_avec_masque5_et_debiaisage2/Assimilation_locale_2021120106_2022050106_hourly_alp_mask5_debiasing2.nc',
-        LHM5D2L5  ='XP19_assimilation_horaire_avec_masque5_debiaisage2_localisation5/Assimilation_locale_2021120106_2022050106_hourly_alp_localisation5_mask5_debiasing2.nc',
+    )
+
+
+debiaising_experiments = dict(
+        LD0      = 'XP00_assimilation_quotidienne_sans_masque_sans_localisation/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
+        LDD0      = 'XP21_assimilation_quotidienne_avec_debiaisage_uniforme/Assimilation_locale_2021120106_2022050106_daily_alp_debiasing0.nc',
+        LDD1      = 'XP22_assimilation_quotidienne_avec_debiaisage1/Assimilation_locale_2021120106_2022050106_daily_alp_debiasing1.nc',
+        LDD2      = 'XP20_assimilation_quotidienne_avec_debiaisage2/Assimilation_locale_2021120106_2022050106_daily_alp_debiasing2.nc',
+    )
+
+tmp = dict(
+        LD0       = 'XP00_assimilation_quotidienne_sans_masque_sans_localisation/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
+        LDM4D_BIS = 'XP09_assimilation_quotidienne_avec_masque_et_debiaisage_ratio_moyen/Assimilation_locale_2021120106_2022050106_daily_alp_mask4_debiasing.nc',
+        LDM5D2    = 'XP15_assimilation_quotidienne_avec_masque5_et_debiaisage2/Assimilation_locale_2021120106_2022050106_daily_alp_mask5_debiasing2.nc',
+        LDM5D2L5  = 'XP18_assimilation_quotidienne_avec_masque5_et_debiaisage2_et_localisation5/Assimilation_locale_2021120106_2022050106_daily_alp_localisation5_mask5_debiasing2.nc',
+        LHM5D2L5  = 'XP19_assimilation_horaire_avec_masque5_debiaisage2_localisation5/Assimilation_locale_2021120106_2022050106_hourly_alp_localisation5_mask5_debiasing2.nc',
+    )
+
+likelyhood_experiments = dict(
+        LD0         = 'XP00_assimilation_quotidienne_sans_masque_sans_localisation/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
+        LD0G        = 'XP24_assimilation_quotidienne_loi_gamma/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
+        LDM5D2L5    = 'XP18_assimilation_quotidienne_avec_masque5_et_debiaisage2_et_localisation5/Assimilation_locale_2021120106_2022050106_daily_alp_localisation5_mask5_debiasing2.nc',
+        LGDM5D2L5   = 'XP25_assimilation_quotidienne_loi_gamma_mask5_localisation5_debiaising2/Assimilation_locale_2021120106_2022050106_daily_alp_localisation5_mask5_debiasing2.nc',
     )
 
 
 experiments_map = dict(
-    mask_experiments   = mask_experiments,
-    daily_experiments  = daily_experiments,
-    hourly_experiments = hourly_experiments,
+    reference                  = dict(),  # Plot only ANTILOPE and RAW ensemble
+    debiaising_experiments     = debiaising_experiments,
+    tmp                        = tmp,
+    mask_experiments           = mask_experiments,
+    daily_experiments          = daily_experiments,
+    hourly_experiments         = hourly_experiments,
+    likelyhood_experiments     = likelyhood_experiments,
 )
 experiments = experiments_map[xpid]
 
@@ -127,29 +171,36 @@ if not os.path.exists(savedir):
     os.makedirs(savedir)
 
 xpid_label = dict(
-        antilope  = 'ANTILOPE',
-        raw       = 'Raw PEAROME ensemble',
-        GD0       = 'Global daily assimilation',
-        LD0       = 'Daily assimilation with no option',
-        LDM4      = 'Daily assimilation with mask4',
-        LDM3      = 'Daily assimilation with mask3',
-        LDM1      = 'Daily assimilation with mask1',
-        LDM2      = 'Daily assimilation with mask2',
-        LDM5      = 'Daily assimilation with mask5',
-        LDD2      = 'Daily assimilation with debiasing2',
-        LDM5D2    = 'Daily assimilation with mask5 and debiasing2',
-        LDM4L     = 'Daily assimilation with mask4 and localization',
-        LDM4D     = 'Daily assimilation with mask4 and debiasing',
-        LDM4D_BIS = 'Daily assimilation with mask4 and uniform debiasing',
-        LDM4LD    = 'Daily assimilation with mask4 and localization and debiasing',
-        LDM5D2L5  = 'Daily assimilation with mask5 and localization5 and debiasing2',
-        LH0       = 'Hourly assimilation with no option',
-        LHM4D     = 'Hourly assimilation with mask4 and debiasing',
-        LHM5D2    = 'Hourly assimilation with mask5 and debiasing2',
-        LHM4DL    = 'Hourly assimilation with mask4 and localization7 and debiasing',
-        LHM4DL20  = 'Hourly assimilation with mask4 and localization20 and debiasing',
-        LHM4DL50  = 'Hourly assimilation with mask4 and localization50 and debiasing',
-        LHM5D2L5  = 'Hourly assimilation with mask5 and localization5 and debiasing2',
+        antilope      = 'ANTILOPE',
+        raw           = 'Raw PEAROME ensemble',
+        GD0           = 'Global daily assimilation',
+        LD0           = 'Daily assimilation with no option',
+        LD0G          = 'Daily assimilation with gamma likelyhood and no option',
+        LDM4          = 'Daily assimilation with mask4',
+        LDM3          = 'Daily assimilation with mask3',
+        LDM1          = 'Daily assimilation with mask1',
+        LDM2          = 'Daily assimilation with mask2',
+        LDM5          = 'Daily assimilation with mask5',
+        LDD0          = 'Daily assimilation with uniform debiasing',
+        LDD1          = 'Daily assimilation with debiasing1',
+        LDD2          = 'Daily assimilation with debiasing2',
+        LDM5D2        = 'Daily assimilation with mask5 and debiasing2',
+        LDM4L         = 'Daily assimilation with mask4 and localization',
+        LDM4D         = 'Daily assimilation with mask4 and debiasing1',
+        LDM4D_BIS     = 'Daily assimilation with mask4 and uniform debiasing1',
+        LDM4LD        = 'Daily assimilation with mask4 and localization and debiasing1',
+        LDM5D2L5      = 'Daily assimilation with mask5 and localization5 and debiasing2',
+        LGDM5D2L5     = 'Daily assimilation with mask5 and localization5 and debiasing2 and gamma likelyhood',
+        LH0           = 'Hourly assimilation with no option',
+        LH0G          = 'Hourly assimilation with gamma likelyhood and no option',
+        LHM4D         = 'Hourly assimilation with mask4 and debiasing1',
+        LHM5D2        = 'Hourly assimilation with mask5 and debiasing2',
+        LHM4DL        = 'Hourly assimilation with mask4 and localization7 and debiasing1',
+        LHM4DL20      = 'Hourly assimilation with mask4 and localization20 and debiasing1',
+        LHM4DL50      = 'Hourly assimilation with mask4 and localization50 and debiasing1',
+        LHM5D2L5      = 'Hourly assimilation with mask5 and localization5 and debiasing2',
+        LGHM5D2L5     = 'Hourly assimilation with gamma likelyhood, mask5 and localization5 and debiasing2',
+        LHM4DLS20T6   = 'Hourly assimilation with mask4 and localization (20,6) and debiasing1',
     )
 
 
@@ -160,9 +211,10 @@ class Evaluation(object):
 #        self.ensemble = ensemble  # DataArray(lat,lon,time,member)
         self.Ne = 16  # TODO : à definir dynamiquement
         self.scores = None
-        self.threshold = threshold  # threshold to use as event detenction in the breier score
+        self.threshold = threshold  # threshold to use as event detection in the Brier Score
         self.lpn = None
         self.obs_error = None
+        self.thresholds = [1, 2, 3, 4, 5, 10, 15, 20, 25, 30]
 
     def ensemble_attributes(self):
         disp = self.dispersion()
@@ -209,22 +261,22 @@ class Evaluation(object):
             rmse = np.sqrt(np.nanmean(np.square(simu.mean(axis=1) - obs)))
         return rmse
 
-    def brier_skill_score(self, simu, obs, ref):
+    def brier_skill_score(self, simu, obs, ref, threshold=10):
         """  BSS = 1 - BS / BSref  """
-        return 1 - self.brier_score(simu, obs) / self.brier_score(ref, obs)
+        return 1 - self.brier_score(simu, obs, threshold) / self.brier_score(ref, obs, threshold)
 
-    def brier(self, simu, obs, *args):
+    def brier(self, simu, obs, threshold=10, *args):
 
         # TODO : verifier le calcul du score de brier
         simu = simu[~np.isnan(obs)]
         obs = obs[~np.isnan(obs)]
 
         if np.shape(simu) == np.shape(obs):  # "Simulation" déterministe
-            psimu = np.where(simu>=self.threshold, 1, 0)
+            psimu = np.where(simu>=threshold, 1, 0)
         else:  # Simulation d'ensemble
-            psimu  = np.count_nonzero(simu>=self.threshold, axis=1) / self.Ne
+            psimu  = np.count_nonzero(simu>=threshold, axis=1) / self.Ne
             #psimu  = (np.count_nonzero(simu>=self.threshold, axis=1)+ 2/3) / (self.Ne+4/3)  # Tukey's plotting position
-        fobs   = np.where(obs>=self.threshold, 1, 0)
+        fobs   = np.where(obs>=threshold, 1, 0)
         brier = np.nanmean((psimu-fobs)**2)
         #print('Brier=',brier)
 
@@ -284,11 +336,17 @@ class Evaluation(object):
         return (false_alarm, succes_rate)
 
     def rank_histogram(self, simu, obs, product, ax, *args):
+        maxsim = np.amax(simu, 1)
+        # WARNING : la condition obs>0 réduit PLUS le nombre de cas.
+        # Le choix de la condition est très important car il fait apparaitre ou disparaitre
+        # une énorme majorité des situations où tout est à 0 sauf 1 membre (grand pic à gauche de l'histogramme)
         simu = simu[obs>0]
         obs = obs[obs>0]
+#        simu = simu[(~np.isnan(obs)) & ((obs>0) | (maxsim>0))]
+#        obs = obs[(~np.isnan(obs)) & ((obs>0) | (maxsim>0))]
         position = np.array([])
         for idx, obs in enumerate(obs):
-            position = np.append(position, np.searchsorted(np.sort(simu[idx]), obs, side='right'))
+            position = np.append(position, np.searchsorted(np.sort(simu[idx]), obs))
         ax.hist(position, bins=range(np.shape(simu)[1]))
 
     def reliability_diagram(self, simu, obs, product, ax):
@@ -507,7 +565,7 @@ class Evaluation(object):
             simus[xpid] = self.read_simu(os.path.join(workdir, filename)).loc[{'time':dates}]
 
 #        scores_list = ['reliability', 'resolution', 'uncertainty', 'rmse', 'bias', 'brier']
-        scores_list = ['rmse', 'bias', 'brier', 'brier_skill_score']
+        scores_list = ['rmse', 'bias'] + [f'brier_{threshold}' for threshold in self.thresholds]
         scores = dict()
         #dates = dates[:10]
         liste_postes = np.array([])
@@ -541,8 +599,8 @@ class Evaluation(object):
                         data[xpid].append(simus[xpid].sel({'lat':nearest(simus[xpid].lat, lat), 'lon':nearest(simus[xpid].lon, lon)}).rr.data)
                     else:
                         data[xpid].append(simus[xpid].sel({'num_poste':num_poste}).rr.data)
-                    t5 = time.time()
-                    print(f'Reading simulation {xpid} took {(t5-t4)*1000.}ms')
+#                    t5 = time.time()
+#                    print(f'Reading simulation {xpid} took {(t5-t4)*1000.}ms')
                 #self.temporal_plot(dates, data['LH0'][-1], obs, num_poste, raw=data['raw'][-1], antilope=data['antilope'][-1], simu2=data['LD0'][-1])
                 #self.temporal_plot(dates, data['LDML'][-1], obs, num_poste, raw=data['raw'][-1], antilope=data['antilope'][-1], simu2=data['LDM'][-1])
                 #self.temporal_plot(dates, data['LDMLD'][-1], obs, num_poste, alti, raw=data['raw'][-1], antilope=data['antilope'][-1])
@@ -550,7 +608,7 @@ class Evaluation(object):
                 if num_poste == 5001400:
                     self.temporal_plot(dates, 'LDM5D2', data['LDM5D2'][-1], obs, num_poste, alti, raw=data['raw'][-1], antilope=data['antilope'][-1])
                 t6 = time.time()
-                print(f'Temporal plot took {(t6-t5)*1000.}ms')
+                #print(f'Temporal plot took {(t6-t5)*1000.}ms')
                 idx=10
                 #self.plot_assimilation(data['raw'][-1][:idx], data['LD0'][-1][:idx], data['antilope'][-1][:idx], 'LD0', num_poste, np.datetime_as_string(dates.data[:idx], unit='D'))
 
@@ -563,16 +621,13 @@ class Evaluation(object):
                     if product not in scores.keys():
                         scores[product] = {score:list() for score in scores_list}
                     for score_name, score in scores[product].items():
-                        # TODO : calculer le score de brier pour différents seuils
-                        #print(product, score)
-                        if score_name != 'brier_skill_score':
+                        if score_name.startswith('brier'):
+                            threshold = float(score_name.split('_')[-1])
+                            score.append(getattr(self, 'brier')(data[product][-1][~np.isnan(obs)], obs[~np.isnan(obs)], threshold=threshold))
+                        else:
                             score.append(getattr(self, score_name)(data[product][-1][~np.isnan(obs)], obs[~np.isnan(obs)]))
                     t7 = time.time()
-                    print(f'Computing score for simulation {xpid} took {(t7-t6)*1000.}ms')
-                    if product not in ['antilope', 'raw']:
-                        scores[product]['brier_skill_score'].append(1-scores[product]['brier'][-1]/scores['raw']['brier'][-1])
-                    else:
-                        scores[product]['brier_skill_score'].append(np.nan)
+                    #print(f'Computing score for simulation {xpid} took {(t7-t6)*1000.}ms')
                 t7 = time.time()
             else:
                 self.data = self.data.where(self.data.num_poste!=num_poste, drop=True)  # Drop station
@@ -588,7 +643,7 @@ class Evaluation(object):
         for xpid in experiments.keys():
             self.data[xpid] = (('num_poste', 'date', 'member'), data[xpid])
         t8 = time.time()
-        print(f'Filling self.data took {(t8-t7)*1000.}ms')
+        #print(f'Filling self.data took {(t8-t7)*1000.}ms')
 
         fig1,ax1 = plt.subplots()
         for product in ['raw'] + [xpid for xpid in experiments.keys()]:
@@ -623,7 +678,7 @@ class Evaluation(object):
         tmp = {"score":{"dims": ("score"), "data":scores_list}, "num_poste":{"dims": ("num_poste"), "data":liste_postes}}
         tmp.update({key:{"dims": ("score", "num_poste"), "data":[value[score] for score in scores_list]} for key,value in scores.items()})
         self.scores = xr.Dataset.from_dict(tmp)
-        self.scores.to_netcdf(os.path.join(datadir, 'scores.nc'))
+        self.scores.to_netcdf(os.path.join(datadir, f'scores_{xpid}.nc'))
         t10 = time.time()
         print(f'Saving scores took {(t10-t9)*1000.}ms')
 
@@ -658,39 +713,77 @@ class Evaluation(object):
             self.evaluate()
         for score in self.scores.score.data:
             fig,ax = plt.subplots(figsize=(22,18))
+            if score.startswith('brier'):
+                threshold = int(score.split('_')[-1])
+                fig2,ax2 = plt.subplots(figsize=(22,18))
+
             pos = 1
+            pos2 = 1
             products = [var for var in self.scores.data_vars]
-            self.labels = []
+            labels = []
+            labels2 = []
+
             for product in products:
-                if score == 'brier_skill_score' and product in ['antilope', 'raw']:
-                    pass
-                else:
-                    x = self.scores.loc[{'score':score}][product].data
-                    for idx, poste in enumerate(self.scores.num_poste.data):
-                        if not np.isnan(x[idx]):
-                            plt.text(pos, x[idx], str(int(poste)), fontsize=6)
-                        else:
-                            print(f'{score} of product {product} not available for poste {str(int(poste))}')
-                    # TODO : Add horizontal bars corresponding to each element
-                    self.add_label(plt.violinplot(x[~np.isnan(x)], showmeans=True, positions=[pos]), xpid_label[product])
-                    if score in ['bias', 'brier_skill_score']:
-                        plt.axhline(color='k')
-                    pos += 1
-            if score == 'brier_skill_score':
-                ax.set_xticklabels([''] + products[2:], fontsize=14)
-                ax.set_xticks(range(len(products)))
+                x = self.scores.loc[{'score':score}][product].data
+                for idx, poste in enumerate(self.scores.num_poste.data):
+                    if not np.isnan(x[idx]):
+                        ax.text(pos, x[idx], str(int(poste)), fontsize=6)
+                        if score.startswith('brier') and product not in ['antilope', 'raw']:
+                            ax2.text(pos2, x[idx], str(int(poste)), fontsize=6)
+                    else:
+                        print(f'{score} of product {product} not available for poste {str(int(poste))}')
+                labels.append(self.add_label(ax.violinplot(x[~np.isnan(x)], showmeans=True, positions=[pos]), xpid_label[product]))
+                if score == 'bias':
+                    ax.axhline(color='k')
+                if score.startswith('brier') and product not in ['antilope', 'raw']:
+                    ref = self.scores.loc[{'score':score}]['raw'].data
+                    bss = 1 - x / ref
+                    labels2.append(self.add_label(ax2.violinplot(bss[~np.isnan(bss)], showmeans=True, positions=[pos2]), xpid_label[product]))
+                    ax2.axhline(color='k')
+                    pos2 += 1
+                pos += 1
+
+            if score.startswith('brier'):
+                ax.set_ylabel(f'{score}', fontsize=28)
+                ax2.set_ylabel('Brier Skill Score', fontsize=28)
+                ax2.set_xticklabels([''] + products[2:], fontsize=28)
+                ax2.set_xticks(range(len(products)))
+                ax2.legend(*zip(*labels2), fontsize=18)
             else:
-                ax.set_xticklabels([''] + products, fontsize=14)
-                ax.set_xticks(range(len(products)+2))
-            if score in ['brier', 'brier_skill_score']:
-                ax.set_ylabel(f'{score}', fontsize=14)
-            else:
-                ax.set_ylabel(f'{score} (mm)', fontsize=14)
-            ax.legend(*zip(*self.labels), fontsize=14)
-            if score in ['brier', 'brier_skill_score']:
-                fig.savefig(f'{savedir}/{score}_{self.threshold}.pdf', formatout='pdf',  bbox_inches='tight')
+                ax.set_ylabel(f'{score} (mm)', fontsize=28)
+
+            ax.set_xticklabels([''] + products, fontsize=28)
+            ax.set_xticks(range(len(products)+2))
+            ax.yaxis.set_tick_params(labelsize=28)
+            ax.legend(*zip(*labels), fontsize=18)
+
+            if score.startswith('brier'):
+                fig.savefig(f'{savedir}/{score}.pdf', formatout='pdf',  bbox_inches='tight')
+                fig2.savefig(f'{savedir}/brier_skill_score_{threshold}.pdf', formatout='pdf',  bbox_inches='tight')
             else:
                 fig.savefig(f'{savedir}/{score}.pdf', formatout='pdf',  bbox_inches='tight')
+            plt.close('all')
+
+        self.plot_brier_evolution()
+
+    def plot_brier_evolution(self):
+        fig,ax = plt.subplots(figsize=(22,18))
+        products = [var for var in self.scores.data_vars]
+        for product in products:
+            brier = np.array([])
+            for threshold in self.thresholds:
+                brier = np.append(brier, np.mean(self.scores.loc[{'score':f'brier_{threshold}'}][product].data))
+            ax.plot(self.thresholds, brier, label=xpid_label[product], linewidth=3)
+        ax.legend(fontsize=22)
+        ax.set_ylabel('Brier Score', fontsize=24)
+        ax.set_xlabel('Threshold (mm)', fontsize=24)
+        #ax.set_xticklabels(self.thresholds, fontsize=18)
+        ax.xaxis.set_tick_params(labelsize=22)
+        ax.yaxis.set_tick_params(labelsize=22)
+        #ax.set_yticks(fontsize=18)
+
+        fig.savefig(f'{savedir}/brier_evolution.pdf', format='pdf', bbox_inches='tight')
+
 
     def add_label(self, violin, label, color=None):
         """ Customize violinplot by adding a label"""
@@ -700,7 +793,8 @@ class Evaluation(object):
         else:
             violin["bodies"][0].set_facecolor(color)
             violin["bodies"][0].set_edgecolor(color)
-        self.labels.append((mpatches.Patch(color=color), label))
+
+        return (mpatches.Patch(color=color), label)
 
     def read_observation_error(self, xpid):
 
