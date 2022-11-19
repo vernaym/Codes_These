@@ -183,7 +183,7 @@ def linear_regression(x, y):
     model = reg.predict(x.reshape((-1,1)))
     r2 = reg.score(x.reshape((-1, 1)), y)
     det = " R²={0:.4f}".format(r2)
-    return model, r2, det
+    return reg, model, r2, det
 
 def RANSAC(x, y):
     reg = RANSACRegressor(random_state=0).fit(x, y)
@@ -221,12 +221,12 @@ def daily_scatterplot(workdf, datebegin, dateend, massif=None, subdomain=None, s
     y = workdf[f'rr_{kw["product"]}'].to_numpy()
     minval = min([min(x), min(y)])-0.5
     maxval = max([max(x), max(y)])*1.05
-    model, r2, det = linear_regression(x.reshape((-1, 1)), y)
+    reg, model, r2, det = linear_regression(x.reshape((-1, 1)), y)
 
     fig, ax = plt.subplots(figsize=(12,9))
 
-    ax.plot(x, model, color='black', linewidth=2)
-    ax.text(maxval*0.75, maxval*0.5, f'R²={r2:.4}', fontsize=18, color='black')
+    ax.plot(x, model, color='black', linewidth=2, label=f'Slope={reg.coef_[0]:.3f}, Intercept={reg.intercept_:.3f}, R²={r2:.4}')
+    #ax.text(maxval*0.75, maxval*0.5, f'R²={r2:.4}', fontsize=18, color='black')
     mean_rr_nivometeo = dict()
     mean_rr_antilope = dict()
     if massif is None and subdomain is None:
@@ -264,7 +264,7 @@ def daily_scatterplot(workdf, datebegin, dateend, massif=None, subdomain=None, s
         ndays = len(tmp)
         x = tmp['rr_nivometeo'].to_numpy()
         y = tmp[f'rr_{kw["product"]}'].to_numpy()
-        model, r2, det = linear_regression(x.reshape((-1, 1)), y)
+        reg, model, r2, det = linear_regression(x.reshape((-1, 1)), y)
         if len(stations) <= 10:
             color = cm.colors[i]
         else:
@@ -281,8 +281,9 @@ def daily_scatterplot(workdf, datebegin, dateend, massif=None, subdomain=None, s
     ax.plot(xpoints, ypoints, linestyle='--', color='grey', lw=1, scalex=False, scaley=False)
     ax.set_xlim(left=minval, right=maxval)
     ax.set_ylim(bottom=minval, top=maxval)
-    ax.set_ylabel(f'Daily {kw["product"]} precipitation estimate (mm/day)', fontsize=12)
-    ax.set_xlabel('Daily rain-gauges observed precipitation (mm/day)', fontsize=12)
+    ax.set_ylabel(f'Daily {kw["product"]} precipitation estimate (mm/day)', fontsize=14)
+    ax.set_xlabel('Daily rain-gauges observed precipitation (mm/day)', fontsize=14)
+    ax.legend(fontsize=14)
     #plt.tight_layout()
     #fig.savefig(f'scatterplot_massif_{massif}.svg', bbox_inches='tight', format='svg')
     fig.savefig(f'{filename1}.svg', format='svg', bbox_inches='tight')
@@ -348,7 +349,7 @@ def elevation_scatterplot(workdf, datebegin, dateend, suffix=None, **kw):
 
         def plot(x, y, ax, regression=True):
             if regression and len(x) > 1:
-                model, r2, det = linear_regression(x.reshape((-1, 1)), y)
+                reg, model, r2, det = linear_regression(x.reshape((-1, 1)), y)
             else:
                 det = ""
             if i == 0:
@@ -635,9 +636,9 @@ def fill_all_massifs(domain, lat, lon, df, suffix=None, **kw):
         tmp = df.loc[df["massif_number"]==massif]
         nb_stations[massif] = len(tmp)
         if len(tmp) >= 3:
-            model,r2,det = linear_regression(tmp['rr_nivometeo'].to_numpy().reshape((-1,1)), tmp[f'rr_{kw["product"]}'].to_numpy())
+            reg,model,r2,det = linear_regression(tmp['rr_nivometeo'].to_numpy().reshape((-1,1)), tmp[f'rr_{kw["product"]}'].to_numpy())
             r2_by_massif[massif] = r2
-            model,r2,det = linear_regression((tmp[f'rr_{kw["product"]}'] / tmp['rr_nivometeo']).to_numpy().reshape((-1,1)), tmp['elevation'].to_numpy())
+            reg,model,r2,det = linear_regression((tmp[f'rr_{kw["product"]}'] / tmp['rr_nivometeo']).to_numpy().reshape((-1,1)), tmp['elevation'].to_numpy())
             ratio[massif] = r2
         bias[massif] = (tmp[f'rr_{kw["product"]}'] - tmp['rr_nivometeo']).mean()
         rmse[massif] = np.sqrt(np.square(tmp[f'rr_{kw["product"]}'] - tmp['rr_nivometeo']).mean())
@@ -696,18 +697,39 @@ def fill_all_massifs(domain, lat, lon, df, suffix=None, **kw):
 
 def error_vs_RR(df, datebegin, dateend, **kw):
     #import seaborn as sns
+
     df['error'] = np.sqrt(np.square(df[f'rr_{kw["product"]}'] - df['rr_nivometeo']))
     fig = plt.figure()
     #sns.regplot(df[f'rr_{kw["product"]}'], df['error'])
     plt.plot(df[f'rr_{kw["product"]}'], df['error'], linestyle='', marker='+')
+    tmp = df[df[f'rr_{kw["product"]}']==0]
+    plt.plot(tmp[f'rr_{kw["product"]}'], tmp['error'], linestyle='', marker='+', color='red')
     a, b = np.polyfit(df[f'rr_{kw["product"]}'], df['error'], deg=1)
+
+    rr = df[f'rr_{kw["product"]}'].values
+    reg    = LinearRegression().fit(rr.reshape(-1, 1), df['error'])
+    model1 = reg.predict(rr.reshape(-1, 1))
+    r2     = reg.score(rr.reshape(-1, 1), df['error'])
+
     x = np.array([0, np.max(df[f'rr_{kw["product"]}'])])
-    plt.plot(x, a*x+b, marker=None, color='k', label=f'Regression parameters : slope={a:.3f}, intercept={b:.3f}')
-    plt.xlabel('ANTILOPE 24-hour precipitation (mm)')
-    plt.ylabel('ANTILOPE root mean square deviation (mm)')
-    plt.legend()
+    #plt.plot(x, a*x+b, marker=None, color='k', label=f'Regression parameters : slope={a:.3f}, intercept={b:.3f}')
+    #plt.plot(rr, model1, label=f'Regression parameters : slope={a:.3f}, intercept={b:.3f}')
+    plt.plot(rr, model1, label=f'Slope={reg.coef_[0]:.3f}, Intercept={reg.intercept_:.3f}, R²={r2:.4}', color='k')
+    #plt.text(40, 40, f'R²={r2:.4}', fontsize=12, color='k')
+    plt.xlabel('ANTILOPE 24-hour precipitation (mm)', fontsize=12)
+    plt.ylabel('ANTILOPE root mean square deviation (mm)', fontsize=12)
+    plt.legend(fontsize=12)
     plt.tight_layout()
     fig.savefig(f'ANTILOPE_rmsd_vs_ANTILOPE_RR_{datebegin.strftime("%Y%m%d")}_{dateend.strftime("%Y%m%d")}.pdf', format='pdf', bbox_inches='tight')
+
+    fig, ax = plt.subplots()
+    count, bins = np.histogram(tmp['error'][tmp['rr_nivometeo']>0], range=(0,5), bins=20)
+    ax.hist(bins[:-1], bins, weights=count)
+    ax.set_xticks(bins[0::2])
+    plt.xlabel('Nivométéo 24h précipitation (mm)', fontsize=12)
+    plt.ylabel('Frequency', fontsize=12)
+    plt.tight_layout()
+    fig.savefig(f'Histogram_rr_antilope=0.pdf', format='pdf')
 
 def read_nivometeo():
 
