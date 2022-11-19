@@ -705,18 +705,22 @@ class ParticleFilter(object):
 
         return prob_density
 
+    @speedtest
     def gamma_dist(self, sample, mu, sd):
         """ Definition of gamma distribution """
         #import math  # math.gamma does not work with arrays
         from scipy.special import gamma
 
-        k     = mu**2 / sd
-        theta = sd / mu
+        if mu > 0:
+            k     = mu**2 / sd + 1  # A prouver
+            theta = sd / mu  # A prouver
+            prob_density = sample**(k-1)*np.exp(-sample/theta)/(theta**k*gamma(k))
+        else:
+            prob_density = np.exp(-0.5*sample/sd**2)  # décroissance exponentielle
 
-        prob_density = sample**(k-1)*np.exp(-sample/theta)/(theta**k*gamma(k))
         return prob_density
 
-#    @speedtest
+    @speedtest
     def weighting(self, x, mu, sigma, obs, plot_distribution=False, **kw):
 
         if self.likelyhood == 'normal':
@@ -726,8 +730,8 @@ class ParticleFilter(object):
 
         if plot_distribution:
             dy = 0.01
-            num = np.max((mu+3*sigma)/dy).astype(int)
-            y = np.linspace(0, mu+3*sigma, num=num)
+            num = np.max((mu+15*sigma)/dy).astype(int)
+            y = np.linspace(0, mu+15*sigma, num=num)
             if self.likelyhood == 'normal':
                 norm = self.normal_dist(y, mu, sigma)
             elif self.likelyhood == 'gamma':
@@ -740,13 +744,13 @@ class ParticleFilter(object):
             ymax = mu+3*sigma
             ax.plot(x, draw, linestyle='', marker='+', markersize=10.)
             if self.likelyhood == 'normal':
-                ax.plot(y[(y>0) & (y<ymax)], norm[(y>0) & (y<ymax)],
+                ax.plot(y[(y>=0) & (y<ymax)], norm[(y>=0) & (y<ymax)],
                         label=f'Norm(mu={mu:0.2},sigma={sigma:0.2})', color=color)
             elif self.likelyhood == 'gamma':
-                ax.plot(y[(y>0) & (y<ymax)], gamma[(y>0) & (y<ymax)],
+                ax.plot(y[(y>=0) & (y<ymax)], gamma[(y>=0) & (y<ymax)],
                         label=f'gamma(mu={mu:0.2},sigma={sigma:0.2})', color=color)
             plt.axvline(x=0, color='k', linestyle='-', linewidth=0.5)
-            plt.axvline(x=obs, color='k', linestyle='--', label=f'Observation : {mu:0.2}')
+            plt.axvline(x=obs, color='k', linestyle='--', label=f'Observation : {obs:0.2}')
             plt.xlabel('Precipitation (mm)')
             plt.ylabel('Weight')
             plt.legend(loc ="upper right")
@@ -756,7 +760,9 @@ class ParticleFilter(object):
             if 'date' in kw.keys():
                 filename = '_'.join([filename, kw['date'].strftime('%Y%m%d%H')])
 
-            fig.savefig(f"{filename}.pdf", format='pdf')
+            if not os.path.exists(self.date_str):
+                os.makedirs(self.date_str)
+            fig.savefig(f"{self.date_str}/{filename}.pdf", format='pdf')
             plt.close('all')
 
         return draw
@@ -945,6 +951,7 @@ class ParticleFilter(object):
         mu = parameters.mu.data
 
         inflation = 0
+        # TODO : avec la loi gamma, si mu>0 et max(raw/raw_localized)=0 ==> ne pas entrer dans la boucle (inutile, ce cas spécifique est traité à part)
         while ((nb_new_member < 4) and (inflation <= 8)):  # Security to avoid infinite loops
 
             # 2.a Inflation
@@ -958,7 +965,8 @@ class ParticleFilter(object):
             # 2.b Weighting
             #-------------
             #weights = self.weighting(raw_localized, parameters.mu.data, sigma, plot_distribution=True)
-            weights = self.weighting(raw_localized, mu, sigma, obs)  # parameters.mu.data is the observations !
+            #weights = self.weighting(raw_localized, mu, sigma, obs, plot_distribution=True)
+            weights = self.weighting(raw_localized, mu, sigma, obs)
             weights = weights / np.sum(weights)
 
             # 3. Resampling
@@ -967,15 +975,19 @@ class ParticleFilter(object):
             selection_locale = self.resample(weights, self.Ne)  # Idicies of selected particles from the "super-ensemble"
             nb_new_member = len(np.unique(selection_locale))
 
-        tmp = np.sort(raw_localized[selection_locale])
+        if inflation == 9:
+            # Generally occurs with gamma likelyhood when obs > 0 and all members == 0
+            new = raw
+        else:
+            tmp = np.sort(raw_localized[selection_locale])
 
-        # 4. ECC for consistency with raw members
-        #----------------------------------------
-        ecc = np.argsort(raw, axis=0)
-        new = np.empty(len(tmp))
-        new[:] = np.nan
-        for idx, value in enumerate(tmp):
-            new[ecc[idx]] = value
+            # 4. ECC for consistency with raw members
+            #----------------------------------------
+            ecc = np.argsort(raw, axis=0)
+            new = np.empty(len(tmp))
+            new[:] = np.nan
+            for idx, value in enumerate(tmp):
+                new[ecc[idx]] = value
 
         # TODO : virer la ligne suivante qui court-circuite l'ECC
         #new = raw_localized[selection_locale]
@@ -985,8 +997,7 @@ class ParticleFilter(object):
 
         # To plot data for one specific point / date
 #        if num_poste == 73150400:
-#            import pdb
-#            pdb.set_trace()
+#            self.weighting(raw_localized, parameters.mu.data, sigma, obs, plot_distribution=True, num_poste=num_poste, date=date)
         #if self.plot:
         #    self.plot_assimilation(raw, new, obs, num_poste, date)
         #    self.weighting(raw_localized, parameters.mu.data, sigma, obs, plot_distribution=True, num_poste=num_poste, date=date)
@@ -1041,17 +1052,16 @@ class ParticleFilter(object):
         self.erreur_obs = null.copy()
         time_selection_unique = 0
         time_selection_sequentielle = 0
-        time_localisation = 6  # TODO : à passer en paramètre
+        time_localisation = 3  # TODO : à passer en paramètre
         for idd,date in enumerate(self.period):
             print(date)
+            t1 = time.time()
             # On réduit le dataset maintenant pour gagner du temps ensuite
             if self.frequency == 'hourly' and self.localisation is not None:
                 assimilation_period = [date + timedelta(hours=dt) for dt in range(-time_localisation,time_localisation+1)]
             else:
                 assimilation_period = [date]
-            t1 = time.time()
             localized_period = self.ensemble.sel({'time':assimilation_period}).compute()  # Load data into memory now
-            t2 = time.time()
             #print(f'reading "raw_localized" took {(t2-t1)*1000.}ms')
 #            obs_date = self.radar.sel(time=date)
 #            if self.frequency == 'hourly' and self.localisation:
@@ -1061,6 +1071,9 @@ class ParticleFilter(object):
             parameters_date = self.parameters.sel({'time':date})
 
             self.date_str = date.strftime('%Y%m%d%H')
+            if self.plot:
+                if not os.path.exists(self.date_str):
+                    os.makedirs(self.date_str)
 
             if self.gridded:
                 self.gridded_assimilation(date, idd, localized_period, parameters_date)
@@ -1076,6 +1089,9 @@ class ParticleFilter(object):
                         )
                 #self.rrmax = np.nanmax(parameters_date.rr.data)
                 self.plot_obs(parameters_date)
+            t2 = time.time()
+            print(f'Assimilation for date {self.date_str} took {(t2-t1)*1000.}ms')
+
 
     @speedtest
     def plot_weights(self, date, weights):
