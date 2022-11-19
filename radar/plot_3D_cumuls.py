@@ -145,7 +145,8 @@ else:
     # define pixel colors
     #radar = ds.where((ds.longitude>=lonmin) & (ds.longitude<=lonmax) & (ds.latitude>=latmin) & (ds.latitude<=latmax), drop=True).rr_cumul
     radar = ds.where((ds.lon>=lonmin) & (ds.lon<=lonmax) & (ds.lat>=latmin) & (ds.lat<=latmax), drop=True).rr_cumul
-    colors = plt.cm.coolwarm(norm(np.nan_to_num(radar.values)))
+    #colors = plt.cm.coolwarm(norm(np.nan_to_num(radar.values)))
+    colors = plt.cm.YlGnBu(norm(np.nan_to_num(radar.values)))
 
 fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
 ax.view_init(elev=50., azim=135)  # Set point of view
@@ -164,7 +165,7 @@ ax.set_zlabel('Elevation (m)')
 ax.set_zlim(0., 3500.)
 #fig.colorbar(surf, shrink=0.5, aspect=5)
 #fig.colorbar(colorbar=colors, shrink=0.5, aspect=5)
-fig.colorbar(cm.ScalarMappable(norm=norm, cmap=plt.cm.coolwarm), ax=ax, shrink=0.75, aspect=8, label=f'{product} cumulated precipitation \n between {datebegin} and {dateend} (mm)')
+fig.colorbar(cm.ScalarMappable(norm=norm, cmap=plt.cm.YlGnBu), ax=ax, shrink=0.75, aspect=8, label=f'{product} cumulated precipitation \n between {datebegin} and {dateend} (mm)')
 #plt.show()
 plt.tight_layout()
 plt.savefig(f'{savedir}/CUMUL3D_{product}_{datebegin}_{dateend}.pdf', format='pdf')
