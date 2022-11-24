@@ -93,24 +93,25 @@ all_experiments = dict(
 mask_experiments = dict(
         #GD0      = 'Assimilation_globale_2021073106_2022070106_daily.nc',
         LD0      = 'XP00_assimilation_quotidienne_sans_masque_sans_localisation/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
-        #LDM4     = 'XP02_assimilation_quotidienne_avec_masque/Assimilation_locale_2021120106_2022050106_daily_alp_mask4.nc',
+        LDM4     = 'XP02_assimilation_quotidienne_avec_masque/Assimilation_locale_2021120106_2022050106_daily_alp_mask4.nc',
         #LDM3     = 'XP10_assimilation_quotidienne_avec_masque3/Assimilation_locale_2021120106_2022050106_daily_alp_mask3.nc',
-        #LDM1     = 'XP11_assimilation_quotidienne_avec_masque1/Assimilation_locale_2021120106_2022050106_daily_alp_mask1.nc',
-        #LDM2     = 'XP12_assimilation_quotidienne_avec_masque2/Assimilation_locale_2021120106_2022050106_daily_alp_mask2.nc',
+        LDM1     = 'XP11_assimilation_quotidienne_avec_masque1/Assimilation_locale_2021120106_2022050106_daily_alp_mask1.nc',
+        LDM2     = 'XP12_assimilation_quotidienne_avec_masque2/Assimilation_locale_2021120106_2022050106_daily_alp_mask2.nc',
         LDM5     = 'XP17_assimilation_quotidienne_avec_masque5/Assimilation_locale_2021120106_2022050106_daily_alp_mask5.nc',
-        LDM5D2    = 'XP15_assimilation_quotidienne_avec_masque5_et_debiaisage2/Assimilation_locale_2021120106_2022050106_daily_alp_mask5_debiasing2.nc',
+        #LDM5D2    = 'XP15_assimilation_quotidienne_avec_masque5_et_debiaisage2/Assimilation_locale_2021120106_2022050106_daily_alp_mask5_debiasing2.nc',
     )
 
 daily_experiments = dict(
         LD0       = 'XP00_assimilation_quotidienne_sans_masque_sans_localisation/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
-        LDM4      = 'XP02_assimilation_quotidienne_avec_masque/Assimilation_locale_2021120106_2022050106_daily_alp_mask4.nc',
+#        LDM4      = 'XP02_assimilation_quotidienne_avec_masque/Assimilation_locale_2021120106_2022050106_daily_alp_mask4.nc',
         LDM4D     = 'XP06_assimilation_quotidienne_avec_masque_et_debiaisage/Assimilation_locale_2021120106_2022050106_daily_alp_mask4_debiasing.nc',
         #LDD2      = 'XP20_assimilation_quotidienne_avec_debiaisage2/Assimilation_locale_2021120106_2022050106_daily_alp_debiasing2.nc',
-        LDM4D_BIS = 'XP09_assimilation_quotidienne_avec_masque_et_debiaisage_ratio_moyen/Assimilation_locale_2021120106_2022050106_daily_alp_mask4_debiasing.nc',
-        LDM5D2    = 'XP15_assimilation_quotidienne_avec_masque5_et_debiaisage2/Assimilation_locale_2021120106_2022050106_daily_alp_mask5_debiasing2.nc',
+#        LDM4D_BIS = 'XP09_assimilation_quotidienne_avec_masque_et_debiaisage_ratio_moyen/Assimilation_locale_2021120106_2022050106_daily_alp_mask4_debiasing.nc',
+#        LDM5D2    = 'XP15_assimilation_quotidienne_avec_masque5_et_debiaisage2/Assimilation_locale_2021120106_2022050106_daily_alp_mask5_debiasing2.nc',
 #        LDM4L     = 'XP05_assimilation_quotidienne_avec_masque_et_localisation/Assimilation_locale_2021120106_2022050106_daily_alp_localisation_mask4.nc',
-#        LDM4LD    = 'XP08_assimilation_quotidienne_avec_masque_localisation_et_debiaisage/Assimilation_locale_2021120106_2022050106_daily_alp_localisation_mask4_debiasing.nc',
+        LDM4LD    = 'XP08_assimilation_quotidienne_avec_masque_localisation_et_debiaisage/Assimilation_locale_2021120106_2022050106_daily_alp_localisation_mask4_debiasing.nc',
 #        LDM5D2L5  = 'XP18_assimilation_quotidienne_avec_masque5_et_debiaisage2_et_localisation5/Assimilation_locale_2021120106_2022050106_daily_alp_localisation5_mask5_debiasing2.nc',  # WARNING : erreur_obs * 10
+        LGDM5D2L5   = 'XP25_assimilation_quotidienne_loi_gamma_mask5_localisation5_debiaising2/Assimilation_locale_2021120106_2022050106_daily_alp_localisation5_mask5_debiasing2.nc',
 
     )
 
@@ -163,6 +164,7 @@ experiments_map = dict(
     daily_experiments          = daily_experiments,
     hourly_experiments         = hourly_experiments,
     likelyhood_experiments     = likelyhood_experiments,
+    localisation_experiments   = localisation_experiments,
 )
 experiments = experiments_map[xpid]
 
@@ -723,21 +725,24 @@ class Evaluation(object):
             labels = []
             labels2 = []
 
-            for product in products:
-                x = self.scores.loc[{'score':score}][product].data
+            def add_num_poste(axis, pos, liste_score):
                 for idx, poste in enumerate(self.scores.num_poste.data):
-                    if not np.isnan(x[idx]):
-                        ax.text(pos, x[idx], str(int(poste)), fontsize=6)
-                        if score.startswith('brier') and product not in ['antilope', 'raw']:
-                            ax2.text(pos2, x[idx], str(int(poste)), fontsize=6)
+                    if not np.isnan(liste_score[idx]):
+                        if not np.isnan(liste_score[idx]):
+                            axis.text(pos, liste_score[idx], str(int(poste)), fontsize=6)
                     else:
                         print(f'{score} of product {product} not available for poste {str(int(poste))}')
+
+            for product in products:
+                x = self.scores.loc[{'score':score}][product].data
+                add_num_poste(ax, pos, x)
                 labels.append(self.add_label(ax.violinplot(x[~np.isnan(x)], showmeans=True, positions=[pos]), xpid_label[product]))
                 if score == 'bias':
                     ax.axhline(color='k')
                 if score.startswith('brier') and product not in ['antilope', 'raw']:
                     ref = self.scores.loc[{'score':score}]['raw'].data
                     bss = 1 - x / ref
+                    add_num_poste(ax2, pos2, bss)
                     labels2.append(self.add_label(ax2.violinplot(bss[~np.isnan(bss)], showmeans=True, positions=[pos2]), xpid_label[product]))
                     ax2.axhline(color='k')
                     pos2 += 1
