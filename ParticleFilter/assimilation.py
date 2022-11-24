@@ -705,7 +705,7 @@ class ParticleFilter(object):
 
         return prob_density
 
-    @speedtest
+#    @speedtest
     def gamma_dist(self, sample, mu, sd):
         """ Definition of gamma distribution """
         #import math  # math.gamma does not work with arrays
@@ -716,11 +716,11 @@ class ParticleFilter(object):
             theta = sd / mu  # A prouver
             prob_density = sample**(k-1)*np.exp(-sample/theta)/(theta**k*gamma(k))
         else:
-            prob_density = np.exp(-0.5*sample/sd**2)  # décroissance exponentielle
+            prob_density = np.exp(-sample/sd)  # décroissance exponentielle
 
         return prob_density
 
-    @speedtest
+#    @speedtest
     def weighting(self, x, mu, sigma, obs, plot_distribution=False, **kw):
 
         if self.likelyhood == 'normal':
