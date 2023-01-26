@@ -307,19 +307,19 @@ class Evaluation(object):
         succes_rate = list()
         false_alarm = list()
         if np.shape(simu) == np.shape(obs):
-            a = np.count_nonzero(np.where((obs>=threshold) & (simu>=threshold)))
-            b = np.count_nonzero(np.where((obs<threshold) & (simu>=threshold)))
-            c = np.count_nonzero(np.where((obs>=threshold) & (simu<threshold)))
-            d = np.count_nonzero(np.where((obs<threshold) & (simu<threshold)))
+            a = np.count_nonzero(np.where((obs>threshold) & (simu>threshold)))
+            b = np.count_nonzero(np.where((obs<=threshold) & (simu>threshold)))
+            c = np.count_nonzero(np.where((obs>threshold) & (simu<=threshold)))
+            d = np.count_nonzero(np.where((obs<=threshold) & (simu<=threshold)))
             succes_rate.append(a/(a+c) if a>0 else 0)
             false_alarm.append(b/(b+d) if b>0 else 0)
         else:
             for seuil in range(1, self.Ne+1):
                 # Pour un dépassement de seuil :
-                a = len(np.where((obs>=threshold) & (np.count_nonzero(simu>=threshold, axis=1)>=seuil))[0])
-                b = len(np.where((obs<threshold) & (np.count_nonzero(simu>=threshold, axis=1)>=seuil))[0])
-                c = len(np.where((obs>=threshold) & (np.count_nonzero(simu>=threshold, axis=1)<seuil))[0])
-                d = len(np.where((obs<threshold) & (np.count_nonzero(simu>=threshold, axis=1)<seuil))[0])
+                a = len(np.where((obs>threshold) & (np.count_nonzero(simu>threshold, axis=1)>=seuil))[0])
+                b = len(np.where((obs<=threshold) & (np.count_nonzero(simu>threshold, axis=1)>=seuil))[0])
+                c = len(np.where((obs>threshold) & (np.count_nonzero(simu>threshold, axis=1)<seuil))[0])
+                d = len(np.where((obs<=threshold) & (np.count_nonzero(simu>threshold, axis=1)<seuil))[0])
 #            # Pour un intervalle :
 #            a = np.count_nonzero(np.where((obs>=1) & (obs<5) & (np.count_nonzero((simu>=1) & (simu<5), axis=1)>=seuil)))
 #            b = np.count_nonzero(np.where(((obs<1) | (obs>=5)) & (np.count_nonzero((simu>=1) & (simu<5), axis=1)>=seuil)))
@@ -661,7 +661,7 @@ class Evaluation(object):
         ax1.legend(fontsize=14)
         fig1.savefig(f'{savedir}/reliability_diagram_{self.threshold}.pdf', format='pdf')
 
-        for threshold in [1, 10, 20]:
+        for threshold in [0, 1, 10, 20]:
             fig,ax = plt.subplots()
             ax.set_title(f'Threshold={threshold}mm')
             for product in ['raw'] + [xpid for xpid in experiments.keys()]:

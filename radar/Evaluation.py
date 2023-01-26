@@ -170,13 +170,13 @@ def raw_scatterplot(rr_nivometeo, rr_antilope, elevations, datebegin, dateend, s
     plt.plot(rr_nivometeo, y, color="red", linewidth=1)
     plt.text(minval+1, maxval*0.7, f'R²={r2:.4}', fontsize=18, color='red')
 
-    #fig.savefig('raw_scatterplot_{0:s}_{1:s}.svg'.format(datebegin.strftime('%Y%m%d'), dateend.strftime('%Y%m%d')), bbox_inches='tight', format='svg')
+    #fig.savefig('raw_scatterplot_{0:s}_{1:s}.pdf'.format(datebegin.strftime('%Y%m%d'), dateend.strftime('%Y%m%d')), bbox_inches='tight', format='pdf')
     filename = 'raw_scatterplot_{0:s}_{1:s}'.format(datebegin.strftime('%Y%m%d'), dateend.strftime('%Y%m%d'))
     if suffix is not None:
         filename = f'{filename}_{suffix}'
 
     #plt.tight_layout()
-    fig.savefig(f'{filename}.svg', format='svg', bbox_inches='tight')
+    fig.savefig(f'{filename}.pdf', format='pdf', bbox_inches='tight')
 
 def linear_regression(x, y):
     reg = LinearRegression().fit(x.reshape((-1, 1)), y)
@@ -285,8 +285,8 @@ def daily_scatterplot(workdf, datebegin, dateend, massif=None, subdomain=None, s
     ax.set_xlabel('Daily rain-gauges observed precipitation (mm/day)', fontsize=14)
     ax.legend(fontsize=14)
     #plt.tight_layout()
-    #fig.savefig(f'scatterplot_massif_{massif}.svg', bbox_inches='tight', format='svg')
-    fig.savefig(f'{filename1}.svg', format='svg', bbox_inches='tight')
+    #fig.savefig(f'scatterplot_massif_{massif}.pdf', bbox_inches='tight', format='pdf')
+    fig.savefig(f'{filename1}.pdf', format='pdf', bbox_inches='tight')
 
     fig, ax = plt.subplots(figsize=(12,9))
     #ax.set_xlim(left=700, right=np.max(elevations) * 1.1)
@@ -307,12 +307,33 @@ def daily_scatterplot(workdf, datebegin, dateend, massif=None, subdomain=None, s
     r2 = reg2.score(elevations.reshape((-1, 1)), y2)
     ax.plot(elevations, model2, color='red', linewidth=2)
     ax.text(1500, 3, f'R²={r2:.4}', fontsize=18, color='red')
-    #fig.savefig(f'scatterplot_alti_massif_{massif}.svg', bbox_inches='tight', format='svg')
+    #fig.savefig(f'scatterplot_alti_massif_{massif}.pdf', bbox_inches='tight', format='pdf')
     ax.set_ylim(bottom=0, top=np.max([np.max(y1), np.max(y2)]) * 1.1)
     ax.set_ylabel('Mean daily precipitation (mm/day)', fontsize=12)
     ax.set_xlabel('Elevation (m)', fontsize=12)
     #plt.tight_layout()
-    fig.savefig(f'{filename2}.svg', format='svg', bbox_inches='tight')
+    fig.savefig(f'{filename2}.pdf', format='pdf', bbox_inches='tight')
+
+def ratio_scatterplot(workdf, datebegin, dateend, **kw):
+
+    fig, ax = plt.subplots(figsize=(12,9))
+
+    workdf['ratio'] = workdf[f'rr_{kw["product"]}'] / workdf['rr_nivometeo']
+    workdf.replace([np.inf, -np.inf], np.nan, inplace=True)
+    workdf = workdf.loc[~workdf['ratio'].isna()]
+    nbpoint = len(workdf['elevation'].to_numpy())
+
+    reg = LinearRegression().fit(workdf['rr_nivometeo'].to_numpy().reshape((-1, 1)), workdf['ratio'].to_numpy())
+    model = reg.predict(workdf['rr_nivometeo'].to_numpy().reshape((-1,1)))
+    r2 = reg.score(workdf['rr_nivometeo'].to_numpy().reshape((-1, 1)),workdf['ratio'].to_numpy())
+    ax.plot(workdf['rr_nivometeo'].to_numpy(), model, color='black', linewidth=2)
+    ax.text(3, max(workdf['ratio'].to_numpy()), f'R²={r2:.4}', fontsize=18, color='black')
+    ax.text(3, max(workdf['ratio'].to_numpy()) * 0.95, f'{nbpoint} stations', fontsize=18, color='black')
+    ax.scatter(workdf['rr_nivometeo'], workdf['ratio'], marker='D', s=10)
+    ax.set_ylabel(f'ANTILOPE / rain gauge ratio', fontsize=12)
+    ax.set_xlabel('Mean daily rain-gauges observed precipitation (mm)', fontsize=12)
+    plt.tight_layout()
+    fig.savefig(f'ratio_scatterplot_{datebegin.strftime("%Y%m%d")}_{dateend.strftime("%Y%m%d")}.pdf', format='pdf', bbox_inches='tight')
 
 def elevation_scatterplot(workdf, datebegin, dateend, suffix=None, **kw):
 
@@ -381,15 +402,15 @@ def elevation_scatterplot(workdf, datebegin, dateend, suffix=None, **kw):
     ax2.set_ylabel(f'{kw["product"]}/rain-gauges ratio', fontsize=12)
     ax2.set_xlabel('Rain-gauge elevation (m)', fontsize=12)
     plt.tight_layout()
-    #fig1.savefig('scatterplot_by_elevation_{0:s}_{1:s}.svg'.format(datebegin.strftime('%Y%m%d'), dateend.strftime('%Y%m%d')), bbox_inches='tight', format='svg')
+    #fig1.savefig('scatterplot_by_elevation_{0:s}_{1:s}.pdf'.format(datebegin.strftime('%Y%m%d'), dateend.strftime('%Y%m%d')), bbox_inches='tight', format='pdf')
     filename1 = 'scatterplot_by_elevation_{0:s}_{1:s}'.format(datebegin.strftime('%Y%m%d'), dateend.strftime('%Y%m%d'))
     filename2 = 'ratio_scatterplot_by_elevation_{0:s}_{1:s}'.format(datebegin.strftime('%Y%m%d'), dateend.strftime('%Y%m%d'))
     if suffix is not None:
         filename1 = f'{filename1}_{suffix}'
         filename2 = f'{filename2}_{suffix}'
-    fig1.savefig(f'{filename1}.svg', format='svg', bbox_inches='tight')
-    #fig2.savefig('ratio_scatterplot_by_elevation_{0:s}_{1:s}.svg'.format(datebegin.strftime('%Y%m%d'), dateend.strftime('%Y%m%d')), bbox_inches='tight', format='svg')
-    fig2.savefig(f'{filename2}.svg', format='svg', bbox_inches='tight')
+    fig1.savefig(f'{filename1}.pdf', format='pdf', bbox_inches='tight')
+    #fig2.savefig('ratio_scatterplot_by_elevation_{0:s}_{1:s}.pdf'.format(datebegin.strftime('%Y%m%d'), dateend.strftime('%Y%m%d')), bbox_inches='tight', format='pdf')
+    fig2.savefig(f'{filename2}.pdf', format='pdf', bbox_inches='tight')
 
 def plot_massif(mydf, massif=None, subdomain=None, error=0.2, threshold=None, **kw):
     #mydf = mydf.loc[~mydf['rr'].isna()].loc[~mydf['rr_antilope'].isna()]
@@ -569,7 +590,7 @@ def plot_massif(mydf, massif=None, subdomain=None, error=0.2, threshold=None, **
         #fig.fig.colorbar(sc, label='Radar/Rain-gauge ratio', ax=fig.fig.axes[0], shrink=shrink)
         fig.fig.colorbar(sc, label=legend, shrink=shrink, anchor=anchor)
         plt.tight_layout()
-        fig.save(f'{filename}.svg', formatout='svg', bbox_inches='tight')
+        fig.save(f'{filename}.pdf', formatout='pdf', bbox_inches='tight')
         fig.close()
 
 def plot_obs(lat, lon, alt, num_poste, datebegin, dateend):
@@ -594,19 +615,19 @@ def plot_obs(lat, lon, alt, num_poste, datebegin, dateend):
         ax = fig.fig.axes[0]
         add_radar_positions(ax)
         sc = fig.map.scatter(lon, lat, c=alt, marker="^", s=150)
-        for idx,poste in enumerate(num_poste):
-            if lon[idx]>=lonmin and lon[idx]<=lonmax and lat[idx]<=latmax and lat[idx]>=latmin:
-                txt = plt.text(lon[idx], lat[idx], str(int(poste)))
+#        for idx,poste in enumerate(num_poste):
+#            if lon[idx]>=lonmin and lon[idx]<=lonmax and lat[idx]<=latmax and lat[idx]>=latmin:
+#                txt = plt.text(lon[idx], lat[idx], str(int(poste)))
         plt.colorbar(sc, label='Elevation (m)', shrink=shrink)
         plt.tight_layout()
-        fig.save(f'obs_{domain}_{datebegin}_{dateend}.svg', formatout='svg', bbox_inches='tight')
+        fig.save(f'obs_{domain}_{datebegin}_{dateend}.pdf', formatout='pdf', bbox_inches='tight')
         fig.close()
 #        for massif in map_massifs[domain]:
 #            fig = cartopy.Zoom_massif(massif)
 #            fig.init_massifs()
 #            fig.addpoints(lon, lat, labels=alt)
 #            plt.tight_layout()
-#            fig.save(f'alti_obs_massif{massif}.svg', formatout='svg')
+#            fig.save(f'alti_obs_massif{massif}.pdf', formatout='pdf')
 #            fig.close()
 
 
@@ -653,7 +674,7 @@ def fill_all_massifs(domain, lat, lon, df, suffix=None, **kw):
 #    if suffix is not None:
 #        filename = f'{filename}_{suffix}'
 #    plt.tight_layout()
-#    fig.save(f'{filename}.svg', formatout='svg')
+#    fig.save(f'{filename}.pdf', formatout='pdf')
 #    fig.close()
 #    attributes = dict(palette='YlGnBu', forcemin=0., forcemax=np.max(np.fromiter(ratio.values(), dtype=float)), seuiltext=50., label=f'R² linear regression of the ratio {kw["product"]} / rain gauges function of elevation')
 #    fig = class_()
@@ -663,7 +684,7 @@ def fill_all_massifs(domain, lat, lon, df, suffix=None, **kw):
 #    if suffix is not None:
 #        filename = f'{filename}_{suffix}'
 #    plt.tight_layout()
-#    fig.save(f'{filename}.svg', formatout='svg')
+#    fig.save(f'{filename}.pdf', formatout='pdf')
 #    fig.close()
 
     #extreme_value = np.nanmax(np.abs(np.fromiter(bias.values(), dtype=float)))
@@ -678,7 +699,7 @@ def fill_all_massifs(domain, lat, lon, df, suffix=None, **kw):
     fig.draw_massifs(np.fromiter(bias.keys(), dtype=int), np.fromiter(bias.values(), dtype=float), **attributes)
     fig.plot_center_massif(massif_numbers, np.fromiter(nb_stations.values(), dtype=int), **attributes)
     #plt.tight_layout()
-    fig.save(f'{filename}.svg', formatout='svg', bbox_inches='tight')
+    fig.save(f'{filename}.pdf', formatout='pdf', bbox_inches='tight')
     fig.close()
 
     filename = f'RMSE_by_massif_{domain}'
@@ -692,7 +713,7 @@ def fill_all_massifs(domain, lat, lon, df, suffix=None, **kw):
     fig.draw_massifs(np.fromiter(rmse.keys(), dtype=int), np.fromiter(rmse.values(), dtype=float), **attributes)
     fig.plot_center_massif(massif_numbers, np.fromiter(nb_stations.values(), dtype=int), **attributes)
     #plt.tight_layout()
-    fig.save(f'{filename}.svg', formatout='svg', bbox_inches='tight')
+    fig.save(f'{filename}.pdf', formatout='pdf', bbox_inches='tight')
     fig.close()
 
 def error_vs_RR(df, datebegin, dateend, **kw):
@@ -761,6 +782,61 @@ def error_vs_RR(df, datebegin, dateend, **kw):
     count, bins = np.histogram(tmp[f'rr_{kw["product"]}'], range=(0,8), bins=32)
     #count, bins = np.histogram(tmp['rr_nivometeo'], range=(0,20), bins=20)
     bins = bins
+    #count = np.insert(count, 0, len(tmp[tmp['rr_nivometeo']==0])) / len(tmp)
+    #bins = np.insert(bins, 0, -0.5)
+    ax.hist(bins[:-1], bins, weights=count/len(nivometeo0), label=f'freq of antilope=0 : {freq_0:.3} ({nb_0})')
+    #ax.hist(bins[:-1], bins, weights=count, label=f'freq of antilope=0 : {freq_0:.3} ({nb_0})')
+    ax.set_xticks(bins[0::2])
+    plt.xlabel('ANTILOPE 24h précipitation (mm)', fontsize=12)
+    plt.ylabel('Frequency', fontsize=12)
+    plt.legend()
+    plt.tight_layout()
+    fig.savefig(f'{outname}.pdf', format='pdf')
+
+    fig, ax = plt.subplots()
+    outname = 'Histogram_rr_antilope>0'
+    #count, bins = np.histogram(antilope0['error'][antilope0['rr_nivometeo']>0], range=(0,5), bins=20)
+    antilope0 = df[df[f'rr_{kw["product"]}']>0]
+    antilope0['date'] = pd.to_datetime(antilope0['date'])
+    # Pour regarder quand les obs nivometeo sont réellement de 6h à 6h
+    #antilope0 = antilope0[antilope0['date'].dt.month==4]
+    #outname = '_'.join([outname, 'april'])
+    len_0 = len(antilope0[antilope0['rr_nivometeo']==0])
+    freq_0 = len_0 / len(antilope0) if len(antilope0)>0 else 0.
+    tmp = antilope0[antilope0['rr_nivometeo']>0]
+    #tmp = antilope0
+    # Pour regarder quand les obs nivometeo sont réellement de 6h à 6h
+    count, bins = np.histogram(tmp['rr_nivometeo'], range=(0,30), bins=15)
+    count = np.insert(count, 0, len_0)
+    bins = np.insert(bins, 0, -2)
+    ax.hist(bins[:-1], bins, weights=count/len(antilope0), label=f'freq of obs=0 : {freq_0:.3} ({len_0})')
+    #ax.hist(bins[:-1], bins, weights=count, label=f'freq of obs=0 : {freq_0:.3} ({len_0})')
+    ax.set_xticks(bins[0::2])
+    plt.xlabel('Nivométéo 24h précipitation (mm)', fontsize=12)
+    plt.ylabel('Frequency', fontsize=12)
+    plt.legend()
+    plt.tight_layout()
+    fig.savefig(f'{outname}.pdf', format='pdf')
+
+    fig, ax = plt.subplots()
+    outname = 'Histogram_rr_nivometeo>0'
+    seuil_min = 8
+    seuil_max = 12
+    #tmp = df[(df[f'rr_{kw["product"]}']>=seuil_min) & (df[f'rr_{kw["product"]}']<=seuil_max)]
+    nivometeo0 = df[df[f'rr_nivometeo']>0]
+    nivometeo0['date'] = pd.to_datetime(nivometeo['date'])
+    # Pour regarder quand les obs nivometeo sont réellement de 6h à 6h
+    #nivometeo0 = nivometeo0[nivometeo0['date'].dt.month==4]
+    #outname = '_'.join([outname, 'april'])
+    nb_0 = len(nivometeo0[nivometeo0[f'rr_{kw["product"]}']==0])
+    freq_0 = nb_0 / len(nivometeo0)
+    tmp = nivometeo0[nivometeo0[f'rr_{kw["product"]}']>0]
+    #print(len(tmp[tmp.date>=datetime(2022, 3, 27).date()]))  # Nombre de cas après changement d'heure (==> précipitations observées de 6h à 6h)
+    #count, bins = np.histogram(tmp['rr_nivometeo'][tmp['rr_nivometeo']>0], range=(0,10), bins=20)
+    count, bins = np.histogram(tmp[f'rr_{kw["product"]}'], range=(0,30), bins=15)
+    count = np.insert(count, 0, nb_0)
+    bins = np.insert(bins, 0, -2)
+    #count, bins = np.histogram(tmp['rr_nivometeo'], range=(0,20), bins=20)
     #count = np.insert(count, 0, len(tmp[tmp['rr_nivometeo']==0])) / len(tmp)
     #bins = np.insert(bins, 0, -0.5)
     ax.hist(bins[:-1], bins, weights=count/len(nivometeo0), label=f'freq of antilope=0 : {freq_0:.3} ({nb_0})')
@@ -915,6 +991,8 @@ if __name__ == "__main__":
         elevation_scatterplot(df_stat, args.datebegin, args.dateend, suffix=suffix, product=args.product)
         # 4. Daily scatter plot
         daily_scatterplot(df, args.datebegin, args.dateend, suffix=suffix, product=args.product)
+        # 5. Ratio scatterplot
+        ratio_scatterplot(df_stat, args.datebegin, args.dateend, product=args.product)
 
         # 5. Maps
         #for domain in ['alpes', 'pyrenees', 'corse']:

@@ -226,6 +226,8 @@ def plot(antilope):
         #antilope.rr_cumul.plot(ax=ax, cbar_kwargs={"label":'Total precipitation between 2021080106 and 2022070106 (mm)'}, cmap=plt.cm.coolwarm)
         #cml = antilope.rr_cumul.plot(ax=ax, cmap=plt.cm.YlGnBu, add_colorbar=False)
         cml = antilope.rr_cumul.plot(ax=ax, cmap=cmap, norm=norm, add_colorbar=False)
+        cml = antilope.rr_cumul.plot.pcolormesh(ax=ax, cmap=cmap, norm=norm, add_colorbar=False)
+        #cml = plt.contourf(antilope.lon, antilope.lat, antilope.rr_cumul, cmap=cmap, norm=norm, add_colorbar=False)
         #cml = antilope.rr_cumul.plot(ax=ax, cmap=plt.cm.YlGnBu, add_colorbar=False, alpha=0.5)
         #add_landmarks(ax)
         add_radar_positions(ax)
@@ -241,15 +243,16 @@ def plot(antilope):
         add_cities(latmin, latmax, lonmin, lonmax)
         cb = fig.colorbar(sc)
         #cb.set_label(label='Mean ANTILOPE / rain-gauges ratio', fontsize=22, weight='bold')
-        cb.set_label(label='Mean ANTILOPE / rain-gauges ratio', fontsize=22)
+        cb.set_label(label='ANTILOPE / rain-gauges ratio', fontsize=22)
         cb.ax.tick_params(labelsize=16)
         cb2 = fig.colorbar(cml, extend='both')
         cb2.set_label(label='Total precipitation between \n 2021080106 and 2022070106 (mm)', fontsize=22)
         cb2.ax.tick_params(labelsize=16)
+        ax.grid(False)  # Remove grid lines (does not work !)
         #fig.legend()
         #fig.tight_layout()
         fig.savefig(os.path.join(savedir, f'CUMUL_ANTILOPE_2021080106_2022070106_{domain}.pdf'), layout='tight')
-        #sys.exit()
+        sys.exit()
 
 def nearest(array, value):
     """ Find the closest element of 'array' to 'value'. """
