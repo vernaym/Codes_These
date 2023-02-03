@@ -155,9 +155,15 @@ likelyhood_experiments = dict(
         LGDM5D2L5   = 'XP25_assimilation_quotidienne_loi_gamma_mask5_localisation5_debiaising2/Assimilation_locale_2021120106_2022050106_daily_alp_localisation5_mask5_debiasing2.nc',
     )
 
+basic = dict(
+        LD0         = 'XP00_assimilation_quotidienne_sans_masque_sans_localisation/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
+        LDD0        = 'XP21_assimilation_quotidienne_avec_debiaisage_uniforme/Assimilation_locale_2021120106_2022050106_daily_alp_debiasing0.nc',
+    )
+
 
 experiments_map = dict(
     reference                  = dict(),  # Plot only ANTILOPE and RAW ensemble
+    basic                      = basic,
     debiaising_experiments     = debiaising_experiments,
     tmp                        = tmp,
     mask_experiments           = mask_experiments,

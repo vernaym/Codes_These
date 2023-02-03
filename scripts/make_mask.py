@@ -627,48 +627,6 @@ def make_mask(field):
 #
 #                t4 = time.time()
 
-    def to_xarray(array, varname):
-        output = xr.DataArray(
-        name   = varname,
-        data   = array,
-        dims   = ["lat", "lon"],
-        coords = dict(lon=field.lon, lat=field.lat),
-        #attrs  = dict(description="Difference between each pixel cumul and the max of its neighbours"),
-        )
-        return output
-
-    def plot_and_save(field, name, cmap=plt.cm.Greys, vmin=None, vmax=None):
-        if domain == 'alp':
-            fig, ax = plt.subplots(figsize=(14,16))
-        elif domain == 'GrandesRousses':
-            fig, ax = plt.subplots(figsize=(12,6))
-        if vmin is None:
-            vmin = np.nanmin(field)
-        if vmax is None:
-            vmax = np.nanmax(field)
-        if cmap == 'custom':
-            cmap = matplotlib.colors.LinearSegmentedColormap.from_list("", ["black", "darkviolet", "green", "orange", "red"], 5)
-            thresholds = [0., 0.5, 0.80, 1.2, 1.5, 10]  # TODO : vérier la coéhrence des seuils entre les figures
-            #thresholds = [0., 0.5, 0.90, 1.1, 1.5, 10]
-            norm = matplotlib.colors.BoundaryNorm(thresholds, cmap.N)
-            cml = field.plot(ax=ax, cmap=cmap, norm=norm, add_colorbar=False)
-        else:
-            cml = field.plot(ax=ax, cmap=cmap, vmin=vmin, vmax=vmax, add_colorbar=False)
-
-        if field.name == 'ratio':
-            # Plot scores with same cmap since it is the same information
-            add_scores(scores, ax, mycmap=cmap, vmin=vmin, vmax=vmax)
-        else:
-            add_scores(scores, ax)
-        add_radar_positions(ax)
-        add_boundaries()
-        add_cities(latmin, latmax, lonmin, lonmax)
-        cb = fig.colorbar(cml)
-        cb.set_label(field.name, fontsize=24)
-        cb.ax.tick_params(labelsize=20)
-        fig.savefig(os.path.join(savedir, f'{name}.pdf'), format='pdf', layout='tight')
-        field.to_netcdf(os.path.join(savedir, f'{name}.nc'))
-
 
 #    maskarray = np.where(maxdiff>-seuil, 1, 2)
 #    mask1 = to_xarray(maskarray, 'mask')
@@ -718,18 +676,69 @@ def make_mask(field):
 #    anomaly = to_xarray(anomaly, 'anomaly')
 #    plot_and_save(anomaly, f'anomaly_loc{loc}_{domain}', cmap=plt.cm.coolwarm)
 
-    homegeneity = to_xarray(homogeneous_size, 'homogeneity')
+    homegeneity = to_xarray(homogeneous_size, field, 'homogeneity')
     #plot_and_save(homegeneity, f'homogeneity_loc{loc}_seuil{seuil_homogeneite}_{domain}', cmap=plt.cm.PuOr)  # TODO : change colorbar (not diverging)
     plot_and_save(homegeneity, f'homogeneity_loc{loc}_seuil{seuil_homogeneite}_{domain}', cmap=plt.cm.YlOrBr)  # TODO : change colorbar (not diverging)
 
     #mask5 = to_xarray(1+mask5*20/np.nanmax(mask5))  # On "normalise" entre 1 et 20 pour avoir une erreur d'observation comprise entre 0.261mm et 0.261*20~5mm
     # TODO : augmenter l'erreur d'observation
-    mask5 = to_xarray(np.clip(mask5, np.nanmin(mask5), 20), 'mask')  # On plafonne (arbitrairement) le masque à 20 pour avoir une erreur d'observation comprise entre 0.261mm et 0.261*20~5mm
+    mask5 = to_xarray(np.clip(mask5, np.nanmin(mask5), 20), field, 'mask')  # On plafonne (arbitrairement) le masque à 20 pour avoir une erreur d'observation comprise entre 0.261mm et 0.261*20~5mm
     # lorsque ANTILOPE observe 0mm
     plot_and_save(mask5, f'mask5_loc{loc}_seuil{seuil_homogeneite}_{domain}', cmap=plt.cm.Greys)  # TODO : change colorbar (not diverging)
 
     # TODO : USe a PuOr colorbar for creterion fields and Grey colorbar for mask fields
 
+def to_xarray(array, field, varname='rr'):
+    output = xr.DataArray(
+    name   = varname,
+    data   = array,
+    dims   = ["lat", "lon"],
+    coords = dict(lon=field.lon, lat=field.lat),
+    #attrs  = dict(description="Difference between each pixel cumul and the max of its neighbours"),
+    )
+    return output
+
+def plot_and_save(field, name, cmap=plt.cm.Greys, vmin=None, vmax=None, add_scores=True):
+    if domain == 'alp':
+        fig, ax = plt.subplots(figsize=(14,16))
+    elif domain == 'GrandesRousses':
+        fig, ax = plt.subplots(figsize=(12,6))
+    if vmin is None:
+        vmin = np.nanmin(field)
+    if vmax is None:
+        vmax = np.nanmax(field)
+    if cmap == 'custom':
+        cmap = matplotlib.colors.LinearSegmentedColormap.from_list("", ["black", "darkviolet", "green", "orange", "red"], 5)
+        thresholds = [0., 0.5, 0.80, 1.2, 1.5, 10]  # TODO : vérier la coéhrence des seuils entre les figures
+        #thresholds = [0., 0.5, 0.90, 1.1, 1.5, 10]
+        norm = matplotlib.colors.BoundaryNorm(thresholds, cmap.N)
+        cml = field.plot(ax=ax, cmap=cmap, norm=norm, add_colorbar=False)
+    else:
+        cml = field.plot(ax=ax, cmap=cmap, vmin=vmin, vmax=vmax, add_colorbar=False)
+
+    if add_scores:
+        if field.name == 'ratio':
+            # Plot scores with same cmap since it is the same information
+            add_scores(scores, ax, mycmap=cmap, vmin=vmin, vmax=vmax)
+        else:
+            add_scores(scores, ax)
+    add_radar_positions(ax)
+    add_boundaries()
+    add_cities(latmin, latmax, lonmin, lonmax)
+    cb = fig.colorbar(cml)
+    cb.set_label(field.name, fontsize=24)
+    cb.ax.tick_params(labelsize=20)
+    fig.savefig(os.path.join(savedir, f'{name}.pdf'), format='pdf', layout='tight')
+    field.to_netcdf(os.path.join(savedir, f'{name}.nc'))
+
+def moving_average(field, size=20):
+    from scipy.ndimage import uniform_filter
+    mean = field.rr_cumul.data/334  # 334 is the number of days over wich the field cumul is made : we want a mean daily (24h) error
+    tmp = uniform_filter(mean, size=size)
+    smoothed = to_xarray(tmp, field)
+    plot_and_save(smoothed, f'Smoothed_field_{size}_{domain}.pdf', cmap=plt.cm.YlGnBu, add_scores=False)
+    plot_and_save(mean-smoothed, f'Observation_error_smoothingsize{size}_{domain}', cmap=plt.cm.coolwarm, add_scores=False)
+    plot_and_save(np.abs(mean-smoothed), f'Observation_error_absolute_value_smoothingsize{size}_{domain}', cmap=plt.cm.Greys, add_scores=False)
 
 def krigeage_scores(field):
     variogram  = 'exponential'  # The same as for ANTILOPE without RADAR data
@@ -780,7 +789,8 @@ if __name__ == "__main__":
 
     plot(antilope)
 #    krigeage_scores(antilope)
-    make_mask(antilope)
+#    make_mask(antilope)
+    moving_average(antilope)
 
 
 

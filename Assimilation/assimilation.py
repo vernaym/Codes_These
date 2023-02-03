@@ -36,6 +36,7 @@ datadir = '/home/vernaym/These/DATA'
 # Domaine des Grandes Rousses
 domain_coords = dict(
         GrandesRousses = dict(latmax=45.240, latmin=44.990, lonmin=6.010, lonmax = 6.490),
+        test           = dict(latmax=45.02, latmin=45.0, lonmin=6.1, lonmax = 6.3),
         alp            = dict(latmax=46.450, latmin=44.100, lonmin=5.400, lonmax=7.200),
 )
 
@@ -70,9 +71,10 @@ def parse_command_line():
     parser = argparse.ArgumentParser(description=description)
     parser.add_argument('-b', '--datebegin', help='Begining date of extraction, format YYYYMMDDHH or YYMMDDHH', required=True)
     parser.add_argument('-e', '--dateend', help = 'Final date of extraction (default=datebegin)')
-    parser.add_argument('-d', '--domain', help='Domain of the file', choices=['alp', 'pyr', 'cor', 'GrandesRousses'], default='GrandesRousses')
+    parser.add_argument('-d', '--domain', help='Domain of the file', choices=['alp', 'pyr', 'cor', 'GrandesRousses', 'test'], default='GrandesRousses')
     parser.add_argument('-w', '--workdir', help='Runing directory', default='/home/vernaym/workdir/ASSIMILATION')
-    parser.add_argument('-m', '--mask', help='Switch observation error mask on/off', choices=[1,2,3,4,5], default=None, type=int)
+    parser.add_argument('-a', '--assimilation', help='Assimilation method', choices=['pf', 'enkf'], default='enkf')
+    parser.add_argument('-m', '--mask', help='Switch observation error mask on/off', choices=[1,2,3,4,5,6], default=None, type=int)
     parser.add_argument('-c', '--debiasing', help='Apply bias correction to observation (0=constant bias, 1=pseudo-kriging, 2=estimation based on homogeneity)', default=None, type=int, choices=[0,1,2])
     parser.add_argument('-t', '--threshold', default=None, help='Threshold of precipitation (mm) to apply in the data to consider', type=int)
     parser.add_argument('-p', '--plot', action='store_true', default=False, help='Plot assimilated fields')
@@ -323,9 +325,6 @@ def plot3D(X, Y, Z, colors, date):
 
 
 def plot_field(field, ax, vmin, vmax, title=None, cmap=plt.cm.YlGnBu):
-#def plot_field(field, ax, vmin, vmax, title, cmap='viridis'):
-#    import pdb
-#    pdb.set_trace()
     im = field.plot(ax=ax, add_colorbar=False, vmin=vmin, vmax=vmax, cmap=cmap)
     for landmark, infos in landmarks.items():
         ax.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='red', markersize=4)
@@ -387,7 +386,7 @@ def read_obs(args):
     return antilope
 
 
-class ParticleFilter(object):
+class Assimilation(object):
 
     def __init__(self, period, obs, ensemble, nivometeo, plot, frequency, gridded, localisation, mask, debiasing, domain, likelyhood):
 
@@ -570,6 +569,15 @@ class ParticleFilter(object):
                 mask = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask", f"mask{self.mask}_loc25_seuil0.1_{self.domain}.nc"))
                 parameters['sigma'] = 0.261 * mask.mask + 0.263 * parameters['rr'] * (1+np.abs(1 - ratio))
                 #parameters['sigma'] = (0.261 + 0.263 * parameters['rr'] * (1+np.abs(1 - ratio))) * mask.mask
+            elif self.mask in [6]:
+                #mask = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask", f"Observation_error_smoothingsize20_{self.domain}.nc"))
+                mask = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask", f"mask5_loc10_seuil0.1_{self.domain}.nc"))
+                #mask = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask", f"Observation_error_smoothingsize30.nc"))
+                #parameters['sigma'] = (0.261 + 0.263 * parameters['rr']) * np.abs(mask.rr)
+                #parameters['sigma'] =  np.abs(mask.rr)
+                parameters['sigma'] =  np.abs(mask.mask)
+                #parameters['sigma'] = np.abs(mask.rr) * 0.261 + 0.263 * parameters['rr']
+                #parameters['sigma'] = np.abs(mask.rr)
 
 #            except FileNotFoundError as e:
 #                print(e)
@@ -676,28 +684,6 @@ class ParticleFilter(object):
 #            i = i + 1
 #    plt.legend()
 
-#    @speedtest
-    def resample(self, weights, Ne):
-        """ Ne is the number of members to draw for the new enesmble """
-        import random
-        #Ne = len(self.members)
-        step = 1/Ne
-        # Sort particules on [0,1[ according to their weight
-        cumulated_weights = np.cumsum(weights, axis=0)
-        #for i in range(1, Ne+1):
-        selected_particles = list()
-        # Random draw between [0, 1/Ne[
-        rdm = random.uniform(0, step)
-        #rdm = np.random.random_sample(np.shape(cumulated_weights[0]))*step
-        while rdm <= 1:
-            # Select particle indicies in wich rdm falls
-            #selected_particles.append(np.searchsorted(cumulated_weights, rdm)+1)
-            #selected_particles.append(np.apply_along_axis(lambda a: a.searchsorted(rdm), axis=0, arr=cumulated_weights)+1)
-            selected_particles.append(int(np.apply_along_axis(lambda a: a.searchsorted(rdm), axis=0, arr=cumulated_weights)))  # add index value (int)
-            # Go 1 step forward and start again
-            rdm += step
-        return selected_particles
-
     def normal_dist(self, sample, mean, sd):
         # TODO : check why sum(norm) >> 1
         #prob_density = (np.pi*sd) * np.exp(-0.5*((sample-mean)/sd)**2)
@@ -719,6 +705,258 @@ class ParticleFilter(object):
             prob_density = np.exp(-sample/sd)  # décroissance exponentielle
 
         return prob_density
+
+
+class EnsembleKalmanFilter(Assimilation):
+
+    def analyseKF(self, X, P, H, Y, R):
+        """Kalman filter analysis
+
+        Parameters
+        ----------
+        X: array
+            Vector of background (model) state
+
+        P: matrix
+            Background error covariance matrix
+
+        H: matrix
+            Forward operator
+
+        Y: array
+            Observation vector
+
+        R: matrix
+            Observation error covariance matrix
+
+        Returns
+        -------
+        A: array
+            Analysis vector
+        """
+
+        #Kalman gain
+        HP = np.dot(H, P)
+
+        #K  = np.dot(np.dot(P, H.T), np.linalg.inv(np.dot(HP, H.T) + R))  # K=PH'(HPH'+R)^-1
+        K  = np.matmul(np.matmul(P, H.T), np.linalg.inv(np.matmul(HP, H.T) + R))  # K=PH'(HPH'+R)^-1
+        #self.plot_matrix(K, 'Background_ECM_diagonal', f'{self.date_str}/Background_ECM.pdf')
+        #K  = P/(P+R)  # K=PH'(HPH'+R)^-1
+        # Analysis
+        #A =  X + np.dot(K, Y-np.dot(H, X))
+        #A = X + np.dot(K, Y-X)
+        A = X + np.matmul(K, Y-X)
+
+#        #Kalman gain
+#        K  = P/(P+R)
+#        # Analysis
+#        A = K*Y + (1-K)*X  # A = KY+(1-K)X
+
+        return K,A
+
+    def background_error_covariance(self, ensemble):
+        """
+        P = sum((Xi-Xmean)(Xi-Xmean)')
+        """
+        ensemble_mean = ensemble.mean('member').rr.data.flatten()  # flatten is optionnal since 'outer' method already flattens a 2D array
+        M = np.mean(ensemble_mean)
+#        P = np.outer(ensemble_mean-M, ensemble_mean-M)/len(ensemble_mean)
+        P = np.empty((len(ensemble_mean), len(ensemble_mean)))
+        for mb in ensemble.member.data:
+            #print('DBUG',mb)
+            member = ensemble.sel(member=mb).rr.data.flatten()
+            P = P + np.diag((member-ensemble_mean)**2)
+            #P = P + np.outer(member-ensemble_mean, member-ensemble_mean)*np.exp(-self.dist/self.ld)
+#        P = P/len(ensemble.member)**2  # TODO check denominator
+        P = P/(len(ensemble.member)-1)
+#        P = np.sqrt(P)
+        #P.reshape(len(ensemble.lat), len(ensemble.lon))  # To reshape back as 2D field
+
+#        M = ensemble.mean('member').rr.data
+#        P = np.empty(np.shape(M))
+#        for mb in ensemble.member.data:
+#            member = ensemble.sel(member=mb).rr.data
+#            P = P + (member-M)*(member-M)
+#        P = np.sqrt(P)
+
+        return P
+
+    def observation_error_covariance(self, std):
+        """
+        R =
+        """
+        #R = np.diag(std*std)  # neglecting correlations
+        R = np.outer(std, std)*np.exp(-self.dist/self.ld)
+        #R = std*std
+
+        return R
+
+    @speedtest
+    def run(self):
+        """ 
+        Main method that loop over the assimilation dates and grid points.
+        TODO : compléter la doc sur la méthode
+        """
+
+        if self.plot:
+            # On profite de la loop sur les membres pour tracer les ensembles bruts avant et après interpolation
+            fig1, axes1 = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
+            fig2, axes2 = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
+        i = 0
+        j = 0
+
+        for idd,date in enumerate(self.period):
+            print(date)
+            t1 = time.time()
+            # On réduit le dataset maintenant pour gagner du temps ensuite
+            ensemble = self.ensemble.sel({'time':date}).compute()  # Load data into memory now
+
+            self.date_str = date.strftime('%Y%m%d%H')
+            if self.plot:
+                if not os.path.exists(self.date_str):
+                    os.makedirs(self.date_str)
+
+            parameters = self.parameters.sel({'time':date})
+
+            Y = parameters.rr.data.flatten()  # Observation vector
+            self.rrmin = 0.
+            self.rrmax = max(
+                    np.nanmax(ensemble.rr.data),
+                    np.nanmax(Y)
+                    )
+
+            if np.max(Y) > 20:
+
+                if not os.path.exists(f'{self.date_str}'):
+                    os.makedirs(f'{self.date_str}')
+
+                # Compute Euclidian distance between all points in the domain
+                from scipy.spatial.distance import cdist
+                coords=[(lon,lat) for lon in parameters.lon.data for lat in parameters.lat.data]
+                self.dist = cdist(coords,coords)
+                self.ld = 0.05  # correlation lenght
+
+                P = self.background_error_covariance(ensemble)  # Background error covariance matrix
+
+                #Y = parameters.rr.data
+                #R = self.observation_error_covariance(obs)
+                #R = self.observation_error_covariance(parameters.sigma.data.flatten())  # Observation error covariance matrix
+
+                # TODO : TMP
+                from scipy.ndimage import uniform_filter
+                smoothobs = uniform_filter(parameters.rr.data, size=30)
+                smoothmatrix = np.diag(smoothobs.flatten())
+
+                #errobs = np.abs(parameters.rr.data-smoothobs).flatten()
+                #R = np.outer(errobs, errobs)*np.exp(-self.dist/self.ld)
+                #R = np.outer(errobs, errobs)
+                Rdyn = np.diag(((parameters.rr.data-smoothobs)**2).flatten())
+                Rdyn = Rdyn/np.max(Rdyn)
+                std = parameters.sigma.data
+                Rstat = np.diag((std*std).flatten())  # neglecting correlations
+                Rstat = Rstat/np.max(Rstat)
+
+                #R=Rdyn
+                R=Rstat
+                #R=(Rdyn+Rstat)/2
+
+                #R = self.observation_error_covariance(parameters.sigma.data)  # Observation error covariance matrix
+
+                P = P/np.max(P)
+
+                H = np.identity(len(P))  # Forward operator (useless in this case)
+
+                #Kalman gain
+                ############################################
+                #X=np.array([39.936, 39.272])
+                #Y=np.array([12.406, 10.406])
+                #P=np.array([[8.490,8.339],[8.339,8.219]])
+                #R=R=np.array([[8.646,4.461],[4.461,2.302]])
+                #inv=np.linalg.inv(P+R)
+                #K=np.dot(P,inv)
+                ############################################
+                #K  = np.matmul(np.matmul(P, H.T), np.linalg.inv(np.matmul(np.matmul(H, P), H.T) + R))  # K=PH'(HPH'+R)^-1
+                K  = np.matmul(P, np.linalg.inv(P+R))  # K=P(P+R)^-1
+
+                # Plot matrices
+                self.plot_matrix(smoothmatrix, parameters.rr, 'Smoothed observation field', f'{self.date_str}/Smooth_Obs.pdf', cmap=plt.cm.YlGnBu)
+                self.plot_matrix(P, parameters.rr, 'Background_ECM_diagonal', f'{self.date_str}/Background_ECM.pdf', cmap=plt.cm.viridis)
+                self.plot_matrix(R, parameters.rr, 'Observation_ECM_diagonal', f'{self.date_str}/Observation_ECM.pdf', cmap=plt.cm.viridis)
+                self.plot_matrix(K, parameters.rr, 'Kalman_Gain_diagonal', f'{self.date_str}/Kalman_Gain.pdf', cmap=plt.cm.coolwarm, vmin=0, vmax=1)
+
+                fig1,ax1 = plt.subplots(nrows=4, ncols=4, figsize=(16,7))
+                fig2,ax2 = plt.subplots(nrows=4, ncols=4, figsize=(16,7))
+                i = 0
+                j = 0
+                self.plot_obs(parameters)
+                for member in ensemble.member:
+                    raw = ensemble.sel({'member':member}).rr
+                    X = raw.data.flatten()  # Ensemble member vector
+                    #X = raw.data  # Ensemble member vector
+                    #K,A = self.analyseKF(X, P, H, Y, R)  # ENKF analysis vector
+                    A = X + np.matmul(K, Y-X)
+
+                    analysis = xr.DataArray(
+                        name   = 'rr',
+                        data   = A.reshape((len(raw.lat), len(raw.lon))),
+                        dims   = ["lat", "lon"],
+                        coords = dict(lon=raw.lon, lat=raw.lat),
+                    )
+                    im1 = plot_field(raw, ax1[i,j], self.rrmin, self.rrmax)
+                    im2 = plot_field(analysis, ax2[i,j], self.rrmin, self.rrmax)
+                    ax1[i,j].set_title(None)
+                    ax2[i,j].set_title(None)
+                    j = j + 1
+                    if j==4:
+                        j = 0
+                        i = i + 1
+
+                finalize_fig(fig1, im1, label='24-hour precipitation (mm)', outname=f'{self.date_str}/RAW_{self.date_str}.pdf')
+                finalize_fig(fig2, im2, label='24-hour precipitation (mm)', outname=f'{self.date_str}/ASSIM_{self.date_str}.pdf')
+
+                t2 = time.time()
+                print(f'Assimilation for date {self.date_str} took {(t2-t1)*1000.}ms')
+
+    def plot_matrix(self, matrix, ref_field, label, outname, cmap=plt.cm.YlGnBu, vmin=None, vmax=None):
+        diag = np.array([matrix[i,i] for i in range(len(matrix))])
+        field = xr.DataArray(
+                name   = 'rr',
+                data   = diag.reshape((len(ref_field.lat), len(ref_field.lon))),
+                dims   = ["lat", "lon"],
+                coords = dict(lon=ref_field.lon, lat=ref_field.lat),
+            )
+        fig,ax = plt.subplots(figsize=(16,8))
+        if vmin is None:
+            vmin = np.min(diag)
+        if vmax is None:
+            vmax=np.max(diag)
+        im = plot_field(field, ax, vmin=vmin, vmax=vmax, cmap=cmap)
+        finalize_fig(fig, im, label=label, outname=outname)
+
+
+class ParticleFilter(Assimilation):
+
+#    @speedtest
+    def resample(self, weights, Ne):
+        """ Ne is the number of members to draw for the new enesmble """
+        import random
+        #Ne = len(self.members)
+        step = 1/Ne
+        # Sort particules on [0,1[ according to their weight
+        cumulated_weights = np.cumsum(weights, axis=0)
+        #for i in range(1, Ne+1):
+        selected_particles = list()
+        # Random draw between [0, 1/Ne[
+        rdm = random.uniform(0, step)
+        #rdm = np.random.random_sample(np.shape(cumulated_weights[0]))*step
+        while rdm <= 1:
+            # Select particle indicies in wich rdm falls
+            #selected_particles.append(np.searchsorted(cumulated_weights, rdm)+1)
+            #selected_particles.append(np.apply_along_axis(lambda a: a.searchsorted(rdm), axis=0, arr=cumulated_weights)+1)
+            selected_particles.append(int(np.apply_along_axis(lambda a: a.searchsorted(rdm), axis=0, arr=cumulated_weights)))  # add index value (int)
+            # Go 1 step forward and start again
+            rdm += step
+        return selected_particles
 
 #    @speedtest
     def weighting(self, x, mu, sigma, obs, plot_distribution=False, **kw):
@@ -1317,23 +1555,35 @@ if __name__ == "__main__":
         globalfields = None
 
     interp_ensemble = pearome.interp(lon=antilope.lon, lat=antilope.lat).clip(0)  # Avoid <0 precipitation values
-    pf = ParticleFilter(extract_period, antilope, interp_ensemble, nivometeo, args.plot, args.frequency, args.gridded, args.localisation, args.mask, args.debiasing, args.domain, args.likelyhood)
-    mask = pf.pdf_parameters()
-    pf.run()  # Compute weight fields before normalisation + plot raw/interp fields
-    #pf.selection()  # Global and local selections
 
-    localfields, globalfields = pf.output(localfields, globalfields)
+
+    # Assimilation
+    # ------------
+
+    if args.assimilation == 'pf':  # 1. Particle Filter
+
+        pf = ParticleFilter(extract_period, antilope, interp_ensemble, nivometeo, args.plot, args.frequency, args.gridded, args.localisation, args.mask, args.debiasing, args.domain, args.likelyhood)
+        mask = pf.pdf_parameters()
+        pf.run()  # Compute weight fields before normalisation + plot raw/interp fields
+        #pf.selection()  # Global and local selections
+        localfields, globalfields = pf.output(localfields, globalfields)
 
 #    plot_chrono(extract_period, antilope, pearome, localfields)
-    outname = f"Assimilation_locale_{args.datebegin.strftime('%Y%m%d%H')}_{args.dateend.strftime('%Y%m%d%H')}_{args.frequency}_{args.domain}"
-    if args.localisation is not None:
-        outname = '_'.join([outname, f'localisation{args.localisation}'])
-    if mask is not None:
-        outname = '_'.join([outname, f'mask{mask}'])
-    if args.debiasing is not None:
-        outname = '_'.join([outname, f'debiasing{args.debiasing}'])
-    localfields.to_netcdf(f"{outname}.nc")
-    #globalfields.to_netcdf(f"Assimilation_globale_{args.datebegin.strftime('%Y%m%d%H')}_{args.dateend.strftime('%Y%m%d%H')}_{args.frequency}.nc")
+        outname = f"Assimilation_locale_{args.datebegin.strftime('%Y%m%d%H')}_{args.dateend.strftime('%Y%m%d%H')}_{args.frequency}_{args.domain}"
+        if args.localisation is not None:
+            outname = '_'.join([outname, f'localisation{args.localisation}'])
+        if mask is not None:
+            outname = '_'.join([outname, f'mask{mask}'])
+        if args.debiasing is not None:
+            outname = '_'.join([outname, f'debiasing{args.debiasing}'])
+        localfields.to_netcdf(f"{outname}.nc")
+        #globalfields.to_netcdf(f"Assimilation_globale_{args.datebegin.strftime('%Y%m%d%H')}_{args.dateend.strftime('%Y%m%d%H')}_{args.frequency}.nc")
+
+    elif args.assimilation == 'enkf':  # 2. Ensemble Kalman Filter
+
+        enkf = EnsembleKalmanFilter(extract_period, antilope, interp_ensemble, nivometeo, args.plot, args.frequency, args.gridded, args.localisation, args.mask, args.debiasing, args.domain, args.likelyhood)
+        mask = enkf.pdf_parameters()
+        enkf.run()
 
     tfin = time.time()
     print(f'Total execution time : {(tfin-t0)/60.} minutes')
