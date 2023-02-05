@@ -326,8 +326,8 @@ def plot3D(X, Y, Z, colors, date):
 
 def plot_field(field, ax, vmin, vmax, title=None, cmap=plt.cm.YlGnBu):
     im = field.plot(ax=ax, add_colorbar=False, vmin=vmin, vmax=vmax, cmap=cmap)
-    for landmark, infos in landmarks.items():
-        ax.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='red', markersize=4)
+#    for landmark, infos in landmarks.items():
+#        ax.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='red', markersize=4)
     ax.set_aspect('equal')
     ax.axis('off')
     if title is not None:
@@ -505,12 +505,14 @@ class Assimilation(object):
     def plot_obs(self, field):
         mnt = xr.open_dataset('/home/vernaym/QGIS/MNT/DEM_ALPES_WGS84_250m_bilinear.nc')  # Pour tracer sur toutes les Alpes
         # Plot ANTILOPE precipitation field
-        fig = plt.figure(figsize=(18,8))
+        #fig = plt.figure(figsize=(18,8))
+        fig = plt.figure(figsize=(14,16))
         field.rr.plot(vmin=0, vmax=self.rrmax, cmap=plt.cm.YlGnBu, cbar_kwargs={'label': "24 hour precipitation (mm)"})  # quadmesh object
         # Add landmarks
-        for landmark, infos in landmarks.items():
-            plt.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='red', markersize=10)
-            plt.annotate(landmark, (infos['lon']+0.003, infos['lat']+0.003), color='red', fontsize=20)
+        if self.domain == 'GrandesRousses':
+            for landmark, infos in landmarks.items():
+                plt.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='red', markersize=10)
+                plt.annotate(landmark, (infos['lon']+0.003, infos['lat']+0.003), color='red', fontsize=20)
 
         plt.xticks(fontsize=16)
         plt.yticks(fontsize=16)
@@ -520,7 +522,7 @@ class Assimilation(object):
         ax.axes.get_xaxis().get_label().set_visible(False)
         ax.axes.get_yaxis().get_label().set_visible(False)
         fig.tight_layout()
-        fig.savefig(f'{self.date_str}/OBS_{self.date_str}.pdf', format='pdf')
+        fig.savefig(f'{self.date_str}/OBS_{self.date_str}_{self.domain}.pdf', format='pdf')
 
         # Plot 3D ANTILOPE precipitation field
 #        tmp = mnt.interp(lon=self.radar.lon, lat=self.radar.lat, method='nearest')  # Pour interpoller le MNT sur la grille ANTILOPE
@@ -660,7 +662,8 @@ class Assimilation(object):
         #-----------------------------------------------------------------------
 
     def plot_ensemble(ensemble, label):
-        fig,ax = plt.subplots(nrows=4, ncols=4, figsize=(16,7))
+        #fig,ax = plt.subplots(nrows=4, ncols=4, figsize=(16,7))
+        fig,ax = plt.subplots(nrows=2, ncols=8, figsize=(16,16))
         i = 0
         j = 0
         for member in ensemble.member.data:
@@ -669,7 +672,7 @@ class Assimilation(object):
             if j==4:
                 j = 0
                 i = i + 1
-        fig.savefig(f"{self.date_str}/{label}_{self.date_str}.pdf", format='pdf')
+        fig.savefig(f"{self.date_str}/{label}_{self.date_str}_{self.domain}.pdf", format='pdf')
 #    fig, ax = plt.subplots(figsize=(4,4))
 #    i = 0
 #    j = 0
@@ -758,17 +761,19 @@ class EnsembleKalmanFilter(Assimilation):
         """
         P = sum((Xi-Xmean)(Xi-Xmean)')
         """
-        ensemble_mean = ensemble.mean('member').rr.data.flatten()  # flatten is optionnal since 'outer' method already flattens a 2D array
+        ensemble_mean = ensemble.mean('member').rr.data  # flatten is optionnal since 'outer' method already flattens a 2D array
         M = np.mean(ensemble_mean)
 #        P = np.outer(ensemble_mean-M, ensemble_mean-M)/len(ensemble_mean)
-        P = np.empty((len(ensemble_mean), len(ensemble_mean)))
+        #P = np.empty((len(ensemble_mean), len(ensemble_mean)))
+        P = np.empty(np.shape(ensemble_mean))
         for mb in ensemble.member.data:
-            #print('DBUG',mb)
-            member = ensemble.sel(member=mb).rr.data.flatten()
-            P = P + np.diag((member-ensemble_mean)**2)
+            member = ensemble.sel(member=mb).rr.data
+            P = P + (member-ensemble_mean)**2
+            #P = P + np.diag((member-ensemble_mean)**2)
             #P = P + np.outer(member-ensemble_mean, member-ensemble_mean)*np.exp(-self.dist/self.ld)
 #        P = P/len(ensemble.member)**2  # TODO check denominator
         P = P/(len(ensemble.member)-1)
+        #P = np.diag(P)
 #        P = np.sqrt(P)
         #P.reshape(len(ensemble.lat), len(ensemble.lon))  # To reshape back as 2D field
 
@@ -798,6 +803,30 @@ class EnsembleKalmanFilter(Assimilation):
         TODO : compléter la doc sur la méthode
         """
 
+        # Initialisation of output fields
+        if self.gridded:
+            self.nlon, self.nlat = len(self.radar.lon), len(self.radar.lat)
+            null  = np.empty((self.nlat, self.nlon, len(self.period)))  # 2D (lat/lon) field
+
+        else:
+            self.nposte = len(self.nivometeo.num_poste)
+            null = np.empty((self.nposte, len(self.period)))
+            #self.nb_out_raw = np.zeros(self.nposte)  # Count number of obs outside raw ensemble
+            # Extract evalution points
+            evaluation_points = zip(self.nivometeo.num_poste.data, np.max(self.nivometeo.lat, axis=1).data, np.max(self.nivometeo.lon, axis=1).data)
+            idx = list()
+            idy = list()
+            for idp, (num_poste, lat, lon) in enumerate(evaluation_points):
+                #print(num_poste)
+                nearest_lat = nearest(self.radar.lat, lat)
+                nearest_lon = nearest(self.radar.lon, lon)
+                idy.append(np.where(self.radar.lat.data==nearest_lat)[0][0])  # index of the corresponding antilope pixel latitude
+                idx.append(np.where(self.radar.lon.data==nearest_lon)[0][0])  # index of the corresponding antilope pixel longitude
+            actual_ensemble = self.ensemble.isel(lat=xr.DataArray(idy, dims='poste'),lon=xr.DataArray(idx, dims='poste'))
+            actual_parameters = self.parameters.isel(lat=xr.DataArray(idy, dims='poste'),lon=xr.DataArray(idx, dims='poste'))
+
+        self.newlocalfield = {m:null.copy() for m in range(1, self.Ne+1)}
+
         if self.plot:
             # On profite de la loop sur les membres pour tracer les ensembles bruts avant et après interpolation
             fig1, axes1 = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
@@ -809,113 +838,142 @@ class EnsembleKalmanFilter(Assimilation):
             print(date)
             t1 = time.time()
             # On réduit le dataset maintenant pour gagner du temps ensuite
-            ensemble = self.ensemble.sel({'time':date}).compute()  # Load data into memory now
+            ensemble = actual_ensemble.sel({'time':date}).compute()  # Load data into memory now
 
             self.date_str = date.strftime('%Y%m%d%H')
             if self.plot:
                 if not os.path.exists(self.date_str):
                     os.makedirs(self.date_str)
 
-            parameters = self.parameters.sel({'time':date})
+            parameters = actual_parameters.sel({'time':date})
 
-            Y = parameters.rr.data.flatten()  # Observation vector
+            Y = parameters.rr.data  # Observation vector
             self.rrmin = 0.
             self.rrmax = max(
                     np.nanmax(ensemble.rr.data),
                     np.nanmax(Y)
                     )
 
-            if np.max(Y) > 20:
+#            if np.max(Y) > 20:
 
-                if not os.path.exists(f'{self.date_str}'):
-                    os.makedirs(f'{self.date_str}')
+            if self.plot and not os.path.exists(f'{self.date_str}'):
+                os.makedirs(f'{self.date_str}')
 
-                # Compute Euclidian distance between all points in the domain
-                from scipy.spatial.distance import cdist
-                coords=[(lon,lat) for lon in parameters.lon.data for lat in parameters.lat.data]
-                self.dist = cdist(coords,coords)
-                self.ld = 0.05  # correlation lenght
+            # Compute Euclidian distance between all points in the domain
+#            from scipy.spatial.distance import cdist
+#            coords=[(lon,lat) for lon in parameters.lon.data for lat in parameters.lat.data]
+#            self.dist = cdist(coords,coords)
+#            self.ld = 0.05  # correlation lenght
 
-                P = self.background_error_covariance(ensemble)  # Background error covariance matrix
+            P = self.background_error_covariance(ensemble)  # Background error covariance matrix
 
-                #Y = parameters.rr.data
-                #R = self.observation_error_covariance(obs)
-                #R = self.observation_error_covariance(parameters.sigma.data.flatten())  # Observation error covariance matrix
+            #Y = parameters.rr.data
+            #R = self.observation_error_covariance(obs)
+            #R = self.observation_error_covariance(parameters.sigma.data.flatten())  # Observation error covariance matrix
 
-                # TODO : TMP
-                from scipy.ndimage import uniform_filter
-                smoothobs = uniform_filter(parameters.rr.data, size=30)
-                smoothmatrix = np.diag(smoothobs.flatten())
+            # TODO : TMP
+            from scipy.ndimage import uniform_filter
+#                smoothobs = uniform_filter(parameters.rr.data, size=30)
+#                smoothmatrix = np.diag(smoothobs.flatten())
 
-                #errobs = np.abs(parameters.rr.data-smoothobs).flatten()
-                #R = np.outer(errobs, errobs)*np.exp(-self.dist/self.ld)
-                #R = np.outer(errobs, errobs)
-                Rdyn = np.diag(((parameters.rr.data-smoothobs)**2).flatten())
-                Rdyn = Rdyn/np.max(Rdyn)
-                std = parameters.sigma.data
-                Rstat = np.diag((std*std).flatten())  # neglecting correlations
-                Rstat = Rstat/np.max(Rstat)
+            #errobs = np.abs(parameters.rr.data-smoothobs).flatten()
+            #R = np.outer(errobs, errobs)*np.exp(-self.dist/self.ld)
+            #R = np.outer(errobs, errobs)
+#                Rdyn = np.diag(((parameters.rr.data-smoothobs)**2).flatten())
+#                Rdyn = Rdyn/np.max(Rdyn)
+            std = parameters.sigma.data
+            Rstat = std**2
+            #Rstat = np.diag((std*std).flatten())  # neglecting correlations
+            Rstat = Rstat/np.max(Rstat)
 
-                #R=Rdyn
-                R=Rstat
-                #R=(Rdyn+Rstat)/2
+            #R=Rdyn
+            R=Rstat
+            #R=(Rdyn+Rstat)/2
 
-                #R = self.observation_error_covariance(parameters.sigma.data)  # Observation error covariance matrix
+            #R = self.observation_error_covariance(parameters.sigma.data)  # Observation error covariance matrix
 
-                P = P/np.max(P)
+            P = P/np.max(P)
 
-                H = np.identity(len(P))  # Forward operator (useless in this case)
+            H = np.identity(len(P))  # Forward operator (useless in this case)
 
-                #Kalman gain
-                ############################################
-                #X=np.array([39.936, 39.272])
-                #Y=np.array([12.406, 10.406])
-                #P=np.array([[8.490,8.339],[8.339,8.219]])
-                #R=R=np.array([[8.646,4.461],[4.461,2.302]])
-                #inv=np.linalg.inv(P+R)
-                #K=np.dot(P,inv)
-                ############################################
-                #K  = np.matmul(np.matmul(P, H.T), np.linalg.inv(np.matmul(np.matmul(H, P), H.T) + R))  # K=PH'(HPH'+R)^-1
-                K  = np.matmul(P, np.linalg.inv(P+R))  # K=P(P+R)^-1
+            #Kalman gain
+            ############################################
+            #X=np.array([39.936, 39.272])
+            #Y=np.array([12.406, 10.406])
+            #P=np.array([[8.490,8.339],[8.339,8.219]])
+            #R=R=np.array([[8.646,4.461],[4.461,2.302]])
+            #inv=np.linalg.inv(P+R)
+            #K=np.dot(P,inv)
+            ############################################
+            #K  = np.matmul(np.matmul(P, H.T), np.linalg.inv(np.matmul(np.matmul(H, P), H.T) + R))  # K=PH'(HPH'+R)^-1
+            #K  = np.matmul(P, np.linalg.inv(P+R))  # K=P(P+R)^-1
+            K = P/(P+R)
 
+            if self.plot:
                 # Plot matrices
-                self.plot_matrix(smoothmatrix, parameters.rr, 'Smoothed observation field', f'{self.date_str}/Smooth_Obs.pdf', cmap=plt.cm.YlGnBu)
-                self.plot_matrix(P, parameters.rr, 'Background_ECM_diagonal', f'{self.date_str}/Background_ECM.pdf', cmap=plt.cm.viridis)
-                self.plot_matrix(R, parameters.rr, 'Observation_ECM_diagonal', f'{self.date_str}/Observation_ECM.pdf', cmap=plt.cm.viridis)
-                self.plot_matrix(K, parameters.rr, 'Kalman_Gain_diagonal', f'{self.date_str}/Kalman_Gain.pdf', cmap=plt.cm.coolwarm, vmin=0, vmax=1)
+#                    self.plot_matrix(smoothmatrix, parameters.rr, 'Smoothed observation field', f'{self.date_str}/Smooth_Obs.pdf', cmap=plt.cm.YlGnBu)
+#                    self.plot_matrix(P, parameters.rr, 'Background_ECM_diagonal', f'{self.date_str}/Background_ECM_{self.domain}.pdf', cmap=plt.cm.viridis)
+#                    self.plot_matrix(R, parameters.rr, 'Observation_ECM_diagonal', f'{self.date_str}/Observation_ECM_{self.domain}.pdf', cmap=plt.cm.viridis)
+#                    self.plot_matrix(K, parameters.rr, 'Kalman_Gain_diagonal', f'{self.date_str}/Kalman_Gain_{self.domain}.pdf', cmap=plt.cm.coolwarm, vmin=0, vmax=1)
+                # Plot fields
+                self.plot_array(P, parameters.rr, 'Background_ECM', f'{self.date_str}/Background_ECM_{self.domain}.pdf', cmap=plt.cm.viridis)
+                self.plot_array(R, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_ECM_{self.domain}.pdf', cmap=plt.cm.viridis)
+                self.plot_array(K, parameters.rr, 'Kalman_Gain', f'{self.date_str}/Kalman_Gain_{self.domain}.pdf', cmap=plt.cm.coolwarm, vmin=0, vmax=1)
 
-                fig1,ax1 = plt.subplots(nrows=4, ncols=4, figsize=(16,7))
-                fig2,ax2 = plt.subplots(nrows=4, ncols=4, figsize=(16,7))
+#                    fig1,ax1 = plt.subplots(nrows=4, ncols=4, figsize=(16,7))
+#                    fig2,ax2 = plt.subplots(nrows=4, ncols=4, figsize=(16,7))
+                fig1,ax1 = plt.subplots(nrows=2, ncols=8, figsize=(16,10))
+                fig2,ax2 = plt.subplots(nrows=2, ncols=8, figsize=(16,10))
                 i = 0
                 j = 0
                 self.plot_obs(parameters)
-                for member in ensemble.member:
-                    raw = ensemble.sel({'member':member}).rr
-                    X = raw.data.flatten()  # Ensemble member vector
-                    #X = raw.data  # Ensemble member vector
-                    #K,A = self.analyseKF(X, P, H, Y, R)  # ENKF analysis vector
-                    A = X + np.matmul(K, Y-X)
 
+            for member in ensemble.member.data:
+                raw = ensemble.sel({'member':member}).rr
+                X = raw.data  # Ensemble member vector
+                #X = raw.data  # Ensemble member vector
+                #K,A = self.analyseKF(X, P, H, Y, R)  # ENKF analysis vector
+                #A = X + np.matmul(K, Y-X)
+                A = X + K*(Y-X)
+
+                if self.gridded:
                     analysis = xr.DataArray(
                         name   = 'rr',
-                        data   = A.reshape((len(raw.lat), len(raw.lon))),
+                        #data   = A.reshape((len(raw.lat), len(raw.lon))),
+                        data   = A,
                         dims   = ["lat", "lon"],
                         coords = dict(lon=raw.lon, lat=raw.lat),
                     )
+                else:
+                    analysis = xr.DataArray(
+                        name   = 'rr',
+                        data   = A,
+                        dims   = ["poste"],
+                        coords = dict(poste=raw.poste),
+                    )
+
+                    self.newlocalfield[member][:,idd] = A
+
+                if self.plot:
                     im1 = plot_field(raw, ax1[i,j], self.rrmin, self.rrmax)
                     im2 = plot_field(analysis, ax2[i,j], self.rrmin, self.rrmax)
                     ax1[i,j].set_title(None)
                     ax2[i,j].set_title(None)
+#                        j = j + 1
+#                        if j==4:
+#                            j = 0
+#                            i = i + 1
                     j = j + 1
-                    if j==4:
+                    if j==8:
                         j = 0
                         i = i + 1
 
-                finalize_fig(fig1, im1, label='24-hour precipitation (mm)', outname=f'{self.date_str}/RAW_{self.date_str}.pdf')
-                finalize_fig(fig2, im2, label='24-hour precipitation (mm)', outname=f'{self.date_str}/ASSIM_{self.date_str}.pdf')
+            if self.plot:
+                finalize_fig(fig1, im1, label='24-hour precipitation (mm)', outname=f'{self.date_str}/RAW_{self.date_str}_{self.domain}.pdf')
+                finalize_fig(fig2, im2, label='24-hour precipitation (mm)', outname=f'{self.date_str}/ASSIM_{self.date_str}_{self.domain}.pdf')
 
-                t2 = time.time()
-                print(f'Assimilation for date {self.date_str} took {(t2-t1)*1000.}ms')
+            t2 = time.time()
+            print(f'Assimilation for date {self.date_str} took {(t2-t1)*1000.}ms')
 
     def plot_matrix(self, matrix, ref_field, label, outname, cmap=plt.cm.YlGnBu, vmin=None, vmax=None):
         diag = np.array([matrix[i,i] for i in range(len(matrix))])
@@ -925,7 +983,8 @@ class EnsembleKalmanFilter(Assimilation):
                 dims   = ["lat", "lon"],
                 coords = dict(lon=ref_field.lon, lat=ref_field.lat),
             )
-        fig,ax = plt.subplots(figsize=(16,8))
+        #fig,ax = plt.subplots(figsize=(16,8))
+        fig,ax = plt.subplots(figsize=(10,12))
         if vmin is None:
             vmin = np.min(diag)
         if vmax is None:
@@ -933,6 +992,34 @@ class EnsembleKalmanFilter(Assimilation):
         im = plot_field(field, ax, vmin=vmin, vmax=vmax, cmap=cmap)
         finalize_fig(fig, im, label=label, outname=outname)
 
+    def plot_array(self, array, ref_field, label, outname, cmap=plt.cm.YlGnBu, vmin=None, vmax=None):
+        field = xr.DataArray(
+                name   = 'rr',
+                data   = array,
+                dims   = ["lat", "lon"],
+                coords = dict(lon=ref_field.lon, lat=ref_field.lat),
+            )
+        #fig,ax = plt.subplots(figsize=(16,8))
+        fig,ax = plt.subplots(figsize=(14,16))
+        if vmin is None:
+            vmin = np.min(array)
+        if vmax is None:
+            vmax=np.max(array)
+        im = plot_field(field, ax, vmin=vmin, vmax=vmax, cmap=cmap)
+        finalize_fig(fig, im, label=label, outname=outname)
+
+    @speedtest
+    def output(self, outfield):
+
+        i = 0
+        j = 0
+        for m in range(1, self.Ne+1):
+            outfield.loc[{'member':m}] = self.newlocalfield[m]  # self.newlocalfield is a numpy array
+
+        if self.plot:
+            plt.close('all')
+
+        return outfield
 
 class ParticleFilter(Assimilation):
 
@@ -1584,6 +1671,9 @@ if __name__ == "__main__":
         enkf = EnsembleKalmanFilter(extract_period, antilope, interp_ensemble, nivometeo, args.plot, args.frequency, args.gridded, args.localisation, args.mask, args.debiasing, args.domain, args.likelyhood)
         mask = enkf.pdf_parameters()
         enkf.run()
+        out = enkf.output(localfields)
+        outname = f"EnKF_{args.datebegin.strftime('%Y%m%d%H')}_{args.dateend.strftime('%Y%m%d%H')}_{args.frequency}_{args.domain}"
+        out.to_netcdf(f"{outname}.nc")
 
     tfin = time.time()
     print(f'Total execution time : {(tfin-t0)/60.} minutes')
