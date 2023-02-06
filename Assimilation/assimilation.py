@@ -7,6 +7,7 @@ import os, sys
 from datetime import datetime,timedelta
 import pandas as pd  # Version 0.25.3
 import numpy as np
+from scipy.ndimage import uniform_filter
 import xarray as xr
 import glob
 #import copy
@@ -871,24 +872,33 @@ class EnsembleKalmanFilter(Assimilation):
             #R = self.observation_error_covariance(obs)
             #R = self.observation_error_covariance(parameters.sigma.data.flatten())  # Observation error covariance matrix
 
-            # TODO : TMP
-            from scipy.ndimage import uniform_filter
-#                smoothobs = uniform_filter(parameters.rr.data, size=30)
-#                smoothmatrix = np.diag(smoothobs.flatten())
-
             #errobs = np.abs(parameters.rr.data-smoothobs).flatten()
             #R = np.outer(errobs, errobs)*np.exp(-self.dist/self.ld)
             #R = np.outer(errobs, errobs)
-#                Rdyn = np.diag(((parameters.rr.data-smoothobs)**2).flatten())
-#                Rdyn = Rdyn/np.max(Rdyn)
+
+            # Smooth observation to compute dynamic observation error
+            smoothobs = uniform_filter(self.parameters.sel({'time':date}).rr, size=30)  # numpy array
+            smoothobs = xr.DataArray(
+                name   = 'rr',
+                data   = smoothobs,
+                dims   = ["lat", "lon"],
+                coords = dict(lon=self.parameters.lon, lat=self.parameters.lat),
+            )
+            if not self.gridded:
+                smoothobs = smoothobs.isel(lat=xr.DataArray(idy, dims='poste'),lon=xr.DataArray(idx, dims='poste'))
+
+            #Rdyn = np.diag(((parameters.rr.data-smoothobs.rr.data)**2).flatten())
+            Rdyn = (Y-smoothobs.data)**2
+            Rdyn = Rdyn/np.max(Rdyn)
             std = parameters.sigma.data
             Rstat = std**2
             #Rstat = np.diag((std*std).flatten())  # neglecting correlations
             Rstat = Rstat/np.max(Rstat)
 
             #R=Rdyn
-            R=Rstat
+            #R=Rstat
             #R=(Rdyn+Rstat)/2
+            R=Rdyn+Rstat
 
             #R = self.observation_error_covariance(parameters.sigma.data)  # Observation error covariance matrix
 

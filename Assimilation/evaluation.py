@@ -88,6 +88,8 @@ all_experiments = dict(
         LHM4DL20    = 'XP13_assimilation_horaire_avec_masque_debiaisage_et_localisation20/Assimilation_locale_2021120106_2022050106_hourly_alp_localisation20_mask4_debiasing.nc',
         LHM4DL50    = 'XP14_assimilation_horaire_avec_masque_debiaisage_et_localisation50/Assimilation_locale_2021120106_2022050106_hourly_alp_localisation50_mask4_debiasing.nc',
         LHM4DLS20T6 = 'XP23_assimilation_horaire_avec_masque4_debiaisage1_localisation_20-6/Assimilation_locale_2021120106_2022050106_hourly_alp_localisation20_mask4_debiasing1.nc',
+        KD0         = 'EnsembleKalmanFilter/XP00_Rstat/EnKF_2021120106_2022050106_daily_alp.nc',
+        KD1         = 'EnsembleKalmanFilter/XP01_Rstat_Rdyn/EnKF_2021120106_2022050106_daily_alp.nc',
     )
 
 mask_experiments = dict(
@@ -160,9 +162,16 @@ basic = dict(
         LDD0        = 'XP21_assimilation_quotidienne_avec_debiaisage_uniforme/Assimilation_locale_2021120106_2022050106_daily_alp_debiasing0.nc',
     )
 
+algo = dict(
+        LD0         = 'XP00_assimilation_quotidienne_sans_masque_sans_localisation/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
+        KD0         = 'EnsembleKalmanFilter/XP00_Rstat/EnKF_2021120106_2022050106_daily_alp.nc',
+        KD1         = 'EnsembleKalmanFilter/XP01_Rstat_Rdyn/EnKF_2021120106_2022050106_daily_alp.nc',
+    )
+
 
 experiments_map = dict(
     reference                  = dict(),  # Plot only ANTILOPE and RAW ensemble
+    algo                       = algo,
     basic                      = basic,
     debiaising_experiments     = debiaising_experiments,
     tmp                        = tmp,
@@ -181,34 +190,36 @@ if not os.path.exists(savedir):
 xpid_label = dict(
         antilope      = 'ANTILOPE',
         raw           = 'Raw PEAROME ensemble',
-        GD0           = 'Global daily assimilation',
-        LD0           = 'Daily assimilation with no option',
-        LD0G          = 'Daily assimilation with gamma likelyhood and no option',
-        LDM4          = 'Daily assimilation with mask4',
-        LDM3          = 'Daily assimilation with mask3',
-        LDM1          = 'Daily assimilation with mask1',
-        LDM2          = 'Daily assimilation with mask2',
-        LDM5          = 'Daily assimilation with mask5',
-        LDD0          = 'Daily assimilation with uniform debiasing',
-        LDD1          = 'Daily assimilation with debiasing1',
-        LDD2          = 'Daily assimilation with debiasing2',
-        LDM5D2        = 'Daily assimilation with mask5 and debiasing2',
-        LDM4L         = 'Daily assimilation with mask4 and localization',
-        LDM4D         = 'Daily assimilation with mask4 and debiasing1',
-        LDM4D_BIS     = 'Daily assimilation with mask4 and uniform debiasing1',
-        LDM4LD        = 'Daily assimilation with mask4 and localization and debiasing1',
-        LDM5D2L5      = 'Daily assimilation with mask5 and localization5 and debiasing2',
-        LGDM5D2L5     = 'Daily assimilation with mask5 and localization5 and debiasing2 and gamma likelyhood',
-        LH0           = 'Hourly assimilation with no option',
-        LH0G          = 'Hourly assimilation with gamma likelyhood and no option',
-        LHM4D         = 'Hourly assimilation with mask4 and debiasing1',
-        LHM5D2        = 'Hourly assimilation with mask5 and debiasing2',
-        LHM4DL        = 'Hourly assimilation with mask4 and localization7 and debiasing1',
-        LHM4DL20      = 'Hourly assimilation with mask4 and localization20 and debiasing1',
-        LHM4DL50      = 'Hourly assimilation with mask4 and localization50 and debiasing1',
-        LHM5D2L5      = 'Hourly assimilation with mask5 and localization5 and debiasing2',
-        LGHM5D2L5     = 'Hourly assimilation with gamma likelyhood, mask5 and localization5 and debiasing2',
-        LHM4DLS20T6   = 'Hourly assimilation with mask4 and localization (20,6) and debiasing1',
+        GD0           = 'Global daily analysis',
+        LD0           = 'Daily analysis with PF',
+        LD0G          = 'Daily analysis with gamma likelyhood and no option',
+        LDM4          = 'Daily analysis with mask4',
+        LDM3          = 'Daily analysis with mask3',
+        LDM1          = 'Daily analysis with mask1',
+        LDM2          = 'Daily analysis with mask2',
+        LDM5          = 'Daily analysis with mask5',
+        LDD0          = 'Daily analysis with uniform debiasing',
+        LDD1          = 'Daily analysis with debiasing1',
+        LDD2          = 'Daily analysis with debiasing2',
+        LDM5D2        = 'Daily analysis with mask5 and debiasing2',
+        LDM4L         = 'Daily analysis with mask4 and localization',
+        LDM4D         = 'Daily analysis with mask4 and debiasing1',
+        LDM4D_BIS     = 'Daily analysis with mask4 and uniform debiasing1',
+        LDM4LD        = 'Daily analysis with mask4 and localization and debiasing1',
+        LDM5D2L5      = 'Daily analysis with mask5 and localization5 and debiasing2',
+        LGDM5D2L5     = 'Daily analysis with mask5 and localization5 and debiasing2 and gamma likelyhood',
+        LH0           = 'Hourly analysis with no option',
+        LH0G          = 'Hourly analysis with gamma likelyhood and no option',
+        LHM4D         = 'Hourly analysis with mask4 and debiasing1',
+        LHM5D2        = 'Hourly analysis with mask5 and debiasing2',
+        LHM4DL        = 'Hourly analysis with mask4 and localization7 and debiasing1',
+        LHM4DL20      = 'Hourly analysis with mask4 and localization20 and debiasing1',
+        LHM4DL50      = 'Hourly analysis with mask4 and localization50 and debiasing1',
+        LHM5D2L5      = 'Hourly analysis with mask5 and localization5 and debiasing2',
+        LGHM5D2L5     = 'Hourly analysis with gamma likelyhood, mask5 and localization5 and debiasing2',
+        LHM4DLS20T6   = 'Hourly analysis with mask4 and localization (20,6) and debiasing1',
+        KD0           = 'Daily analysis with Kalman Filter and static R',
+        KD1           = 'Daily analysis with Kalman Filter and Rstat+Rdyn',
     )
 
 
