@@ -90,6 +90,8 @@ all_experiments = dict(
         LHM4DLS20T6 = 'XP23_assimilation_horaire_avec_masque4_debiaisage1_localisation_20-6/Assimilation_locale_2021120106_2022050106_hourly_alp_localisation20_mask4_debiasing1.nc',
         KD0         = 'EnsembleKalmanFilter/XP00_Rstat/EnKF_2021120106_2022050106_daily_alp.nc',
         KD1         = 'EnsembleKalmanFilter/XP01_Rstat_Rdyn/EnKF_2021120106_2022050106_daily_alp.nc',
+        KD2         = 'EnsembleKalmanFilter/XP02_Rdyn/EnKF_2021120106_2022050106_daily_alp.nc',
+        KD3         = 'EnsembleKalmanFilter/XP03_sans_normalisation/EnKF_2021120106_2022050106_daily_alp.nc',
     )
 
 mask_experiments = dict(
@@ -164,8 +166,10 @@ basic = dict(
 
 algo = dict(
         LD0         = 'XP00_assimilation_quotidienne_sans_masque_sans_localisation/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
-        KD0         = 'EnsembleKalmanFilter/XP00_Rstat/EnKF_2021120106_2022050106_daily_alp.nc',
+        #KD0         = 'EnsembleKalmanFilter/XP00_Rstat/EnKF_2021120106_2022050106_daily_alp.nc',
         KD1         = 'EnsembleKalmanFilter/XP01_Rstat_Rdyn/EnKF_2021120106_2022050106_daily_alp.nc',
+        #KD2         = 'EnsembleKalmanFilter/XP02_Rdyn/EnKF_2021120106_2022050106_daily_alp.nc',
+        KD3         = 'EnsembleKalmanFilter/XP03_sans_normalisation/EnKF_2021120106_2022050106_daily_alp.nc',
     )
 
 
@@ -218,8 +222,10 @@ xpid_label = dict(
         LHM5D2L5      = 'Hourly analysis with mask5 and localization5 and debiasing2',
         LGHM5D2L5     = 'Hourly analysis with gamma likelyhood, mask5 and localization5 and debiasing2',
         LHM4DLS20T6   = 'Hourly analysis with mask4 and localization (20,6) and debiasing1',
-        KD0           = 'Daily analysis with Kalman Filter and static R',
-        KD1           = 'Daily analysis with Kalman Filter and Rstat+Rdyn',
+        KD0           = 'Daily analysis with EnKF (Rstat)',
+        KD1           = 'Daily analysis with EnKF (Rstat+Rdyn)',
+        KD2           = 'Daily analysis with EnKF (Rdyn)',
+        KD3           = 'Daily analysis with EnKF without ECM normalisation'
     )
 
 
@@ -275,9 +281,9 @@ class Evaluation(object):
         obs = obs[~np.isnan(obs)]
 
         if np.shape(simu) == np.shape(obs):  # "Simulation" déterministe
-            rmse = np.sqrt(np.nanmean(simu-obs)) if np.nanmean(simu-obs) > 0 else np.nan
+            rmse = np.sqrt(np.nanmean(np.square(simu-obs))) if np.nanmean(simu-obs) > 0 else np.nan
         else:  # Simulation d'ensemble
-            rmse = np.sqrt(np.nanmean(np.square(simu.mean(axis=1) - obs)))
+            rmse = np.sqrt(np.nanmean(np.square(np.median(simu, axis=1) - obs)))
         return rmse
 
     def brier_skill_score(self, simu, obs, ref, threshold=10):

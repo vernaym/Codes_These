@@ -506,8 +506,8 @@ class Assimilation(object):
     def plot_obs(self, field):
         mnt = xr.open_dataset('/home/vernaym/QGIS/MNT/DEM_ALPES_WGS84_250m_bilinear.nc')  # Pour tracer sur toutes les Alpes
         # Plot ANTILOPE precipitation field
-        #fig = plt.figure(figsize=(18,8))
-        fig = plt.figure(figsize=(14,16))
+        fig = plt.figure(figsize=(18,8))
+        #fig = plt.figure(figsize=(14,16))  Alps
         field.rr.plot(vmin=0, vmax=self.rrmax, cmap=plt.cm.YlGnBu, cbar_kwargs={'label': "24 hour precipitation (mm)"})  # quadmesh object
         # Add landmarks
         if self.domain == 'GrandesRousses':
@@ -663,8 +663,8 @@ class Assimilation(object):
         #-----------------------------------------------------------------------
 
     def plot_ensemble(ensemble, label):
-        #fig,ax = plt.subplots(nrows=4, ncols=4, figsize=(16,7))
-        fig,ax = plt.subplots(nrows=2, ncols=8, figsize=(16,16))
+        fig,ax = plt.subplots(nrows=4, ncols=4, figsize=(16,7))
+        #fig,ax = plt.subplots(nrows=2, ncols=8, figsize=(16,16))  # Alps
         i = 0
         j = 0
         for member in ensemble.member.data:
@@ -808,7 +808,8 @@ class EnsembleKalmanFilter(Assimilation):
         if self.gridded:
             self.nlon, self.nlat = len(self.radar.lon), len(self.radar.lat)
             null  = np.empty((self.nlat, self.nlon, len(self.period)))  # 2D (lat/lon) field
-
+            actual_ensemble = self.ensemble
+            actual_parameters = self.parameters
         else:
             self.nposte = len(self.nivometeo.num_poste)
             null = np.empty((self.nposte, len(self.period)))
@@ -889,20 +890,22 @@ class EnsembleKalmanFilter(Assimilation):
 
             #Rdyn = np.diag(((parameters.rr.data-smoothobs.rr.data)**2).flatten())
             Rdyn = (Y-smoothobs.data)**2
-            Rdyn = Rdyn/np.max(Rdyn)
             std = parameters.sigma.data
             Rstat = std**2
             #Rstat = np.diag((std*std).flatten())  # neglecting correlations
-            Rstat = Rstat/np.max(Rstat)
+
+            # Normalisation of ECMs
+            #Rdyn = Rdyn/np.max(Rdyn)
+            #Rstat = Rstat/np.max(Rstat)
+            #P = P/np.max(P)
 
             #R=Rdyn
             #R=Rstat
             #R=(Rdyn+Rstat)/2
             R=Rdyn+Rstat
+            #R=Rdyn
 
             #R = self.observation_error_covariance(parameters.sigma.data)  # Observation error covariance matrix
-
-            P = P/np.max(P)
 
             H = np.identity(len(P))  # Forward operator (useless in this case)
 
@@ -930,10 +933,10 @@ class EnsembleKalmanFilter(Assimilation):
                 self.plot_array(R, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_ECM_{self.domain}.pdf', cmap=plt.cm.viridis)
                 self.plot_array(K, parameters.rr, 'Kalman_Gain', f'{self.date_str}/Kalman_Gain_{self.domain}.pdf', cmap=plt.cm.coolwarm, vmin=0, vmax=1)
 
-#                    fig1,ax1 = plt.subplots(nrows=4, ncols=4, figsize=(16,7))
-#                    fig2,ax2 = plt.subplots(nrows=4, ncols=4, figsize=(16,7))
-                fig1,ax1 = plt.subplots(nrows=2, ncols=8, figsize=(16,10))
-                fig2,ax2 = plt.subplots(nrows=2, ncols=8, figsize=(16,10))
+                fig1,ax1 = plt.subplots(nrows=4, ncols=4, figsize=(16,7))
+                fig2,ax2 = plt.subplots(nrows=4, ncols=4, figsize=(16,7))
+                #fig1,ax1 = plt.subplots(nrows=2, ncols=8, figsize=(16,10))
+                #fig2,ax2 = plt.subplots(nrows=2, ncols=8, figsize=(16,10))
                 i = 0
                 j = 0
                 self.plot_obs(parameters)
@@ -969,14 +972,15 @@ class EnsembleKalmanFilter(Assimilation):
                     im2 = plot_field(analysis, ax2[i,j], self.rrmin, self.rrmax)
                     ax1[i,j].set_title(None)
                     ax2[i,j].set_title(None)
-#                        j = j + 1
-#                        if j==4:
-#                            j = 0
-#                            i = i + 1
                     j = j + 1
-                    if j==8:
+                    if j==4:
                         j = 0
                         i = i + 1
+                    # Alps :
+                    #j = j + 1
+                    #if j==8:
+                    #    j = 0
+                    #    i = i + 1
 
             if self.plot:
                 finalize_fig(fig1, im1, label='24-hour precipitation (mm)', outname=f'{self.date_str}/RAW_{self.date_str}_{self.domain}.pdf')
@@ -993,8 +997,8 @@ class EnsembleKalmanFilter(Assimilation):
                 dims   = ["lat", "lon"],
                 coords = dict(lon=ref_field.lon, lat=ref_field.lat),
             )
-        #fig,ax = plt.subplots(figsize=(16,8))
-        fig,ax = plt.subplots(figsize=(10,12))
+        fig,ax = plt.subplots(figsize=(16,8))
+        #fig,ax = plt.subplots(figsize=(10,12))  #Alps
         if vmin is None:
             vmin = np.min(diag)
         if vmax is None:
@@ -1009,8 +1013,8 @@ class EnsembleKalmanFilter(Assimilation):
                 dims   = ["lat", "lon"],
                 coords = dict(lon=ref_field.lon, lat=ref_field.lat),
             )
-        #fig,ax = plt.subplots(figsize=(16,8))
-        fig,ax = plt.subplots(figsize=(14,16))
+        fig,ax = plt.subplots(figsize=(16,8))
+        #fig,ax = plt.subplots(figsize=(14,16))  # Alps
         if vmin is None:
             vmin = np.min(array)
         if vmax is None:
