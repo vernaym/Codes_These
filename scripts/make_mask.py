@@ -31,6 +31,10 @@ domain = sys.argv[1]
 datadir = '/home/vernaym/These/DATA'
 savedir = '/home/vernaym/workdir/ASSIMILATION/mask'
 
+# TODO ajouter les postes clim non utilisés par ANTILOPE temps réel
+fic_score = os.path.join(datadir, 'scores_2021110106_2022043006_alpes.csv')
+#fic_score = os.path.join(datadir, 'scores_2021110106_2022043006_alpes_10.csv')  # WARNING : scores valid for precipitation >10mm
+
 landmarks = {
         "Alpe d'Huez" : dict(lon=6.070, lat=45.092, alt=1800, marker='o'),
         "Les 2 Alpes" : dict(lon=6.127, lat=45.013, alt=1800, marker='o'),
@@ -41,15 +45,31 @@ landmarks = {
 
 # Domaine des Grandes Rousses
 extract_dom = dict(
-    latmax = 45.240,
-    latmin = 44.990,
-    lonmin = 6.010,
-    lonmax = 6.490,
-)
-latmin = extract_dom['latmin']
-lonmin = extract_dom['lonmin']
-latmax = extract_dom['latmax']
-lonmax = extract_dom['lonmax']
+        GrandesRousses = dict(
+            latmax = 45.240,
+            latmin = 44.990,
+            lonmin = 6.010,
+            lonmax = 6.490,
+        ),
+        Savoie = dict(
+            latmax = 45.5,
+            latmin = 45.0,
+            lonmin = 6.25,
+            lonmax = 6.75,
+        ),
+        HautesAlpes = dict(
+            latmax = 45.0,
+            latmin = 44.7,
+            lonmin = 6.4,
+            lonmax = 7.0,
+        ),
+    )
+
+if not domain == 'alp':  # Use all domain for the Alps
+    latmin = extract_dom[domain]['latmin']
+    lonmin = extract_dom[domain]['lonmin']
+    latmax = extract_dom[domain]['latmax']
+    lonmax = extract_dom[domain]['lonmax']
 
 def get_date(a_string):
     try:
@@ -135,10 +155,10 @@ def add_scores(scores, ax, mycmap=None, vmin=None, vmax=None):
     else:
         cmap = mycmap
 
-    if domain == 'GrandesRousses':
-        scores_domain = scores.loc[(scores.lons>=lonmin) & (scores.lons<=lonmax) & (scores.lats<=latmax) & (scores.lats>=latmin)]
-    else:
+    if domain == 'alp':
         scores_domain = scores
+    else:
+        scores_domain = scores.loc[(scores.lons>=lonmin) & (scores.lons<=lonmax) & (scores.lats<=latmax) & (scores.lats>=latmin)]
 
     def set_marker(row):
         if row['ratio'] <= 0.8:
@@ -153,8 +173,8 @@ def add_scores(scores, ax, mycmap=None, vmin=None, vmax=None):
     for marker, info in scores_domain.groupby('marker'):
         if mycmap is None:
             #sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=450, edgecolors='black', linewidth=3, alpha=1)
-            #sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=150, edgecolors='black', alpha=0.5)
-            sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=350, edgecolors='black', alpha=1)
+            sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=150, edgecolors='black', alpha=0.5)
+            #sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=350, edgecolors='black', alpha=1)
         else:
             sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, vmin=vmin, vmax=vmax, marker=marker, s=300, edgecolors='black', alpha=1)
 
@@ -205,54 +225,74 @@ def add_cities(latmin, latmax, lonmin, lonmax):
     for idx in tmp.index:
         plt.text(tmp.lng[idx], tmp.lat[idx], tmp.city[idx], alpha=0.5)
 
-def plot(antilope):
+def plot(antilope, categories=True, baiscorrection=False):
 
-    if not os.path.exists(os.path.join(savedir, f'CUMUL_ANTILOPE_2021080106_2022070106_{domain}.pdf')):
-    #if True:
+    #if not os.path.exists(os.path.join(savedir, f'CUMUL_ANTILOPE_2021080106_2022070106_{domain}.pdf')):
+    if True:
 
         if domain == 'alp':
             fig, ax = plt.subplots(figsize=(16,16))
         elif domain == 'GrandesRousses':
             fig, ax = plt.subplots(figsize=(15,7))
+        elif domain == 'HautesAlpes':
+            fig, ax = plt.subplots(figsize=(14,7))
+        else:
+            fig, ax = plt.subplots()
 
-        cmap = plt.cm.YlGnBu
-        cmaplist = [cmap(i) for i in range(20, cmap.N+1)]
-        cmap = matplotlib.colors.LinearSegmentedColormap.from_list('Custom cmap', cmaplist, cmap.N-20)
-        # define the bins and normalize
-        bounds = np.arange(200, 1300, 100)
-        #norm = matplotlib.colors.BoundaryNorm(bounds, cmap.N)
-        norm = matplotlib.colors.BoundaryNorm(bounds, len(bounds)-2)
-
-        #antilope.rr_cumul.plot(ax=ax, cbar_kwargs={"label":'Total precipitation between 2021080106 and 2022070106 (mm)'}, cmap=plt.cm.coolwarm)
-        #cml = antilope.rr_cumul.plot(ax=ax, cmap=plt.cm.YlGnBu, add_colorbar=False)
-        cml = antilope.rr_cumul.plot(ax=ax, cmap=cmap, norm=norm, add_colorbar=False)
-        cml = antilope.rr_cumul.plot.pcolormesh(ax=ax, cmap=cmap, norm=norm, add_colorbar=False)
-        #cml = plt.contourf(antilope.lon, antilope.lat, antilope.rr_cumul, cmap=cmap, norm=norm, add_colorbar=False)
-        #cml = antilope.rr_cumul.plot(ax=ax, cmap=plt.cm.YlGnBu, add_colorbar=False, alpha=0.5)
-        #add_landmarks(ax)
-        add_radar_positions(ax)
-        fic_score = os.path.join(datadir, 'scores_2021110106_2022043006_alpes_10.csv')  # WARNING : scores valid for precipitation >10mm
-        #fic_score = os.path.join(datadir, 'scores_2021110106_2022043006_alpes.csv')
-        scores = pd.read_csv(fic_score, sep=';')
-        sc = add_scores(scores, ax)
-        add_boundaries()
         latmin = np.min(antilope.lat.data)
         latmax = np.max(antilope.lat.data)
         lonmin = np.min(antilope.lon.data)
         lonmax = np.max(antilope.lon.data)
+
+        if baiscorrection:
+            filename ='Estimated_ratio_alp.nc'
+            ratio = xr.open_dataset(filename)
+            if not domain == 'alp':
+                ratio = ratio.where((ratio.lon>=lonmin) & (ratio.lon<=lonmax) & (ratio.lat<=latmax) & (ratio.lat>=latmin), drop=True)
+            antilope.rr_cumul.data = antilope.rr_cumul.data / ratio.rr.data
+
+        cmap = plt.cm.YlGnBu
+
+        if categories :
+            # To group by range of data
+            cmaplist = [cmap(i) for i in range(20, cmap.N+1)]
+            cmap = matplotlib.colors.LinearSegmentedColormap.from_list('Custom cmap', cmaplist, cmap.N-20)
+            # define the bins and normalize
+            bounds = np.arange(200, 1300, 100)
+            #norm = matplotlib.colors.BoundaryNorm(bounds, cmap.N)
+            norm = matplotlib.colors.BoundaryNorm(bounds, len(bounds)-2)
+            cml = antilope.rr_cumul.plot.pcolormesh(ax=ax, cmap=cmap, norm=norm, add_colorbar=False)
+
+            #cml = antilope.rr_cumul.plot(ax=ax, cmap=cmap, norm=norm, add_colorbar=False)
+            #antilope.rr_cumul.plot(ax=ax, cbar_kwargs={"label":'Total precipitation between 2021080106 and 2022070106 (mm)'}, cmap=plt.cm.coolwarm)
+            #cml = antilope.rr_cumul.plot(ax=ax, cmap=plt.cm.YlGnBu, add_colorbar=False)
+            #cml = plt.contourf(antilope.lon, antilope.lat, antilope.rr_cumul, cmap=cmap, norm=norm, add_colorbar=False)
+            #cml = antilope.rr_cumul.plot(ax=ax, cmap=plt.cm.YlGnBu, add_colorbar=False, alpha=0.5)
+        else:
+            #cml = antilope.rr_cumul.plot(ax=ax, vmin=100, vmax=1200, cmap=plt.cm.YlGnBu, add_colorbar=False)
+            cml = antilope.rr_cumul.plot(ax=ax, vmin=150, vmax=500, cmap=plt.cm.YlGnBu, add_colorbar=False)
+
+        #add_landmarks(ax)
+        add_radar_positions(ax)
+        scores = pd.read_csv(fic_score, sep=';')
+        sc = add_scores(scores, ax)
+        add_boundaries()
         add_cities(latmin, latmax, lonmin, lonmax)
         cb = fig.colorbar(sc)
         #cb.set_label(label='Mean ANTILOPE / rain-gauges ratio', fontsize=22, weight='bold')
-        cb.set_label(label='ANTILOPE / rain-gauges ratio', fontsize=22)
+        #cb.set_label(label='ANTILOPE / rain-gauges ratio', fontsize=22)
+        cb.set_label(label='ANTILOPE / rain-gauges ratio', fontsize=14)
         cb.ax.tick_params(labelsize=16)
         cb2 = fig.colorbar(cml, extend='both')
-        cb2.set_label(label='Total precipitation between \n 2021080106 and 2022070106 (mm)', fontsize=22)
-        cb2.ax.tick_params(labelsize=16)
+        #cb2.set_label(label='Total precipitation between \n 2021080106 and 2022070106 (mm)', fontsize=22)
+        cb2.set_label(label='Total precipitation between \n 2021080106 and 2022070106 (mm)', fontsize=14)
+        #cb2.ax.tick_params(labelsize=16)
+        cb2.ax.tick_params(labelsize=12)
         ax.grid(False)  # Remove grid lines (does not work !)
         #fig.legend()
-        #fig.tight_layout()
+        fig.tight_layout()
         fig.savefig(os.path.join(savedir, f'CUMUL_ANTILOPE_2021080106_2022070106_{domain}.pdf'), layout='tight')
-        sys.exit()
+        #sys.exit()
 
 def nearest(array, value):
     """ Find the closest element of 'array' to 'value'. """
@@ -303,9 +343,6 @@ def make_mask(field):
     lonmin = field.lon.data.min()
     lonmax = field.lon.data.max()
 
-    # TODO ajouter les postes clim non utilisés par ANTILOPE temps réel
-    fic_score = os.path.join(datadir, 'scores_2021110106_2022043006_alpes_10.csv')  # WARNING : scores valid for precipitation >10mm
-    #fic_score = os.path.join(datadir, 'scores_2021110106_2022043006_alpes.csv')  # Algorithme pas adapté aux socres sans seuil
     scores = pd.read_csv(fic_score, sep=';')
     scores = scores.loc[(scores.lats>=latmin) & (scores.lats<=latmax) & (scores.lons>=lonmin) & (scores.lons<=lonmax)]
 
@@ -698,11 +735,14 @@ def to_xarray(array, field, varname='rr'):
     )
     return output
 
-def plot_and_save(field, name, cmap=plt.cm.Greys, vmin=None, vmax=None, add_scores=True):
-    if domain == 'alp':
-        fig, ax = plt.subplots(figsize=(14,16))
-    elif domain == 'GrandesRousses':
+def plot_and_save(field, name, cmap=plt.cm.Greys, vmin=None, vmax=None, scores=None):
+    if domain == 'GrandesRousses':
         fig, ax = plt.subplots(figsize=(12,6))
+    elif domain == 'alp':
+        fig, ax = plt.subplots(figsize=(14,16))
+    else:
+        fig, ax = plt.subplots()
+
     if vmin is None:
         vmin = np.nanmin(field)
     if vmax is None:
@@ -716,7 +756,7 @@ def plot_and_save(field, name, cmap=plt.cm.Greys, vmin=None, vmax=None, add_scor
     else:
         cml = field.plot(ax=ax, cmap=cmap, vmin=vmin, vmax=vmax, add_colorbar=False)
 
-    if add_scores:
+    if scores is not None:
         if field.name == 'ratio':
             # Plot scores with same cmap since it is the same information
             add_scores(scores, ax, mycmap=cmap, vmin=vmin, vmax=vmax)
@@ -724,35 +764,95 @@ def plot_and_save(field, name, cmap=plt.cm.Greys, vmin=None, vmax=None, add_scor
             add_scores(scores, ax)
     add_radar_positions(ax)
     add_boundaries()
-    add_cities(latmin, latmax, lonmin, lonmax)
+    #add_cities(latmin, latmax, lonmin, lonmax)
     cb = fig.colorbar(cml)
     cb.set_label(field.name, fontsize=24)
     cb.ax.tick_params(labelsize=20)
     fig.savefig(os.path.join(savedir, f'{name}.pdf'), format='pdf', layout='tight')
     field.to_netcdf(os.path.join(savedir, f'{name}.nc'))
 
-def moving_average(field, size=20):
+def ratio_estimation(field, moving_window=15):
+    """
+    Two steps :
+    1. filter accumulation field to produce a map of deviation to the
+    smoothed field (parameter : moving window size set to 15)
+    2. Use evaluation data to apply the ratio to neighboring points with a
+    ponderation depending on the ratio estimated at step 1 and the distance
+    between each pixel and the scores (parameter : correlation lenght set to 0.15)
+
+    This provides both a debiaising mask to apply to each new observation
+    before assimilation and an observation error field.
+
+    When this debiasing method is applied to ANTILOPE accumulations, the
+    field is smoother and visible artifical patterns are attenuated.
+    """
+#    latmin = field.lat.data.min()
+#    latmax = field.lat.data.max()
+#    lonmin = field.lon.data.min()
+#    lonmax = field.lon.data.max()
+#    if domain == 'custom':
+#        latmin = 45
+#        latmax = 45.5
+#        lonmin = 6.25
+#        lonmax = 6.75
+#        lats = [np.round(lat,2) for lat in np.arange(latmin,latmax,0.01)]
+#        lons = [np.round(lon,2) for lon in np.arange(lonmin,lonmax,0.01)]
+#        field = field.sel({'lat':lats, 'lon':lons})
+
     from scipy.ndimage import uniform_filter
     mean = field.rr_cumul.data/334  # 334 is the number of days over wich the field cumul is made : we want a mean daily (24h) error
-    tmp = uniform_filter(mean, size=size)
+    tmp = uniform_filter(mean, size=moving_window)
     smoothed = to_xarray(tmp, field)
-    plot_and_save(smoothed, f'Smoothed_field_{size}_{domain}.pdf', cmap=plt.cm.YlGnBu, add_scores=False)
-    plot_and_save(mean-smoothed, f'Observation_error_smoothingsize{size}_{domain}', cmap=plt.cm.coolwarm, add_scores=False)
-    plot_and_save(np.abs(mean-smoothed), f'Observation_error_absolute_value_smoothingsize{size}_{domain}', cmap=plt.cm.Greys, add_scores=False)
+    smoothratio = mean/smoothed
+    plot_and_save(smoothed, f'Smoothed_field_{moving_window}_{domain}', cmap=plt.cm.YlGnBu)
+    plot_and_save(mean-smoothed, f'Observation_error_smoothingsize{moving_window}_{domain}', cmap=plt.cm.coolwarm)
+
+    scores = pd.read_csv(fic_score, sep=';')
+    if not domain == 'alp':
+        scores = scores.loc[(scores.lats>=latmin) & (scores.lats<=latmax) & (scores.lons>=lonmin) & (scores.lons<=lonmax)]
+
+    plot_and_save(np.abs(mean-smoothed), f'Observation_error_absolute_value_smoothingsize{moving_window}_{domain}', cmap=plt.cm.Greys, scores=scores)
+    plot_and_save(smoothratio, f'Observation_error_ratio_absolute_value_smoothingsize{moving_window}_{domain}', vmin=0.6, vmax=1.4, cmap=plt.cm.coolwarm, scores=scores)
+
+
+
+    lons, lats = np.meshgrid(field.lon.data, field.lat.data)
+    estimated_ratio = np.ones(np.shape(field.rr_cumul.data))
+
+    scores = pd.read_csv(fic_score, sep=';')
+    scores = scores.set_index('num_poste')
+    for poste in scores.index:
+        #print(scores.loc[poste])
+        ratio = scores.loc[poste, 'ratio']
+        dist = np.sqrt((lats-scores.loc[poste,'lats'])**2+(lons-scores.loc[poste, 'lons'])**2)  # Euclidian horizontal distance
+        idx, idy = np.where(dist==np.min(dist))
+        ref_cumul = field.rr_cumul.data[idx[0],idy[0]]
+        cumul_dist = field.rr_cumul.data-ref_cumul
+        cumul_ratio = field.rr_cumul.data/ref_cumul
+        #estimated_ratio = estimated_ratio+(cumul_ratio-estimated_ratio)*np.exp(-np.abs(cumul_dist)/(ref_cumul/5))*np.exp(-dist/0.3)  # Marche bien mais n'utilise pas le score !
+        #estimated_ratio = estimated_ratio+((cumul_ratio-estimated_ratio)*np.exp(-np.abs(cumul_dist)/(ref_cumul))-estimated_ratio)*np.exp(-dist/0.2)  # DERIVE
+        #pond = np.exp(-dist/0.3)
+        #pond[np.where(dist>0.5)]=0
+        #estimated_ratio = estimated_ratio+(ratio-estimated_ratio)*np.exp(-np.abs(cumul_dist)/(ref_cumul/10))*np.exp(-dist/1)  # PAS MAL
+        d0 = 0.15
+        c0 = 4
+        #estimated_ratio = estimated_ratio+(ratio*cumul_ratio-estimated_ratio)*np.exp(-np.abs(cumul_dist)/(ref_cumul/c0))*np.exp(-dist/d0)  # Marche bien avec d0=0.4 et c0=5
+        #estimated_ratio = estimated_ratio+(ratio-estimated_ratio)*np.exp(-np.abs(cumul_dist)/(ref_cumul/c0))*np.exp(-dist/d0)  # TEST
+        #estimated_ratio = estimated_ratio+(ratio*cumul_ratio-estimated_ratio)*np.exp(-dist/d0)  # TEST
+        estimated_ratio = estimated_ratio+(ratio*smoothratio-estimated_ratio)*np.exp(-dist/d0) # TEST
+
+    if not domain == 'alp':
+        scores = scores.loc[(scores.lats>=latmin) & (scores.lats<=latmax) & (scores.lons>=lonmin) & (scores.lons<=lonmax)]
+    ratio_field = to_xarray(estimated_ratio, field)
+    plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}_{moving_window}', vmin=0.5, vmax=1.5, cmap=plt.cm.coolwarm, scores=scores)
+    #plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}_{c0}', vmin=0.5, vmax=1.5, cmap=plt.cm.coolwarm, scores=scores)
+
+
 
 def krigeage_scores(field):
     variogram  = 'exponential'  # The same as for ANTILOPE without RADAR data
 
-    fic_score = os.path.join(datadir, 'scores_2021110106_2022043006_alpes_10.csv')
     scores = pd.read_csv(fic_score, sep=';')
-    data = np.array(
-    [
-        [0.3, 1.2, 0.47],
-        [1.9, 0.6, 0.56],
-        [1.1, 3.2, 0.74],
-        [3.3, 4.4, 1.47],
-        [4.7, 3.8, 1.74],
-    ])
 
     kriging = UniversalKriging(scores.lons.values, scores.lats.values, scores.ratio.values, variogram_model=variogram)
     score, ss = kriging.execute('grid', field.lon, field.lat)
@@ -779,18 +879,23 @@ def plot_field(field, scores):
     fig.savefig(os.path.join(datadir, filename.replace('.nc', '.pdf')), format='pdf', layout='tight')
 
 if __name__ == "__main__":
-    if domain == 'alp':
-        filename ='CUMUL_ANTILOPEH_alp_2021103000_2022060200.nc'
-    elif domain == 'GrandesRousses':
-        filename = 'CUMUL_ANTILOPEH_GrandesRousses_2021073106_2022070106.nc'
-    antilope = xr.open_dataset(os.path.join(datadir, filename))
     if domain == 'GrandesRousses':
+        filename = 'CUMUL_ANTILOPEH_GrandesRousses_2021073106_2022070106.nc'
+    else:
+        filename ='CUMUL_ANTILOPEH_alp_2021103000_2022060200.nc'
+    antilope = xr.open_dataset(os.path.join(datadir, filename))
+    if not domain == 'alp':
         antilope = antilope.where((antilope.lon>=lonmin) & (antilope.lon<=lonmax) & (antilope.lat<=latmax) & (antilope.lat>=latmin), drop=True)
 
-    plot(antilope)
+    #plot(antilope, categories=False, baiscorrection=True)
+    plot(antilope, categories=False)
+
+    #ratio_estimation(antilope)
+
 #    krigeage_scores(antilope)
 #    make_mask(antilope)
-    moving_average(antilope)
+#    ratio_estimation(antilope)
+    #moving_average(antilope)
 
 
 
