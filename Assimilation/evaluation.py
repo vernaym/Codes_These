@@ -91,7 +91,10 @@ all_experiments = dict(
         KD0         = 'EnsembleKalmanFilter/XP00_Rstat/EnKF_2021120106_2022050106_daily_alp.nc',
         KD1         = 'EnsembleKalmanFilter/XP01_Rstat_Rdyn/EnKF_2021120106_2022050106_daily_alp.nc',
         KD2         = 'EnsembleKalmanFilter/XP02_Rdyn/EnKF_2021120106_2022050106_daily_alp.nc',
-        KD3         = 'EnsembleKalmanFilter/XP03_sans_normalisation/EnKF_2021120106_2022050106_daily_alp.nc',
+        KD4         = 'EnsembleKalmanFilter/XP03_sans_normalisation/EnKF_2021120106_2022050106_daily_alp.nc',
+        KDM6D3      = 'EnsembleKalmanFilter/XP07_mask6_debiaisage3/EnKF_2021120106_2022050106_daily_alp.nc',
+        KDM8D3      = 'EnsembleKalmanFilter/XP05_debiaisage/EnKF_2021120106_2022050106_daily_alp.nc',
+        KDM8        = 'EnsembleKalmanFilter/XP06_mask8/EnKF_2021120106_2022050106_daily_alp.nc',
     )
 
 mask_experiments = dict(
@@ -167,9 +170,14 @@ basic = dict(
 algo = dict(
         LD0         = 'XP00_assimilation_quotidienne_sans_masque_sans_localisation/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
         #KD0         = 'EnsembleKalmanFilter/XP00_Rstat/EnKF_2021120106_2022050106_daily_alp.nc',
-        KD1         = 'EnsembleKalmanFilter/XP01_Rstat_Rdyn/EnKF_2021120106_2022050106_daily_alp.nc',
+        #KD1         = 'EnsembleKalmanFilter/XP01_Rstat_Rdyn/EnKF_2021120106_2022050106_daily_alp.nc',
         #KD2         = 'EnsembleKalmanFilter/XP02_Rdyn/EnKF_2021120106_2022050106_daily_alp.nc',
-        KD3         = 'EnsembleKalmanFilter/XP03_sans_normalisation/EnKF_2021120106_2022050106_daily_alp.nc',
+        KD4         = 'EnsembleKalmanFilter/XP03_sans_normalisation/EnKF_2021120106_2022050106_daily_alp.nc',
+        #KDM6D3      = 'EnsembleKalmanFilter/XP07_mask6_debiaisage3/EnKF_2021120106_2022050106_daily_alp.nc',
+        #KDD3        = 'EnsembleKalmanFilter/XP05_debiaisage/EnKF_2021120106_2022050106_daily_alp.nc',
+        #KDM8        = 'EnsembleKalmanFilter/XP06_mask8/EnKF_2021120106_2022050106_daily_alp.nc',
+        KDM9        = 'EnsembleKalmanFilter/XP08_mask9/EnKF_2021120106_2022050106_daily_alp.nc',
+        #KDM8D3      = 'EnsembleKalmanFilter/XP05_debiaisage/EnKF_2021120106_2022050106_daily_alp.nc',
     )
 
 
@@ -225,7 +233,12 @@ xpid_label = dict(
         KD0           = 'Daily analysis with EnKF (Rstat)',
         KD1           = 'Daily analysis with EnKF (Rstat+Rdyn)',
         KD2           = 'Daily analysis with EnKF (Rdyn)',
-        KD3           = 'Daily analysis with EnKF without ECM normalisation'
+        KD4           = 'Daily analysis with EnKF without ECM normalisation (bis)',
+        KDM6D3        = 'Daily analysis with EnKF with mask6 and debiasing3',
+        KDM8D3        = 'Daily analysis with EnKF with debiasing3 and mask8',
+        KDM8          = 'Daily analysis with EnKF with mask8',
+        KDM9          = 'Daily analysis with EnKF with mask9',
+
     )
 
 

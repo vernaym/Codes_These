@@ -75,8 +75,8 @@ def parse_command_line():
     parser.add_argument('-d', '--domain', help='Domain of the file', choices=['alp', 'pyr', 'cor', 'GrandesRousses', 'test'], default='GrandesRousses')
     parser.add_argument('-w', '--workdir', help='Runing directory', default='/home/vernaym/workdir/ASSIMILATION')
     parser.add_argument('-a', '--assimilation', help='Assimilation method', choices=['pf', 'enkf'], default='enkf')
-    parser.add_argument('-m', '--mask', help='Switch observation error mask on/off', choices=[1,2,3,4,5,6], default=None, type=int)
-    parser.add_argument('-c', '--debiasing', help='Apply bias correction to observation (0=constant bias, 1=pseudo-kriging, 2=estimation based on homogeneity)', default=None, type=int, choices=[0,1,2])
+    parser.add_argument('-m', '--mask', help='Switch observation error mask on/off', choices=[1,2,3,4,5,6,7,8,9], default=None, type=int)
+    parser.add_argument('-c', '--debiasing', help='Apply bias correction to observation (0=constant bias, 1=pseudo-kriging, 2=estimation based on homogeneity,3=smoothing+scores)', default=None, type=int, choices=[0,1,2,3])
     parser.add_argument('-t', '--threshold', default=None, help='Threshold of precipitation (mm) to apply in the data to consider', type=int)
     parser.add_argument('-p', '--plot', action='store_true', default=False, help='Plot assimilated fields')
     parser.add_argument('-f', '--frequency', choices=['hourly', 'daily'], help='Assimilation frequency')
@@ -503,12 +503,12 @@ class Assimilation(object):
         #draw[np.where(x<0)] = 0  # x is already a precipitation field with >0 values
         return draw
 
-    def plot_obs(self, field):
+    def plot_obs(self, field, var='rr'):
         mnt = xr.open_dataset('/home/vernaym/QGIS/MNT/DEM_ALPES_WGS84_250m_bilinear.nc')  # Pour tracer sur toutes les Alpes
         # Plot ANTILOPE precipitation field
         fig = plt.figure(figsize=(18,8))
         #fig = plt.figure(figsize=(14,16))  Alps
-        field.rr.plot(vmin=0, vmax=self.rrmax, cmap=plt.cm.YlGnBu, cbar_kwargs={'label': "24 hour precipitation (mm)"})  # quadmesh object
+        field[var].plot(vmin=0, vmax=self.rrmax, cmap=plt.cm.YlGnBu, cbar_kwargs={'label': "24 hour precipitation (mm)"})  # quadmesh object
         # Add landmarks
         if self.domain == 'GrandesRousses':
             for landmark, infos in landmarks.items():
@@ -523,7 +523,11 @@ class Assimilation(object):
         ax.axes.get_xaxis().get_label().set_visible(False)
         ax.axes.get_yaxis().get_label().set_visible(False)
         fig.tight_layout()
-        fig.savefig(f'{self.date_str}/OBS_{self.date_str}_{self.domain}.pdf', format='pdf')
+        if var == 'rr':
+            fig.savefig(f'{self.date_str}/OBS_{self.date_str}_{self.domain}.pdf', format='pdf')
+        elif var == 'mu':
+            fig.savefig(f'{self.date_str}/DEBIASED_OBS_{self.date_str}_{self.domain}.pdf', format='pdf')
+
 
         # Plot 3D ANTILOPE precipitation field
 #        tmp = mnt.interp(lon=self.radar.lon, lat=self.radar.lat, method='nearest')  # Pour interpoller le MNT sur la grille ANTILOPE
@@ -549,6 +553,9 @@ class Assimilation(object):
         elif self.debiasing == 2:
             mask = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask", f"estimated_ratio2_loc25_seuil_0.1_{self.domain}.nc"))
             ratio = mask.ratio
+        elif self.debiasing == 3:
+            mask = xr.open_dataset(os.path.join("/home/vernaym/These/DATA", f"Estimated_ratio_{self.domain}_0.15_15.nc"))
+            ratio = mask.rr
         else:
             ratio = 1  # No debiasing
         parameters['mu'] = parameters['rr'] / ratio  # TODO : check if the ensemble after assimilation is not biased
@@ -581,6 +588,16 @@ class Assimilation(object):
                 parameters['sigma'] =  np.abs(mask.mask)
                 #parameters['sigma'] = np.abs(mask.rr) * 0.261 + 0.263 * parameters['rr']
                 #parameters['sigma'] = np.abs(mask.rr)
+            elif self.mask in [7]:
+                mask = xr.open_dataset(os.path.join("/home/vernaym/These/DATA", f"Observation_error_absolute_value_smoothingsize15_{self.domain}.nc"))
+                parameters['sigma'] =  np.abs(mask.rr)
+            elif self.mask in [8]:
+                mask = xr.open_dataset(os.path.join("/home/vernaym/These/DATA", f"Observation_error_15_0.15_alp.nc"))
+                parameters['sigma'] =  np.abs(mask.rr)
+            elif self.mask in [9]:
+                mask = xr.open_dataset(os.path.join("/home/vernaym/These/DATA", f"Observation_error_25_0.1_alp.nc"))
+                parameters['sigma'] =  np.abs(mask.rr)
+
 
 #            except FileNotFoundError as e:
 #                print(e)
@@ -849,7 +866,7 @@ class EnsembleKalmanFilter(Assimilation):
 
             parameters = actual_parameters.sel({'time':date})
 
-            Y = parameters.rr.data  # Observation vector
+            Y = parameters.mu.data  # Observation vector. WARNING : Use mu to take debiasing into account !
             self.rrmin = 0.
             self.rrmax = max(
                     np.nanmax(ensemble.rr.data),
@@ -878,7 +895,8 @@ class EnsembleKalmanFilter(Assimilation):
             #R = np.outer(errobs, errobs)
 
             # Smooth observation to compute dynamic observation error
-            smoothobs = uniform_filter(self.parameters.sel({'time':date}).rr, size=30)  # numpy array
+            #smoothobs = uniform_filter(self.parameters.sel({'time':date}).rr, size=15)  # numpy array
+            smoothobs = uniform_filter(self.parameters.sel({'time':date}).mu, size=20)  # numpy array
             smoothobs = xr.DataArray(
                 name   = 'rr',
                 data   = smoothobs,
@@ -892,6 +910,10 @@ class EnsembleKalmanFilter(Assimilation):
             Rdyn = (Y-smoothobs.data)**2
             std = parameters.sigma.data
             Rstat = std**2
+            import pdb
+            pdb.set_trace()
+            #Rstat = std**2*Y  #TODO :TMP
+
             #Rstat = np.diag((std*std).flatten())  # neglecting correlations
 
             # Normalisation of ECMs
@@ -903,7 +925,7 @@ class EnsembleKalmanFilter(Assimilation):
             #R=Rstat
             #R=(Rdyn+Rstat)/2
             R=Rdyn+Rstat
-            #R=Rdyn
+            #R=Rstat  #TODO : TMP
 
             #R = self.observation_error_covariance(parameters.sigma.data)  # Observation error covariance matrix
 
@@ -929,8 +951,10 @@ class EnsembleKalmanFilter(Assimilation):
 #                    self.plot_matrix(R, parameters.rr, 'Observation_ECM_diagonal', f'{self.date_str}/Observation_ECM_{self.domain}.pdf', cmap=plt.cm.viridis)
 #                    self.plot_matrix(K, parameters.rr, 'Kalman_Gain_diagonal', f'{self.date_str}/Kalman_Gain_{self.domain}.pdf', cmap=plt.cm.coolwarm, vmin=0, vmax=1)
                 # Plot fields
-                self.plot_array(P, parameters.rr, 'Background_ECM', f'{self.date_str}/Background_ECM_{self.domain}.pdf', cmap=plt.cm.viridis)
-                self.plot_array(R, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_ECM_{self.domain}.pdf', cmap=plt.cm.viridis)
+                self.plot_array(P, parameters.rr, 'Background_ECM', f'{self.date_str}/Background_ECM_{self.domain}.pdf', vmin=0, vmax=200, cmap=plt.cm.viridis)
+                self.plot_array(R, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_ECM_{self.domain}.pdf', vmin=0, vmax=200, cmap=plt.cm.viridis)
+                self.plot_array(Rstat, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_stat_ECM_{self.domain}.pdf', vmin=0, vmax=200, cmap=plt.cm.viridis)
+                self.plot_array(Rdyn, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_dyn_ECM_{self.domain}.pdf', vmin=0, vmax=200, cmap=plt.cm.viridis)
                 self.plot_array(K, parameters.rr, 'Kalman_Gain', f'{self.date_str}/Kalman_Gain_{self.domain}.pdf', cmap=plt.cm.coolwarm, vmin=0, vmax=1)
 
                 fig1,ax1 = plt.subplots(nrows=4, ncols=4, figsize=(16,7))
@@ -940,6 +964,8 @@ class EnsembleKalmanFilter(Assimilation):
                 i = 0
                 j = 0
                 self.plot_obs(parameters)
+                if self.debiasing:
+                    self.plot_obs(parameters, var='mu')
 
             for member in ensemble.member.data:
                 raw = ensemble.sel({'member':member}).rr
