@@ -841,7 +841,7 @@ def ratio_estimation(field, moving_window=25):
     #observation_error = ((np.abs(ratio_field-1) + np.abs(diff))**2)*10
 
     #observation_error = (np.abs(ratio_field-1)*5 + 5*np.abs(diff))**2
-    observation_error = 1+(np.abs(ratio_field-1)*5 + np.abs(diff))**5
+    observation_error = 1+np.abs(ratio_field-1)+np.abs(diff)
 
     #observation_error = np.abs(ratio_field-1)
     #observation_error = np.abs(ratio_field**2-1)*50
@@ -862,8 +862,8 @@ def ratio_estimation(field, moving_window=25):
     plot_and_save(diff, f'Observation_error_smoothingsize{moving_window}_{domain}', cmap=plt.cm.coolwarm)
     plot_and_save(np.abs(diff), f'Observation_error_absolute_value_smoothingsize{moving_window}_{domain}', cmap=plt.cm.Greys, scores=scores)
     plot_and_save(smoothratio, f'Observation_error_ratio_smoothingsize{moving_window}_{domain}', vmin=0.6, vmax=1.4, cmap=plt.cm.coolwarm, scores=scores)
-    #plot_and_save(observation_error, f'Observation_error_{moving_window}_{d0}_{domain}', cmap=plt.cm.Greys, scores=scores)
-    plot_and_save(observation_error, f'Observation_error_{moving_window}_{d0}_{domain}', vmin=0, vmax=30, cmap=plt.cm.Greys, scores=scores)
+    plot_and_save(observation_error, f'Observation_error_{moving_window}_{d0}_{domain}', cmap=plt.cm.Greys, scores=scores)
+    #plot_and_save(observation_error, f'Observation_error_{moving_window}_{d0}_{domain}', vmin=0, vmax=30, cmap=plt.cm.Greys, scores=scores)
 
 
 def krigeage_scores(field):
