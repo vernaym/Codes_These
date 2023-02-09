@@ -909,8 +909,8 @@ class EnsembleKalmanFilter(Assimilation):
             #Rdyn = np.diag(((parameters.rr.data-smoothobs.rr.data)**2).flatten())
             Rdyn = (Y-smoothobs.data)**2
             std = parameters.sigma.data
-            #Rstat = std**2
-            Rstat = std**2*Y  #TODO :TMP
+            Rstat = std**2
+            #Rstat = std**2*Y  #TODO :TMP
 
             #Rstat = np.diag((std*std).flatten())  # neglecting correlations
 
@@ -923,7 +923,7 @@ class EnsembleKalmanFilter(Assimilation):
             #R=Rstat
             #R=(Rdyn+Rstat)/2
             #R=Rdyn+Rstat
-            R=Rstat  #TODO : TMP
+            R=Rstat*(Y+1)  # Y+1 améliore sensiblement les petites precip !
 
             #R = self.observation_error_covariance(parameters.sigma.data)  # Observation error covariance matrix
 
