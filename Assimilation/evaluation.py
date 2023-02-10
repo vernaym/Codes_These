@@ -168,8 +168,8 @@ basic = dict(
     )
 
 algo = dict(
-        LD0         = 'XP00_assimilation_quotidienne_sans_masque_sans_localisation/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
-        LDM5D2L5    = 'XP18_assimilation_quotidienne_avec_masque5_et_debiaisage2_et_localisation5/Assimilation_locale_2021120106_2022050106_daily_alp_localisation5_mask5_debiasing2.nc',
+        #LD0         = 'XP00_assimilation_quotidienne_sans_masque_sans_localisation/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
+        #LDM5D2L5    = 'XP18_assimilation_quotidienne_avec_masque5_et_debiaisage2_et_localisation5/Assimilation_locale_2021120106_2022050106_daily_alp_localisation5_mask5_debiasing2.nc',
         #KD0         = 'EnsembleKalmanFilter/XP00_Rstat/EnKF_2021120106_2022050106_daily_alp.nc',
         #KD1         = 'EnsembleKalmanFilter/XP01_Rstat_Rdyn/EnKF_2021120106_2022050106_daily_alp.nc',
         #KD2         = 'EnsembleKalmanFilter/XP02_Rdyn/EnKF_2021120106_2022050106_daily_alp.nc',
@@ -191,6 +191,7 @@ algo = dict(
         #KD08         = 'EnsembleKalmanFilter/XP08/EnKF_2021120106_2022050106_daily_alp.nc',
         KD09         = 'EnsembleKalmanFilter/XP09/EnKF_2021120106_2022050106_daily_alp.nc',
         KD10         = 'EnsembleKalmanFilter/XP10/EnKF_2021120106_2022050106_daily_alp.nc',
+        KD11         = 'EnsembleKalmanFilter/XP11/EnKF_2021120106_2022050106_daily_alp.nc',
     )
 
 
@@ -263,6 +264,7 @@ xpid_label = dict(
         KD08          = 'EnKF, mask9=(estimated_ratio+diff_25_0.1_2)*2, debiaisage3=25_0.1_2',
         KD09          = 'EnKF, mask9=estimated_ratio, debiaisage3=25_0.1_2',
         KD10          = 'EnKF, mask9=estimated_ratio, debiaisage3=0.15_2',
+        KD11          = 'EnKF, mask9=smooth, debiaisage3=smooth15',
 
     )
 
