@@ -554,7 +554,8 @@ class Assimilation(object):
             mask = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask", f"estimated_ratio2_loc25_seuil_0.1_{self.domain}.nc"))
             ratio = mask.ratio
         elif self.debiasing == 3:
-            mask = xr.open_dataset(os.path.join("/home/vernaym/These/DATA/mask", f"Estimated_ratio_{self.domain}_0.15_15.nc"))
+            #mask = xr.open_dataset(os.path.join("/home/vernaym/These/DATA/mask", f"Estimated_ratio_{self.domain}_0.15_15.nc"))
+            mask = xr.open_dataset(os.path.join(f"Estimated_ratio.nc"))
             ratio = mask.rr
         else:
             ratio = 1  # No debiasing
