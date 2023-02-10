@@ -196,7 +196,8 @@ algo = dict(
         #KD13         = 'EnsembleKalmanFilter/XP13/EnKF_2021120106_2022050106_daily_alp.nc',
         #KD14         = 'EnsembleKalmanFilter/XP14/EnKF_2021120106_2022050106_daily_alp.nc',
         #KD15         = 'EnsembleKalmanFilter/XP15/EnKF_2021120106_2022050106_daily_alp.nc',
-        KD16         = 'EnsembleKalmanFilter/XP16/EnKF_2021120106_2022050106_daily_alp.nc',
+        #KD16         = 'EnsembleKalmanFilter/XP16/EnKF_2021120106_2022050106_daily_alp.nc',
+        LDM9D3        = 'XP28_mask9_debiaising3_0.1_2/Assimilation_locale_2021120106_2022050106_daily_alp_mask9_debiasing3.nc',
     )
 
 
@@ -275,6 +276,7 @@ xpid_label = dict(
         KD14          = 'EnKF, mask9=estimated_ratio, debiaisage3=0.1_1',
         KD15          = 'EnKF, mask9=estimated_ratio, debiaisage3=0.25_1',
         KD16          = 'EnKF, mask9=estimated_ratio, debiaisage3=0.25_2',
+        LDM9D3        = 'PF, mask9=estimated_ratio, debiaisage3=0.1_2',
 
     )
 
