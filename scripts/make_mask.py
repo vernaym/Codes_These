@@ -841,7 +841,7 @@ def ratio_estimation(field, moving_window=25):
     #observation_error = ((np.abs(ratio_field-1) + np.abs(diff))**2)*10
 
     #observation_error = (np.abs(ratio_field-1)*5 + 5*np.abs(diff))**2
-    observation_error = 1+np.abs(ratio_field-1)+np.abs(diff)
+    observation_error = 1+(np.abs(ratio_field-1)+np.abs(diff))*2
 
     #observation_error = np.abs(ratio_field-1)
     #observation_error = np.abs(ratio_field**2-1)*50
