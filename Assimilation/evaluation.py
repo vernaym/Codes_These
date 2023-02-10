@@ -177,9 +177,10 @@ algo = dict(
         #KDD3        = 'EnsembleKalmanFilter/XP05_debiaisage/EnKF_2021120106_2022050106_daily_alp.nc',
         #KDM8        = 'EnsembleKalmanFilter/XP06_mask8/EnKF_2021120106_2022050106_daily_alp.nc',
         #KDM9        = 'EnsembleKalmanFilter/XP08_mask9/EnKF_2021120106_2022050106_daily_alp.nc',
-        KDM9D3      = 'EnsembleKalmanFilter/XP09_mask9_debiaising3_Rstat.Y/EnKF_2021120106_2022050106_daily_alp.nc',
-        KDM9D3_bis  = 'EnsembleKalmanFilter/XP11_mask9_debiaising3_Rstat.Ydebiaise/EnKF_2021120106_2022050106_daily_alp.nc',
+        #KDM9D3      = 'EnsembleKalmanFilter/XP09_mask9_debiaising3_Rstat.Y/EnKF_2021120106_2022050106_daily_alp.nc',
+        #KDM9D3_bis  = 'EnsembleKalmanFilter/XP11_mask9_debiaising3_Rstat.Ydebiaise/EnKF_2021120106_2022050106_daily_alp.nc',
         #KDM8D3      = 'EnsembleKalmanFilter/XP05_debiaisage/EnKF_2021120106_2022050106_daily_alp.nc',
+        KD01         = 'EnsembleKalmanFilter/XP01/EnKF_2021120106_2022050106_daily_alp.nc',
     )
 
 
@@ -242,6 +243,7 @@ xpid_label = dict(
         KDM9          = 'Daily analysis with EnKF with mask9',
         KDM9D3        = 'Daily analysis with EnKF with mask9 and debiassing3 R=Rstat*Y',
         KDM9D3_bis    = 'Daily analysis with EnKF with mask9 and debiassing3 R=Rstat*Ydebiaise',
+        KD01          = 'EnKF, mask9=diff',
 
     )
 

@@ -595,7 +595,7 @@ class Assimilation(object):
                 mask = xr.open_dataset(os.path.join("/home/vernaym/These/DATA/mask", f"Observation_error_15_0.15_alp.nc"))
                 parameters['sigma'] =  np.abs(mask.rr)
             elif self.mask in [9]:
-                mask = xr.open_dataset(os.path.join("/home/vernaym/These/DATA/mask", f"Observation_error_25_0.1_alp.nc"))
+                mask = xr.open_dataset(os.path.join(f"Observation_error.nc"))
                 parameters['sigma'] =  np.abs(mask.rr)
 
 
@@ -928,7 +928,8 @@ class EnsembleKalmanFilter(Assimilation):
             #R=Rstat
             #R=(Rdyn+Rstat)/2
             #R=Rdyn+Rstat
-            R=Rstat*(ref_field+1)  # +1 améliore sensiblement les petites precip (sinon error obs=0). ref field soit champs débiaisé soit champ lissé pour éviter de pénaliser les zones avec surestimation des précipitations
+            #R=Rstat*(ref_field+1)  # +1 améliore sensiblement les petites precip (sinon error obs=0). ref field soit champs débiaisé soit champ lissé pour éviter de pénaliser les zones avec surestimation des précipitations
+            R=Rstat*(Y+1)  # +1 améliore sensiblement les petites precip (sinon error obs=0). ref field soit champs débiaisé soit champ lissé pour éviter de pénaliser les zones avec surestimation des précipitations
             #R = uniform_filter(R, size=5)  # WARNING : smoothing only possible for diagonal R matrix and not necessary if R is not Rstat+Rdyn but has a linear depencency with Y
 
             #R = self.observation_error_covariance(parameters.sigma.data)  # Observation error covariance matrix
