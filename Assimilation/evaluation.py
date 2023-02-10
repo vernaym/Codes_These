@@ -172,12 +172,13 @@ algo = dict(
         #KD0         = 'EnsembleKalmanFilter/XP00_Rstat/EnKF_2021120106_2022050106_daily_alp.nc',
         #KD1         = 'EnsembleKalmanFilter/XP01_Rstat_Rdyn/EnKF_2021120106_2022050106_daily_alp.nc',
         #KD2         = 'EnsembleKalmanFilter/XP02_Rdyn/EnKF_2021120106_2022050106_daily_alp.nc',
-        KD4         = 'EnsembleKalmanFilter/XP03_sans_normalisation/EnKF_2021120106_2022050106_daily_alp.nc',
+        #KD4         = 'EnsembleKalmanFilter/XP03_sans_normalisation/EnKF_2021120106_2022050106_daily_alp.nc',
         #KDM6D3      = 'EnsembleKalmanFilter/XP07_mask6_debiaisage3/EnKF_2021120106_2022050106_daily_alp.nc',
         #KDD3        = 'EnsembleKalmanFilter/XP05_debiaisage/EnKF_2021120106_2022050106_daily_alp.nc',
         #KDM8        = 'EnsembleKalmanFilter/XP06_mask8/EnKF_2021120106_2022050106_daily_alp.nc',
-        KDM9        = 'EnsembleKalmanFilter/XP08_mask9/EnKF_2021120106_2022050106_daily_alp.nc',
-        KDM9D3        = 'EnsembleKalmanFilter/XP09_mask9_debiaising3/EnKF_2021120106_2022050106_daily_alp.nc',
+        #KDM9        = 'EnsembleKalmanFilter/XP08_mask9/EnKF_2021120106_2022050106_daily_alp.nc',
+        KDM9D3      = 'EnsembleKalmanFilter/XP09_mask9_debiaising3_Rstat.Y/EnKF_2021120106_2022050106_daily_alp.nc',
+        KDM9D3_bis  = 'EnsembleKalmanFilter/XP11_mask9_debiaising3_Rstat.Ydebiaise/EnKF_2021120106_2022050106_daily_alp.nc',
         #KDM8D3      = 'EnsembleKalmanFilter/XP05_debiaisage/EnKF_2021120106_2022050106_daily_alp.nc',
     )
 
@@ -239,7 +240,8 @@ xpid_label = dict(
         KDM8D3        = 'Daily analysis with EnKF with debiasing3 and mask8',
         KDM8          = 'Daily analysis with EnKF with mask8',
         KDM9          = 'Daily analysis with EnKF with mask9',
-        KDM9D3        = 'Daily analysis with EnKF with mask9 and debiassing3',
+        KDM9D3        = 'Daily analysis with EnKF with mask9 and debiassing3 R=Rstat*Y',
+        KDM9D3_bis    = 'Daily analysis with EnKF with mask9 and debiassing3 R=Rstat*Ydebiaise',
 
     )
 

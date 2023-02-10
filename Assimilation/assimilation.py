@@ -554,7 +554,7 @@ class Assimilation(object):
             mask = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask", f"estimated_ratio2_loc25_seuil_0.1_{self.domain}.nc"))
             ratio = mask.ratio
         elif self.debiasing == 3:
-            mask = xr.open_dataset(os.path.join("/home/vernaym/These/DATA", f"Estimated_ratio_{self.domain}_0.15_15.nc"))
+            mask = xr.open_dataset(os.path.join("/home/vernaym/These/DATA/mask", f"Estimated_ratio_{self.domain}_0.15_15.nc"))
             ratio = mask.rr
         else:
             ratio = 1  # No debiasing
@@ -589,13 +589,13 @@ class Assimilation(object):
                 #parameters['sigma'] = np.abs(mask.rr) * 0.261 + 0.263 * parameters['rr']
                 #parameters['sigma'] = np.abs(mask.rr)
             elif self.mask in [7]:
-                mask = xr.open_dataset(os.path.join("/home/vernaym/These/DATA", f"Observation_error_absolute_value_smoothingsize15_{self.domain}.nc"))
+                mask = xr.open_dataset(os.path.join("/home/vernaym/These/DATA/mask", f"Observation_error_absolute_value_smoothingsize15_{self.domain}.nc"))
                 parameters['sigma'] =  np.abs(mask.rr)
             elif self.mask in [8]:
-                mask = xr.open_dataset(os.path.join("/home/vernaym/These/DATA", f"Observation_error_15_0.15_alp.nc"))
+                mask = xr.open_dataset(os.path.join("/home/vernaym/These/DATA/mask", f"Observation_error_15_0.15_alp.nc"))
                 parameters['sigma'] =  np.abs(mask.rr)
             elif self.mask in [9]:
-                mask = xr.open_dataset(os.path.join("/home/vernaym/These/DATA", f"Observation_error_25_0.1_alp.nc"))
+                mask = xr.open_dataset(os.path.join("/home/vernaym/These/DATA/mask", f"Observation_error_25_0.1_alp.nc"))
                 parameters['sigma'] =  np.abs(mask.rr)
 
 
@@ -912,6 +912,11 @@ class EnsembleKalmanFilter(Assimilation):
             Rstat = std**2
             #Rstat = std**2*Y  #TODO :TMP
 
+            if self.debiasing:
+                ref_field = parameters.mu.data
+            else:
+                ref_field = smoothobs
+
             #Rstat = np.diag((std*std).flatten())  # neglecting correlations
 
             # Normalisation of ECMs
@@ -923,7 +928,8 @@ class EnsembleKalmanFilter(Assimilation):
             #R=Rstat
             #R=(Rdyn+Rstat)/2
             #R=Rdyn+Rstat
-            R=Rstat*(Y+1)  # Y+1 améliore sensiblement les petites precip !
+            R=Rstat*(ref_field+1)  # +1 améliore sensiblement les petites precip (sinon error obs=0). ref field soit champs débiaisé soit champ lissé pour éviter de pénaliser les zones avec surestimation des précipitations
+            #R = uniform_filter(R, size=5)  # WARNING : smoothing only possible for diagonal R matrix and not necessary if R is not Rstat+Rdyn but has a linear depencency with Y
 
             #R = self.observation_error_covariance(parameters.sigma.data)  # Observation error covariance matrix
 
