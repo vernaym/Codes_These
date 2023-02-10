@@ -181,11 +181,12 @@ algo = dict(
         #KDM9D3_bis  = 'EnsembleKalmanFilter/XP11_mask9_debiaising3_Rstat.Ydebiaise/EnKF_2021120106_2022050106_daily_alp.nc',
         #KDM8D3      = 'EnsembleKalmanFilter/XP05_debiaisage/EnKF_2021120106_2022050106_daily_alp.nc',
         #KD01         = 'EnsembleKalmanFilter/XP01/EnKF_2021120106_2022050106_daily_alp.nc',
-        KD02         = 'EnsembleKalmanFilter/XP02/EnKF_2021120106_2022050106_daily_alp.nc',
+        #KD02         = 'EnsembleKalmanFilter/XP02/EnKF_2021120106_2022050106_daily_alp.nc',
         #KD03         = 'EnsembleKalmanFilter/XP03/EnKF_2021120106_2022050106_daily_alp.nc',
         KD04         = 'EnsembleKalmanFilter/XP04/EnKF_2021120106_2022050106_daily_alp.nc',
         #KD05         = 'EnsembleKalmanFilter/XP05/EnKF_2021120106_2022050106_daily_alp.nc',
-        KD06         = 'EnsembleKalmanFilter/XP06/EnKF_2021120106_2022050106_daily_alp.nc',
+        #KD06         = 'EnsembleKalmanFilter/XP06/EnKF_2021120106_2022050106_daily_alp.nc',
+        KD07         = 'EnsembleKalmanFilter/XP07/EnKF_2021120106_2022050106_daily_alp.nc',
     )
 
 
@@ -254,6 +255,7 @@ xpid_label = dict(
         KD04          = 'EnKF, mask9=estimated_ratio+diff_25_0.1_2, debiaisage3=25_0.1_2',
         KD05          = 'EnKF, mask9=estimated_ratio+diff_15_0.15_2, debiaisage3=15_0.15_2',
         KD06          = 'EnKF, mask9=estimated_ratio+diff_25_0.15_2, debiaisage3=25_0.15_2',
+        KD07          = 'EnKF, debiaisage3=15_0.15_2',
 
     )
 
