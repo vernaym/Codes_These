@@ -827,7 +827,7 @@ def ratio_estimation(field, moving_window=15):
         #pond[np.where(dist>0.5)]=0
         #estimated_ratio = estimated_ratio+(ratio-estimated_ratio)*np.exp(-np.abs(cumul_dist)/(ref_cumul/10))*np.exp(-dist/1)  # PAS MAL
         d0 = 0.15
-        c0 = 2
+        c0 = 1
         #estimated_ratio = estimated_ratio+(ratio*cumul_ratio-estimated_ratio)*np.exp(-np.abs(cumul_dist)/(ref_cumul/c0))*np.exp(-dist/d0)  # Marche bien avec d0=0.4 et c0=5
         #estimated_ratio = estimated_ratio+(ratio-estimated_ratio)*np.exp(-np.abs(cumul_dist)/(ref_cumul/c0))*np.exp(-dist/d0)  # TEST
         #estimated_ratio = estimated_ratio+(ratio*cumul_ratio-estimated_ratio)*np.exp(-dist/d0)  # TEST
@@ -841,8 +841,8 @@ def ratio_estimation(field, moving_window=15):
     #observation_error = ((np.abs(ratio_field-1) + np.abs(diff))**2)*10
 
     #observation_error = (np.abs(ratio_field-1)*5 + 5*np.abs(diff))**2
-    #observation_error = 1+np.abs(ratio_field-1)
-    observation_error = 1+np.abs(smoothratio-1)
+    observation_error = 1+np.abs(ratio_field-1)
+    #observation_error = 1+np.abs(smoothratio-1)
 
     #observation_error = np.abs(ratio_field-1)
     #observation_error = np.abs(ratio_field**2-1)*50
