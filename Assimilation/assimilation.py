@@ -911,7 +911,7 @@ class EnsembleKalmanFilter(Assimilation):
             #Rdyn = np.diag(((parameters.rr.data-smoothobs.rr.data)**2).flatten())
             Rdyn = (Y-smoothobs.data)**2
             std = parameters.sigma.data
-            Rstat = std**2
+            Rstat = (std*(Y+1))**2
             #Rstat = std**2*Y  #TODO :TMP
 
             if self.debiasing:
@@ -931,7 +931,7 @@ class EnsembleKalmanFilter(Assimilation):
             #R=(Rdyn+Rstat)/2
             #R=Rdyn+Rstat
             #R=Rstat*(ref_field+1)  # +1 améliore sensiblement les petites precip (sinon error obs=0). ref field soit champs débiaisé soit champ lissé pour éviter de pénaliser les zones avec surestimation des précipitations
-            R=Rstat*(Y+1)  # +1 améliore sensiblement les petites precip (sinon error obs=0). ref field soit champs débiaisé soit champ lissé pour éviter de pénaliser les zones avec surestimation des précipitations
+            R=Rstat  # +1 améliore sensiblement les petites precip (sinon error obs=0). ref field soit champs débiaisé soit champ lissé pour éviter de pénaliser les zones avec surestimation des précipitations
             #R = uniform_filter(R, size=5)  # WARNING : smoothing only possible for diagonal R matrix and not necessary if R is not Rstat+Rdyn but has a linear depencency with Y
 
             #R = self.observation_error_covariance(parameters.sigma.data)  # Observation error covariance matrix
