@@ -597,7 +597,7 @@ class Assimilation(object):
                 parameters['sigma'] =  np.abs(mask.rr)
             elif self.mask in [9]:
                 mask = xr.open_dataset(os.path.join(f"Observation_error.nc"))
-                parameters['sigma'] =  np.abs(mask.rr)
+                parameters['sigma'] =  mask.rr  # Pas de valeur absolue pour le calcul des covariances !
                 #parameters['sigma'] =  (0.261 + 0.263 * parameters['rr'])*np.abs(mask.rr)  # PF
 
 
@@ -908,16 +908,24 @@ class EnsembleKalmanFilter(Assimilation):
             if not self.gridded:
                 smoothobs = smoothobs.isel(lat=xr.DataArray(idy, dims='poste'),lon=xr.DataArray(idx, dims='poste'))
 
-            #Rdyn = np.diag(((parameters.rr.data-smoothobs.rr.data)**2).flatten())
-            Rdyn = (Y-smoothobs.data)**2
             std = parameters.sigma.data
-            Rstat = (std*(Y+1))**2
-            #Rstat = std**2*Y  #TODO :TMP
+            #Rdyn = np.diag(((parameters.rr.data-smoothobs.rr.data)**2).flatten())
+            #Rdyn = (Y-smoothobs.data)**2
+            dyn_ratio = parameters.rr.data/smoothobs.data-1
+            pos = np.where(dyn_ratio>0)
+            dyn_ratio[pos] = dyn_ratio[pos] + 1  # r=1.4 ==> err = 1.4
+            neg = np.where(dyn_ratio<0)
+            dyn_ratio[neg] = dyn_ratio[neg] - 1  # r=1.4 ==> err = 1.4
 
+            # ref field soit champs débiaisé soit champ lissé pour éviter de pénaliser les zones avec surestimation des précipitations
             if self.debiasing:
                 ref_field = parameters.mu.data
             else:
                 ref_field = smoothobs
+
+            Rdyn = ref_field*std**2
+            Rstat = std**2  # TODO : fixer l'erreur d'obs en absence de precipitation
+            #Rstat = std**2*Y  #TODO :TMP
 
             #Rstat = np.diag((std*std).flatten())  # neglecting correlations
 
@@ -931,7 +939,7 @@ class EnsembleKalmanFilter(Assimilation):
             #R=(Rdyn+Rstat)/2
             #R=Rdyn+Rstat
             #R=Rstat*(ref_field+1)  # +1 améliore sensiblement les petites precip (sinon error obs=0). ref field soit champs débiaisé soit champ lissé pour éviter de pénaliser les zones avec surestimation des précipitations
-            R=Rstat  # +1 améliore sensiblement les petites precip (sinon error obs=0). ref field soit champs débiaisé soit champ lissé pour éviter de pénaliser les zones avec surestimation des précipitations
+            R=Rstat+Rdyn  # Rstat améliore sensiblement les petites precip (sinon error obs=0).
             #R = uniform_filter(R, size=5)  # WARNING : smoothing only possible for diagonal R matrix and not necessary if R is not Rstat+Rdyn but has a linear depencency with Y
 
             #R = self.observation_error_covariance(parameters.sigma.data)  # Observation error covariance matrix
