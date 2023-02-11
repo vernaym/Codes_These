@@ -772,7 +772,7 @@ def plot_and_save(field, name, cmap=plt.cm.Greys, vmin=None, vmax=None, scores=N
     fig.savefig(os.path.join(savedir, f'{name}.pdf'), format='pdf', layout='tight')
     field.to_netcdf(os.path.join(savedir, f'{name}.nc'))
 
-def ratio_estimation(field, moving_window=25):
+def ratio_estimation(field, moving_window=10):
     """
     Two steps :
     1. filter accumulation field to produce a map of deviation to the
