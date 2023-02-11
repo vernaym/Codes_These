@@ -597,8 +597,8 @@ class Assimilation(object):
                 parameters['sigma'] =  np.abs(mask.rr)
             elif self.mask in [9]:
                 mask = xr.open_dataset(os.path.join(f"Observation_error.nc"))
-                #parameters['sigma'] =  np.abs(mask.rr)
-                parameters['sigma'] =  (0.261 + 0.263 * parameters['rr'])*np.abs(mask.rr)
+                parameters['sigma'] =  np.abs(mask.rr)
+                #parameters['sigma'] =  (0.261 + 0.263 * parameters['rr'])*np.abs(mask.rr)  # PF
 
 
 #            except FileNotFoundError as e:

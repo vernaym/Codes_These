@@ -772,7 +772,7 @@ def plot_and_save(field, name, cmap=plt.cm.Greys, vmin=None, vmax=None, scores=N
     fig.savefig(os.path.join(savedir, f'{name}.pdf'), format='pdf', layout='tight')
     field.to_netcdf(os.path.join(savedir, f'{name}.nc'))
 
-def ratio_estimation(field, moving_window=15):
+def ratio_estimation(field, moving_window=25):
     """
     Two steps :
     1. filter accumulation field to produce a map of deviation to the
@@ -812,7 +812,9 @@ def ratio_estimation(field, moving_window=15):
     scores = scores.set_index('num_poste')
 
     lons, lats = np.meshgrid(field.lon.data, field.lat.data)
-    estimated_ratio = np.ones(np.shape(field.rr_cumul.data))*scores.ratio.mean()
+    #estimated_ratio = np.ones(np.shape(field.rr_cumul.data))*scores.ratio.mean()
+    estimated_ratio = smoothratio
+
     for poste in scores.index:
         #print(scores.loc[poste])
         ratio = scores.loc[poste, 'ratio']
@@ -826,7 +828,7 @@ def ratio_estimation(field, moving_window=15):
         #pond = np.exp(-dist/0.3)
         #pond[np.where(dist>0.5)]=0
         #estimated_ratio = estimated_ratio+(ratio-estimated_ratio)*np.exp(-np.abs(cumul_dist)/(ref_cumul/10))*np.exp(-dist/1)  # PAS MAL
-        d0 = 0.25
+        d0 = 0.15
         c0 = 2
         #estimated_ratio = estimated_ratio+(ratio*cumul_ratio-estimated_ratio)*np.exp(-np.abs(cumul_dist)/(ref_cumul/c0))*np.exp(-dist/d0)  # Marche bien avec d0=0.4 et c0=5
         #estimated_ratio = estimated_ratio+(ratio-estimated_ratio)*np.exp(-np.abs(cumul_dist)/(ref_cumul/c0))*np.exp(-dist/d0)  # TEST
@@ -857,13 +859,13 @@ def ratio_estimation(field, moving_window=15):
         scores = scores.loc[(scores.lats>=latmin) & (scores.lats<=latmax) & (scores.lons>=lonmin) & (scores.lons<=lonmax)]
     #plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}_{moving_window}', vmin=0.5, vmax=1.5, cmap=plt.cm.coolwarm, scores=scores)
     #plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}', vmin=0.5, vmax=1.5, cmap=plt.cm.coolwarm, scores=scores)
-    plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}_{c0}', vmin=0.5, vmax=1.5, cmap=plt.cm.coolwarm, scores=scores)
+    plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{moving_window}_{d0}_{c0}', vmin=0.5, vmax=1.5, cmap=plt.cm.coolwarm, scores=scores)
 
     plot_and_save(smoothed, f'Smoothed_field_{moving_window}_{domain}', cmap=plt.cm.YlGnBu)
     plot_and_save(diff, f'Observation_error_smoothingsize{moving_window}_{domain}', cmap=plt.cm.coolwarm)
     plot_and_save(np.abs(diff), f'Observation_error_absolute_value_smoothingsize{moving_window}_{domain}', cmap=plt.cm.Greys, scores=scores)
     plot_and_save(smoothratio, f'Observation_error_ratio_smoothingsize{moving_window}_{domain}', vmin=0.6, vmax=1.4, cmap=plt.cm.coolwarm, scores=scores)
-    plot_and_save(observation_error, f'Observation_error_{d0}_{c0}_{domain}', cmap=plt.cm.Greys, scores=scores)
+    plot_and_save(observation_error, f'Observation_error_{moving_window}_{d0}_{c0}_{domain}', cmap=plt.cm.Greys, scores=scores)
     #plot_and_save(observation_error, f'Observation_error_{moving_window}_{d0}_{domain}', vmin=0, vmax=30, cmap=plt.cm.Greys, scores=scores)
 
 
