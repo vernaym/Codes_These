@@ -596,9 +596,9 @@ class Evaluation(object):
 
     def evaluate(self):
 
-#        if os.path.exists(os.path.join(datadir, 'scores.nc')):
-#            self.scores = xr.open_dataset(os.path.join(datadir, 'scores.nc'))
-#            return
+        if os.path.exists(os.path.join(datadir, 'scores.nc')):
+            self.scores = xr.open_dataset(os.path.join(datadir, 'scores.nc'))
+            return
 
         def nearest(array, value):
             """ Find element of "array" the closer to 'value' """
