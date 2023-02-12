@@ -8,6 +8,9 @@ from datetime import datetime,timedelta
 import pandas as pd  # Version 0.25.3
 import numpy as np
 from scipy.ndimage import uniform_filter
+from scipy.spatial.distance import cdist
+from scipy.sparse import coo_matrix
+from scipy.sparse.linalg import inv
 import xarray as xr
 import glob
 #import copy
@@ -782,15 +785,18 @@ class EnsembleKalmanFilter(Assimilation):
         P = sum((Xi-Xmean)(Xi-Xmean)')
         """
         ensemble_mean = ensemble.mean('member').rr.data  # flatten is optionnal since 'outer' method already flattens a 2D array
-        M = np.mean(ensemble_mean)
+#        M = np.mean(ensemble_mean)
 #        P = np.outer(ensemble_mean-M, ensemble_mean-M)/len(ensemble_mean)
         #P = np.empty((len(ensemble_mean), len(ensemble_mean)))
-        P = np.empty(np.shape(ensemble_mean))
+
+        P = coo_matrix(np.shape(self.pond))
+        #P = np.empty(np.shape(ensemble_mean))
         for mb in ensemble.member.data:
             member = ensemble.sel(member=mb).rr.data
-            P = P + (member-ensemble_mean)**2
+            #P = P + (member-ensemble_mean)**2
             #P = P + np.diag((member-ensemble_mean)**2)
-            #P = P + np.outer(member-ensemble_mean, member-ensemble_mean)*np.exp(-self.dist/self.ld)
+            P = P + coo_matrix(np.outer(member-ensemble_mean, member-ensemble_mean)*self.pond)
+            #P = P + np.outer(member-ensemble_mean, member-ensemble_mean)
 #        P = P/len(ensemble.member)**2  # TODO check denominator
         P = P/(len(ensemble.member)-1)
         #P = np.diag(P)
@@ -881,21 +887,18 @@ class EnsembleKalmanFilter(Assimilation):
                 os.makedirs(f'{self.date_str}')
 
             # Compute Euclidian distance between all points in the domain
-#            from scipy.spatial.distance import cdist
-#            coords=[(lon,lat) for lon in parameters.lon.data for lat in parameters.lat.data]
-#            self.dist = cdist(coords,coords)
-#            self.ld = 0.05  # correlation lenght
+            coords=[(lon,lat) for lat in parameters.lat.data for lon in parameters.lon.data]
+            dist = cdist(coords,coords)
+            ld = 0.1  # correlation lenght
+            self.pond = np.exp(-dist/ld)  # ponderation matrix
+            null_mask = np.where(self.pond<0.01)
+            self.pond[null_mask] = 0
+#            self.pond = coo_matrix(self.pond)
 
             P = self.background_error_covariance(ensemble)  # Background error covariance matrix
 
-            #Y = parameters.rr.data
-            #R = self.observation_error_covariance(obs)
-            #R = self.observation_error_covariance(parameters.sigma.data.flatten())  # Observation error covariance matrix
-
-            #errobs = np.abs(parameters.rr.data-smoothobs).flatten()
             #R = np.outer(errobs, errobs)*np.exp(-self.dist/self.ld)
             #R = np.outer(errobs, errobs)
-
             # Smooth observation to compute dynamic observation error
             #smoothobs = uniform_filter(self.parameters.sel({'time':date}).rr, size=15)  # numpy array
             smoothobs = uniform_filter(self.parameters.sel({'time':date}).mu, size=20)  # numpy array
@@ -905,30 +908,36 @@ class EnsembleKalmanFilter(Assimilation):
                 dims   = ["lat", "lon"],
                 coords = dict(lon=self.parameters.lon, lat=self.parameters.lat),
             )
-            if not self.gridded:
-                smoothobs = smoothobs.isel(lat=xr.DataArray(idy, dims='poste'),lon=xr.DataArray(idx, dims='poste'))
+            #if not self.gridded:
+            #    smoothobs = smoothobs.isel(lat=xr.DataArray(idy, dims='poste'),lon=xr.DataArray(idx, dims='poste'))
 
             std = parameters.sigma.data
             #Rdyn = np.diag(((parameters.rr.data-smoothobs.rr.data)**2).flatten())
             #Rdyn = (Y-smoothobs.data)**2
-            dyn_ratio = parameters.rr.data/smoothobs.data-1
-            pos = np.where(dyn_ratio>0)
-            dyn_ratio[pos] = dyn_ratio[pos] + 1  # r=1.4 ==> err = 1.4
-            neg = np.where(dyn_ratio<0)
-            dyn_ratio[neg] = dyn_ratio[neg] - 1  # r=1.4 ==> err = 1.4
+#            dyn_ratio = parameters.rr.data/smoothobs.data-1
+#            pos = np.where(dyn_ratio>0)
+#            dyn_ratio[pos] = dyn_ratio[pos] + 1  # r=1.4 ==> err = 1.4
+#            neg = np.where(dyn_ratio<0)
+#            dyn_ratio[neg] = dyn_ratio[neg] - 1  # r=1.4 ==> err = 1.4
 
             # ref field soit champs débiaisé soit champ lissé pour éviter de pénaliser les zones avec surestimation des précipitations
             if self.debiasing:
                 ref_field = parameters.mu.data
             else:
                 ref_field = smoothobs
+#            ref_field = parameters.mu.data - smoothobs
 
-            Rdyn = ref_field*std**2
-            Rstat = std**2  # TODO : fixer l'erreur d'obs en absence de precipitation
-            #Rstat = std**2*Y  #TODO :TMP
+            #Rdyn = ref_field*std**2  # If no spatial correlations
+            #Rdyn = coo_matrix(np.outer(np.sqrt(ref_field)*std, np.sqrt(ref_field)*std)*self.pond)
+            #Rdyn = coo_matrix(np.outer(ref_field*std, ref_field*std)*self.pond)
+            Rdyn = coo_matrix(np.outer(ref_field*std, ref_field*std)*self.pond)
+            Rstat = coo_matrix(np.outer(std,std)*self.pond)  # TODO : fixer l'erreur d'obs en absence de precipitation
+            #Rdyn = np.outer(np.sqrt(ref_field)*std, np.sqrt(ref_field)*std)
+            #Rstat = np.outer(std,std)  # TODO : fixer l'erreur d'obs en absence de precipitation
+            R = Rstat + Rdyn  # Rstat améliore sensiblement les petites precip (sinon error obs=0).
+            #R = coo_matrix(np.outer(std,std)*(ref_field+1)*self.pond)
 
             #Rstat = np.diag((std*std).flatten())  # neglecting correlations
-
             # Normalisation of ECMs
             #Rdyn = Rdyn/np.max(Rdyn)
             #Rstat = Rstat/np.max(Rstat)
@@ -939,12 +948,9 @@ class EnsembleKalmanFilter(Assimilation):
             #R=(Rdyn+Rstat)/2
             #R=Rdyn+Rstat
             #R=Rstat*(ref_field+1)  # +1 améliore sensiblement les petites precip (sinon error obs=0). ref field soit champs débiaisé soit champ lissé pour éviter de pénaliser les zones avec surestimation des précipitations
-            R=Rstat+Rdyn  # Rstat améliore sensiblement les petites precip (sinon error obs=0).
             #R = uniform_filter(R, size=5)  # WARNING : smoothing only possible for diagonal R matrix and not necessary if R is not Rstat+Rdyn but has a linear depencency with Y
 
-            #R = self.observation_error_covariance(parameters.sigma.data)  # Observation error covariance matrix
 
-            H = np.identity(len(P))  # Forward operator (useless in this case)
 
             #Kalman gain
             ############################################
@@ -955,26 +961,43 @@ class EnsembleKalmanFilter(Assimilation):
             #inv=np.linalg.inv(P+R)
             #K=np.dot(P,inv)
             ############################################
+            #H = np.identity(len(P))  # Forward operator (useless in this case)
             #K  = np.matmul(np.matmul(P, H.T), np.linalg.inv(np.matmul(np.matmul(H, P), H.T) + R))  # K=PH'(HPH'+R)^-1
             #K  = np.matmul(P, np.linalg.inv(P+R))  # K=P(P+R)^-1
-            K = P/(P+R)
+            #K = coo_matrix(np.matmul(P, np.linalg.inv(P+R))*self.pond)
+            K = P.dot(inv(P+R))
 
             if self.plot:
+                line = K.getrow(600).toarray()[0].reshape((len(parameters.lat), len(parameters.lon)))
+                self.plot_array(line, parameters.rr, 'Kalman_Gain', f'{self.date_str}/Kalman_Gain_{self.domain}_L1.pdf', cmap=plt.cm.coolwarm, vmin=0, vmax=1)
+                self.plot_array(dist[0].reshape((len(parameters.lat), len(parameters.lon))), parameters.rr, 'Distance to point 1', f'{self.date_str}/Distance_1.pdf', cmap=plt.cm.coolwarm)
+                line = P.getrow(600).toarray()[0].reshape((len(parameters.lat), len(parameters.lon)))
+                self.plot_array(line, parameters.rr, 'Background_ECM', f'{self.date_str}/Background_ECM_{self.domain}_L1.pdf', cmap=plt.cm.coolwarm)
+                line = R.getrow(600).toarray()[0].reshape((len(parameters.lat), len(parameters.lon)))
+                self.plot_array(line, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_ECM_{self.domain}_L1.pdf', cmap=plt.cm.coolwarm)
+                self.plot_array(ref_field, parameters.rr, 'Dynamic error', f'{self.date_str}/Ref_field.pdf', cmap=plt.cm.coolwarm)
+
                 # Plot matrices
+                ECM_max = max(np.max(R.diagonal()), np.max(P.diagonal()))
+                self.plot_matrix(P, parameters.rr, 'Background_ECM', f'{self.date_str}/Background_ECM_{self.domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.viridis)
+                self.plot_matrix(R, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_ECM_{self.domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.viridis)
+                self.plot_matrix(Rstat, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_stat_ECM_{self.domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.viridis)
+                self.plot_matrix(Rdyn, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_dyn_ECM_{self.domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.viridis)
+                self.plot_matrix(K, parameters.rr, 'Kalman_Gain', f'{self.date_str}/Kalman_Gain_{self.domain}.pdf', cmap=plt.cm.coolwarm, vmin=0, vmax=1)
 #                    self.plot_matrix(smoothmatrix, parameters.rr, 'Smoothed observation field', f'{self.date_str}/Smooth_Obs.pdf', cmap=plt.cm.YlGnBu)
 #                    self.plot_matrix(P, parameters.rr, 'Background_ECM_diagonal', f'{self.date_str}/Background_ECM_{self.domain}.pdf', cmap=plt.cm.viridis)
 #                    self.plot_matrix(R, parameters.rr, 'Observation_ECM_diagonal', f'{self.date_str}/Observation_ECM_{self.domain}.pdf', cmap=plt.cm.viridis)
 #                    self.plot_matrix(K, parameters.rr, 'Kalman_Gain_diagonal', f'{self.date_str}/Kalman_Gain_{self.domain}.pdf', cmap=plt.cm.coolwarm, vmin=0, vmax=1)
                 # Plot fields
-                self.plot_array(P, parameters.rr, 'Background_ECM', f'{self.date_str}/Background_ECM_{self.domain}.pdf', vmin=0, vmax=200, cmap=plt.cm.viridis)
-                self.plot_array(R, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_ECM_{self.domain}.pdf', vmin=0, vmax=200, cmap=plt.cm.viridis)
-                self.plot_array(Rstat, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_stat_ECM_{self.domain}.pdf', vmin=0, vmax=200, cmap=plt.cm.viridis)
-                self.plot_array(Rdyn, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_dyn_ECM_{self.domain}.pdf', vmin=0, vmax=200, cmap=plt.cm.viridis)
-                self.plot_array(K, parameters.rr, 'Kalman_Gain', f'{self.date_str}/Kalman_Gain_{self.domain}.pdf', cmap=plt.cm.coolwarm, vmin=0, vmax=1)
+#                self.plot_array(P, parameters.rr, 'Background_ECM', f'{self.date_str}/Background_ECM_{self.domain}.pdf', vmin=0, vmax=200, cmap=plt.cm.viridis)
+#                self.plot_array(R, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_ECM_{self.domain}.pdf', vmin=0, vmax=200, cmap=plt.cm.viridis)
+#                self.plot_array(Rstat, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_stat_ECM_{self.domain}.pdf', vmin=0, vmax=200, cmap=plt.cm.viridis)
+#                self.plot_array(Rdyn, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_dyn_ECM_{self.domain}.pdf', vmin=0, vmax=200, cmap=plt.cm.viridis)
+#                self.plot_array(K, parameters.rr, 'Kalman_Gain', f'{self.date_str}/Kalman_Gain_{self.domain}.pdf', cmap=plt.cm.coolwarm, vmin=0, vmax=1)
 
                 fig1,ax1 = plt.subplots(nrows=4, ncols=4, figsize=(16,7))
                 fig2,ax2 = plt.subplots(nrows=4, ncols=4, figsize=(16,7))
-                #fig1,ax1 = plt.subplots(nrows=2, ncols=8, figsize=(16,10))
+                fig3,ax3 = plt.subplots(nrows=2, ncols=8, figsize=(16,7))
                 #fig2,ax2 = plt.subplots(nrows=2, ncols=8, figsize=(16,10))
                 i = 0
                 j = 0
@@ -984,17 +1007,20 @@ class EnsembleKalmanFilter(Assimilation):
 
             for member in ensemble.member.data:
                 raw = ensemble.sel({'member':member}).rr
-                X = raw.data  # Ensemble member vector
+                #X = raw.data  # Ensemble member vector without spatial correlations
+                X = raw.data.flatten()  # Ensemble member vector
                 #X = raw.data  # Ensemble member vector
                 #K,A = self.analyseKF(X, P, H, Y, R)  # ENKF analysis vector
                 #A = X + np.matmul(K, Y-X)
+                #A = X + K*(Y-X)  # Without spatial correlations
+                Y = Y.flatten()
                 A = X + K*(Y-X)
 
                 if self.gridded:
                     analysis = xr.DataArray(
                         name   = 'rr',
-                        #data   = A.reshape((len(raw.lat), len(raw.lon))),
-                        data   = A,
+                        data   = A.reshape((len(raw.lat), len(raw.lon))),
+                        #data   = A,  # Without spatial correlations
                         dims   = ["lat", "lon"],
                         coords = dict(lon=raw.lon, lat=raw.lat),
                     )
@@ -1011,6 +1037,7 @@ class EnsembleKalmanFilter(Assimilation):
                 if self.plot:
                     im1 = plot_field(raw, ax1[i,j], self.rrmin, self.rrmax)
                     im2 = plot_field(analysis, ax2[i,j], self.rrmin, self.rrmax)
+                    im3 = plot_field(self.parameters.mu-raw, ax3[i,j], np.min(self.parameters.mu.data-raw.data), np.max(self.parameters.mu.data-raw.data))
                     ax1[i,j].set_title(None)
                     ax2[i,j].set_title(None)
                     j = j + 1
@@ -1026,12 +1053,16 @@ class EnsembleKalmanFilter(Assimilation):
             if self.plot:
                 finalize_fig(fig1, im1, label='24-hour precipitation (mm)', outname=f'{self.date_str}/RAW_{self.date_str}_{self.domain}.pdf')
                 finalize_fig(fig2, im2, label='24-hour precipitation (mm)', outname=f'{self.date_str}/ASSIM_{self.date_str}_{self.domain}.pdf')
+                finalize_fig(fig3, im3, label='24-hour precipitation difference (mm)', outname=f'{self.date_str}/INNOVATION_{self.date_str}_{self.domain}.pdf')
+
+                #TODO : Plot analysis dispersion
 
             t2 = time.time()
             print(f'Assimilation for date {self.date_str} took {(t2-t1)*1000.}ms')
 
     def plot_matrix(self, matrix, ref_field, label, outname, cmap=plt.cm.YlGnBu, vmin=None, vmax=None):
-        diag = np.array([matrix[i,i] for i in range(len(matrix))])
+        #diag = np.array([matrix[i,i] for i in range(len(matrix))])
+        diag = matrix.diagonal()
         field = xr.DataArray(
                 name   = 'rr',
                 data   = diag.reshape((len(ref_field.lat), len(ref_field.lon))),
