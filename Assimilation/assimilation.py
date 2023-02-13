@@ -7,10 +7,13 @@ import os, sys
 from datetime import datetime,timedelta
 import pandas as pd  # Version 0.25.3
 import numpy as np
+import scipy
 from scipy.ndimage import uniform_filter
 from scipy.spatial.distance import cdist
-from scipy.sparse import coo_matrix
+from scipy import sparse
+from scipy.sparse import csc_matrix, csr_matrix
 from scipy.sparse.linalg import inv
+from scipy.spatial import cKDTree
 import xarray as xr
 import glob
 #import copy
@@ -780,6 +783,7 @@ class EnsembleKalmanFilter(Assimilation):
 
         return K,A
 
+    @speedtest
     def background_error_covariance(self, ensemble):
         """
         P = sum((Xi-Xmean)(Xi-Xmean)')
@@ -789,14 +793,15 @@ class EnsembleKalmanFilter(Assimilation):
 #        P = np.outer(ensemble_mean-M, ensemble_mean-M)/len(ensemble_mean)
         #P = np.empty((len(ensemble_mean), len(ensemble_mean)))
 
-        P = coo_matrix(np.shape(self.pond))
+        P = csc_matrix(np.shape(self.pond))
         #P = np.empty(np.shape(ensemble_mean))
+        print('DBUG0')
         for mb in ensemble.member.data:
             member = ensemble.sel(member=mb).rr.data
             #P = P + (member-ensemble_mean)**2
             #P = P + np.diag((member-ensemble_mean)**2)
-            P = P + coo_matrix(np.outer(member-ensemble_mean, member-ensemble_mean)*self.pond)
-            #P = P + np.outer(member-ensemble_mean, member-ensemble_mean)
+            print('DBUG1')
+            P = P + self.pond.multiply(np.outer(member-ensemble_mean, member-ensemble_mean))  # elementwive multiplication
 #        P = P/len(ensemble.member)**2  # TODO check denominator
         P = P/(len(ensemble.member)-1)
         #P = np.diag(P)
@@ -829,12 +834,14 @@ class EnsembleKalmanFilter(Assimilation):
         TODO : compléter la doc sur la méthode
         """
 
+        actual_ensemble = self.ensemble
+        actual_parameters = self.parameters
         # Initialisation of output fields
         if self.gridded:
             self.nlon, self.nlat = len(self.radar.lon), len(self.radar.lat)
             null  = np.empty((self.nlat, self.nlon, len(self.period)))  # 2D (lat/lon) field
-            actual_ensemble = self.ensemble
-            actual_parameters = self.parameters
+#            actual_ensemble = self.ensemble
+#            actual_parameters = self.parameters
         else:
             self.nposte = len(self.nivometeo.num_poste)
             null = np.empty((self.nposte, len(self.period)))
@@ -849,8 +856,8 @@ class EnsembleKalmanFilter(Assimilation):
                 nearest_lon = nearest(self.radar.lon, lon)
                 idy.append(np.where(self.radar.lat.data==nearest_lat)[0][0])  # index of the corresponding antilope pixel latitude
                 idx.append(np.where(self.radar.lon.data==nearest_lon)[0][0])  # index of the corresponding antilope pixel longitude
-            actual_ensemble = self.ensemble.isel(lat=xr.DataArray(idy, dims='poste'),lon=xr.DataArray(idx, dims='poste'))
-            actual_parameters = self.parameters.isel(lat=xr.DataArray(idy, dims='poste'),lon=xr.DataArray(idx, dims='poste'))
+#            actual_ensemble = self.ensemble.isel(lat=xr.DataArray(idy, dims='poste'),lon=xr.DataArray(idx, dims='poste'))
+#            actual_parameters = self.parameters.isel(lat=xr.DataArray(idy, dims='poste'),lon=xr.DataArray(idx, dims='poste'))
 
         self.newlocalfield = {m:null.copy() for m in range(1, self.Ne+1)}
 
@@ -860,6 +867,28 @@ class EnsembleKalmanFilter(Assimilation):
             fig2, axes2 = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
         i = 0
         j = 0
+
+        # Compute Euclidian distance between all points in the domain
+        nlat = len(actual_parameters.lat)
+        nlon = len(actual_parameters.lon)
+        ld = 0.05 # correlation lenght
+        max_dist = 0.5  # Memory limit reached at 0.2 for domain Alp. WARNING : very high analysis sensibility to this parameter !!
+
+        codistances = os.path.join('/home/vernaym/These/DATA', f'codistance_max_dist_{max_dist}_{self.domain}.npz')
+        if not os.path.exists(codistances):
+            coords=[(lon,lat) for lat in actual_parameters.lat.data for lon in actual_parameters.lon.data]
+            # Calcul des interdistances (TODO : creer un fichier statique à lire)
+            # Solution pour le calcul des inter-distances trouvée sur : https://stackoverflow.com/questions/35296935/python-calculate-lots-of-distances-quickly
+            tree = cKDTree(coords)
+            dist = tree.sparse_distance_matrix(tree, max_distance=max_dist, p=2)
+            dist = csr_matrix(dist)
+            dist[dist.nonzero()] = -dist[dist.nonzero()]/ld
+            np.exp(dist.data, out=dist.data )
+            scipy.sparse.save_npz(codistances, dist, compressed=True)
+            self.pond = dist
+            del(dist)
+        else:
+            self.pond = scipy.sparse.load_npz(codistances)
 
         for idd,date in enumerate(self.period):
             print(date)
@@ -886,14 +915,6 @@ class EnsembleKalmanFilter(Assimilation):
             if self.plot and not os.path.exists(f'{self.date_str}'):
                 os.makedirs(f'{self.date_str}')
 
-            # Compute Euclidian distance between all points in the domain
-            coords=[(lon,lat) for lat in parameters.lat.data for lon in parameters.lon.data]
-            dist = cdist(coords,coords)
-            ld = 0.1  # correlation lenght
-            self.pond = np.exp(-dist/ld)  # ponderation matrix
-            null_mask = np.where(self.pond<0.01)
-            self.pond[null_mask] = 0
-#            self.pond = coo_matrix(self.pond)
 
             P = self.background_error_covariance(ensemble)  # Background error covariance matrix
 
@@ -925,14 +946,19 @@ class EnsembleKalmanFilter(Assimilation):
                 ref_field = parameters.mu.data
             else:
                 ref_field = smoothobs
-#            ref_field = parameters.mu.data - smoothobs
+            ref_field = parameters.mu.data - smoothobs
+
+            #std_dyn = std*ref_field.flatten()
 
             #Rdyn = ref_field*std**2  # If no spatial correlations
             #Rdyn = coo_matrix(np.outer(np.sqrt(ref_field)*std, np.sqrt(ref_field)*std)*self.pond)
             #Rdyn = coo_matrix(np.outer(ref_field*std, ref_field*std)*self.pond)
-            Rdyn = coo_matrix(np.outer(ref_field*std, ref_field*std)*self.pond)
-            Rstat = coo_matrix(np.outer(std,std)*self.pond)  # TODO : fixer l'erreur d'obs en absence de precipitation
-            #Rdyn = np.outer(np.sqrt(ref_field)*std, np.sqrt(ref_field)*std)
+
+            #Rdyn = csc_matrix(np.outer(ref_field*std, ref_field*std)*self.pond)
+            Rdyn = self.pond.multiply(np.outer(ref_field*std, ref_field*std))
+            #Rdyn = self.pond.multiply(std_dyn).multiply(std_dyn)
+            Rstat = self.pond.multiply(np.outer(std,std))  # TODO : fixer l'erreur d'obs en absence de precipitation
+            #Rstat = self.pond.multiply(std).multiply(std)  # TODO : fixer l'erreur d'obs en absence de precipitation
             #Rstat = np.outer(std,std)  # TODO : fixer l'erreur d'obs en absence de precipitation
             R = Rstat + Rdyn  # Rstat améliore sensiblement les petites precip (sinon error obs=0).
             #R = coo_matrix(np.outer(std,std)*(ref_field+1)*self.pond)
@@ -950,6 +976,13 @@ class EnsembleKalmanFilter(Assimilation):
             #R=Rstat*(ref_field+1)  # +1 améliore sensiblement les petites precip (sinon error obs=0). ref field soit champs débiaisé soit champ lissé pour éviter de pénaliser les zones avec surestimation des précipitations
             #R = uniform_filter(R, size=5)  # WARNING : smoothing only possible for diagonal R matrix and not necessary if R is not Rstat+Rdyn but has a linear depencency with Y
 
+#            print('DBUG3')
+#            #C = csc_matrix(P+R)
+#            C = P+R
+#            print('DBUG4')
+#            D = inv(C)
+#            print('DBUG5')
+
 
 
             #Kalman gain
@@ -965,12 +998,16 @@ class EnsembleKalmanFilter(Assimilation):
             #K  = np.matmul(np.matmul(P, H.T), np.linalg.inv(np.matmul(np.matmul(H, P), H.T) + R))  # K=PH'(HPH'+R)^-1
             #K  = np.matmul(P, np.linalg.inv(P+R))  # K=P(P+R)^-1
             #K = coo_matrix(np.matmul(P, np.linalg.inv(P+R))*self.pond)
+
+            #K = P.dot(D)
             K = P.dot(inv(P+R))
+
+            print('DBUG6')
 
             if self.plot:
                 line = K.getrow(600).toarray()[0].reshape((len(parameters.lat), len(parameters.lon)))
                 self.plot_array(line, parameters.rr, 'Kalman_Gain', f'{self.date_str}/Kalman_Gain_{self.domain}_L1.pdf', cmap=plt.cm.coolwarm, vmin=0, vmax=1)
-                self.plot_array(dist[0].reshape((len(parameters.lat), len(parameters.lon))), parameters.rr, 'Distance to point 1', f'{self.date_str}/Distance_1.pdf', cmap=plt.cm.coolwarm)
+                #self.plot_array(dist[0].reshape((len(parameters.lat), len(parameters.lon))), parameters.rr, 'Distance to point 1', f'{self.date_str}/Distance_1.pdf', cmap=plt.cm.coolwarm)
                 line = P.getrow(600).toarray()[0].reshape((len(parameters.lat), len(parameters.lon)))
                 self.plot_array(line, parameters.rr, 'Background_ECM', f'{self.date_str}/Background_ECM_{self.domain}_L1.pdf', cmap=plt.cm.coolwarm)
                 line = R.getrow(600).toarray()[0].reshape((len(parameters.lat), len(parameters.lon)))
@@ -997,7 +1034,7 @@ class EnsembleKalmanFilter(Assimilation):
 
                 fig1,ax1 = plt.subplots(nrows=4, ncols=4, figsize=(16,7))
                 fig2,ax2 = plt.subplots(nrows=4, ncols=4, figsize=(16,7))
-                fig3,ax3 = plt.subplots(nrows=2, ncols=8, figsize=(16,7))
+                fig3,ax3 = plt.subplots(nrows=4, ncols=4, figsize=(16,7))
                 #fig2,ax2 = plt.subplots(nrows=2, ncols=8, figsize=(16,10))
                 i = 0
                 j = 0
@@ -1014,30 +1051,24 @@ class EnsembleKalmanFilter(Assimilation):
                 #A = X + np.matmul(K, Y-X)
                 #A = X + K*(Y-X)  # Without spatial correlations
                 Y = Y.flatten()
-                A = X + K*(Y-X)
+                A = X + K.dot(Y-X)
 
-                if self.gridded:
-                    analysis = xr.DataArray(
-                        name   = 'rr',
-                        data   = A.reshape((len(raw.lat), len(raw.lon))),
-                        #data   = A,  # Without spatial correlations
-                        dims   = ["lat", "lon"],
-                        coords = dict(lon=raw.lon, lat=raw.lat),
-                    )
-                else:
-                    analysis = xr.DataArray(
-                        name   = 'rr',
-                        data   = A,
-                        dims   = ["poste"],
-                        coords = dict(poste=raw.poste),
-                    )
+                analysis = xr.DataArray(
+                    name   = 'rr',
+                    data   = A.reshape((len(raw.lat), len(raw.lon))),
+                    #data   = A,  # Without spatial correlations
+                    dims   = ["lat", "lon"],
+                    coords = dict(lon=raw.lon, lat=raw.lat),
+                )
 
-                    self.newlocalfield[member][:,idd] = A
+                if not self.gridded:
+                    ponctual_analysis = analysis.isel(lat=xr.DataArray(idy, dims='poste'),lon=xr.DataArray(idx, dims='poste'))
+                    self.newlocalfield[member][:,idd] = ponctual_analysis.data
 
                 if self.plot:
                     im1 = plot_field(raw, ax1[i,j], self.rrmin, self.rrmax)
                     im2 = plot_field(analysis, ax2[i,j], self.rrmin, self.rrmax)
-                    im3 = plot_field(self.parameters.mu-raw, ax3[i,j], np.min(self.parameters.mu.data-raw.data), np.max(self.parameters.mu.data-raw.data))
+                    im3 = plot_field(parameters.mu-raw, ax3[i,j], np.min(parameters.mu.data-raw.data), np.max(parameters.mu.data-raw.data))
                     ax1[i,j].set_title(None)
                     ax2[i,j].set_title(None)
                     j = j + 1
