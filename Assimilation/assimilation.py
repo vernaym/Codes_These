@@ -795,12 +795,10 @@ class EnsembleKalmanFilter(Assimilation):
 
         B = csc_matrix(np.shape(self.pond))
         #P = np.empty(np.shape(ensemble_mean))
-        print('DBUG0')
         for mb in ensemble.member.data:
             member = ensemble.sel(member=mb).rr.data
             #B = B + (member-ensemble_mean)**2
             #B = B + np.diag((member-ensemble_mean)**2)
-            print('DBUG1')
             B = B + self.pond.multiply(np.outer(member-ensemble_mean, member-ensemble_mean))  # elementwive multiplication
 #        B = B/len(ensemble.member)**2  # TODO check denominator
         B = B/(len(ensemble.member)-1)
@@ -913,8 +911,9 @@ class EnsembleKalmanFilter(Assimilation):
         # Compute Euclidian distance between all points in the domain
         nlat = len(actual_parameters.lat)
         nlon = len(actual_parameters.lon)
-        ld = 0.3 # correlation lenght
-        max_dist = 0.5  # Memory limit reached at 0.2 for domain Alp. WARNING : very high analysis sensibility to this parameter !!
+        ld = 0.05 # correlation lenght. WARNING : ne pas trop augmenter la distance de correlation (analyse trop proche de l'obs ==> perte de dispersion)
+        max_dist = 10 * ld
+        #max_dist = 0.5  # Memory limit reached at 0.2 for domain Alp. WARNING : very high analysis sensibility to this parameter !!
 
         codistances = os.path.join('/home/vernaym/These/DATA', f'codistance_max_dist_{max_dist}_{self.domain}.npz')
         if not os.path.exists(codistances):
@@ -988,7 +987,7 @@ class EnsembleKalmanFilter(Assimilation):
                 ref_field = parameters.mu.data
             else:
                 ref_field = smoothobs
-            ref_field = parameters.mu.data - smoothobs
+            #ref_field = parameters.mu.data - smoothobs
 
             #std_dyn = std*ref_field.flatten()
 
@@ -997,7 +996,7 @@ class EnsembleKalmanFilter(Assimilation):
             #Rdyn = coo_matrix(np.outer(ref_field*std, ref_field*std)*self.pond)
 
             #Rdyn = csc_matrix(np.outer(ref_field*std, ref_field*std)*self.pond)
-            Rdyn = self.pond.multiply(np.outer(ref_field*std, ref_field*std))
+            Rdyn = self.pond.multiply(np.outer(ref_field*std, ref_field*std))  # TODO comprendre pourquoi *10 augmente autant la dispersion
             #Rdyn = self.pond.multiply(std_dyn).multiply(std_dyn)
             Rstat = self.pond.multiply(np.outer(std,std))  # TODO : fixer l'erreur d'obs en absence de precipitation
             #Rstat = self.pond.multiply(std).multiply(std)  # TODO : fixer l'erreur d'obs en absence de precipitation
@@ -1044,11 +1043,9 @@ class EnsembleKalmanFilter(Assimilation):
             #K = P.dot(D)
             K = B.dot(inv(B+R))
 
-            print('DBUG6')
-
             if self.plot:
                 line = K.getrow(600).toarray()[0].reshape((len(parameters.lat), len(parameters.lon)))
-                self.plot_array(line, parameters.rr, 'Kalman_Gain', f'{self.date_str}/Kalman_Gain_{self.domain}_L1.pdf', cmap=plt.cm.coolwarm, vmin=0, vmax=1)
+                self.plot_array(line, parameters.rr, 'Kalman_Gain', f'{self.date_str}/Kalman_Gain_{self.domain}_L1.pdf', cmap=plt.cm.coolwarm)
                 #self.plot_array(dist[0].reshape((len(parameters.lat), len(parameters.lon))), parameters.rr, 'Distance to point 1', f'{self.date_str}/Distance_1.pdf', cmap=plt.cm.coolwarm)
                 line = B.getrow(600).toarray()[0].reshape((len(parameters.lat), len(parameters.lon)))
                 self.plot_array(line, parameters.rr, 'Background_ECM', f'{self.date_str}/Background_ECM_{self.domain}_L1.pdf', cmap=plt.cm.coolwarm)
@@ -1058,7 +1055,7 @@ class EnsembleKalmanFilter(Assimilation):
 
                 # Plot matrices
                 ECM_max = max(np.max(R.diagonal()), np.max(B.diagonal()))
-                self.plot_matrix(B, parameters.rr, 'Background_ECM', f'{self.date_str}/Background_ECM_{self.domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.viridis)
+                self.plot_matrix(B, parameters.rr, 'Background_ECM', f'{self.date_str}/Background_ECM_{self.domain}.pdf', cmap=plt.cm.viridis)
                 self.plot_matrix(R, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_ECM_{self.domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.viridis)
                 self.plot_matrix(Rstat, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_stat_ECM_{self.domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.viridis)
                 self.plot_matrix(Rdyn, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_dyn_ECM_{self.domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.viridis)
@@ -1122,6 +1119,7 @@ class EnsembleKalmanFilter(Assimilation):
 
             mean = self.ensemble_mean(analysis)
             self.plot_array(mean, parameters.rr, 'Mean precipitation (mm)', f'{self.date_str}/Analysis_mean_{self.domain}.pdf', cmap=plt.cm.YlGnBu, vmin=self.rrmin, vmax=self.rrmax)
+            # TODO : comprendre pourquoi la dispersion est plus importante sur les bords du domaine (distance de coorélation moins impactante ?
             disp = self.ensemble_dispersion(analysis)
             self.plot_array(disp, parameters.rr, 'Dispersion (mm)', f'{self.date_str}/Analysis_dispersion_{self.domain}.pdf', cmap=plt.cm.YlGnBu)
 
