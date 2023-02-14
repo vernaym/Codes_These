@@ -262,6 +262,7 @@ def plot(antilope, datebegin, dateend, categories=True, baiscorrection=False):
     if baiscorrection:
         filename ='Estimated_ratio_alp.nc'
         ratio = xr.open_dataset(filename)
+        #ratio.lat.data = ratio.lat.data+0.005  # TODO : comprendre et resoudre le probleme de decallage des coordonnees
         ratio = ratio.where((ratio.lon>=lonmin) & (ratio.lon<=lonmax) & (ratio.lat<=latmax) & (ratio.lat>=latmin), drop=True)
         antilope.rr_cumul.data = antilope.rr_cumul.data / ratio.ratio.data
 
@@ -498,16 +499,16 @@ if __name__ == "__main__":
     else:
         filename ='CUMUL_ANTILOPEH_alp_2021103000_2022060200.nc'
         #filename ='CUMUL_ANTILOPEQ_alp_2018080106_2019043006.nc'
-        # TODO : comprendre et resoudre le probleme de decallage des coordonnees
     datebegin = filename.split('.')[0].split('_')[-2]
     dateend = filename.split('.')[0].split('_')[-1]
     antilope = xr.open_dataset(os.path.join(datadir, filename))
-    antilope = antilope.where((antilope.lon>=lonmin) & (antilope.lon<=lonmax) & (antilope.lat<=latmax) & (antilope.lat>=latmin), drop=True)
+    #antilope.lat.data = antilope.lat.data+0.005  # TODO : comprendre et resoudre le probleme de decallage des coordonnees
+    #antilope = antilope.where((antilope.lon>=lonmin) & (antilope.lon<=lonmax) & (antilope.lat<=latmax) & (antilope.lat>=latmin), drop=True)
 
-#    plot(antilope, datebegin, dateend, categories=False, baiscorrection=True)
+    plot(antilope, datebegin, dateend, categories=False, baiscorrection=True)
 #    plot(antilope, datebegin, dateend, categories=False)
 
-    ratio_estimation(antilope)
+#    ratio_estimation(antilope)
 
 #    krigeage_scores(antilope)
 #    make_mask(antilope)
