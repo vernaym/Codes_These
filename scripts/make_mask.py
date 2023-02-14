@@ -18,6 +18,7 @@ import shapefile
 import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
+import matplotlib.animation as animation
 
 #plt.rcParams["figure.figsize"] = [7.50, 3.50]
 plt.rcParams["figure.autolayout"] = True
@@ -185,7 +186,7 @@ def add_scores(scores, ax, mycmap=None, vmin=None, vmax=None):
             return '^'
     scores_domain["marker"] = scores_domain.apply(set_marker, axis=1)  # axis=1 makes sure that function is applied to each row
     for marker, info in scores_domain.groupby('marker'):
-        #onlypostes = info.index
+        onlypostes = info.index
         info = info[info.index.isin(onlypostes)]
         if mycmap is None:
             #sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=450, edgecolors='black', linewidth=3, alpha=1)
@@ -232,7 +233,7 @@ def add_boundaries():
     for shape in borders.shapeRecords():
         x = [i[0] for i in shape.shape.points[:]]
         y = [i[1] for i in shape.shape.points[:]]
-        plt.plot(x,y)
+        plt.plot(x,y, color='k')
 
 def add_cities(latmin, latmax, lonmin, lonmax):
     cities = pd.read_csv(os.path.join('/home/vernaym/safran/monitoring/', 'cities.csv'), sep=',')
@@ -331,6 +332,12 @@ def plot_and_save(field, name, cmap=plt.cm.Greys, vmin=None, vmax=None, scores=N
         fig, ax = plt.subplots(figsize=(14,16))
     else:
         fig, ax = plt.subplots()
+    ax = plot_field(fig, ax, field, cmap=cmap, vmin=vmin, vmax=vmax, scores=scores)
+    fig.savefig(os.path.join(savedir, f'{name}.pdf'), format='pdf', layout='tight')
+    field.to_netcdf(os.path.join(savedir, f'{name}.nc'))
+
+
+def plot_field(fig, ax, field, cmap=plt.cm.Greys, vmin=None, vmax=None, scores=None, colorbar=True):
 
     if vmin is None:
         vmin = np.nanmin(field)
@@ -351,14 +358,18 @@ def plot_and_save(field, name, cmap=plt.cm.Greys, vmin=None, vmax=None, scores=N
             add_scores(scores, ax, mycmap=cmap, vmin=vmin, vmax=vmax)
         else:
             add_scores(scores, ax)
+
     add_radar_positions(ax)
     add_boundaries()
     #add_cities(latmin, latmax, lonmin, lonmax)
-    cb = fig.colorbar(cml)
-    cb.set_label(field.name, fontsize=24)
-    cb.ax.tick_params(labelsize=20)
-    fig.savefig(os.path.join(savedir, f'{name}.pdf'), format='pdf', layout='tight')
-    field.to_netcdf(os.path.join(savedir, f'{name}.nc'))
+
+    if colorbar:
+
+        cb = fig.colorbar(cml)
+        cb.set_label(field.name, fontsize=24)
+        cb.ax.tick_params(labelsize=20)
+
+    return ax
 
 def ratio_estimation(field, moving_window=25):
     """
@@ -398,6 +409,7 @@ def ratio_estimation(field, moving_window=25):
 
     scores = pd.read_csv(fic_score, sep=';')
     scores = scores.set_index('num_poste')
+    scores = scores.sort_values('lats')
 
     lons, lats = np.meshgrid(field.lon.data, field.lat.data)
     estimated_ratio = np.ones(np.shape(field.rr_cumul.data))*scores.ratio.mean()
@@ -405,8 +417,11 @@ def ratio_estimation(field, moving_window=25):
     d0 = 0.25
     c0 = 1
     onlypostes = scores.index
-    for poste in scores.index:
+
+    used_scores = []
+    for i,poste in enumerate(scores.index):
         if poste in onlypostes:
+            used_scores.append(poste)
             #print(scores.loc[poste])
             ratio = scores.loc[poste, 'ratio']
             dist = np.sqrt((lats-scores.loc[poste,'lats'])**2+(lons-scores.loc[poste, 'lons'])**2)  # Euclidian horizontal distance
@@ -463,6 +478,53 @@ def ratio_estimation(field, moving_window=25):
 #    plot_and_save(observation_error, f'Observation_error_{moving_window}_{d0}_{c0}_{domain}', cmap=plt.cm.coolwarm, scores=scores)
     #plot_and_save(observation_error, f'Observation_error_{moving_window}_{d0}_{domain}', vmin=0, vmax=30, cmap=plt.cm.Greys, scores=scores)
 
+def animation_mask(field):
+
+    scores = pd.read_csv(fic_score, sep=';')
+    scores = scores.loc[(scores.lons>=lonmin) & (scores.lons<=lonmax) & (scores.lats<=latmax) & (scores.lats>=latmin)]
+    scores = scores.set_index('num_poste')
+    scores = scores.sort_values('lats')
+
+    lons, lats = np.meshgrid(field.lon.data, field.lat.data)
+    estimated_ratio = np.ones(np.shape(field.rr_cumul.data))*scores.ratio.mean()
+    #estimated_ratio = smoothratio
+    d0 = 0.25
+    c0 = 1
+    def animate_func(num):
+        """
+        From : https://towardsdatascience.com/how-to-animate-plots-in-python-2512327c8263
+        """
+        ax = plt.axes()
+        ax.clear()
+        estimated_ratio = estimated_ratio = np.ones(np.shape(field.rr_cumul.data))*scores.ratio.mean()
+        used_scores = scores.index[:num]
+        if num == 0 :
+            ratio_field = to_xarray(estimated_ratio, field)
+            plot_field(fig, ax, ratio_field, cmap=plt.cm.coolwarm, vmin=0.2, vmax=1.8, colorbar=True)
+        else:
+            for poste in used_scores:
+                ratio = scores.loc[poste, 'ratio']
+                dist = np.sqrt((lats-scores.loc[poste,'lats'])**2+(lons-scores.loc[poste, 'lons'])**2)  # Euclidian horizontal distance
+                idx, idy = np.where(dist==np.min(dist))
+                ref_cumul = field.rr_cumul.data[idx[0],idy[0]]
+                cumul_dist = field.rr_cumul.data-ref_cumul
+                cumul_ratio = field.rr_cumul.data/ref_cumul
+                estimated_ratio = estimated_ratio+(ratio*cumul_ratio-estimated_ratio)*np.exp(-dist/d0)*np.exp(-np.abs(cumul_dist)/(ref_cumul/c0))
+            ratio_field = to_xarray(estimated_ratio, field)
+            plot_field(fig, ax, ratio_field, cmap=plt.cm.coolwarm, vmin=0.5, vmax=1.5, scores=scores.loc[used_scores], colorbar=False)
+
+    #fig, ax = plt.subplots(figsize=(14,16))
+    if domain == 'alp':
+        fig = plt.figure(figsize=(14,16))
+    elif domain == 'GrandesRousses':
+        fig = plt.figure(figsize=(12,6))
+
+#    ax = plt.axes()
+    line_ani = animation.FuncAnimation(fig, animate_func, interval=750, frames=len(scores.index))
+    # Saving the Animation
+    f = os.path.join('/home/vernaym/These/figures/mask', f'animation_mask_{domain}.gif')
+    writergif = animation.PillowWriter(fps=1)
+    line_ani.save(f, writer=writergif)
 
 def krigeage_scores(field):
     variogram  = 'exponential'  # The same as for ANTILOPE without RADAR data
@@ -487,11 +549,11 @@ def krigeage_scores(field):
     add_scores(scores)
     fig.savefig(os.path.join(savedir, f'kriging_ratio.pdf'), format='pdf', layout='tight')
 
-def plot_field(field, scores):
-    lt.subplots(figsize=(14,16))
-    field.rr_cumul.plot(ax=ax, cmap=plt.cm.coolwarm)
-    add_scores(scores)
-    fig.savefig(os.path.join(datadir, filename.replace('.nc', '.pdf')), format='pdf', layout='tight')
+#def plot_field(field, scores):
+#    lt.subplots(figsize=(14,16))
+#    field.rr_cumul.plot(ax=ax, cmap=plt.cm.coolwarm)
+#    add_scores(scores)
+#    fig.savefig(os.path.join(datadir, filename.replace('.nc', '.pdf')), format='pdf', layout='tight')
 
 if __name__ == "__main__":
     if domain == 'GrandesRousses':
@@ -503,12 +565,13 @@ if __name__ == "__main__":
     dateend = filename.split('.')[0].split('_')[-1]
     antilope = xr.open_dataset(os.path.join(datadir, filename))
     #antilope.lat.data = antilope.lat.data+0.005  # TODO : comprendre et resoudre le probleme de decallage des coordonnees
-    #antilope = antilope.where((antilope.lon>=lonmin) & (antilope.lon<=lonmax) & (antilope.lat<=latmax) & (antilope.lat>=latmin), drop=True)
+    antilope = antilope.where((antilope.lon>=lonmin) & (antilope.lon<=lonmax) & (antilope.lat<=latmax) & (antilope.lat>=latmin), drop=True)
 
-    plot(antilope, datebegin, dateend, categories=False, baiscorrection=True)
+#    plot(antilope, datebegin, dateend, categories=False, baiscorrection=True)
 #    plot(antilope, datebegin, dateend, categories=False)
 
 #    ratio_estimation(antilope)
+    animation_mask(antilope)
 
 #    krigeage_scores(antilope)
 #    make_mask(antilope)
