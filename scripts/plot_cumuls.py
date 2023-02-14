@@ -404,7 +404,16 @@ if __name__ == "__main__":
     mnt_proj = proj_mnt(mnt)
     #antilope = xr.open_dataset(os.path.join(datadir, 'CUMUL_ANTILOPEQ_GrandesRousses_{0:s}_{1:s}.nc'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))))
     #antilope = xr.open_dataset(os.path.join(datadir, 'CUMUL_ANTILOPEJP1Q_GrandesRousses_{0:s}_{1:s}.nc'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))))
-    antilope = xr.open_dataset(os.path.join(datadir, 'CUMUL_ANTILOPEH_alp_{0:s}_{1:s}.nc'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))))
+    filename = os.path.join(datadir, 'CUMUL_ANTILOPEH_alp_{0:s}_{1:s}.nc'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H')))
+    try :
+        antilope = xr.open_dataset(filename)
+    except:
+        try :
+            filename = os.path.join(datadir, 'CUMUL_ANTILOPEQ_alp_{0:s}_{1:s}.nc'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H')))
+            antilope = xr.open_dataset(filename)
+        except:
+            raise
+
     if args.domain == 'GrandesRousses':
         antilope = antilope.where((antilope.lon>=lonmin) & (antilope.lon<=lonmax) & (antilope.lat<=latmax) & (antilope.lat>=latmin), drop=True)
     vmax = np.max(antilope.rr_cumul)

@@ -126,7 +126,7 @@ def goto(path):
     os.chdir(path)
 
 def read_nivometeo_coords(domain):
-    metadata = pd.read_csv('postes_nivometeo.csv', sep=';')
+    metadata = pd.read_csv(os.path.join('/home/vernaym/These/DATA', 'postes_nivometeo.csv'), sep=';')
     latmax, latmin, lonmin, lonmax = np.array(coords[domain]).astype(float)/1000.
     subdata = metadata[(metadata['poste_nivo.lat_dg']>=latmin) & (metadata['poste_nivo.lat_dg']<=latmax) & (metadata['poste_nivo.lon_dg']>=lonmin) & (metadata['poste_nivo.lon_dg']<=lonmax)]
     return dict(zip(np.array(subdata['poste_nivo.num_poste']), zip(np.array(subdata['poste_nivo.lat_dg']), np.array(subdata['poste_nivo.lon_dg']))))
@@ -201,6 +201,8 @@ if __name__ == "__main__":
             print(date.strftime('%Y%m%d%H'))
             #if date.month in [1,2,3,4,11,12]:  # Consider only month with nivometeo observations
             if not os.path.exists('{0:s}_{1:s}.grib'.format(args.model, date.strftime('%Y%m%d%H'))):
+                print(os.getcwd())
+                print(f'File {args.model}_{date.strftime("%Y%m%d%H")}.grib does not exist')
                 grib = ExtractGrib(args.model, args.grid, domain, date)
                 result = grib.run(args.parameter, args.level, dt)
                 gribname = grib.gribname
