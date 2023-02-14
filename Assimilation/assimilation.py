@@ -911,11 +911,11 @@ class EnsembleKalmanFilter(Assimilation):
             std = parameters.sigma.data
             #Rdyn = np.diag(((parameters.rr.data-smoothobs.rr.data)**2).flatten())
             #Rdyn = (Y-smoothobs.data)**2
-            dyn_ratio = parameters.rr.data/smoothobs.data-1
-            pos = np.where(dyn_ratio>0)
-            dyn_ratio[pos] = dyn_ratio[pos] + 1  # r=1.4 ==> err = 1.4
-            neg = np.where(dyn_ratio<0)
-            dyn_ratio[neg] = dyn_ratio[neg] - 1  # r=1.4 ==> err = 1.4
+#            dyn_ratio = parameters.rr.data/smoothobs.data-1
+#            pos = np.where(dyn_ratio>0)
+#            dyn_ratio[pos] = dyn_ratio[pos] + 1  # r=1.4 ==> err = 1.4
+#            neg = np.where(dyn_ratio<0)
+#            dyn_ratio[neg] = dyn_ratio[neg] - 1  # r=1.4 ==> err = 1.4
 
             # ref field soit champs débiaisé soit champ lissé pour éviter de pénaliser les zones avec surestimation des précipitations
             if self.debiasing:
