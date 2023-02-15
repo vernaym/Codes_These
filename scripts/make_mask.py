@@ -34,14 +34,19 @@ datadir = '/home/vernaym/These/DATA'
 #savedir = '/home/vernaym/workdir/ASSIMILATION/mask'
 savedir = '/home/vernaym/workdir/ASSIMILATION/mask/illustration_methode'
 
-onlypostes = [5001400]
 onlypostes = [5001400, 5085403]
 onlypostes = [5001400, 5085403, 5133400]
 onlypostes = [74056416, 73176400, 73257400, 73123402, 38548400, 73194401]
 onlypostes = [74056416, 73132400, 73176400, 73257400, 73194401]
 onlypostes = [38191400]
-onlypostes = []
-onlypostes = [73257400]
+onlypostes = [5001400]
+onlypostes = [38375400]
+onlypostes = [38253400]
+onlypostes = [73194401]
+onlypostes = [74056416, 5001400,38548400]
+
+d0 = 0.2
+c0 = 2
 
 # TODO ajouter les postes clim non utilisés par ANTILOPE temps réel
 fic_score = os.path.join(datadir, 'scores_2021110106_2022043006_alpes.csv')
@@ -65,16 +70,22 @@ extract_dom = dict(
             lonmax = 6.490,
         ),
         Savoie = dict(
-            latmax = 45.5,
+            latmax = 45.6,
             latmin = 45.0,
-            lonmin = 6.25,
-            lonmax = 6.75,
+            lonmin = 6.2,
+            lonmax = 7.2,
         ),
         HautesAlpes = dict(
-            latmax = 45.0,
-            latmin = 44.7,
-            lonmin = 6.4,
-            lonmax = 7.0,
+            latmax = 45.2,
+            latmin = 44.25,
+            lonmin = 6.2,
+            lonmax = 7.1,
+        ),
+        MontBlanc = dict(
+            latmax = 46.25,
+            latmin = 45.5,
+            lonmin = 6.5,
+            lonmax = 7.1,
         ),
         alp = dict(
             latmax = 46.45,
@@ -328,6 +339,12 @@ def to_xarray(array, field, varname='rr'):
 def plot_and_save(field, name, cmap=plt.cm.Greys, vmin=None, vmax=None, scores=None):
     if domain == 'GrandesRousses':
         fig, ax = plt.subplots(figsize=(12,6))
+    elif domain == 'HautesAlpes':
+        fig, ax = plt.subplots(figsize=(14,12))
+    elif domain == 'Savoie':
+        fig, ax = plt.subplots(figsize=(12,6))
+    elif domain == 'MontBlanc':
+        fig, ax = plt.subplots(figsize=(12,11))
     elif domain == 'alp':
         fig, ax = plt.subplots(figsize=(14,16))
     else:
@@ -414,10 +431,7 @@ def ratio_estimation(field, moving_window=25):
     lons, lats = np.meshgrid(field.lon.data, field.lat.data)
     estimated_ratio = np.ones(np.shape(field.rr_cumul.data))*scores.ratio.mean()
     #estimated_ratio = smoothratio
-    d0 = 0.25
-    c0 = 1
     onlypostes = scores.index
-
     used_scores = []
     for i,poste in enumerate(scores.index):
         if poste in onlypostes:
@@ -488,8 +502,6 @@ def animation_mask(field):
     lons, lats = np.meshgrid(field.lon.data, field.lat.data)
     estimated_ratio = np.ones(np.shape(field.rr_cumul.data))*scores.ratio.mean()
     #estimated_ratio = smoothratio
-    d0 = 0.25
-    c0 = 1
     def animate_func(num):
         """
         From : https://towardsdatascience.com/how-to-animate-plots-in-python-2512327c8263
@@ -567,10 +579,10 @@ if __name__ == "__main__":
     #antilope.lat.data = antilope.lat.data+0.005  # TODO : comprendre et resoudre le probleme de decallage des coordonnees
     antilope = antilope.where((antilope.lon>=lonmin) & (antilope.lon<=lonmax) & (antilope.lat<=latmax) & (antilope.lat>=latmin), drop=True)
 
-    plot(antilope, datebegin, dateend, categories=False, baiscorrection=True)
+#    plot(antilope, datebegin, dateend, categories=False, baiscorrection=True)
 #    plot(antilope, datebegin, dateend, categories=False)
 
-#    ratio_estimation(antilope)
+    ratio_estimation(antilope)
 #    animation_mask(antilope)
 
 #    krigeage_scores(antilope)
