@@ -201,7 +201,7 @@ algo = dict(
         KD17         = 'EnsembleKalmanFilter/XP17/EnKF_2021120106_2022050106_daily_alp.nc',
         #KD18         = 'EnsembleKalmanFilter/XP18/EnKF_2021120106_2022050106_daily_alp.nc',
         #KD19         = 'EnsembleKalmanFilter/XP19/EnKF_2021120106_2022050106_daily_alp.nc',
-        KD20         = 'EnsembleKalmanFilter/XP20/EnKF_2021120106_2022050106_daily_alp.nc',
+        #KD20         = 'EnsembleKalmanFilter/XP20/EnKF_2021120106_2022050106_daily_alp.nc',
     )
 
 
