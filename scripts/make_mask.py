@@ -469,7 +469,7 @@ def ratio_estimation(field, moving_window=25):
     scores = scores.loc[(scores.lats>=latmin) & (scores.lats<=latmax) & (scores.lons>=lonmin) & (scores.lons<=lonmax)]
     #plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}_{moving_window}', vmin=0.5, vmax=1.5, cmap=plt.cm.coolwarm, scores=scores)
     #plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}', vmin=0.5, vmax=1.5, cmap=plt.cm.coolwarm, scores=scores)
-    plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{moving_window}_{d0}_{c0}', vmin=0.5, vmax=1.5, cmap=plt.cm.coolwarm, scores=scores)
+    plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{moving_window}_{d0}_{c0}', vmin=0.4, vmax=1.6, cmap=plt.cm.coolwarm, scores=scores)
 
 #    plot_and_save(smoothed, f'Smoothed_field_{moving_window}_{domain}', cmap=plt.cm.YlGnBu)
 #    plot_and_save(diff, f'Observation_error_smoothingsize{moving_window}_{domain}', cmap=plt.cm.coolwarm)
@@ -500,7 +500,7 @@ def animation_mask(field):
         used_scores = scores.index[:num]
         if num == 0 :
             ratio_field = to_xarray(estimated_ratio, field)
-            plot_field(fig, ax, ratio_field, cmap=plt.cm.coolwarm, vmin=0.2, vmax=1.8, colorbar=True)
+            plot_field(fig, ax, ratio_field, cmap=plt.cm.coolwarm, vmin=0.4, vmax=1.6, colorbar=True)
         else:
             for poste in used_scores:
                 ratio = scores.loc[poste, 'ratio']
@@ -511,7 +511,7 @@ def animation_mask(field):
                 cumul_ratio = field.rr_cumul.data/ref_cumul
                 estimated_ratio = estimated_ratio+(ratio*cumul_ratio-estimated_ratio)*np.exp(-dist/d0)*np.exp(-np.abs(cumul_dist)/(ref_cumul/c0))
             ratio_field = to_xarray(estimated_ratio, field)
-            plot_field(fig, ax, ratio_field, cmap=plt.cm.coolwarm, vmin=0.5, vmax=1.5, scores=scores.loc[used_scores], colorbar=False)
+            plot_field(fig, ax, ratio_field, cmap=plt.cm.coolwarm, vmin=0.4, vmax=1.6, scores=scores.loc[used_scores], colorbar=False)
 
     #fig, ax = plt.subplots(figsize=(14,16))
     if domain == 'alp':
@@ -567,11 +567,11 @@ if __name__ == "__main__":
     #antilope.lat.data = antilope.lat.data+0.005  # TODO : comprendre et resoudre le probleme de decallage des coordonnees
     antilope = antilope.where((antilope.lon>=lonmin) & (antilope.lon<=lonmax) & (antilope.lat<=latmax) & (antilope.lat>=latmin), drop=True)
 
-#    plot(antilope, datebegin, dateend, categories=False, baiscorrection=True)
+    plot(antilope, datebegin, dateend, categories=False, baiscorrection=True)
 #    plot(antilope, datebegin, dateend, categories=False)
 
 #    ratio_estimation(antilope)
-    animation_mask(antilope)
+#    animation_mask(antilope)
 
 #    krigeage_scores(antilope)
 #    make_mask(antilope)
