@@ -44,9 +44,15 @@ datadir = '/home/vernaym/These/DATA'
 # Domaine des Grandes Rousses
 domain_coords = dict(
         GrandesRousses = dict(latmax=45.240, latmin=44.990, lonmin=6.010, lonmax = 6.490),
-        NorthernAlps   = dict(lonmin=5.8, lonmax=7.1, latmin=45.6, latmax=46.35),
-        CentralAlps    = dict(lonmin=5.6, lonmax=7.2, latmin=45.0, latmax=45.6),
-        SouthernAlps   = dict(lonmin=5.7, lonmax=7.0, latmin=44.1, latmax=45.0),
+        NorthernAlps   = dict(lonmin=6.0, lonmax=6.9, latmin=45.6, latmax=46.35),
+        CentralAlps    = dict(lonmin=5.6, lonmax=7.0, latmin=45.0, latmax=45.6),
+        SouthernAlps   = dict(lonmin=5.7, lonmax=7.0, latmin=44.2, latmax=45.0),
+        HauteSavoie    = dict(lonmin=6.45, lonmax=6.95, latmin=45.67, latmax=46.35),
+        Savoie         = dict(lonmin=6.06, lonmax=7.06, latmin=45.15, latmax=45.65),
+        Isere          = dict(lonmin=5.54, lonmax=6.19, latmin=44.89, latmax=45.16),
+        Brianconnais   = dict(lonmin=6.48, lonmax=6.95, latmin=44.67, latmax=44.95),
+        HautesAlpes    = dict(lonmin=5.90, lonmax=6.36, latmin=44.58, latmax=44.81),
+        AlpesSud       = dict(lonmin=6.56, lonmax=6.92, latmin=44.18, latmax=40.49),
         alp            = dict(latmax=46.450, latmin=44.100, lonmin=5.400, lonmax=7.200),
 )
 
@@ -581,7 +587,8 @@ class Assimilation(object):
         elif self.debiasing == 3:
             #mask = xr.open_dataset(os.path.join("/home/vernaym/These/DATA/mask", f"Estimated_ratio_{self.domain}_0.15_15.nc"))
             mask = xr.open_dataset(os.path.join(f"Estimated_ratio.nc"))
-            ratio = mask.rr
+            #ratio = mask.rr
+            ratio = mask.ratio
         else:
             ratio = 1  # No debiasing
         parameters['mu'] = parameters['rr'] / ratio  # TODO : check if the ensemble after assimilation is not biased
@@ -622,7 +629,8 @@ class Assimilation(object):
                 parameters['sigma'] =  np.abs(mask.rr)
             elif self.mask in [9]:
                 mask = xr.open_dataset(os.path.join(f"Observation_error.nc"))
-                parameters['sigma'] =  mask.rr  # Pas de valeur absolue pour le calcul des covariances !
+                #parameters['sigma'] =  mask.rr  # Pas de valeur absolue pour le calcul des covariances !
+                parameters['sigma'] =  mask.ratio  # Pas de valeur absolue pour le calcul des covariances !
                 #parameters['sigma'] =  (0.261 + 0.263 * parameters['rr'])*np.abs(mask.rr)  # PF
 
 
@@ -906,21 +914,14 @@ class EnsembleKalmanFilter(Assimilation):
             null = np.empty((self.nposte, len(self.period)))
             #self.nb_out_raw = np.zeros(self.nposte)  # Count number of obs outside raw ensemble
             # Extract evalution points
-            evaluation_points = zip(self.nivometeo.num_poste.data, np.max(self.nivometeo.lat, axis=1).data, np.max(self.nivometeo.lon, axis=1).data)
-            idx = list()
-            idy = list()
-            for idp, (num_poste, lat, lon) in enumerate(evaluation_points):
-                #print(num_poste)
-                nearest_lat = nearest(self.radar.lat, lat)
-                nearest_lon = nearest(self.radar.lon, lon)
-                idy.append(np.where(self.radar.lat.data==nearest_lat)[0][0])  # index of the corresponding antilope pixel latitude
-                idx.append(np.where(self.radar.lon.data==nearest_lon)[0][0])  # index of the corresponding antilope pixel longitude
 
+        null[:] = np.nan
         self.newlocalfield = {m:null.copy() for m in range(1, self.Ne+1)}  # Used only for ponctual assimilation
         #self.newlocalfield = {m:dict() for m in range(1, self.Ne+1)}  # Used only for ponctual assimilation
 
         if self.domain == 'alp':
-            domains = ['NorthernAlps', 'CentralAlps', 'SouthernAlps']
+            #domains = ['NorthernAlps', 'CentralAlps', 'SouthernAlps']
+            domains = ['HauteSavoie', 'Savoie', 'Isere', 'Brianconnais', 'HautesAlpes', 'AlpesSud']
         else:
             domains = [self.domain]
 
@@ -954,7 +955,7 @@ class EnsembleKalmanFilter(Assimilation):
             nlat = len(parameters_domain.lat)
             nlon = len(parameters_domain.lon)
             ld = 0.03 # correlation lenght. WARNING : ne pas trop augmenter la distance de correlation (analyse trop proche de l'obs ==> perte de dispersion)
-            max_dist = 2*ld
+            max_dist = ld*2
             #max_dist = 0.5  # Memory limit reached at 0.2 for domain Alp. WARNING : very high analysis sensibility to this parameter !!
 
             codistances = os.path.join('/home/vernaym/These/DATA', f'codistance_max_dist_{max_dist}_{domain}.npz')
@@ -1031,9 +1032,8 @@ class EnsembleKalmanFilter(Assimilation):
                 Rdyn = self.pond.multiply(np.outer(ref_field*std, ref_field*std))  # TODO comprendre pourquoi *10 augmente autant la dispersion
                 Rstat = self.pond.multiply(np.outer(std,std))  # TODO : fixer l'erreur d'obs en absence de precipitation
                 R = Rstat + Rdyn  # Rstat améliore sensiblement les petites precip (sinon error obs=0).
-                import pdb
-                pdb.set_trace()
-                K = B.dot(inv(B+R))
+                #K = B.dot(inv(B+R))
+                K = B.dot(np.linalg.inv((B+R).toarray()))
 
                 if self.plot:
                     line = K.getrow(600).toarray()[0].reshape((len(parameters.lat), len(parameters.lon)))
@@ -1071,21 +1071,30 @@ class EnsembleKalmanFilter(Assimilation):
                     A = X + K.dot(Y-X)
 
                     # On peut maintenant extraire les vrais domaines (on a plus besoind e la marge sur les bords)
-                    raw   = raw.sel({'lat':actual_lat, 'lon':actual_lon})
-                    tmp = xr.DataArray(
+                    analysis[member] = xr.DataArray(
                         name   = 'rr',
                         data   = A.reshape((len(raw.lat), len(raw.lon))),
                         #data   = A,  # Without spatial correlations
                         dims   = ["lat", "lon"],
                         coords = dict(lon=raw.lon, lat=raw.lat),
                     )
-                    analysis[domain][member] = tmp.sel({'lat':actual_lat, 'lon':actual_lon})
+                    raw   = raw.sel({'lat':actual_lat, 'lon':actual_lon})
+                    #analysis[member] = tmp.sel({'lat':actual_lat, 'lon':actual_lon})
 
                     if not self.gridded:
-                        ponctual_analysis = analysis[domain][member].isel(lat=xr.DataArray(idy[(idy>=latmin)&(idy<=latmax)], dims='poste'),lon=xr.DataArray(idx[(idx>=lonmin)&(idx<=lonmax)], dims='poste'))
-                        import pdb
-                        pdb.set_trace()
-                        self.newlocalfield[member][:,idd] = ponctual_analysis.data
+                        evaluation_points = zip(self.nivometeo.num_poste.data, np.max(self.nivometeo.lat, axis=1).data, np.max(self.nivometeo.lon, axis=1).data)
+#                        idx = list()
+#                        idy = list()
+                        for idp, (num_poste, lat, lon) in enumerate(evaluation_points):
+                            #print(num_poste)
+                            if lat>=latmin and lat<=latmax and lon>=lonmin and lon<=lonmax:
+                                nearest_lat = nearest(analysis[member].lat, lat)
+                                nearest_lon = nearest(analysis[member].lon, lon)
+                                self.newlocalfield[member][idp,idd] = analysis[member].sel({'lat':nearest_lat, 'lon':nearest_lon}).data
+#                                idy.append(np.where(analysis[member].lat.data==nearest_lat)[0][0])  # index of the corresponding antilope pixel latitude
+#                                idx.append(np.where(analysis[member].lon.data==nearest_lon)[0][0])  # index of the corresponding antilope pixel longitude
+#                                ponctual_analysis = analysis[member].isel(lat=xr.DataArray(idy[(idy>=latmin)&(idy<=latmax)], dims='poste'),lon=xr.DataArray(idx[(idx>=lonmin)&(idx<=lonmax)], dims='poste'))
+#                                self.newlocalfield[member][:,idd] = ponctual_analysis.data
 
                     if self.plot:
                         im1 = plot_field(raw, ax1[i,j], self.rrmin, self.rrmax)
@@ -1097,27 +1106,19 @@ class EnsembleKalmanFilter(Assimilation):
                         if j==4:
                             j = 0
                             i = i + 1
-                        # Alps :
-                        #j = j + 1
-                        #if j==8:
-                        #    j = 0
-                        #    i = i + 1
-
-            mean = self.ensemble_mean(analysis)
-            self.plot_array(mean, parameters.rr, 'Mean precipitation (mm)', f'{self.date_str}/Analysis_mean_{self.domain}.pdf', cmap=plt.cm.YlGnBu, vmin=self.rrmin, vmax=self.rrmax)
-            # TODO : comprendre pourquoi la dispersion est plus importante sur les bords du domaine (distance de coorélation moins impactante ?
-            disp = self.ensemble_dispersion(analysis)
-            self.plot_array(disp, parameters.rr, 'Dispersion (mm)', f'{self.date_str}/Analysis_dispersion_{self.domain}.pdf', cmap=plt.cm.YlGnBu)
 
             if self.plot:
+                mean = self.ensemble_mean(analysis)
+                self.plot_array(mean, parameters.rr, 'Mean precipitation (mm)', f'{self.date_str}/Analysis_mean_{self.domain}.pdf', cmap=plt.cm.YlGnBu, vmin=self.rrmin, vmax=self.rrmax)
+                # TODO : comprendre pourquoi la dispersion est plus importante sur les bords du domaine (distance de coorélation moins impactante ?
+                disp = self.ensemble_dispersion(analysis)
+                self.plot_array(disp, parameters.rr, 'Dispersion (mm)', f'{self.date_str}/Analysis_dispersion_{self.domain}.pdf', cmap=plt.cm.YlGnBu)
                 finalize_fig(fig1, im1, label='24-hour precipitation (mm)', outname=f'{self.date_str}/RAW_{self.date_str}_{self.domain}.pdf')
                 finalize_fig(fig2, im2, label='24-hour precipitation (mm)', outname=f'{self.date_str}/ANALYSIS_{self.date_str}_{self.domain}.pdf')
                 finalize_fig(fig3, im3, label='24-hour precipitation difference (mm)', outname=f'{self.date_str}/INNOVATION_{self.date_str}_{self.domain}.pdf')
 
-                #TODO : Plot analysis dispersion
-
-            t2 = time.time()
-            print(f'Assimilation for date {self.date_str} took {(t2-t1)*1000.}ms')
+#            t2 = time.time()
+#            print(f'Assimilation for date {self.date_str} took {(t2-t1)*1000.}ms')
 
     def plot_matrix(self, matrix, ref_field, label, outname, cmap=plt.cm.YlGnBu, vmin=None, vmax=None):
         #diag = np.array([matrix[i,i] for i in range(len(matrix))])
