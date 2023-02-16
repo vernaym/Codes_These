@@ -318,7 +318,7 @@ def plot(antilope, datebegin, dateend, categories=True, baiscorrection=False):
     #cb2.ax.tick_params(labelsize=12)
     ax.grid(False)  # Remove grid lines (does not work !)
     #fig.legend()
-    fig.tight_layout()
+    #fig.tight_layout()
     fig.savefig(os.path.join(savedir, f'CUMUL_ANTILOPE_{datebegin}_{dateend}_{domain}.pdf'), layout='tight')
     #sys.exit()
 
@@ -346,7 +346,8 @@ def plot_and_save(field, name, cmap=plt.cm.Greys, vmin=None, vmax=None, scores=N
     elif domain == 'MontBlanc':
         fig, ax = plt.subplots(figsize=(12,11))
     elif domain == 'alp':
-        fig, ax = plt.subplots(figsize=(14,16))
+        fig, ax = plt.subplots(figsize=(16,16))
+        #fig, ax = plt.subplots(figsize=(14,16))
     else:
         fig, ax = plt.subplots()
     ax = plot_field(fig, ax, field, cmap=cmap, vmin=vmin, vmax=vmax, scores=scores)
@@ -483,7 +484,8 @@ def ratio_estimation(field, moving_window=25):
     scores = scores.loc[(scores.lats>=latmin) & (scores.lats<=latmax) & (scores.lons>=lonmin) & (scores.lons<=lonmax)]
     #plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}_{moving_window}', vmin=0.5, vmax=1.5, cmap=plt.cm.coolwarm, scores=scores)
     #plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}', vmin=0.5, vmax=1.5, cmap=plt.cm.coolwarm, scores=scores)
-    plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{moving_window}_{d0}_{c0}', vmin=0.4, vmax=1.6, cmap=plt.cm.coolwarm, scores=scores)
+    #plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{moving_window}_{d0}_{c0}', vmin=0.4, vmax=1.6, cmap=plt.cm.coolwarm, scores=scores)  # To add scores
+    plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{moving_window}_{d0}_{c0}', vmin=0.4, vmax=1.6, cmap=plt.cm.coolwarm)
 
 #    plot_and_save(smoothed, f'Smoothed_field_{moving_window}_{domain}', cmap=plt.cm.YlGnBu)
 #    plot_and_save(diff, f'Observation_error_smoothingsize{moving_window}_{domain}', cmap=plt.cm.coolwarm)
@@ -579,10 +581,10 @@ if __name__ == "__main__":
     #antilope.lat.data = antilope.lat.data+0.005  # TODO : comprendre et resoudre le probleme de decallage des coordonnees
     antilope = antilope.where((antilope.lon>=lonmin) & (antilope.lon<=lonmax) & (antilope.lat<=latmax) & (antilope.lat>=latmin), drop=True)
 
-#    plot(antilope, datebegin, dateend, categories=False, baiscorrection=True)
-#    plot(antilope, datebegin, dateend, categories=False)
+    plot(antilope, datebegin, dateend, categories=True, baiscorrection=True)
+#    plot(antilope, datebegin, dateend, categories=True)
 
-    ratio_estimation(antilope)
+#    ratio_estimation(antilope)
 #    animation_mask(antilope)
 
 #    krigeage_scores(antilope)
