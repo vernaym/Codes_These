@@ -1046,7 +1046,7 @@ class EnsembleKalmanFilter(Assimilation):
 
         # Smooth observation to compute dynamic observation error
 #        smoothobs = uniform_filter(self.parameters.sel({'time':date}).rr, size=15)  # numpy array
-        smoothobs = uniform_filter(self.parameters.sel({'time':date}).mu, size=30)  # numpy array
+        smoothobs = uniform_filter(self.parameters.sel({'time':date}).mu, size=10)  # numpy array
         smoothobs = xr.DataArray(
             name   = 'rr',
             data   = smoothobs,
@@ -1061,16 +1061,17 @@ class EnsembleKalmanFilter(Assimilation):
 #            ref_field = parameters.mu.data
 #        else:
 #            ref_field = smoothobs
-#        ref_field = parameters.mu.data - smoothobs
+        ref_field = parameters.mu.data - smoothobs
 #        ref_field = parameters.rr.data - smoothobs
 #        ref_field = smoothobs
-        ref_field = parameters.mu.data
+#        ref_field = parameters.mu.data
 
         std = parameters.sigma.data
-        Rdyn = self.pond.multiply(np.outer(np.sqrt(ref_field)*std, np.sqrt(ref_field)*std))  # TODO comprendre pourquoi *10 augmente autant la dispersion
-        #Rdyn = self.pond.multiply(np.outer(ref_field*std, ref_field*std))  # TODO comprendre pourquoi *10 augmente autant la dispersion
-        Rstat = self.pond.multiply(np.outer(std*10,std*10))  # TODO : fixer l'erreur d'obs en absence de precipitation
+        #Rdyn = self.pond.multiply(np.outer(np.sqrt(ref_field)*std, np.sqrt(ref_field)*std))  # TODO comprendre pourquoi *10 augmente autant la dispersion
+        Rdyn = self.pond.multiply(np.outer(ref_field, ref_field))  # TODO comprendre pourquoi *10 augmente autant la dispersion
+        Rstat = self.pond.multiply(np.outer(std*20,std*20))  # TODO : fixer l'erreur d'obs en absence de precipitation
         R = Rstat + Rdyn  # Rstat améliore sensiblement les petites precip (sinon error obs=0).
+        #R = Rstat # Rstat améliore sensiblement les petites precip (sinon error obs=0).
         #K = B.dot(inv(B+R))
         K = B.dot(np.linalg.inv((B+R).toarray()))
 
