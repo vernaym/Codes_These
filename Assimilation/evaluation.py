@@ -201,7 +201,8 @@ algo = dict(
         KD17         = 'EnsembleKalmanFilter/XP17/EnKF_2021120106_2022050106_daily_alp.nc',
         #KD18         = 'EnsembleKalmanFilter/XP18/EnKF_2021120106_2022050106_daily_alp.nc',
         #KD19         = 'EnsembleKalmanFilter/XP19/EnKF_2021120106_2022050106_daily_alp.nc',
-        KD20         = 'EnsembleKalmanFilter/XP20/EnKF_2021120106_2022050106_daily_alp.nc',
+        #KD20         = 'EnsembleKalmanFilter/XP20/EnKF_2021120106_2022050106_daily_alp.nc',
+        KD22         = 'EnsembleKalmanFilter/XP_localisation/EnKF_2021120106_2022050106_daily_alp.nc',
     )
 
 
@@ -284,6 +285,7 @@ xpid_label = dict(
         KD18          = 'EnKF, mask9=estimated_ratio, debiaisage3=25_0.1_2',
         KD19          = 'EnKF, mask9=estimated_ratio, debiaisage3=10_0.1_2',
         KD20          = 'EnKF, mask9=estimated_ratio, debiaisage3=25_0.15_2, R=((Y+1)*std)²',
+        KD22          = 'EnKF, mask9=estimated_ratio, debiaisage3=0.2_2, localisation=0.05',
         LDM9D3        = 'PF, mask9=estimated_ratio, debiaisage3=0.1_2',
 
     )
@@ -596,9 +598,11 @@ class Evaluation(object):
 
     def evaluate(self):
 
-        if os.path.exists(os.path.join(datadir, 'scores.nc')):
-            self.scores = xr.open_dataset(os.path.join(datadir, 'scores.nc'))
-            return
+        # TODO : store each XPI score in a file to reuse instead of recompute
+        # ==> inverse loops on stations and XPIDs
+#        if os.path.exists(os.path.join(datadir, 'scores.nc')):
+#            self.scores = xr.open_dataset(os.path.join(datadir, 'scores.nc'))
+#            return
 
         def nearest(array, value):
             """ Find element of "array" the closer to 'value' """
@@ -607,8 +611,6 @@ class Evaluation(object):
                 return float(array[np.abs(array - value).argmin()].data)
             else:
                 print(f'ERROR : no corresponding pixel found for value {value}')
-                import pdb
-                pdb.set_trace()
 
         # To Extract specific values where evaluation data (obs nivometeo) is available
         pos = 1
