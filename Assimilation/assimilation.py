@@ -1069,7 +1069,7 @@ class EnsembleKalmanFilter(Assimilation):
         std = parameters.sigma.data
         Rdyn = self.pond.multiply(np.outer(np.sqrt(ref_field)*std, np.sqrt(ref_field)*std))  # TODO comprendre pourquoi *10 augmente autant la dispersion
         #Rdyn = self.pond.multiply(np.outer(ref_field*std, ref_field*std))  # TODO comprendre pourquoi *10 augmente autant la dispersion
-        Rstat = self.pond.multiply(np.outer(std,std))  # TODO : fixer l'erreur d'obs en absence de precipitation
+        Rstat = self.pond.multiply(np.outer(std*10,std*10))  # TODO : fixer l'erreur d'obs en absence de precipitation
         R = Rstat + Rdyn  # Rstat améliore sensiblement les petites precip (sinon error obs=0).
         #K = B.dot(inv(B+R))
         K = B.dot(np.linalg.inv((B+R).toarray()))
