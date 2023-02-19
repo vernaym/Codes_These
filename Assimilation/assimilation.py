@@ -1039,8 +1039,7 @@ class EnsembleKalmanFilter(Assimilation):
 #        Rstat = self.pond.multiply(np.outer(std,std))  # TODO : fixer l'erreur d'obs en absence de precipitation
         Rdyn = self.pond.multiply(np.outer(ref_field, ref_field))
         # La dispersion de l'analyse est principalement augmentée par Rstat
-        #Rstat = self.pond.multiply(np.outer(np.exp(np.abs(std)), np.exp(np.abs(std))))  # TODO : fixer l'erreur d'obs en absence de precipitation
-        Rstat = self.pond.multiply(np.outer(np.exp(np.abs(std)), np.exp(np.abs(std)))*5)  # TODO : fixer l'erreur d'obs en absence de precipitation
+        Rstat = self.pond.multiply(np.outer(std, std)*50)  # TODO : fixer l'erreur d'obs en absence de precipitation
 
         R = Rstat + Rdyn  # Rstat améliore sensiblement les petites precip (sinon error obs=0).
 
