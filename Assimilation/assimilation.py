@@ -1006,10 +1006,9 @@ class EnsembleKalmanFilter(Assimilation):
                 self.pond = self.codistances(coords)
 
                 B = self.background_error_covariance(ensemble_loc)  # Background error covariance matrix
-                std = parameters_loc.sigma.data
-                Rdyn = self.pond.multiply(np.outer(np.sqrt(Y)*std, np.sqrt(Y)*std))  # TODO comprendre pourquoi *10 augmente autant la dispersion
-                Rstat = self.pond.multiply(np.outer(std,std))  # TODO : fixer l'erreur d'obs en absence de precipitation
-                R = Rstat + Rdyn  # Rstat améliore sensiblement les petites precip (sinon error obs=0).
+
+                R, Rstat, Rdyn, ref_field = self.observation_ECM(parameters_loc, date)
+
                 K = B.dot(np.linalg.inv((B+R).toarray()))
 
                 Y = Y.flatten()
@@ -1032,6 +1031,36 @@ class EnsembleKalmanFilter(Assimilation):
             except KeyError:
                 print(f'Dropping station number {num_poste} (too close from the edge of the domain)')
 
+    def observation_ECM(self, parameters, date):
+
+        ref_field = self.ref_field(parameters.mu, date)
+        std = parameters.sigma.data
+#        Rdyn = self.pond.multiply(np.outer(np.sqrt(Y)*std, np.sqrt(Y)*std))
+#        Rstat = self.pond.multiply(np.outer(std,std))  # TODO : fixer l'erreur d'obs en absence de precipitation
+        Rdyn = self.pond.multiply(np.outer(ref_field, ref_field))
+        # La dispersion de l'analyse est principalement augmentée par Rstat
+        #Rstat = self.pond.multiply(np.outer(np.exp(np.abs(std)), np.exp(np.abs(std))))  # TODO : fixer l'erreur d'obs en absence de precipitation
+        Rstat = self.pond.multiply(np.outer(std, std)*20)  # TODO : fixer l'erreur d'obs en absence de precipitation
+
+        R = Rstat + Rdyn  # Rstat améliore sensiblement les petites precip (sinon error obs=0).
+
+        return R, Rstat, Rdyn, ref_field
+
+    def ref_field(self, field, date):
+
+        smoothobs = uniform_filter(self.parameters.sel({'time':date}).mu, size=10)  # numpy array
+        #smoothobs = uniform_filter(parameters.sel({'time':date}).mu, size=10)  # numpy array
+        smoothobs = xr.DataArray(
+            name   = 'rr',
+            data   = smoothobs,
+            dims   = ["lat", "lon"],
+            coords = dict(lon=self.parameters.lon, lat=self.parameters.lat),
+        )
+        smoothobs = smoothobs.sel({'lat':field.lat, 'lon':field.lon})
+        ref_field = field.data - smoothobs
+
+        return ref_field
+
     @speedtest
     def gridded_analysis(self, date, idd, ensemble, parameters, domain):
 
@@ -1044,35 +1073,8 @@ class EnsembleKalmanFilter(Assimilation):
 
         B = self.background_error_covariance(ensemble)  # Background error covariance matrix
 
-        # Smooth observation to compute dynamic observation error
-#        smoothobs = uniform_filter(self.parameters.sel({'time':date}).rr, size=15)  # numpy array
-        smoothobs = uniform_filter(self.parameters.sel({'time':date}).mu, size=10)  # numpy array
-        smoothobs = xr.DataArray(
-            name   = 'rr',
-            data   = smoothobs,
-            dims   = ["lat", "lon"],
-            coords = dict(lon=self.parameters.lon, lat=self.parameters.lat),
-        )
-        #if not self.gridded:
-        #    smoothobs = smoothobs.isel(lat=xr.DataArray(idy, dims='poste'),lon=xr.DataArray(idx, dims='poste'))
+        R, Rstat, Rdyn, ref_field = self.observation_ECM(parameters, date)
 
-        # ref field soit champs débiaisé soit champ lissé pour éviter de pénaliser les zones avec surestimation des précipitations
-#        if self.debiasing:
-#            ref_field = parameters.mu.data
-#        else:
-#            ref_field = smoothobs
-        ref_field = parameters.mu.data - smoothobs
-#        ref_field = parameters.rr.data - smoothobs
-#        ref_field = smoothobs
-#        ref_field = parameters.mu.data
-
-        std = parameters.sigma.data
-        #Rdyn = self.pond.multiply(np.outer(np.sqrt(ref_field)*std, np.sqrt(ref_field)*std))  # TODO comprendre pourquoi *10 augmente autant la dispersion
-        Rdyn = self.pond.multiply(np.outer(ref_field, ref_field))  # TODO comprendre pourquoi *10 augmente autant la dispersion
-        Rstat = self.pond.multiply(np.outer(std*20,std*20))  # TODO : fixer l'erreur d'obs en absence de precipitation
-        R = Rstat + Rdyn  # Rstat améliore sensiblement les petites precip (sinon error obs=0).
-        #R = Rstat # Rstat améliore sensiblement les petites precip (sinon error obs=0).
-        #K = B.dot(inv(B+R))
         K = B.dot(np.linalg.inv((B+R).toarray()))
 
         if self.plot:
