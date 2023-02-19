@@ -1040,7 +1040,7 @@ class EnsembleKalmanFilter(Assimilation):
         Rdyn = self.pond.multiply(np.outer(ref_field, ref_field))
         # La dispersion de l'analyse est principalement augmentée par Rstat
         #Rstat = self.pond.multiply(np.outer(np.exp(np.abs(std)), np.exp(np.abs(std))))  # TODO : fixer l'erreur d'obs en absence de precipitation
-        Rstat = self.pond.multiply(np.outer(std, std)*20)  # TODO : fixer l'erreur d'obs en absence de precipitation
+        Rstat = self.pond.multiply(np.outer(np.exp(np.abs(std)), np.exp(np.abs(std)))*5)  # TODO : fixer l'erreur d'obs en absence de precipitation
 
         R = Rstat + Rdyn  # Rstat améliore sensiblement les petites precip (sinon error obs=0).
 
@@ -1130,8 +1130,10 @@ class EnsembleKalmanFilter(Assimilation):
             ECM_max = max(np.max(R.diagonal()), np.max(B.diagonal()))
             self.plot_matrix(B, parameters.rr, 'Background_ECM', f'{self.date_str}/Background_ECM_{domain}.pdf', cmap=plt.cm.viridis)
             self.plot_matrix(R, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_ECM_{domain}.pdf', vmin=0, vmax=400, cmap=plt.cm.viridis)
-            self.plot_matrix(Rstat, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_stat_ECM_{domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.viridis)
-            self.plot_matrix(Rdyn, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_dyn_ECM_{domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.viridis)
+            #self.plot_matrix(Rstat, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_stat_ECM_{domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.viridis)
+            #self.plot_matrix(Rdyn, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_dyn_ECM_{domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.viridis)
+            self.plot_matrix(Rstat, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_stat_ECM_{domain}.pdf', cmap=plt.cm.viridis)
+            self.plot_matrix(Rdyn, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_dyn_ECM_{domain}.pdf', cmap=plt.cm.viridis)
             self.plot_matrix(K, parameters.rr, 'Kalman_Gain', f'{self.date_str}/Kalman_Gain_{domain}.pdf', cmap=plt.cm.coolwarm, vmin=0, vmax=1)
 
             self.plot_obs(parameters, domain=domain)
