@@ -10,6 +10,7 @@ from datetime import datetime,timedelta
 import numpy as np
 import xarray as xr
 import pandas as pd
+from scipy.stats import rankdata
 
 import argparse
 
@@ -202,6 +203,12 @@ algo = dict(
         #KD18         = 'EnsembleKalmanFilter/XP18/EnKF_2021120106_2022050106_daily_alp.nc',
         #KD19         = 'EnsembleKalmanFilter/XP19/EnKF_2021120106_2022050106_daily_alp.nc',
         #KD20         = 'EnsembleKalmanFilter/XP20/EnKF_2021120106_2022050106_daily_alp.nc',
+        #KD21         = 'EnsembleKalmanFilter/XP21/EnKF_2021120106_2022050106_daily_alp.nc',
+        KD22         = 'EnsembleKalmanFilter/XP22/EnKF_2021120106_2022050106_daily_alp.nc',
+        #KD23         = 'EnsembleKalmanFilter/XP23/EnKF_2021120106_2022050106_daily_alp.nc',
+        #KD24         = 'EnsembleKalmanFilter/XP24/EnKF_2021120106_2022050106_daily_alp.nc',
+        #KD25         = 'EnsembleKalmanFilter/XP25/EnKF_2021120106_2022050106_daily_alp.nc',
+        #KD26         = 'EnsembleKalmanFilter/XP26/EnKF_2021120106_2022050106_daily_alp.nc',
     )
 
 
@@ -420,19 +427,41 @@ class Evaluation(object):
 
         return (false_alarm, succes_rate)
 
-    def rank_histogram(self, simu, obs, product, ax, *args):
-        maxsim = np.amax(simu, 1)
+    def rank_histogram(self, ensemble, obs, product, ax, *args):
+#        maxsim = np.amax(simu, 1)
         # WARNING : la condition obs>0 réduit PLUS le nombre de cas.
         # Le choix de la condition est très important car il fait apparaitre ou disparaitre
         # une énorme majorité des situations où tout est à 0 sauf 1 membre (grand pic à gauche de l'histogramme)
-        simu = simu[obs>0]
-        obs = obs[obs>0]
+#        simu = simu[obs>0]
+#        obs = obs[obs>0]
 #        simu = simu[(~np.isnan(obs)) & ((obs>0) | (maxsim>0))]
 #        obs = obs[(~np.isnan(obs)) & ((obs>0) | (maxsim>0))]
-        position = np.array([])
-        for idx, obs in enumerate(obs):
-            position = np.append(position, np.searchsorted(np.sort(simu[idx]), obs))
-        ax.hist(position, bins=range(np.shape(simu)[1]))
+#        position = np.array([])
+#        for idx, obs in enumerate(obs):
+#            position = np.append(position, np.searchsorted(np.sort(simu[idx]), obs))
+#        ax.hist(position, bins=range(np.shape(simu)[1]))
+
+        ensemble = np.transpose(ensemble)  # Shape (Nmember, Ndates)
+        ensemble = ensemble[:,~np.isnan(obs)]
+        obs = obs[~np.isnan(obs)]
+        combined = np.vstack((obs[np.newaxis], ensemble))
+
+        # Computing ranks
+        ranks = np.apply_along_axis(lambda x: rankdata(x, method='min'), 0, combined)
+
+        # Computing ties')
+        ties = np.sum(ranks[0]==ranks[1:], axis=0)
+        ranks = ranks[0]
+        tie = np.unique(ties)
+
+        for i in range(1,len(tie)):
+            index = ranks[ties==tie[i]]
+            # print('randomizing tied ranks for ' + str(len(index)) + ' instances where there is ' + str(tie[i]) + ' tie/s. ' + str(len(tie)-i-1) + ' more to go')
+            ranks[ties==tie[i]] = [np.random.randint(index[j], index[j]+tie[i]+1, tie[i])[0] for j in range(len(index))]
+
+        #return np.histogram(ranks, bins=np.linspace(0.5, combined.shape[0]+0.5, combined.shape[0]+1))
+        #ax.hist(ranks, bins=range(np.shape(ensemble)[0]))
+        ax.hist(ranks, bins=np.linspace(0.5, combined.shape[0]+0.5, combined.shape[0]+1))
 
     def reliability_diagram(self, simu, obs, product, ax):
         ndays = len(obs)
