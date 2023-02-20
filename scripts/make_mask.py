@@ -345,7 +345,24 @@ def make_mask(field):
     lonmax = field.lon.data.max()
 
     scores = pd.read_csv(fic_score, sep=';')
-    scores = scores.loc[(scores.lats>=latmin) & (scores.lats<=latmax) & (scores.lons>=lonmin) & (scores.lons<=lonmax)]
+    sc = add_scores(scores, ax)
+    add_boundaries()
+    add_cities(latmin, latmax, lonmin, lonmax)
+    cb = fig.colorbar(sc)
+    #cb.set_label(label='Mean ANTILOPE / rain-gauges ratio', fontsize=22, weight='bold')
+    cb.set_label(label='ANTILOPE / rain-gauges ratio', fontsize=22)
+    #cb.set_label(label='ANTILOPE / rain-gauges ratio', fontsize=14)
+    cb.ax.tick_params(labelsize=16)
+    cb2 = fig.colorbar(cml, extend='both')
+    cb2.set_label(label=f'Total precipitation between \n {datebegin} and {dateend} (mm)', fontsize=22)
+    #cb2.set_label(label=f'Total precipitation between \n {datebegin} and {dateend} (mm)', fontsize=14)
+    cb2.ax.tick_params(labelsize=16)
+    #cb2.ax.tick_params(labelsize=12)
+    ax.grid(False)  # Remove grid lines (does not work !)
+    #fig.legend()
+    #fig.tight_layout()
+    fig.savefig(os.path.join(savedir, f'CUMUL_ANTILOPE_{datebegin}_{dateend}_{domain}.pdf'), layout='tight')
+    #sys.exit()
 
 
     # loc doit être faible (~10) pour avoir de bons résultats pour l'homogénéité, mais suffisament élevé (optimum vers 25, mauvais à 50) pour ne pas avoir un champs de biais estimé
@@ -740,7 +757,8 @@ def plot_and_save(field, name, cmap=plt.cm.Greys, vmin=None, vmax=None, scores=N
     if domain == 'GrandesRousses':
         fig, ax = plt.subplots(figsize=(12,6))
     elif domain == 'alp':
-        fig, ax = plt.subplots(figsize=(14,16))
+        fig, ax = plt.subplots(figsize=(16,16))
+        #fig, ax = plt.subplots(figsize=(14,16))
     else:
         fig, ax = plt.subplots()
 
@@ -865,13 +883,14 @@ def ratio_estimation(field, moving_window=25):
         scores = scores.loc[(scores.lats>=latmin) & (scores.lats<=latmax) & (scores.lons>=lonmin) & (scores.lons<=lonmax)]
     #plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}_{moving_window}', vmin=0.5, vmax=1.5, cmap=plt.cm.coolwarm, scores=scores)
     #plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}', vmin=0.5, vmax=1.5, cmap=plt.cm.coolwarm, scores=scores)
-    plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{moving_window}_{d0}_{c0}', vmin=0.5, vmax=1.5, cmap=plt.cm.coolwarm, scores=scores)
+    #plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{moving_window}_{d0}_{c0}', vmin=0.4, vmax=1.6, cmap=plt.cm.coolwarm, scores=scores)  # To add scores
+    plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{moving_window}_{d0}_{c0}', vmin=0.4, vmax=1.6, cmap=plt.cm.coolwarm)
 
-    plot_and_save(smoothed, f'Smoothed_field_{moving_window}_{domain}', cmap=plt.cm.YlGnBu)
-    plot_and_save(diff, f'Observation_error_smoothingsize{moving_window}_{domain}', cmap=plt.cm.coolwarm)
-    plot_and_save(np.abs(diff), f'Observation_error_absolute_value_smoothingsize{moving_window}_{domain}', cmap=plt.cm.Greys, scores=scores)
-    plot_and_save(smoothratio, f'Observation_error_ratio_smoothingsize{moving_window}_{domain}', vmin=0.6, vmax=1.4, cmap=plt.cm.coolwarm, scores=scores)
-    plot_and_save(observation_error, f'Observation_error_{moving_window}_{d0}_{c0}_{domain}', cmap=plt.cm.coolwarm, scores=scores)
+#    plot_and_save(smoothed, f'Smoothed_field_{moving_window}_{domain}', cmap=plt.cm.YlGnBu)
+#    plot_and_save(diff, f'Observation_error_smoothingsize{moving_window}_{domain}', cmap=plt.cm.coolwarm)
+#    plot_and_save(np.abs(diff), f'Observation_error_absolute_value_smoothingsize{moving_window}_{domain}', cmap=plt.cm.Greys, scores=scores)
+#    plot_and_save(smoothratio, f'Observation_error_ratio_smoothingsize{moving_window}_{domain}', vmin=0.6, vmax=1.4, cmap=plt.cm.coolwarm, scores=scores)
+#    plot_and_save(observation_error, f'Observation_error_{moving_window}_{d0}_{c0}_{domain}', cmap=plt.cm.coolwarm, scores=scores)
     #plot_and_save(observation_error, f'Observation_error_{moving_window}_{d0}_{domain}', vmin=0, vmax=30, cmap=plt.cm.Greys, scores=scores)
 
 
@@ -913,10 +932,11 @@ if __name__ == "__main__":
     if not domain == 'alp':
         antilope = antilope.where((antilope.lon>=lonmin) & (antilope.lon<=lonmax) & (antilope.lat<=latmax) & (antilope.lat>=latmin), drop=True)
 
-    #plot(antilope, categories=False, baiscorrection=True)
-    #plot(antilope, categories=False)
+    plot(antilope, datebegin, dateend, categories=True, baiscorrection=True)
+#    plot(antilope, datebegin, dateend, categories=True)
 
-    ratio_estimation(antilope)
+#    ratio_estimation(antilope)
+#    animation_mask(antilope)
 
 #    krigeage_scores(antilope)
 #    make_mask(antilope)
