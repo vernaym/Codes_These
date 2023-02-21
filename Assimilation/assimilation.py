@@ -15,6 +15,7 @@ from scipy.sparse import csc_matrix, csr_matrix
 from scipy.sparse import linalg as splinalg
 from scipy.sparse.linalg import inv
 from scipy.spatial import cKDTree
+from scipy.sparse import diags
 import xarray as xr
 import glob
 #import copy
@@ -56,6 +57,15 @@ domain_coords = dict(
         alp            = dict(latmax=46.450, latmin=44.100, lonmin=5.400, lonmax=7.200),
 )
 
+figsize = dict(
+        alp            = dict(singleplot=(14,16), ensembleplot=(16,7)),
+        GrandesRousses = dict(singleplot=(16,8), ensembleplot=(16,7)),
+        HauteSavoie    = dict(singleplot=(12,12), ensembleplot=(12,12)),
+        Savoie         = dict(singleplot=(16,8), ensembleplot=(16,7)),
+)
+
+max_dist = 0.06
+
 landmarks = {
         "Alpe d'Huez" : dict(lon=6.070, lat=45.092, alt=1800, marker='o'),
         "Les 2 Alpes" : dict(lon=6.127, lat=45.013, alt=1800, marker='o'),
@@ -87,7 +97,7 @@ def parse_command_line():
     parser = argparse.ArgumentParser(description=description)
     parser.add_argument('-b', '--datebegin', help='Begining date of extraction, format YYYYMMDDHH or YYMMDDHH', required=True)
     parser.add_argument('-e', '--dateend', help = 'Final date of extraction (default=datebegin)')
-    parser.add_argument('-d', '--domain', help='Domain of the file', choices=['alp', 'pyr', 'cor', 'GrandesRousses', 'test'], default='GrandesRousses')
+    parser.add_argument('-d', '--domain', help='Domain of the file', choices=domain_coords.keys(), default='GrandesRousses')
     parser.add_argument('-w', '--workdir', help='Runing directory', default='/home/vernaym/workdir/ASSIMILATION')
     parser.add_argument('-a', '--assimilation', help='Assimilation method', choices=['pf', 'enkf'], default='enkf')
     parser.add_argument('-m', '--mask', help='Switch observation error mask on/off', choices=[1,2,3,4,5,6,7,8,9], default=None, type=int)
@@ -175,7 +185,7 @@ def sparse_cholesky(A): # The input matrix A must be a sparse symmetric positive
         sys.exit('The matrix is not positive definite')
 
 @speedtest
-def read_ensemble(datebegin, dateend, frequency, domain):
+def read_ensemble(datebegin, dateend, frequency, domain, antilope):
     """
     Read ensemble data from multiple netcdf files.
     When the domain is large (for example the french Alps : ~120*150 grid cells) the computation is complex to avoid memory crashes.
@@ -196,10 +206,11 @@ def read_ensemble(datebegin, dateend, frequency, domain):
 
     #filenames = [os.path.join(datadir, f"aspearome_{mb:03d}_{datebegin}_{dateend}_{domain}_{frequency}.nc") for mb in range(1,17)]
     #filenames = [os.path.join(datadir, f"aspearome_{mb:03d}_2021073106_2022070106_{domain}_{frequency}.nc") for mb in range(1,17)]
-    if domain == 'alp':
-        filenames = [os.path.join(datadir, f"aspearome_{mb:03d}_2021102806_2022060206_{domain}_hourly.nc") for mb in range(1,17)]
-    elif domain == 'GrandesRousses':
-        filenames = [os.path.join(datadir, f"aspearome_{mb:03d}_2021073106_2022070106_{domain}_hourly.nc") for mb in range(1,17)]
+#    if domain == 'alp':
+#        filenames = [os.path.join(datadir, f"aspearome_{mb:03d}_2021102806_2022060206_{domain}_hourly.nc") for mb in range(1,17)]
+#    elif domain == 'GrandesRousses':
+#        filenames = [os.path.join(datadir, f"aspearome_{mb:03d}_2021073106_2022070106_{domain}_hourly.nc") for mb in range(1,17)]
+    filenames = [os.path.join(datadir, f"aspearome_{mb:03d}_2021102806_2022060206_alp_hourly.nc") for mb in range(1,17)]
 
     # open_mfdataset returns a dask.array<chunksize=(...), meta=np.ndarray> object that divides arrays into many small pieces, called chunks, 
     # each of which is presumed to be small enough to fit into memory in order to avoid a memory overload. 
@@ -210,6 +221,11 @@ def read_ensemble(datebegin, dateend, frequency, domain):
 
     # Chunks of a multiple of 24 time steps seem optimal (~0.6s by iteration vs >1.2 for other chunk sizes)
     pearome = xr.open_mfdataset(filenames, combine='nested', concat_dim='member', chunks={'time': 24})  # Setting chunks is critical (read the doc !)
+    pearome = pearome.interp(lon=antilope.lon, lat=antilope.lat).clip(0)  # Avoid <0 precipitation values
+#    sel_lat = np.round(np.arange(domain_coords[domain]['latmin']-max_dist, domain_coords[domain]['latmax']+max_dist, 0.01), 2)
+#    sel_lon = np.round(np.arange(domain_coords[domain]['lonmin']-max_dist, domain_coords[domain]['lonmax']+max_dist, 0.01), 2)
+#    pearome = pearome.sel({'lat':sel_lat, 'lon':sel_lon})
+
     pearome['member'] = np.arange(1,17)
     if frequency == 'daily':
         # Convert hourly precipitation into 24h precipitation between 6h J-1 and 6h J
@@ -388,7 +404,7 @@ def read_obs(args):
         if args.domain == 'GrandesRousses':
             print(f'WARNING : no file named {filename} under {datadir}, using default file ANTILOPEQ_2021080106_2022070106_GrandesRousses.nc')
             filename = os.path.join(datadir, f'ANTILOPE{suffix[args.frequency]}_2021073106_2022070106_GrandesRousses.nc')
-        elif args.domain == 'alp':
+        else:
             print(f'WARNING : no file named {filename} under {datadir}, using default file ANTILOPEH_2021103000_2022060200_alp.nc')
             filename = os.path.join(datadir, f'ANTILOPEH_2021103000_2022060200_alp.nc')
     if os.path.exists(filename):
@@ -397,7 +413,10 @@ def read_obs(args):
         latmin = domain_coords[args.domain]['latmin']
         lonmin = domain_coords[args.domain]['lonmin']
         lonmax = domain_coords[args.domain]['lonmax']
-        antilope = antilope.where((antilope.lon>=lonmin) & (antilope.lon<=lonmax) & (antilope.lat>=latmin) & (antilope.lat<=latmax), drop=True)
+        sel_lat = np.round(np.arange(latmin-max_dist, latmax+max_dist, 0.01), 2)
+        sel_lon = np.round(np.arange(lonmin-max_dist, lonmax+max_dist, 0.01), 2)
+        antilope = antilope.sel({'lat':sel_lat, 'lon':sel_lon})
+        #antilope = antilope.where((antilope.lon>=lonmin) & (antilope.lon<=lonmax) & (antilope.lat>=latmin) & (antilope.lat<=latmax), drop=True)
         # Pour une assimilation quotidienne, sommer les cumuls horaires
         if args.frequency == 'daily' and  'ANTILOPEH' in filename:
             # Convert hourly precipitation into 24h precipitation between 6h J-1 and 6h J
@@ -533,7 +552,7 @@ class Assimilation(object):
     def plot_obs(self, field, var='rr', domain=None):
         mnt = xr.open_dataset('/home/vernaym/QGIS/MNT/DEM_ALPES_WGS84_250m_bilinear.nc')  # Pour tracer sur toutes les Alpes
         # Plot ANTILOPE precipitation field
-        fig = plt.figure(figsize=(18,8))
+        fig = plt.figure(figsize=figsize[domain]['singleplot'])
         #fig = plt.figure(figsize=(14,16))  Alps
         field[var].plot(vmin=0, vmax=self.rrmax, cmap=plt.cm.YlGnBu, cbar_kwargs={'label': "24 hour precipitation (mm)"})  # quadmesh object
 
@@ -668,7 +687,7 @@ class Assimilation(object):
         return self.mask
 
     def plot_sigma(self, field):
-        fig, ax = plt.subplots(figsize=(14,6))
+        fig, ax = plt.subplots(figsize=figsize[self.domain]['singleplot'])
         #cmap = plt.cm.YlGnBu
         cmap = plt.cm.Greys
         im = field['sigma'].plot(ax=ax, cmap=cmap, cbar_kwargs=dict(label='Standard deviation (mm)'))
@@ -679,7 +698,7 @@ class Assimilation(object):
 
     def plot_parameters(self):
         label_map = dict(sigma='Standard deviation sigma (mm)', k='Shape parameter (k)', theta='Scale parameter (theta)', delta='Shift parameter (delta)')
-        fig, ax = plt.subplots(nrows=2, ncols=2, figsize=(16,7))
+        fig, ax = plt.subplots(nrows=2, ncols=2, figsize=figsize[self.domain]['singleplot'])
         i = 0
         j = 0
         for param in ['sigma', 'k', 'theta', 'delta']:
@@ -717,7 +736,7 @@ class Assimilation(object):
     def plot_ensemble(ensemble, label, domain=None):
         if domain is None:
             domain = self.domain
-        fig,ax = plt.subplots(nrows=4, ncols=4, figsize=(16,7))
+        fig,ax = plt.subplots(nrows=4, ncols=4, figsize=figsize[domain]['ensembleplot'])
         #fig,ax = plt.subplots(nrows=2, ncols=8, figsize=(16,16))  # Alps
         i = 0
         j = 0
@@ -839,9 +858,12 @@ class EnsembleKalmanFilter(Assimilation):
             #B = B + (member-ensemble_mean)**2
             #B = B + np.diag((member-ensemble_mean)**2)
             #scipy.linalg.cholesky(self.pond.toarray())
-            B = B + self.pond.multiply(np.outer(member-ensemble_mean, member-ensemble_mean))  # elementwive multiplication
+            X = diags((member-ensemble_mean).flatten(), 0)
+            B = B + X.dot(self.pond.dot(X))
+            #B = B + self.pond.multiply(np.outer(member-ensemble_mean, member-ensemble_mean))  # elementwive multiplication
 #        B = B/len(ensemble.member)**2  # TODO check denominator
         B = B/(len(ensemble.member)-1)
+        B.data = np.nan_to_num(B.data, copy=False)
         #B = np.diag(B)
 #        B = np.sqrt(B)
         #B.reshape(len(ensemble.lat), len(ensemble.lon))  # To reshape back as 2D field
@@ -948,12 +970,14 @@ class EnsembleKalmanFilter(Assimilation):
 
         if self.gridded:
             codistances = os.path.join('/home/vernaym/These/DATA', f'codistance_max_dist_{self.max_dist}_{domain}.npz')
-            if not os.path.exists(codistances):
-                # Compute inter-distances
-                coords=[(lon,lat) for lat in actual_parameters.lat.data for lon in actual_parameters.lon.data]
-                self.pond = self.codistances(coords)
-            else:
-                self.pond = scipy.sparse.load_npz(codistances)
+#            if not os.path.exists(codistances):
+#                # Compute inter-distances
+#                coords=[(lon,lat) for lat in actual_parameters.lat.data for lon in actual_parameters.lon.data]
+#                self.pond = self.codistances(coords)
+#            else:
+#                self.pond = scipy.sparse.load_npz(codistances)
+            coords=[(lon,lat) for lat in actual_parameters.lat.data for lon in actual_parameters.lon.data]
+            self.pond = self.codistances(coords)
 
 #        print('DBUG0')
 #        tmp=0.0000001*scipy.sparse.identity(np.shape(self.pond)[0])
@@ -1035,13 +1059,19 @@ class EnsembleKalmanFilter(Assimilation):
 
         ref_field = self.ref_field(parameters.mu, date)
         std = parameters.sigma.data
-        Rdyn = self.pond.multiply(np.outer(np.sqrt(parameters.mu)*std, np.sqrt(parameters.mu)*std))
+        X = diags((np.sqrt(parameters.mu.data)*std).flatten(), 0)
+        Rdyn = X.dot(self.pond.dot(X))
+        #Rdyn = self.pond.multiply(np.outer(np.sqrt(parameters.mu)*std, np.sqrt(parameters.mu)*std))
 #        Rstat = self.pond.multiply(np.outer(std,std))  # TODO : fixer l'erreur d'obs en absence de precipitation
 #        Rdyn = self.pond.multiply(np.outer(ref_field, ref_field))
         # La dispersion de l'analyse est principalement augmentée par Rstat
-        Rstat = self.pond.multiply(np.outer(std, std)*100)  # TODO : fixer l'erreur d'obs en absence de precipitation
+        X = diags(std.flatten()*10)
+        #Rstat = self.pond.multiply(np.outer(std*10, std*10))  # TODO : fixer l'erreur d'obs en absence de precipitation
+        Rstat = X.dot(self.pond.dot(X))
 
         R = Rstat + Rdyn  # Rstat améliore sensiblement les petites precip (sinon error obs=0).
+
+        R.data = np.nan_to_num(R.data, copy=False)
 
         return R, Rstat, Rdyn, ref_field
 
@@ -1071,15 +1101,18 @@ class EnsembleKalmanFilter(Assimilation):
                 )
 
         B = self.background_error_covariance(ensemble)  # Background error covariance matrix
-
         R, Rstat, Rdyn, ref_field = self.observation_ECM(parameters, date)
 
         K = B.dot(np.linalg.inv((B+R).toarray()))
+        # Working inversion of large sparse matrix
+#        A = B+R
+#        A = A + 0.001*scipy.sparse.eye(A.shape[0])
+#        K = B.dot(scipy.sparse.linalg.inv(A))
 
         if self.plot:
-            fig1,ax1 = plt.subplots(nrows=4, ncols=4, figsize=(16,7))
-            fig2,ax2 = plt.subplots(nrows=4, ncols=4, figsize=(16,7))
-            fig3,ax3 = plt.subplots(nrows=4, ncols=4, figsize=(16,7))
+            fig1,ax1 = plt.subplots(nrows=4, ncols=4, figsize=figsize[domain]['ensembleplot'])
+            fig2,ax2 = plt.subplots(nrows=4, ncols=4, figsize=figsize[domain]['ensembleplot'])
+            fig3,ax3 = plt.subplots(nrows=4, ncols=4, figsize=figsize[domain]['ensembleplot'])
             #fig2,ax2 = plt.subplots(nrows=2, ncols=8, figsize=(16,10))
             i = 0
             j = 0
@@ -1150,7 +1183,9 @@ class EnsembleKalmanFilter(Assimilation):
 
             plt.close('all')
 
-    def plot_matrix(self, matrix, ref_field, label, outname, cmap=plt.cm.YlGnBu, vmin=None, vmax=None):
+    def plot_matrix(self, matrix, ref_field, label, outname, cmap=plt.cm.YlGnBu, vmin=None, vmax=None, domain=None):
+        if domain is None:
+            domain = self.domain
         #diag = np.array([matrix[i,i] for i in range(len(matrix))])
         diag = matrix.diagonal()
         field = xr.DataArray(
@@ -1159,7 +1194,7 @@ class EnsembleKalmanFilter(Assimilation):
                 dims   = ["lat", "lon"],
                 coords = dict(lon=ref_field.lon, lat=ref_field.lat),
             )
-        fig,ax = plt.subplots(figsize=(16,8))
+        fig,ax = plt.subplots(figsize=figsize[domain]['singleplot'])
         #fig,ax = plt.subplots(figsize=(10,12))  #Alps
         if vmin is None:
             vmin = np.min(diag)
@@ -1168,14 +1203,16 @@ class EnsembleKalmanFilter(Assimilation):
         im = plot_field(field, ax, vmin=vmin, vmax=vmax, cmap=cmap)
         finalize_fig(fig, im, label=label, outname=outname)
 
-    def plot_array(self, array, ref_field, label, outname, cmap=plt.cm.YlGnBu, vmin=None, vmax=None):
+    def plot_array(self, array, ref_field, label, outname, cmap=plt.cm.YlGnBu, vmin=None, vmax=None, domain=None):
+        if domain is None:
+            domain = self.domain
         field = xr.DataArray(
                 name   = 'rr',
                 data   = array,
                 dims   = ["lat", "lon"],
                 coords = dict(lon=ref_field.lon, lat=ref_field.lat),
             )
-        fig,ax = plt.subplots(figsize=(16,8))
+        fig,ax = plt.subplots(figsize=figsize[domain]['singleplot'])
         #fig,ax = plt.subplots(figsize=(14,16))  # Alps
         if vmin is None:
             vmin = np.min(array)
@@ -1354,8 +1391,8 @@ class ParticleFilter(Assimilation):
                     field[idy,idx,idd]  = new[member-1]  # fill new member
 
         if self.plot:
-            fig1,ax1 = plt.subplots(nrows=4, ncols=4, figsize=(16,7))
-            fig2,ax2 = plt.subplots(nrows=4, ncols=4, figsize=(16,7))
+            fig1,ax1 = plt.subplots(nrows=4, ncols=4, figsize=figsize[domain]['ensembleplot'])
+            fig2,ax2 = plt.subplots(nrows=4, ncols=4, figsize=figsize[domain]['ensembleplot'])
             i = 0
             j = 0
             raw = localized_period.sel({'time':date})
@@ -1531,8 +1568,8 @@ class ParticleFilter(Assimilation):
 
         if self.plot:
             # On profite de la loop sur les membres pour tracer les ensembles bruts avant et après interpolation
-            fig1, axes1 = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
-            fig2, axes2 = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
+            fig1, axes1 = plt.subplots(nrows=4, ncols=4, figsize=figsize[domain]['ensembleplot'])
+            fig2, axes2 = plt.subplots(nrows=4, ncols=4, figsize=figsize[domain]['ensembleplot'])
         i = 0
         j = 0
 
@@ -1792,7 +1829,7 @@ if __name__ == "__main__":
     extract_period = date_range(args.datebegin, args.dateend, dt=timestep[args.frequency])
 
     antilope = read_obs(args)
-    pearome = read_ensemble(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'), args.frequency, args.domain)
+    pearome = read_ensemble(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'), args.frequency, args.domain, antilope)
     if args.gridded:
         localfields = xr.DataArray(
                 name   = 'rr',
@@ -1817,7 +1854,7 @@ if __name__ == "__main__":
             )
         globalfields = None
 
-    interp_ensemble = pearome.interp(lon=antilope.lon, lat=antilope.lat).clip(0)  # Avoid <0 precipitation values
+    #interp_ensemble = pearome.interp(lon=antilope.lon, lat=antilope.lat).clip(0)  # Avoid <0 precipitation values
 
 
     # Assimilation
@@ -1825,7 +1862,8 @@ if __name__ == "__main__":
 
     if args.assimilation == 'pf':  # 1. Particle Filter
 
-        pf = ParticleFilter(extract_period, antilope, interp_ensemble, nivometeo, args.plot, args.frequency, args.gridded, args.localisation, args.mask, args.debiasing, args.domain, args.likelyhood)
+        #pf = ParticleFilter(extract_period, antilope, interp_ensemble, nivometeo, args.plot, args.frequency, args.gridded, args.localisation, args.mask, args.debiasing, args.domain, args.likelyhood)
+        pf = ParticleFilter(extract_period, antilope, pearome, nivometeo, args.plot, args.frequency, args.gridded, args.localisation, args.mask, args.debiasing, args.domain, args.likelyhood)
         mask = pf.pdf_parameters()
         pf.run()  # Compute weight fields before normalisation + plot raw/interp fields
         #pf.selection()  # Global and local selections
@@ -1844,7 +1882,8 @@ if __name__ == "__main__":
 
     elif args.assimilation == 'enkf':  # 2. Ensemble Kalman Filter
 
-        enkf = EnsembleKalmanFilter(extract_period, antilope, interp_ensemble, nivometeo, args.plot, args.frequency, args.gridded, args.localisation, args.mask, args.debiasing, args.domain, args.likelyhood)
+        #enkf = EnsembleKalmanFilter(extract_period, antilope, interp_ensemble, nivometeo, args.plot, args.frequency, args.gridded, args.localisation, args.mask, args.debiasing, args.domain, args.likelyhood)
+        enkf = EnsembleKalmanFilter(extract_period, antilope, pearome, nivometeo, args.plot, args.frequency, args.gridded, args.localisation, args.mask, args.debiasing, args.domain, args.likelyhood)
         mask = enkf.pdf_parameters()
         enkf.run()
         out = enkf.output(localfields)
