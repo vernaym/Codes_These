@@ -18,6 +18,9 @@ from scipy.spatial import cKDTree
 from scipy.sparse import diags
 import xarray as xr
 import glob
+import shapefile
+from shapely.geometry import Point, Polygon
+
 #import copy
 
 import argparse
@@ -62,6 +65,7 @@ figsize = dict(
         GrandesRousses = dict(singleplot=(16,8), ensembleplot=(16,7)),
         HauteSavoie    = dict(singleplot=(12,12), ensembleplot=(12,12)),
         Savoie         = dict(singleplot=(16,8), ensembleplot=(16,7)),
+        Isere          = dict(singleplot=(16,8), ensembleplot=(16,7)),
 )
 
 max_dist = 0.06
@@ -260,6 +264,26 @@ def read_nivometeo_obs(domain='alp'):
 
     return nivometeo.to_xarray()
 
+def add_boundaries():
+#    shapefile_name = os.path.join("/home/vernaym/QGIS/FondDeCarte/", "world-administrative-boundaries.shp")
+#    borders = shapefile.Reader(shapefile_name)
+#    for shape in borders.shapeRecords():
+#        x = [i[0] for i in shape.shape.points[:]]
+#        y = [i[1] for i in shape.shape.points[:]]
+#        plt.plot(x,y, color='k')
+
+    massifs = shapefile.Reader("/home/vernaym/safran/ctes/shapefiles/massifs_safran.shp")
+    for shape in massifs.shapeRecords():
+        x = [i[0] for i in shape.shape.points[:]]
+        y = [i[1] for i in shape.shape.points[:]]
+        plt.plot(x,y,color='k')
+
+def add_cities(latmin, latmax, lonmin, lonmax):
+    cities = pd.read_csv(os.path.join('/home/vernaym/safran/monitoring/', 'cities.csv'), sep=',')
+    tmp = cities[(cities.population>10000) & (cities.lat>=latmin) & (cities.lat<=latmax) & (cities.lng>=lonmin) & (cities.lng<=lonmax)]
+    plt.plot(tmp.lng, tmp.lat, marker='.', linestyle='')
+    for idx in tmp.index:
+        plt.text(tmp.lng[idx], tmp.lat[idx], tmp.city[idx], alpha=0.5)
 
 class Annotation3D(Annotation):
     """ From : https://datascience.stackexchange.com/questions/11430/how-to-annotate-labels-in-a-3d-matplotlib-scatter-plot"""
@@ -401,12 +425,12 @@ def read_obs(args):
         print(f'WARNING : file {filename} does not exist, looking for it under {datadir}')
         filename = os.path.join(datadir, filename)
     if not os.path.exists(filename):
-        if args.domain == 'GrandesRousses':
-            print(f'WARNING : no file named {filename} under {datadir}, using default file ANTILOPEQ_2021080106_2022070106_GrandesRousses.nc')
-            filename = os.path.join(datadir, f'ANTILOPE{suffix[args.frequency]}_2021073106_2022070106_GrandesRousses.nc')
-        else:
-            print(f'WARNING : no file named {filename} under {datadir}, using default file ANTILOPEH_2021103000_2022060200_alp.nc')
-            filename = os.path.join(datadir, f'ANTILOPEH_2021103000_2022060200_alp.nc')
+#        if args.domain == 'GrandesRousses':
+#            print(f'WARNING : no file named {filename} under {datadir}, using default file ANTILOPEQ_2021080106_2022070106_GrandesRousses.nc')
+#            filename = os.path.join(datadir, f'ANTILOPE{suffix[args.frequency]}_2021073106_2022070106_GrandesRousses.nc')
+#        else:
+        print(f'WARNING : no file named {filename} under {datadir}, using default file ANTILOPEH_2021103000_2022060200_alp.nc')
+        filename = os.path.join(datadir, f'ANTILOPEH_2021103000_2022060200_alp.nc')
     if os.path.exists(filename):
         antilope = xr.open_dataset(filename)
         latmax = domain_coords[args.domain]['latmax']
@@ -564,6 +588,13 @@ class Assimilation(object):
             for landmark, infos in landmarks.items():
                 plt.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='red', markersize=10)
                 plt.annotate(landmark, (infos['lon']+0.003, infos['lat']+0.003), color='red', fontsize=20)
+
+        latmin = domain_coords[domain]['latmin']
+        latmax = domain_coords[domain]['latmax']
+        lonmin = domain_coords[domain]['lonmin']
+        lonmax = domain_coords[domain]['lonmax']
+        add_cities(latmin, latmax, lonmin, lonmax)
+        add_boundaries()
 
         plt.xticks(fontsize=16)
         plt.yticks(fontsize=16)
