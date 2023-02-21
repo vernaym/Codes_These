@@ -430,8 +430,8 @@ def ratio_estimation(field, moving_window=25):
     scores = scores.sort_values('lats')
 
     lons, lats = np.meshgrid(field.lon.data, field.lat.data)
-    estimated_ratio = np.ones(np.shape(field.rr_cumul.data))*scores.ratio.mean()
-    #estimated_ratio = smoothratio
+    #estimated_ratio = np.ones(np.shape(field.rr_cumul.data))*scores.ratio.mean()
+    estimated_ratio = smoothratio
     onlypostes = scores.index
     used_scores = []
     for i,poste in enumerate(scores.index):
@@ -485,13 +485,13 @@ def ratio_estimation(field, moving_window=25):
     #plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}_{moving_window}', vmin=0.5, vmax=1.5, cmap=plt.cm.coolwarm, scores=scores)
     #plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}', vmin=0.5, vmax=1.5, cmap=plt.cm.coolwarm, scores=scores)
     #plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{moving_window}_{d0}_{c0}', vmin=0.4, vmax=1.6, cmap=plt.cm.coolwarm, scores=scores)  # To add scores
-    plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}_{c0}', vmin=0.4, vmax=1.6, cmap=plt.cm.coolwarm)
+    plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{moving_window}_{d0}_{c0}', vmin=0.4, vmax=1.6, cmap=plt.cm.coolwarm)
 
 #    plot_and_save(smoothed, f'Smoothed_field_{moving_window}_{domain}', cmap=plt.cm.YlGnBu)
 #    plot_and_save(diff, f'Observation_error_smoothingsize{moving_window}_{domain}', cmap=plt.cm.coolwarm)
 #    plot_and_save(np.abs(diff), f'Observation_error_absolute_value_smoothingsize{moving_window}_{domain}', cmap=plt.cm.Greys, scores=scores)
 #    plot_and_save(smoothratio, f'Observation_error_ratio_smoothingsize{moving_window}_{domain}', vmin=0.6, vmax=1.4, cmap=plt.cm.coolwarm, scores=scores)
-    plot_and_save(observation_error, f'Observation_error_{d0}_{c0}_{domain}', vmin=-1.6, vmax=1.6, cmap=plt.cm.coolwarm, scores=scores)
+    plot_and_save(observation_error, f'Observation_error_{moving_window}_{d0}_{c0}_{domain}', cmap=plt.cm.coolwarm, scores=scores)
     #plot_and_save(observation_error, f'Observation_error_{moving_window}_{d0}_{domain}', vmin=0, vmax=30, cmap=plt.cm.Greys, scores=scores)
 
 def animation_mask(field):
@@ -581,10 +581,10 @@ if __name__ == "__main__":
     #antilope.lat.data = antilope.lat.data+0.005  # TODO : comprendre et resoudre le probleme de decallage des coordonnees
     antilope = antilope.where((antilope.lon>=lonmin) & (antilope.lon<=lonmax) & (antilope.lat<=latmax) & (antilope.lat>=latmin), drop=True)
 
-#    plot(antilope, datebegin, dateend, categories=True, baiscorrection=True)
+    plot(antilope, datebegin, dateend, categories=True, baiscorrection=True)
 #    plot(antilope, datebegin, dateend, categories=True)
 
-    ratio_estimation(antilope)
+#    ratio_estimation(antilope)
 #    animation_mask(antilope)
 
 #    krigeage_scores(antilope)

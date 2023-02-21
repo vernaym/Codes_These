@@ -12,10 +12,15 @@ from scipy.ndimage import uniform_filter
 from scipy.spatial.distance import cdist
 from scipy import sparse
 from scipy.sparse import csc_matrix, csr_matrix
+from scipy.sparse import linalg as splinalg
 from scipy.sparse.linalg import inv
 from scipy.spatial import cKDTree
+from scipy.sparse import diags
 import xarray as xr
 import glob
+import shapefile
+from shapely.geometry import Point, Polygon
+
 #import copy
 
 import argparse
@@ -43,9 +48,27 @@ datadir = '/home/vernaym/These/DATA'
 # Domaine des Grandes Rousses
 domain_coords = dict(
         GrandesRousses = dict(latmax=45.240, latmin=44.990, lonmin=6.010, lonmax = 6.490),
-        test           = dict(latmax=45.02, latmin=45.0, lonmin=6.1, lonmax = 6.3),
+        NorthernAlps   = dict(lonmin=6.0, lonmax=6.9, latmin=45.6, latmax=46.35),
+        CentralAlps    = dict(lonmin=5.6, lonmax=7.0, latmin=45.0, latmax=45.6),
+        SouthernAlps   = dict(lonmin=5.7, lonmax=7.0, latmin=44.2, latmax=45.0),
+        HauteSavoie    = dict(lonmin=6.45, lonmax=6.95, latmin=45.67, latmax=46.35),
+        Savoie         = dict(lonmin=6.06, lonmax=7.06, latmin=45.15, latmax=45.65),
+        Isere          = dict(lonmin=5.54, lonmax=6.19, latmin=44.89, latmax=45.16),
+        Brianconnais   = dict(lonmin=6.48, lonmax=6.95, latmin=44.67, latmax=44.95),
+        HautesAlpes    = dict(lonmin=5.90, lonmax=6.36, latmin=44.58, latmax=44.81),
+        AlpesSud       = dict(lonmin=6.56, lonmax=6.92, latmin=44.18, latmax=40.49),
         alp            = dict(latmax=46.450, latmin=44.100, lonmin=5.400, lonmax=7.200),
 )
+
+figsize = dict(
+        alp            = dict(singleplot=(14,16), ensembleplot=(16,7)),
+        GrandesRousses = dict(singleplot=(16,8), ensembleplot=(16,7)),
+        HauteSavoie    = dict(singleplot=(12,12), ensembleplot=(12,12)),
+        Savoie         = dict(singleplot=(16,8), ensembleplot=(16,7)),
+        Isere          = dict(singleplot=(16,8), ensembleplot=(16,7)),
+)
+
+max_dist = 0.06
 
 landmarks = {
         "Alpe d'Huez" : dict(lon=6.070, lat=45.092, alt=1800, marker='o'),
@@ -78,7 +101,7 @@ def parse_command_line():
     parser = argparse.ArgumentParser(description=description)
     parser.add_argument('-b', '--datebegin', help='Begining date of extraction, format YYYYMMDDHH or YYMMDDHH', required=True)
     parser.add_argument('-e', '--dateend', help = 'Final date of extraction (default=datebegin)')
-    parser.add_argument('-d', '--domain', help='Domain of the file', choices=['alp', 'pyr', 'cor', 'GrandesRousses', 'test'], default='GrandesRousses')
+    parser.add_argument('-d', '--domain', help='Domain of the file', choices=domain_coords.keys(), default='GrandesRousses')
     parser.add_argument('-w', '--workdir', help='Runing directory', default='/home/vernaym/workdir/ASSIMILATION')
     parser.add_argument('-a', '--assimilation', help='Assimilation method', choices=['pf', 'enkf'], default='enkf')
     parser.add_argument('-m', '--mask', help='Switch observation error mask on/off', choices=[1,2,3,4,5,6,7,8,9], default=None, type=int)
@@ -153,8 +176,20 @@ def goto(path):
         os.makedirs(path)
     os.chdir(path)
 
+def sparse_cholesky(A): # The input matrix A must be a sparse symmetric positive-definite.
+    """ 
+    From https://gist.github.com/omitakahiro/c49e5168d04438c5b20c921b928f1f5d
+    """
+    n = A.shape[0]
+    LU = splinalg.splu(A,diag_pivot_thresh=0) # sparse LU decomposition
+
+    if ( LU.perm_r == np.arange(n) ).all() and ( LU.U.diagonal() > 0 ).all(): # check the matrix A is positive definite.
+        return LU.L.dot( sparse.diags(LU.U.diagonal()**0.5) )
+    else:
+        sys.exit('The matrix is not positive definite')
+
 @speedtest
-def read_ensemble(datebegin, dateend, frequency, domain):
+def read_ensemble(datebegin, dateend, frequency, domain, antilope):
     """
     Read ensemble data from multiple netcdf files.
     When the domain is large (for example the french Alps : ~120*150 grid cells) the computation is complex to avoid memory crashes.
@@ -175,10 +210,11 @@ def read_ensemble(datebegin, dateend, frequency, domain):
 
     #filenames = [os.path.join(datadir, f"aspearome_{mb:03d}_{datebegin}_{dateend}_{domain}_{frequency}.nc") for mb in range(1,17)]
     #filenames = [os.path.join(datadir, f"aspearome_{mb:03d}_2021073106_2022070106_{domain}_{frequency}.nc") for mb in range(1,17)]
-    if domain == 'alp':
-        filenames = [os.path.join(datadir, f"aspearome_{mb:03d}_2021102806_2022060206_{domain}_hourly.nc") for mb in range(1,17)]
-    elif domain == 'GrandesRousses':
-        filenames = [os.path.join(datadir, f"aspearome_{mb:03d}_2021073106_2022070106_{domain}_hourly.nc") for mb in range(1,17)]
+#    if domain == 'alp':
+#        filenames = [os.path.join(datadir, f"aspearome_{mb:03d}_2021102806_2022060206_{domain}_hourly.nc") for mb in range(1,17)]
+#    elif domain == 'GrandesRousses':
+#        filenames = [os.path.join(datadir, f"aspearome_{mb:03d}_2021073106_2022070106_{domain}_hourly.nc") for mb in range(1,17)]
+    filenames = [os.path.join(datadir, f"aspearome_{mb:03d}_2021102806_2022060206_alp_hourly.nc") for mb in range(1,17)]
 
     # open_mfdataset returns a dask.array<chunksize=(...), meta=np.ndarray> object that divides arrays into many small pieces, called chunks, 
     # each of which is presumed to be small enough to fit into memory in order to avoid a memory overload. 
@@ -189,6 +225,11 @@ def read_ensemble(datebegin, dateend, frequency, domain):
 
     # Chunks of a multiple of 24 time steps seem optimal (~0.6s by iteration vs >1.2 for other chunk sizes)
     pearome = xr.open_mfdataset(filenames, combine='nested', concat_dim='member', chunks={'time': 24})  # Setting chunks is critical (read the doc !)
+    pearome = pearome.interp(lon=antilope.lon, lat=antilope.lat).clip(0)  # Avoid <0 precipitation values
+#    sel_lat = np.round(np.arange(domain_coords[domain]['latmin']-max_dist, domain_coords[domain]['latmax']+max_dist, 0.01), 2)
+#    sel_lon = np.round(np.arange(domain_coords[domain]['lonmin']-max_dist, domain_coords[domain]['lonmax']+max_dist, 0.01), 2)
+#    pearome = pearome.sel({'lat':sel_lat, 'lon':sel_lon})
+
     pearome['member'] = np.arange(1,17)
     if frequency == 'daily':
         # Convert hourly precipitation into 24h precipitation between 6h J-1 and 6h J
@@ -223,6 +264,26 @@ def read_nivometeo_obs(domain='alp'):
 
     return nivometeo.to_xarray()
 
+def add_boundaries():
+#    shapefile_name = os.path.join("/home/vernaym/QGIS/FondDeCarte/", "world-administrative-boundaries.shp")
+#    borders = shapefile.Reader(shapefile_name)
+#    for shape in borders.shapeRecords():
+#        x = [i[0] for i in shape.shape.points[:]]
+#        y = [i[1] for i in shape.shape.points[:]]
+#        plt.plot(x,y, color='k')
+
+    massifs = shapefile.Reader("/home/vernaym/safran/ctes/shapefiles/massifs_safran.shp")
+    for shape in massifs.shapeRecords():
+        x = [i[0] for i in shape.shape.points[:]]
+        y = [i[1] for i in shape.shape.points[:]]
+        plt.plot(x,y,color='k')
+
+def add_cities(latmin, latmax, lonmin, lonmax):
+    cities = pd.read_csv(os.path.join('/home/vernaym/safran/monitoring/', 'cities.csv'), sep=',')
+    tmp = cities[(cities.population>10000) & (cities.lat>=latmin) & (cities.lat<=latmax) & (cities.lng>=lonmin) & (cities.lng<=lonmax)]
+    plt.plot(tmp.lng, tmp.lat, marker='.', linestyle='')
+    for idx in tmp.index:
+        plt.text(tmp.lng[idx], tmp.lat[idx], tmp.city[idx], alpha=0.5)
 
 class Annotation3D(Annotation):
     """ From : https://datascience.stackexchange.com/questions/11430/how-to-annotate-labels-in-a-3d-matplotlib-scatter-plot"""
@@ -359,24 +420,27 @@ def finalize_fig(figure, imm, label, outname):
 
 @speedtest
 def read_obs(args):
-    filename = f'ANTILOPE{suffix[args.frequency]}_{args.datebegin.strftime("%Y%m%d%H")}_{args.dateend.strftime("%Y%m%d%H")}_{args.domain}.nc'
+    filename = f'ANTILOPE{suffix[args.frequency]}_{args.datebegin.strftime("%Y%m%d%H")}_{args.dateend.strftime("%Y%m%d%H")}_alp.nc'
     if not os.path.exists(filename):
         print(f'WARNING : file {filename} does not exist, looking for it under {datadir}')
         filename = os.path.join(datadir, filename)
     if not os.path.exists(filename):
-        if args.domain == 'GrandesRousses':
-            print(f'WARNING : no file named {filename} under {datadir}, using default file ANTILOPEQ_2021080106_2022070106_GrandesRousses.nc')
-            filename = os.path.join(datadir, f'ANTILOPE{suffix[args.frequency]}_2021073106_2022070106_GrandesRousses.nc')
-        elif args.domain == 'alp':
-            print(f'WARNING : no file named {filename} under {datadir}, using default file ANTILOPEH_2021103000_2022060200_alp.nc')
-            filename = os.path.join(datadir, f'ANTILOPEH_2021103000_2022060200_alp.nc')
+#        if args.domain == 'GrandesRousses':
+#            print(f'WARNING : no file named {filename} under {datadir}, using default file ANTILOPEQ_2021080106_2022070106_GrandesRousses.nc')
+#            filename = os.path.join(datadir, f'ANTILOPE{suffix[args.frequency]}_2021073106_2022070106_GrandesRousses.nc')
+#        else:
+        print(f'WARNING : no file named {filename} under {datadir}, using default file ANTILOPEH_2021103000_2022060200_alp.nc')
+        filename = os.path.join(datadir, f'ANTILOPEH_2021103000_2022060200_alp.nc')
     if os.path.exists(filename):
         antilope = xr.open_dataset(filename)
         latmax = domain_coords[args.domain]['latmax']
         latmin = domain_coords[args.domain]['latmin']
         lonmin = domain_coords[args.domain]['lonmin']
         lonmax = domain_coords[args.domain]['lonmax']
-        antilope = antilope.where((antilope.lon>=lonmin) & (antilope.lon<=lonmax) & (antilope.lat>=latmin) & (antilope.lat<=latmax), drop=True)
+        sel_lat = np.round(np.arange(latmin-max_dist, latmax+max_dist, 0.01), 2)
+        sel_lon = np.round(np.arange(lonmin-max_dist, lonmax+max_dist, 0.01), 2)
+        antilope = antilope.sel({'lat':sel_lat, 'lon':sel_lon})
+        #antilope = antilope.where((antilope.lon>=lonmin) & (antilope.lon<=lonmax) & (antilope.lat>=latmin) & (antilope.lat<=latmax), drop=True)
         # Pour une assimilation quotidienne, sommer les cumuls horaires
         if args.frequency == 'daily' and  'ANTILOPEH' in filename:
             # Convert hourly precipitation into 24h precipitation between 6h J-1 and 6h J
@@ -509,17 +573,28 @@ class Assimilation(object):
         #draw[np.where(x<0)] = 0  # x is already a precipitation field with >0 values
         return draw
 
-    def plot_obs(self, field, var='rr'):
+    def plot_obs(self, field, var='rr', domain=None):
         mnt = xr.open_dataset('/home/vernaym/QGIS/MNT/DEM_ALPES_WGS84_250m_bilinear.nc')  # Pour tracer sur toutes les Alpes
         # Plot ANTILOPE precipitation field
-        fig = plt.figure(figsize=(18,8))
+        fig = plt.figure(figsize=figsize[domain]['singleplot'])
         #fig = plt.figure(figsize=(14,16))  Alps
         field[var].plot(vmin=0, vmax=self.rrmax, cmap=plt.cm.YlGnBu, cbar_kwargs={'label': "24 hour precipitation (mm)"})  # quadmesh object
+
+        if domain is None:
+            domain = self.domain
+
         # Add landmarks
-        if self.domain == 'GrandesRousses':
+        if domain == 'GrandesRousses':
             for landmark, infos in landmarks.items():
                 plt.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='red', markersize=10)
                 plt.annotate(landmark, (infos['lon']+0.003, infos['lat']+0.003), color='red', fontsize=20)
+
+        latmin = domain_coords[domain]['latmin']
+        latmax = domain_coords[domain]['latmax']
+        lonmin = domain_coords[domain]['lonmin']
+        lonmax = domain_coords[domain]['lonmax']
+        add_cities(latmin, latmax, lonmin, lonmax)
+        add_boundaries()
 
         plt.xticks(fontsize=16)
         plt.yticks(fontsize=16)
@@ -530,9 +605,9 @@ class Assimilation(object):
         ax.axes.get_yaxis().get_label().set_visible(False)
         fig.tight_layout()
         if var == 'rr':
-            fig.savefig(f'{self.date_str}/OBS_{self.date_str}_{self.domain}.pdf', format='pdf')
+            fig.savefig(f'{self.date_str}/OBS_{self.date_str}_{domain}.pdf', format='pdf')
         elif var == 'mu':
-            fig.savefig(f'{self.date_str}/DEBIASED_OBS_{self.date_str}_{self.domain}.pdf', format='pdf')
+            fig.savefig(f'{self.date_str}/DEBIASED_OBS_{self.date_str}_{domain}.pdf', format='pdf')
 
 
         # Plot 3D ANTILOPE precipitation field
@@ -562,7 +637,8 @@ class Assimilation(object):
         elif self.debiasing == 3:
             #mask = xr.open_dataset(os.path.join("/home/vernaym/These/DATA/mask", f"Estimated_ratio_{self.domain}_0.15_15.nc"))
             mask = xr.open_dataset(os.path.join(f"Estimated_ratio.nc"))
-            ratio = mask.rr
+            #ratio = mask.rr
+            ratio = mask.ratio
         else:
             ratio = 1  # No debiasing
         parameters['mu'] = parameters['rr'] / ratio  # TODO : check if the ensemble after assimilation is not biased
@@ -603,7 +679,8 @@ class Assimilation(object):
                 parameters['sigma'] =  np.abs(mask.rr)
             elif self.mask in [9]:
                 mask = xr.open_dataset(os.path.join(f"Observation_error.nc"))
-                parameters['sigma'] =  mask.rr  # Pas de valeur absolue pour le calcul des covariances !
+                #parameters['sigma'] =  mask.rr  # Pas de valeur absolue pour le calcul des covariances !
+                parameters['sigma'] =  mask.ratio  # Pas de valeur absolue pour le calcul des covariances !
                 #parameters['sigma'] =  (0.261 + 0.263 * parameters['rr'])*np.abs(mask.rr)  # PF
 
 
@@ -641,7 +718,7 @@ class Assimilation(object):
         return self.mask
 
     def plot_sigma(self, field):
-        fig, ax = plt.subplots(figsize=(14,6))
+        fig, ax = plt.subplots(figsize=figsize[self.domain]['singleplot'])
         #cmap = plt.cm.YlGnBu
         cmap = plt.cm.Greys
         im = field['sigma'].plot(ax=ax, cmap=cmap, cbar_kwargs=dict(label='Standard deviation (mm)'))
@@ -652,7 +729,7 @@ class Assimilation(object):
 
     def plot_parameters(self):
         label_map = dict(sigma='Standard deviation sigma (mm)', k='Shape parameter (k)', theta='Scale parameter (theta)', delta='Shift parameter (delta)')
-        fig, ax = plt.subplots(nrows=2, ncols=2, figsize=(16,7))
+        fig, ax = plt.subplots(nrows=2, ncols=2, figsize=figsize[self.domain]['singleplot'])
         i = 0
         j = 0
         for param in ['sigma', 'k', 'theta', 'delta']:
@@ -687,8 +764,10 @@ class Assimilation(object):
         #SCGD_shape_PDF(Y, k=k, theta=theta, delta=delta, plot_parameters=False)
         #-----------------------------------------------------------------------
 
-    def plot_ensemble(ensemble, label):
-        fig,ax = plt.subplots(nrows=4, ncols=4, figsize=(16,7))
+    def plot_ensemble(ensemble, label, domain=None):
+        if domain is None:
+            domain = self.domain
+        fig,ax = plt.subplots(nrows=4, ncols=4, figsize=figsize[domain]['ensembleplot'])
         #fig,ax = plt.subplots(nrows=2, ncols=8, figsize=(16,16))  # Alps
         i = 0
         j = 0
@@ -698,7 +777,7 @@ class Assimilation(object):
             if j==4:
                 j = 0
                 i = i + 1
-        fig.savefig(f"{self.date_str}/{label}_{self.date_str}_{self.domain}.pdf", format='pdf')
+        fig.savefig(f"{self.date_str}/{label}_{self.date_str}_{domain}.pdf", format='pdf')
 #    fig, ax = plt.subplots(figsize=(4,4))
 #    i = 0
 #    j = 0
@@ -737,6 +816,16 @@ class Assimilation(object):
 
 
 class EnsembleKalmanFilter(Assimilation):
+
+    def __init__(self, period, obs, ensemble, nivometeo, plot, frequency, gridded, localisation, mask, debiasing, domain, likelyhood):
+
+        super(EnsembleKalmanFilter, self).__init__(period, obs, ensemble, nivometeo, plot, frequency, gridded, localisation, mask, debiasing, domain, likelyhood)
+
+        # Parameters to compute Euclidian distance between all points in the domain
+        self.ld = 0.02 # correlation lenght. WARNING : ne pas trop augmenter la distance de correlation (analyse trop proche de l'obs ==> perte de dispersion)
+        # ld = 0.02 marche plutot bien (sous dispersion), ld=0.03 pas du tout !!!
+        self.max_dist = self.ld*3
+        #max_dist = 0.5  # Memory limit reached at 0.2 for domain Alp. WARNING : very high analysis sensibility to this parameter !!
 
     def analyseKF(self, X, P, H, Y, R):
         """Kalman filter analysis
@@ -799,9 +888,13 @@ class EnsembleKalmanFilter(Assimilation):
             member = ensemble.sel(member=mb).rr.data
             #B = B + (member-ensemble_mean)**2
             #B = B + np.diag((member-ensemble_mean)**2)
-            B = B + self.pond.multiply(np.outer(member-ensemble_mean, member-ensemble_mean))  # elementwive multiplication
+            #scipy.linalg.cholesky(self.pond.toarray())
+            X = diags((member-ensemble_mean).flatten(), 0)
+            B = B + X.dot(self.pond.dot(X))
+            #B = B + self.pond.multiply(np.outer(member-ensemble_mean, member-ensemble_mean))  # elementwive multiplication
 #        B = B/len(ensemble.member)**2  # TODO check denominator
         B = B/(len(ensemble.member)-1)
+        B.data = np.nan_to_num(B.data, copy=False)
         #B = np.diag(B)
 #        B = np.sqrt(B)
         #B.reshape(len(ensemble.lat), len(ensemble.lon))  # To reshape back as 2D field
@@ -814,6 +907,7 @@ class EnsembleKalmanFilter(Assimilation):
 #        B = np.sqrt(B)
 
         return B
+
 
     @speedtest
     def ensemble_dispersion(self, ensemble):
@@ -867,6 +961,18 @@ class EnsembleKalmanFilter(Assimilation):
 
         return R
 
+    def codistances(self, coords):
+        """
+        Solution pour le calcul des inter-distances trouvée sur : https://stackoverflow.com/questions/35296935/python-calculate-lots-of-distances-quickly
+        """
+        tree = cKDTree(coords)
+        dist = tree.sparse_distance_matrix(tree, max_distance=self.max_dist, p=2, output_type='coo_matrix')
+        dist = csr_matrix(dist)
+        #TODO : utiliser une gaussienne plutot qu'une exponentielle décroissante
+        dist[dist.nonzero()] = -dist[dist.nonzero()]/self.ld
+        np.exp(dist.data, out=dist.data )
+        return dist
+
     @speedtest
     def run(self):
         """ 
@@ -874,266 +980,243 @@ class EnsembleKalmanFilter(Assimilation):
         TODO : compléter la doc sur la méthode
         """
 
-        actual_ensemble = self.ensemble
-        actual_parameters = self.parameters
+        domain = self.domain
+
         # Initialisation of output fields
         if self.gridded:
             self.nlon, self.nlat = len(self.radar.lon), len(self.radar.lat)
             null  = np.empty((self.nlat, self.nlon, len(self.period)))  # 2D (lat/lon) field
-#            actual_ensemble = self.ensemble
-#            actual_parameters = self.parameters
         else:
             self.nposte = len(self.nivometeo.num_poste)
             null = np.empty((self.nposte, len(self.period)))
             #self.nb_out_raw = np.zeros(self.nposte)  # Count number of obs outside raw ensemble
             # Extract evalution points
-            evaluation_points = zip(self.nivometeo.num_poste.data, np.max(self.nivometeo.lat, axis=1).data, np.max(self.nivometeo.lon, axis=1).data)
-            idx = list()
-            idy = list()
-            for idp, (num_poste, lat, lon) in enumerate(evaluation_points):
-                #print(num_poste)
-                nearest_lat = nearest(self.radar.lat, lat)
-                nearest_lon = nearest(self.radar.lon, lon)
-                idy.append(np.where(self.radar.lat.data==nearest_lat)[0][0])  # index of the corresponding antilope pixel latitude
-                idx.append(np.where(self.radar.lon.data==nearest_lon)[0][0])  # index of the corresponding antilope pixel longitude
-#            actual_ensemble = self.ensemble.isel(lat=xr.DataArray(idy, dims='poste'),lon=xr.DataArray(idx, dims='poste'))
-#            actual_parameters = self.parameters.isel(lat=xr.DataArray(idy, dims='poste'),lon=xr.DataArray(idx, dims='poste'))
 
-        self.newlocalfield = {m:null.copy() for m in range(1, self.Ne+1)}
+        null[:] = np.nan
+        self.newlocalfield = {m:null.copy() for m in range(1, self.Ne+1)}  # Used only for ponctual assimilation
+        #self.newlocalfield = {m:dict() for m in range(1, self.Ne+1)}  # Used only for ponctual assimilation
 
-        if self.plot:
-            # On profite de la loop sur les membres pour tracer les ensembles bruts avant et après interpolation
-            fig1, axes1 = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
-            fig2, axes2 = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
-        i = 0
-        j = 0
+        actual_ensemble = self.ensemble
+        actual_parameters = self.parameters
 
-        # Compute Euclidian distance between all points in the domain
-        nlat = len(actual_parameters.lat)
-        nlon = len(actual_parameters.lon)
-        ld = 0.05 # correlation lenght. WARNING : ne pas trop augmenter la distance de correlation (analyse trop proche de l'obs ==> perte de dispersion)
-        max_dist = 10 * ld
-        #max_dist = 0.5  # Memory limit reached at 0.2 for domain Alp. WARNING : very high analysis sensibility to this parameter !!
-
-        codistances = os.path.join('/home/vernaym/These/DATA', f'codistance_max_dist_{max_dist}_{self.domain}.npz')
-        if not os.path.exists(codistances):
+        if self.gridded:
+            codistances = os.path.join('/home/vernaym/These/DATA', f'codistance_max_dist_{self.max_dist}_{domain}.npz')
+#            if not os.path.exists(codistances):
+#                # Compute inter-distances
+#                coords=[(lon,lat) for lat in actual_parameters.lat.data for lon in actual_parameters.lon.data]
+#                self.pond = self.codistances(coords)
+#            else:
+#                self.pond = scipy.sparse.load_npz(codistances)
             coords=[(lon,lat) for lat in actual_parameters.lat.data for lon in actual_parameters.lon.data]
-            # Calcul des interdistances (TODO : creer un fichier statique à lire)
-            # Solution pour le calcul des inter-distances trouvée sur : https://stackoverflow.com/questions/35296935/python-calculate-lots-of-distances-quickly
-            tree = cKDTree(coords)
-            dist = tree.sparse_distance_matrix(tree, max_distance=max_dist, p=2)
-            dist = csr_matrix(dist)
-            dist[dist.nonzero()] = -dist[dist.nonzero()]/ld
-            np.exp(dist.data, out=dist.data )
-            scipy.sparse.save_npz(codistances, dist, compressed=True)
-            self.pond = dist
-            del(dist)
-        else:
-            self.pond = scipy.sparse.load_npz(codistances)
+            self.pond = self.codistances(coords)
 
-        for idd,date in enumerate(self.period):
+#        print('DBUG0')
+#        tmp=0.0000001*scipy.sparse.identity(np.shape(self.pond)[0])
+#        tmp=csc_matrix(self.pond+tmp)
+#        #tmp=np.linalg.cholesky(tmp.toarray())
+#        import pdb
+#        pdb.set_trace()
+#        tmp=sparse_cholesky(tmp)
+#        #from cholespy import CholeskySolverF
+#        #solver = CholeskySolverF(np.shape(self.pond)[0], , cols, self.pond.nonzero(), scipy.sparse.csr.csr_matrix)
+#        tmp=np.round(tmp, 2)
+#        self.C = sparse_cholesky(csc_matrix(tmp))
+#        #self.C = np.round(sparse_cholesky(csc_matrix(self.pond+0.0000001*scipy.sparse.identity(np.shape(self.pond)[0]))), 2)
+#        print('DBUG1')
+
+        for idd, date in enumerate(self.period):
             print(date)
-            t1 = time.time()
-            # On réduit le dataset maintenant pour gagner du temps ensuite
-            ensemble = actual_ensemble.sel({'time':date}).compute()  # Load data into memory now
-
             self.date_str = date.strftime('%Y%m%d%H')
             if self.plot:
                 if not os.path.exists(self.date_str):
                     os.makedirs(self.date_str)
 
+            ensemble   = actual_ensemble.sel({'time':date}).compute()  # Load data into memory now
             parameters = actual_parameters.sel({'time':date})
 
-            Y = parameters.mu.data  # Observation vector. WARNING : Use mu to take debiasing into account !
-            self.rrmin = 0.
-            self.rrmax = max(
-                    np.nanmax(ensemble.rr.data),
-                    np.nanmax(Y)
+            if self.gridded:
+                self.gridded_analysis(date, idd,  ensemble, parameters, domain)
+            else:
+                self.ponctual_analysis(date, idd, ensemble, parameters)
+
+    @speedtest
+    def ponctual_analysis(self, date, idd, ensemble, parameters):
+        evaluation_points = zip(self.nivometeo.num_poste.data, np.max(self.nivometeo.lat, axis=1).data, np.max(self.nivometeo.lon, axis=1).data)
+        for idp, (num_poste, lat, lon) in enumerate(evaluation_points):
+            print(num_poste, idp)
+            # Extract rectangle around evaluation point
+            nearest_lat = nearest(parameters.lat, lat)
+            nearest_lon = nearest(parameters.lon, lon)
+            sel_lat = np.round(np.arange(nearest_lat-self.max_dist, nearest_lat+self.max_dist, 0.01), 2)
+            sel_lon = np.round(np.arange(nearest_lon-self.max_dist, nearest_lon+self.max_dist, 0.01), 2)
+
+            try:
+                ensemble_loc = ensemble.sel({'lat':sel_lat, 'lon':sel_lon})
+                parameters_loc = parameters.sel({'lat':sel_lat, 'lon':sel_lon})
+
+                Y = parameters_loc.mu.data  # Observation vector. WARNING : Use mu to take debiasing into account !
+
+                # Compute inter-distances
+                coords=[(lon,lat) for lat in parameters_loc.lat.data for lon in parameters_loc.lon.data]
+                self.pond = self.codistances(coords)
+
+                B = self.background_error_covariance(ensemble_loc)  # Background error covariance matrix
+
+                R, Rstat, Rdyn, ref_field = self.observation_ECM(parameters_loc, date)
+
+                K = B.dot(np.linalg.inv((B+R).toarray()))
+
+                Y = Y.flatten()
+                for member in ensemble_loc.member.data:
+                    raw = ensemble_loc.sel({'member':member}).rr
+                    X = raw.data.flatten()  # Ensemble member vector
+                    A = X + K.dot(Y-X)
+
+                    # On peut maintenant extraire les vrais domaines (on a plus besoind e la marge sur les bords)
+                    analysis = xr.DataArray(
+                        name   = 'rr',
+                        data   = A.reshape((len(raw.lat), len(raw.lon))),
+                        #data   = A,  # Without spatial correlations
+                        dims   = ["lat", "lon"],
+                        coords = dict(lon=raw.lon, lat=raw.lat),
                     )
 
-#            if np.max(Y) > 20:
+                    self.newlocalfield[member][idp,idd] = analysis.sel({'lat':nearest_lat, 'lon':nearest_lon}).data
 
-            if self.plot and not os.path.exists(f'{self.date_str}'):
-                os.makedirs(f'{self.date_str}')
+            except KeyError:
+                print(f'Dropping station number {num_poste} (too close from the edge of the domain)')
 
+    def observation_ECM(self, parameters, date):
 
-            B = self.background_error_covariance(ensemble)  # Background error covariance matrix
+        ref_field = self.ref_field(parameters.mu, date)
+        std = parameters.sigma.data
+        X = diags((np.sqrt(parameters.mu.data)*std).flatten(), 0)
+        Rdyn = X.dot(self.pond.dot(X))
+        #Rdyn = self.pond.multiply(np.outer(np.sqrt(parameters.mu)*std, np.sqrt(parameters.mu)*std))
+#        Rstat = self.pond.multiply(np.outer(std,std))  # TODO : fixer l'erreur d'obs en absence de precipitation
+#        Rdyn = self.pond.multiply(np.outer(ref_field, ref_field))
+        # La dispersion de l'analyse est principalement augmentée par Rstat
+        X = diags(std.flatten()*10)
+        #Rstat = self.pond.multiply(np.outer(std*10, std*10))  # TODO : fixer l'erreur d'obs en absence de precipitation
+        Rstat = X.dot(self.pond.dot(X))
 
-            #R = np.outer(errobs, errobs)*np.exp(-self.dist/self.ld)
-            #R = np.outer(errobs, errobs)
-            # Smooth observation to compute dynamic observation error
-            #smoothobs = uniform_filter(self.parameters.sel({'time':date}).rr, size=15)  # numpy array
-            smoothobs = uniform_filter(self.parameters.sel({'time':date}).mu, size=20)  # numpy array
-            smoothobs = xr.DataArray(
-                name   = 'rr',
-                data   = smoothobs,
-                dims   = ["lat", "lon"],
-                coords = dict(lon=self.parameters.lon, lat=self.parameters.lat),
-            )
-            #if not self.gridded:
-            #    smoothobs = smoothobs.isel(lat=xr.DataArray(idy, dims='poste'),lon=xr.DataArray(idx, dims='poste'))
+        R = Rstat + Rdyn  # Rstat améliore sensiblement les petites precip (sinon error obs=0).
 
-            std = parameters.sigma.data
-            #Rdyn = np.diag(((parameters.rr.data-smoothobs.rr.data)**2).flatten())
-            #Rdyn = (Y-smoothobs.data)**2
-#            dyn_ratio = parameters.rr.data/smoothobs.data-1
-#            pos = np.where(dyn_ratio>0)
-#            dyn_ratio[pos] = dyn_ratio[pos] + 1  # r=1.4 ==> err = 1.4
-#            neg = np.where(dyn_ratio<0)
-#            dyn_ratio[neg] = dyn_ratio[neg] - 1  # r=1.4 ==> err = 1.4
+        R.data = np.nan_to_num(R.data, copy=False)
 
-            # ref field soit champs débiaisé soit champ lissé pour éviter de pénaliser les zones avec surestimation des précipitations
-            if self.debiasing:
-                ref_field = parameters.mu.data
-            else:
-                ref_field = smoothobs
-            #ref_field = parameters.mu.data - smoothobs
+        return R, Rstat, Rdyn, ref_field
 
-            #std_dyn = std*ref_field.flatten()
+    def ref_field(self, field, date):
 
-            #Rdyn = ref_field*std**2  # If no spatial correlations
-            #Rdyn = coo_matrix(np.outer(np.sqrt(ref_field)*std, np.sqrt(ref_field)*std)*self.pond)
-            #Rdyn = coo_matrix(np.outer(ref_field*std, ref_field*std)*self.pond)
+        smoothobs = uniform_filter(self.parameters.sel({'time':date}).mu, size=10)  # numpy array
+        #smoothobs = uniform_filter(parameters.sel({'time':date}).mu, size=10)  # numpy array
+        smoothobs = xr.DataArray(
+            name   = 'rr',
+            data   = smoothobs,
+            dims   = ["lat", "lon"],
+            coords = dict(lon=self.parameters.lon, lat=self.parameters.lat),
+        )
+        smoothobs = smoothobs.sel({'lat':field.lat, 'lon':field.lon})
+        ref_field = field.data - smoothobs
 
-            #Rdyn = csc_matrix(np.outer(ref_field*std, ref_field*std)*self.pond)
-            Rdyn = self.pond.multiply(np.outer(ref_field*std, ref_field*std))  # TODO comprendre pourquoi *10 augmente autant la dispersion
-            #Rdyn = self.pond.multiply(std_dyn).multiply(std_dyn)
-            Rstat = self.pond.multiply(np.outer(std,std))  # TODO : fixer l'erreur d'obs en absence de precipitation
-            #Rstat = self.pond.multiply(std).multiply(std)  # TODO : fixer l'erreur d'obs en absence de precipitation
-            #Rstat = np.outer(std,std)  # TODO : fixer l'erreur d'obs en absence de precipitation
-            R = Rstat + Rdyn  # Rstat améliore sensiblement les petites precip (sinon error obs=0).
-            #R = coo_matrix(np.outer(std,std)*(ref_field+1)*self.pond)
+        return ref_field
 
-            #Rstat = np.diag((std*std).flatten())  # neglecting correlations
-            # Normalisation of ECMs
-            #Rdyn = Rdyn/np.max(Rdyn)
-            #Rstat = Rstat/np.max(Rstat)
-            #P = P/np.max(P)
+    @speedtest
+    def gridded_analysis(self, date, idd, ensemble, parameters, domain):
 
-            #R=Rdyn
-            #R=Rstat
-            #R=(Rdyn+Rstat)/2
-            #R=Rdyn+Rstat
-            #R=Rstat*(ref_field+1)  # +1 améliore sensiblement les petites precip (sinon error obs=0). ref field soit champs débiaisé soit champ lissé pour éviter de pénaliser les zones avec surestimation des précipitations
-            #R = uniform_filter(R, size=5)  # WARNING : smoothing only possible for diagonal R matrix and not necessary if R is not Rstat+Rdyn but has a linear depencency with Y
-
-#            print('DBUG3')
-#            #C = csc_matrix(P+R)
-#            C = P+R
-#            print('DBUG4')
-#            D = inv(C)
-#            print('DBUG5')
-
-
-
-            #Kalman gain
-            ############################################
-            #X=np.array([39.936, 39.272])
-            #Y=np.array([12.406, 10.406])
-            #P=np.array([[8.490,8.339],[8.339,8.219]])
-            #R=R=np.array([[8.646,4.461],[4.461,2.302]])
-            #inv=np.linalg.inv(P+R)
-            #K=np.dot(P,inv)
-            ############################################
-            #H = np.identity(len(P))  # Forward operator (useless in this case)
-            #K  = np.matmul(np.matmul(P, H.T), np.linalg.inv(np.matmul(np.matmul(H, P), H.T) + R))  # K=PH'(HPH'+R)^-1
-            #K  = np.matmul(P, np.linalg.inv(P+R))  # K=P(P+R)^-1
-            #K = coo_matrix(np.matmul(P, np.linalg.inv(P+R))*self.pond)
-
-            #K = P.dot(D)
-            K = B.dot(inv(B+R))
-
-            if self.plot:
-                line = K.getrow(600).toarray()[0].reshape((len(parameters.lat), len(parameters.lon)))
-                self.plot_array(line, parameters.rr, 'Kalman_Gain', f'{self.date_str}/Kalman_Gain_{self.domain}_L1.pdf', cmap=plt.cm.coolwarm)
-                #self.plot_array(dist[0].reshape((len(parameters.lat), len(parameters.lon))), parameters.rr, 'Distance to point 1', f'{self.date_str}/Distance_1.pdf', cmap=plt.cm.coolwarm)
-                line = B.getrow(600).toarray()[0].reshape((len(parameters.lat), len(parameters.lon)))
-                self.plot_array(line, parameters.rr, 'Background_ECM', f'{self.date_str}/Background_ECM_{self.domain}_L1.pdf', cmap=plt.cm.coolwarm)
-                line = R.getrow(600).toarray()[0].reshape((len(parameters.lat), len(parameters.lon)))
-                self.plot_array(line, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_ECM_{self.domain}_L1.pdf', cmap=plt.cm.coolwarm)
-                self.plot_array(ref_field, parameters.rr, 'Dynamic error', f'{self.date_str}/Ref_field.pdf', cmap=plt.cm.coolwarm)
-
-                # Plot matrices
-                ECM_max = max(np.max(R.diagonal()), np.max(B.diagonal()))
-                self.plot_matrix(B, parameters.rr, 'Background_ECM', f'{self.date_str}/Background_ECM_{self.domain}.pdf', cmap=plt.cm.viridis)
-                self.plot_matrix(R, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_ECM_{self.domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.viridis)
-                self.plot_matrix(Rstat, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_stat_ECM_{self.domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.viridis)
-                self.plot_matrix(Rdyn, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_dyn_ECM_{self.domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.viridis)
-                self.plot_matrix(K, parameters.rr, 'Kalman_Gain', f'{self.date_str}/Kalman_Gain_{self.domain}.pdf', cmap=plt.cm.coolwarm, vmin=0, vmax=1)
-                # Plot fields
-#                self.plot_array(B, parameters.rr, 'Background_ECM', f'{self.date_str}/Background_ECM_{self.domain}.pdf', vmin=0, vmax=200, cmap=plt.cm.viridis)
-#                self.plot_array(R, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_ECM_{self.domain}.pdf', vmin=0, vmax=200, cmap=plt.cm.viridis)
-#                self.plot_array(Rstat, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_stat_ECM_{self.domain}.pdf', vmin=0, vmax=200, cmap=plt.cm.viridis)
-#                self.plot_array(Rdyn, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_dyn_ECM_{self.domain}.pdf', vmin=0, vmax=200, cmap=plt.cm.viridis)
-#                self.plot_array(K, parameters.rr, 'Kalman_Gain', f'{self.date_str}/Kalman_Gain_{self.domain}.pdf', cmap=plt.cm.coolwarm, vmin=0, vmax=1)
-
-                fig1,ax1 = plt.subplots(nrows=4, ncols=4, figsize=(16,7))
-                fig2,ax2 = plt.subplots(nrows=4, ncols=4, figsize=(16,7))
-                fig3,ax3 = plt.subplots(nrows=4, ncols=4, figsize=(16,7))
-                #fig2,ax2 = plt.subplots(nrows=2, ncols=8, figsize=(16,10))
-                i = 0
-                j = 0
-                self.plot_obs(parameters)
-                if self.debiasing:
-                    self.plot_obs(parameters, var='mu')
-
-            Y = Y.flatten()
-            analysis = dict()
-            for member in ensemble.member.data:
-                raw = ensemble.sel({'member':member}).rr
-                #X = raw.data  # Ensemble member vector without spatial correlations
-                X = raw.data.flatten()  # Ensemble member vector
-                #X = raw.data  # Ensemble member vector
-                #K,A = self.analyseKF(X, B, H, Y, R)  # ENKF analysis vector
-                #A = X + np.matmul(K, Y-X)
-                #A = X + K*(Y-X)  # Without spatial correlations
-                A = X + K.dot(Y-X)
-
-                analysis[member] = xr.DataArray(
-                    name   = 'rr',
-                    data   = A.reshape((len(raw.lat), len(raw.lon))),
-                    #data   = A,  # Without spatial correlations
-                    dims   = ["lat", "lon"],
-                    coords = dict(lon=raw.lon, lat=raw.lat),
+        Y = parameters.mu.data  # Observation vector. WARNING : Use mu to take debiasing into account !
+        self.rrmin = 0.
+        self.rrmax = max(
+                np.nanmax(ensemble.rr.data),
+                np.nanmax(Y)
                 )
 
-                if not self.gridded:
-                    ponctual_analysis = analysis[member].isel(lat=xr.DataArray(idy, dims='poste'),lon=xr.DataArray(idx, dims='poste'))
-                    self.newlocalfield[member][:,idd] = ponctual_analysis.data
+        B = self.background_error_covariance(ensemble)  # Background error covariance matrix
+        R, Rstat, Rdyn, ref_field = self.observation_ECM(parameters, date)
 
-                if self.plot:
-                    im1 = plot_field(raw, ax1[i,j], self.rrmin, self.rrmax)
-                    im2 = plot_field(analysis[member], ax2[i,j], self.rrmin, self.rrmax)
-                    im3 = plot_field(parameters.mu-raw, ax3[i,j], np.min(parameters.mu.data-raw.data), np.max(parameters.mu.data-raw.data))
-                    ax1[i,j].set_title(None)
-                    ax2[i,j].set_title(None)
-                    j = j + 1
-                    if j==4:
-                        j = 0
-                        i = i + 1
-                    # Alps :
-                    #j = j + 1
-                    #if j==8:
-                    #    j = 0
-                    #    i = i + 1
+        K = B.dot(np.linalg.inv((B+R).toarray()))
+        # Working inversion of large sparse matrix
+#        A = B+R
+#        A = A + 0.001*scipy.sparse.eye(A.shape[0])
+#        K = B.dot(scipy.sparse.linalg.inv(A))
+
+        if self.plot:
+            fig1,ax1 = plt.subplots(nrows=4, ncols=4, figsize=figsize[domain]['ensembleplot'])
+            fig2,ax2 = plt.subplots(nrows=4, ncols=4, figsize=figsize[domain]['ensembleplot'])
+            fig3,ax3 = plt.subplots(nrows=4, ncols=4, figsize=figsize[domain]['ensembleplot'])
+            #fig2,ax2 = plt.subplots(nrows=2, ncols=8, figsize=(16,10))
+            i = 0
+            j = 0
+
+        Y = Y.flatten()
+        analysis = dict()
+        for member in ensemble.member.data:
+            raw = ensemble.sel({'member':member}).rr
+            X = raw.data.flatten()  # Ensemble member vector
+            A = X + K.dot(Y-X)
+
+            # On peut maintenant extraire les vrais domaines (on a plus besoind e la marge sur les bords)
+            analysis[member] = xr.DataArray(
+                name   = 'rr',
+                data   = A.reshape((len(raw.lat), len(raw.lon))),
+                #data   = A,  # Without spatial correlations
+                dims   = ["lat", "lon"],
+                coords = dict(lon=raw.lon, lat=raw.lat),
+            )
+
+            if self.plot:
+                im1 = plot_field(raw, ax1[i,j], self.rrmin, self.rrmax)
+                im2 = plot_field(analysis[member], ax2[i,j], self.rrmin, self.rrmax)
+                im3 = plot_field(parameters.mu-raw, ax3[i,j], np.min(parameters.mu.data-raw.data), np.max(parameters.mu.data-raw.data))
+                ax1[i,j].set_title(None)
+                ax2[i,j].set_title(None)
+                j = j + 1
+                if j==4:
+                    j = 0
+                    i = i + 1
+
+        if self.plot:
+
+            #line = K.getrow(600).toarray()[0].reshape((len(parameters.lat), len(parameters.lon)))
+            line = K[600].reshape((len(parameters.lat), len(parameters.lon)))
+            self.plot_array(line, parameters.rr, 'Kalman_Gain', f'{self.date_str}/Kalman_Gain_{domain}_L1.pdf', cmap=plt.cm.coolwarm)
+            #self.plot_array(dist[0].reshape((len(parameters.lat), len(parameters.lon))), parameters.rr, 'Distance to point 1', f'{self.date_str}/Distance_1.pdf', cmap=plt.cm.coolwarm)
+            line = B.getrow(600).toarray()[0].reshape((len(parameters.lat), len(parameters.lon)))
+            #line = B[600].reshape((len(parameters.lat), len(parameters.lon)))
+            self.plot_array(line, parameters.rr, 'Background_ECM', f'{self.date_str}/Background_ECM_{domain}_L1.pdf', cmap=plt.cm.coolwarm)
+            line = R.getrow(600).toarray()[0].reshape((len(parameters.lat), len(parameters.lon)))
+            #line = R[600].reshape((len(parameters.lat), len(parameters.lon)))
+            self.plot_array(line, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_ECM_{domain}_L1.pdf', cmap=plt.cm.coolwarm)
+            self.plot_array(ref_field, parameters.rr, 'Dynamic error', f'{self.date_str}/Ref_field.pdf', cmap=plt.cm.coolwarm)
+
+            # Plot matrices
+            ECM_max = max(np.max(R.diagonal()), np.max(B.diagonal()))
+            self.plot_matrix(B, parameters.rr, 'Background_ECM', f'{self.date_str}/Background_ECM_{domain}.pdf', cmap=plt.cm.viridis)
+            self.plot_matrix(R, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_ECM_{domain}.pdf', vmin=0, vmax=400, cmap=plt.cm.viridis)
+            #self.plot_matrix(Rstat, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_stat_ECM_{domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.viridis)
+            #self.plot_matrix(Rdyn, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_dyn_ECM_{domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.viridis)
+            self.plot_matrix(Rstat, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_stat_ECM_{domain}.pdf', cmap=plt.cm.viridis)
+            self.plot_matrix(Rdyn, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_dyn_ECM_{domain}.pdf', cmap=plt.cm.viridis)
+            self.plot_matrix(K, parameters.rr, 'Kalman_Gain', f'{self.date_str}/Kalman_Gain_{domain}.pdf', cmap=plt.cm.coolwarm, vmin=0, vmax=1)
+
+            self.plot_obs(parameters, domain=domain)
+            if self.debiasing:
+                self.plot_obs(parameters, var='mu', domain=domain)
 
             mean = self.ensemble_mean(analysis)
             self.plot_array(mean, parameters.rr, 'Mean precipitation (mm)', f'{self.date_str}/Analysis_mean_{self.domain}.pdf', cmap=plt.cm.YlGnBu, vmin=self.rrmin, vmax=self.rrmax)
             # TODO : comprendre pourquoi la dispersion est plus importante sur les bords du domaine (distance de coorélation moins impactante ?
             disp = self.ensemble_dispersion(analysis)
             self.plot_array(disp, parameters.rr, 'Dispersion (mm)', f'{self.date_str}/Analysis_dispersion_{self.domain}.pdf', cmap=plt.cm.YlGnBu)
+            finalize_fig(fig1, im1, label='24-hour precipitation (mm)', outname=f'{self.date_str}/RAW_{self.date_str}_{self.domain}.pdf')
+            finalize_fig(fig2, im2, label='24-hour precipitation (mm)', outname=f'{self.date_str}/ANALYSIS_{self.date_str}_{self.domain}.pdf')
+            finalize_fig(fig3, im3, label='24-hour precipitation difference (mm)', outname=f'{self.date_str}/INNOVATION_{self.date_str}_{self.domain}.pdf')
 
-            if self.plot:
-                finalize_fig(fig1, im1, label='24-hour precipitation (mm)', outname=f'{self.date_str}/RAW_{self.date_str}_{self.domain}.pdf')
-                finalize_fig(fig2, im2, label='24-hour precipitation (mm)', outname=f'{self.date_str}/ANALYSIS_{self.date_str}_{self.domain}.pdf')
-                finalize_fig(fig3, im3, label='24-hour precipitation difference (mm)', outname=f'{self.date_str}/INNOVATION_{self.date_str}_{self.domain}.pdf')
+            plt.close('all')
 
-                #TODO : Plot analysis dispersion
-
-            t2 = time.time()
-            print(f'Assimilation for date {self.date_str} took {(t2-t1)*1000.}ms')
-
-    def plot_matrix(self, matrix, ref_field, label, outname, cmap=plt.cm.YlGnBu, vmin=None, vmax=None):
+    def plot_matrix(self, matrix, ref_field, label, outname, cmap=plt.cm.YlGnBu, vmin=None, vmax=None, domain=None):
+        if domain is None:
+            domain = self.domain
         #diag = np.array([matrix[i,i] for i in range(len(matrix))])
         diag = matrix.diagonal()
         field = xr.DataArray(
@@ -1142,7 +1225,7 @@ class EnsembleKalmanFilter(Assimilation):
                 dims   = ["lat", "lon"],
                 coords = dict(lon=ref_field.lon, lat=ref_field.lat),
             )
-        fig,ax = plt.subplots(figsize=(16,8))
+        fig,ax = plt.subplots(figsize=figsize[domain]['singleplot'])
         #fig,ax = plt.subplots(figsize=(10,12))  #Alps
         if vmin is None:
             vmin = np.min(diag)
@@ -1151,14 +1234,16 @@ class EnsembleKalmanFilter(Assimilation):
         im = plot_field(field, ax, vmin=vmin, vmax=vmax, cmap=cmap)
         finalize_fig(fig, im, label=label, outname=outname)
 
-    def plot_array(self, array, ref_field, label, outname, cmap=plt.cm.YlGnBu, vmin=None, vmax=None):
+    def plot_array(self, array, ref_field, label, outname, cmap=plt.cm.YlGnBu, vmin=None, vmax=None, domain=None):
+        if domain is None:
+            domain = self.domain
         field = xr.DataArray(
                 name   = 'rr',
                 data   = array,
                 dims   = ["lat", "lon"],
                 coords = dict(lon=ref_field.lon, lat=ref_field.lat),
             )
-        fig,ax = plt.subplots(figsize=(16,8))
+        fig,ax = plt.subplots(figsize=figsize[domain]['singleplot'])
         #fig,ax = plt.subplots(figsize=(14,16))  # Alps
         if vmin is None:
             vmin = np.min(array)
@@ -1337,8 +1422,8 @@ class ParticleFilter(Assimilation):
                     field[idy,idx,idd]  = new[member-1]  # fill new member
 
         if self.plot:
-            fig1,ax1 = plt.subplots(nrows=4, ncols=4, figsize=(16,7))
-            fig2,ax2 = plt.subplots(nrows=4, ncols=4, figsize=(16,7))
+            fig1,ax1 = plt.subplots(nrows=4, ncols=4, figsize=figsize[domain]['ensembleplot'])
+            fig2,ax2 = plt.subplots(nrows=4, ncols=4, figsize=figsize[domain]['ensembleplot'])
             i = 0
             j = 0
             raw = localized_period.sel({'time':date})
@@ -1514,8 +1599,8 @@ class ParticleFilter(Assimilation):
 
         if self.plot:
             # On profite de la loop sur les membres pour tracer les ensembles bruts avant et après interpolation
-            fig1, axes1 = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
-            fig2, axes2 = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
+            fig1, axes1 = plt.subplots(nrows=4, ncols=4, figsize=figsize[domain]['ensembleplot'])
+            fig2, axes2 = plt.subplots(nrows=4, ncols=4, figsize=figsize[domain]['ensembleplot'])
         i = 0
         j = 0
 
@@ -1775,7 +1860,7 @@ if __name__ == "__main__":
     extract_period = date_range(args.datebegin, args.dateend, dt=timestep[args.frequency])
 
     antilope = read_obs(args)
-    pearome = read_ensemble(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'), args.frequency, args.domain)
+    pearome = read_ensemble(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'), args.frequency, args.domain, antilope)
     if args.gridded:
         localfields = xr.DataArray(
                 name   = 'rr',
@@ -1800,7 +1885,7 @@ if __name__ == "__main__":
             )
         globalfields = None
 
-    interp_ensemble = pearome.interp(lon=antilope.lon, lat=antilope.lat).clip(0)  # Avoid <0 precipitation values
+    #interp_ensemble = pearome.interp(lon=antilope.lon, lat=antilope.lat).clip(0)  # Avoid <0 precipitation values
 
 
     # Assimilation
@@ -1808,7 +1893,8 @@ if __name__ == "__main__":
 
     if args.assimilation == 'pf':  # 1. Particle Filter
 
-        pf = ParticleFilter(extract_period, antilope, interp_ensemble, nivometeo, args.plot, args.frequency, args.gridded, args.localisation, args.mask, args.debiasing, args.domain, args.likelyhood)
+        #pf = ParticleFilter(extract_period, antilope, interp_ensemble, nivometeo, args.plot, args.frequency, args.gridded, args.localisation, args.mask, args.debiasing, args.domain, args.likelyhood)
+        pf = ParticleFilter(extract_period, antilope, pearome, nivometeo, args.plot, args.frequency, args.gridded, args.localisation, args.mask, args.debiasing, args.domain, args.likelyhood)
         mask = pf.pdf_parameters()
         pf.run()  # Compute weight fields before normalisation + plot raw/interp fields
         #pf.selection()  # Global and local selections
@@ -1827,7 +1913,8 @@ if __name__ == "__main__":
 
     elif args.assimilation == 'enkf':  # 2. Ensemble Kalman Filter
 
-        enkf = EnsembleKalmanFilter(extract_period, antilope, interp_ensemble, nivometeo, args.plot, args.frequency, args.gridded, args.localisation, args.mask, args.debiasing, args.domain, args.likelyhood)
+        #enkf = EnsembleKalmanFilter(extract_period, antilope, interp_ensemble, nivometeo, args.plot, args.frequency, args.gridded, args.localisation, args.mask, args.debiasing, args.domain, args.likelyhood)
+        enkf = EnsembleKalmanFilter(extract_period, antilope, pearome, nivometeo, args.plot, args.frequency, args.gridded, args.localisation, args.mask, args.debiasing, args.domain, args.likelyhood)
         mask = enkf.pdf_parameters()
         enkf.run()
         out = enkf.output(localfields)
