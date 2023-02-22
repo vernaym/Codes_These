@@ -168,8 +168,8 @@ likelyhood_experiments = dict(
     )
 
 basic = dict(
-        LD0         = 'XP00_assimilation_quotidienne_sans_masque_sans_localisation/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
-        LDD0        = 'XP21_assimilation_quotidienne_avec_debiaisage_uniforme/Assimilation_locale_2021120106_2022050106_daily_alp_debiasing0.nc',
+#        LD0         = 'XP00_assimilation_quotidienne_sans_masque_sans_localisation/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
+#        LDD0        = 'XP21_assimilation_quotidienne_avec_debiaisage_uniforme/Assimilation_locale_2021120106_2022050106_daily_alp_debiasing0.nc',
     )
 
 algo = dict(
@@ -237,6 +237,7 @@ if not os.path.exists(savedir):
 
 xpid_label = dict(
         antilope      = 'ANTILOPE',
+        antiloped     = 'ANTILOPE DEBIAISE',
         raw           = 'Raw PEAROME ensemble',
         GD0           = 'Global daily analysis',
         LD0           = 'Daily analysis with PF',
@@ -434,7 +435,8 @@ class Evaluation(object):
 
         #plt.plot(false_alarm, succes_rate, label=product, linestyle=linestyle_map[threshold])
         if np.shape(simu) == np.shape(obs):
-            ax.plot(false_alarm, succes_rate, marker = '+', markersize=12, linestyle='', label=product, color='k')
+            #ax.plot(false_alarm, succes_rate, marker = '+', markersize=12, linestyle='', label=product, color='k')
+            ax.plot(false_alarm, succes_rate, marker = '+', markersize=12, linestyle='', label=product)
         else:
             ax.plot(false_alarm, succes_rate, label=product)
 
@@ -684,13 +686,18 @@ class Evaluation(object):
 
         antilope = self.read_antilope()
         antilope = antilope.loc[{'time':dates}]
+        mask = xr.open_dataset(os.path.join(datadir, 'mask', f"Estimated_ratio.nc"))
+        ratio = mask.ratio
+        def debiaise(ds):
+            return ds / ratio
+        antiloped = antilope.groupby('date').apply(debiaise)
 
         raw = self.read_raw_ensemble()
         raw = raw.loc[{'time':dates}]
         raw = raw.compute()
         self.data['member'] = np.arange(1,17)
 
-        data = dict(antilope=list(), raw=list())
+        data = dict(antilope=list(), antiloped=list(), raw=list())
         simus = dict()
         for xpid,filename in experiments.items():
             simus[xpid] = self.read_simu(os.path.join(workdir, filename)).loc[{'time':dates}]
@@ -718,6 +725,7 @@ class Evaluation(object):
                 liste_postes = np.append(liste_postes, num_poste)
                 #obs = obs[:10]
                 data['antilope'].append(antilope.sel({'lat':nearest(antilope.lat, lat), 'lon':nearest(antilope.lon, lon)}).rr.data)
+                data['antiloped'].append(antiloped.sel({'lat':nearest(antiloped.lat, lat), 'lon':nearest(antiloped.lon, lon)}).rr.data)
                 t3 = time.time()
                 print(f'Reading antilope informations took {(t3-t2)*1000.}ms')
                 data['raw'].append(raw.sel({'lat':nearest(raw.lat, lat), 'lon':nearest(raw.lon, lon)}).rr.data)
@@ -770,6 +778,7 @@ class Evaluation(object):
         # TODO : optimiser le calcul des scores !
 
         self.data['antilope'] = (('num_poste', 'date'), data['antilope'])
+        self.data['antiloped'] = (('num_poste', 'date'), data['antiloped'])
         self.data['raw'] = (('num_poste', 'date', 'member'), data['raw'])
         for xpid in experiments.keys():
             self.data[xpid] = (('num_poste', 'date', 'member'), data[xpid])
@@ -797,6 +806,7 @@ class Evaluation(object):
                 # TODO : vérifier les données (virer les dates où obs=nan,...)
                 self.ROC(self.data[product].data.reshape(-1, 16), self.data.obs.data.flatten(), product, ax, threshold=threshold)
             self.ROC(self.data['antilope'].data.flatten(), self.data.obs.data.flatten(), 'antilope', ax, threshold=threshold)
+            self.ROC(self.data['antiloped'].data.flatten(), self.data.obs.data.flatten(), 'antiloped', ax, threshold=threshold)
             ax.set_xlim([0, 0.5])
             ax.set_ylim([0.5, 1])
             ax.set_xlabel('False alarm rate')
@@ -809,7 +819,7 @@ class Evaluation(object):
         tmp = {"score":{"dims": ("score"), "data":scores_list}, "num_poste":{"dims": ("num_poste"), "data":liste_postes}}
         tmp.update({key:{"dims": ("score", "num_poste"), "data":[value[score] for score in scores_list]} for key,value in scores.items()})
         self.scores = xr.Dataset.from_dict(tmp)
-        self.scores.to_netcdf(os.path.join(datadir, f'scores_{xpid}.nc'))
+#        self.scores.to_netcdf(os.path.join(datadir, f'scores_{xpid}.nc'))
         t10 = time.time()
         print(f'Saving scores took {(t10-t9)*1000.}ms')
 
@@ -868,7 +878,7 @@ class Evaluation(object):
                 labels.append(self.add_label(ax.violinplot(x[~np.isnan(x)], showmeans=True, positions=[pos]), xpid_label[product]))
                 if score == 'bias':
                     ax.axhline(color='k')
-                if score.startswith('brier') and product not in ['antilope', 'raw']:
+                if score.startswith('brier') and product not in ['antilope', 'antiloped', 'raw']:
                     ref = self.scores.loc[{'score':score}]['raw'].data
                     bss = 1 - x / ref
                     add_num_poste(ax2, pos2, bss)
