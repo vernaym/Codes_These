@@ -37,16 +37,17 @@ savedir = '/home/vernaym/workdir/ASSIMILATION/mask/illustration_methode'
 onlypostes = [5001400, 5085403]
 onlypostes = [5001400, 5085403, 5133400]
 onlypostes = [74056416, 73176400, 73257400, 73123402, 38548400, 73194401]
-onlypostes = [74056416, 73132400, 73176400, 73257400, 73194401]
 onlypostes = [38191400]
 onlypostes = [5001400]
 onlypostes = [38375400]
 onlypostes = [38253400]
 onlypostes = [73194401]
+onlypostes = [73257400]
 onlypostes = [74056416, 5001400,38548400]
+onlypostes = [74056416, 73132400, 73176400, 73257400, 73194401]
 
-d0 = 0.2
-c0 = 2
+d0 = 0.3
+c0 = 1
 
 # TODO ajouter les postes clim non utilisés par ANTILOPE temps réel
 fic_score = os.path.join(datadir, 'scores_2021110106_2022043006_alpes.csv')
@@ -204,7 +205,8 @@ def add_scores(scores, ax, mycmap=None, vmin=None, vmax=None):
             #sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=150, edgecolors='black', alpha=0.5)
             sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=300, edgecolors='black', alpha=1)
         else:
-            sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, vmin=vmin, vmax=vmax, marker=marker, s=300, edgecolors='black', alpha=1)
+            #sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, vmin=vmin, vmax=vmax, marker=marker, s=300, edgecolors='black', alpha=1)
+            sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, vmin=vmin, vmax=vmax, marker=marker, s=200, edgecolors='black', alpha=0.1)
 
         #labels = [str(num_poste) for num_poste in info['num_poste']]
         labels = [str(np.around(ratio, decimals=2)) for ratio in info['ratio']]
@@ -213,7 +215,7 @@ def add_scores(scores, ax, mycmap=None, vmin=None, vmax=None):
         for idx in info.index:
             txt = plt.text(info['lons'][idx], info['lats'][idx], np.around(info['ratio'][idx], decimals=2), fontsize=16)
             #txt = plt.text(info['lons'][idx], info['lats'][idx], info['num_poste'][idx])
-    #ax.colorbar(sc, label=legend)
+    #cb = ax.colorbar(sc, label=legend)
     #ax.colorbar(sc, label=legend, shrink=shrink, anchor=anchor)
     return sc
 
@@ -245,6 +247,20 @@ def add_boundaries():
         x = [i[0] for i in shape.shape.points[:]]
         y = [i[1] for i in shape.shape.points[:]]
         plt.plot(x,y, color='k')
+
+def add_massifs():
+#    shapefile_name = os.path.join("/home/vernaym/QGIS/FondDeCarte/", "world-administrative-boundaries.shp")
+#    borders = shapefile.Reader(shapefile_name)
+#    for shape in borders.shapeRecords():
+#        x = [i[0] for i in shape.shape.points[:]]
+#        y = [i[1] for i in shape.shape.points[:]]
+#        plt.plot(x,y, color='k')
+
+    massifs = shapefile.Reader("/home/vernaym/safran/ctes/shapefiles/massifs_safran.shp")
+    for shape in massifs.shapeRecords():
+        x = [i[0] for i in shape.shape.points[:]]
+        y = [i[1] for i in shape.shape.points[:]]
+        plt.plot(x, y,color='grey', alpha=0.5)
 
 def add_cities(latmin, latmax, lonmin, lonmax):
     cities = pd.read_csv(os.path.join('/home/vernaym/safran/monitoring/', 'cities.csv'), sep=',')
@@ -373,16 +389,16 @@ def plot_field(fig, ax, field, cmap=plt.cm.Greys, vmin=None, vmax=None, scores=N
     if scores is not None:
         if field.name == 'ratio':
             # Plot scores with same cmap since it is the same information
-            add_scores(scores, ax, mycmap=cmap, vmin=vmin, vmax=vmax)
+            sc = add_scores(scores, ax, mycmap=cmap, vmin=vmin, vmax=vmax)
         else:
-            add_scores(scores, ax)
+            sc = add_scores(scores, ax)
 
     add_radar_positions(ax)
     add_boundaries()
+    add_massifs()
     #add_cities(latmin, latmax, lonmin, lonmax)
 
     if colorbar:
-
         cb = fig.colorbar(cml)
         cb.set_label(field.name, fontsize=24)
         cb.ax.tick_params(labelsize=20)
@@ -430,11 +446,22 @@ def ratio_estimation(field, moving_window=25):
     scores = scores.sort_values('lats')
 
     lons, lats = np.meshgrid(field.lon.data, field.lat.data)
-    #estimated_ratio = np.ones(np.shape(field.rr_cumul.data))*scores.ratio.mean()
-    estimated_ratio = smoothratio
-    onlypostes = scores.index
+    estimated_ratio = np.ones(np.shape(field.rr_cumul.data))*scores.ratio.mean()
+    #estimated_ratio = np.ones(np.shape(field.rr_cumul.data))
+    #inov = np.zeros(np.shape(field.rr_cumul.data))
+    inov = np.ones(np.shape(field.rr_cumul.data))
+    weight = np.ones(np.shape(field.rr_cumul.data))
+    #weight = np.zeros(np.shape(field.rr_cumul.data))
+    #estimated_ratio = smoothratio
+    #onlypostes = scores.index
+    scores = scores
     used_scores = []
+
+    # TODO : trouver un moyen de rendre l'estimation indépendante de l'ordre de traitement
+    N = 0
+    onlypostes = scores.index
     for i,poste in enumerate(scores.index):
+    #for i,poste in enumerate(reversed(scores.index)):
         if poste in onlypostes:
             used_scores.append(poste)
             #print(scores.loc[poste])
@@ -453,13 +480,23 @@ def ratio_estimation(field, moving_window=25):
             #estimated_ratio = estimated_ratio+(ratio-estimated_ratio)*np.exp(-np.abs(cumul_dist)/(ref_cumul/c0))*np.exp(-dist/d0)  # TEST
             #estimated_ratio = estimated_ratio+(ratio*cumul_ratio-estimated_ratio)*np.exp(-dist/d0)  # TEST
             #estimated_ratio = estimated_ratio+(ratio*smoothratio-estimated_ratio)*np.exp(-dist/d0)*np.exp(-np.abs(cumul_dist)/(ref_cumul/c0)) # TEST
-            estimated_ratio = estimated_ratio+(ratio*cumul_ratio-estimated_ratio)*np.exp(-dist/d0)*np.exp(-np.abs(cumul_dist)/(ref_cumul/c0))
+            #estimated_ratio = estimated_ratio+(ratio*cumul_ratio-estimated_ratio)*np.exp(-dist/d0)*np.exp(-np.abs(cumul_dist)/(ref_cumul/c0))
+            #estimated_ratio = estimated_ratio+(ratio*cumul_ratio-1)*np.exp(-(dist/d0)**2)*np.exp(-(np.abs(cumul_dist)/(ref_cumul/c0))**2)
+
+            w = np.exp(-(dist/d0)**2)*np.exp(-(np.abs(cumul_dist)/(ref_cumul/c0))**2)
+            #w = np.exp(-(dist/d0))*np.exp(-(np.abs(cumul_dist)/(ref_cumul/c0)))
+            inov = inov + (ratio*cumul_ratio-estimated_ratio)*w
+            weight = weight + w
+    estimated_ratio = estimated_ratio + (inov-estimated_ratio)/weight
+
+    #weight = np.ones(np.shape(field.rr_cumul.data))
+    #estimated_ratio = estimated_ratio*(1+inov*(weight/(N+weight)))
 
     #TODO : TMP
     #mean_ratio = uniform_filter(estimated_ratio, size=moving_window)
     #estimated_ratio = estimated_ratio - mean_ratio
-    ratio_field = to_xarray(estimated_ratio, field)
-    ratio_field = ratio_field.rename('ratio')
+    ratio_field = to_xarray(estimated_ratio, field, varname='ratio')
+    #ratio_field = ratio_field.rename('ratio')
     #observation_error = ((np.abs(ratio_field-1) + np.abs(diff))**2)*10
 
     #observation_error = (np.abs(ratio_field-1)*5 + 5*np.abs(diff))**2
@@ -482,17 +519,20 @@ def ratio_estimation(field, moving_window=25):
     # PLots
     #######
     scores = scores.loc[(scores.lats>=latmin) & (scores.lats<=latmax) & (scores.lons>=lonmin) & (scores.lons<=lonmax)]
+    scores = scores.loc[used_scores]
     #plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}_{moving_window}', vmin=0.5, vmax=1.5, cmap=plt.cm.coolwarm, scores=scores)
     #plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}', vmin=0.5, vmax=1.5, cmap=plt.cm.coolwarm, scores=scores)
     #plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{moving_window}_{d0}_{c0}', vmin=0.4, vmax=1.6, cmap=plt.cm.coolwarm, scores=scores)  # To add scores
-    plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{moving_window}_{d0}_{c0}', vmin=0.4, vmax=1.6, cmap=plt.cm.coolwarm)
+    #plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{moving_window}_{d0}_{c0}', vmin=0.4, vmax=1.6, cmap=plt.cm.coolwarm, scores=scores)
+    plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}_{c0}', vmin=0.4, vmax=1.6, cmap=plt.cm.coolwarm, scores=scores)
+    #plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}_{c0}', cmap=plt.cm.coolwarm, scores=scores)
 
-#    plot_and_save(smoothed, f'Smoothed_field_{moving_window}_{domain}', cmap=plt.cm.YlGnBu)
-#    plot_and_save(diff, f'Observation_error_smoothingsize{moving_window}_{domain}', cmap=plt.cm.coolwarm)
-#    plot_and_save(np.abs(diff), f'Observation_error_absolute_value_smoothingsize{moving_window}_{domain}', cmap=plt.cm.Greys, scores=scores)
-#    plot_and_save(smoothratio, f'Observation_error_ratio_smoothingsize{moving_window}_{domain}', vmin=0.6, vmax=1.4, cmap=plt.cm.coolwarm, scores=scores)
-    plot_and_save(observation_error, f'Observation_error_{moving_window}_{d0}_{c0}_{domain}', cmap=plt.cm.coolwarm, scores=scores)
-    #plot_and_save(observation_error, f'Observation_error_{moving_window}_{d0}_{domain}', vmin=0, vmax=30, cmap=plt.cm.Greys, scores=scores)
+    #plot_and_save(smoothed, f'Smoothed_field_{moving_window}_{domain}', cmap=plt.cm.YlGnBu)
+    #plot_and_save(diff, f'Observation_error_smoothingsize{moving_window}_{domain}', cmap=plt.cm.coolwarm)
+    #plot_and_save(np.abs(diff), f'Observation_error_absolute_value_smoothingsize{moving_window}_{domain}', cmap=plt.cm.Greys, scores=scores)
+    #plot_and_save(smoothratio, f'Observation_error_ratio_smoothingsize{moving_window}_{domain}', vmin=0.6, vmax=1.4, cmap=plt.cm.coolwarm, scores=scores)
+    #plot_and_save(observation_error, f'Observation_error_{moving_window}_{d0}_{c0}_{domain}', cmap=plt.cm.coolwarm, scores=scores)
+    plot_and_save(observation_error, f'Observation_error_{d0}_{c0}_{domain}', cmap=plt.cm.coolwarm, scores=scores)
 
 def animation_mask(field):
 
@@ -560,7 +600,7 @@ def krigeage_scores(field):
     norm = matplotlib.colors.BoundaryNorm(thresholds, cmap.N)
     fig, ax = plt.subplots(figsize=(14,16))
     ratio.plot(ax=ax, cmap=cmap, norm=norm)
-    add_scores(scores)
+    add_scores(scores, ax)
     fig.savefig(os.path.join(savedir, f'kriging_ratio.pdf'), format='pdf', layout='tight')
 
 #def plot_field(field, scores):
