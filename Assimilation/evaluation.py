@@ -142,10 +142,14 @@ localisation_experiments = dict(
 
 
 debiaising_experiments = dict(
-        LD0      = 'XP00_assimilation_quotidienne_sans_masque_sans_localisation/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
-        LDD0      = 'XP21_assimilation_quotidienne_avec_debiaisage_uniforme/Assimilation_locale_2021120106_2022050106_daily_alp_debiasing0.nc',
-        LDD1      = 'XP22_assimilation_quotidienne_avec_debiaisage1/Assimilation_locale_2021120106_2022050106_daily_alp_debiasing1.nc',
-        LDD2      = 'XP20_assimilation_quotidienne_avec_debiaisage2/Assimilation_locale_2021120106_2022050106_daily_alp_debiasing2.nc',
+#        LD0      = 'XP00_assimilation_quotidienne_sans_masque_sans_localisation/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
+#        LDD0      = 'XP21_assimilation_quotidienne_avec_debiaisage_uniforme/Assimilation_locale_2021120106_2022050106_daily_alp_debiasing0.nc',
+#        LDD1      = 'XP22_assimilation_quotidienne_avec_debiaisage1/Assimilation_locale_2021120106_2022050106_daily_alp_debiasing1.nc',
+#        LDD2      = 'XP20_assimilation_quotidienne_avec_debiaisage2/Assimilation_locale_2021120106_2022050106_daily_alp_debiasing2.nc',
+        KD14         = 'EnsembleKalmanFilter/XP14/EnKF_2021120106_2022050106_daily_alp.nc',
+        KD15         = 'EnsembleKalmanFilter/XP15/EnKF_2021120106_2022050106_daily_alp.nc',
+        KD16         = 'EnsembleKalmanFilter/XP16/EnKF_2021120106_2022050106_daily_alp.nc',
+        KD18         = 'EnsembleKalmanFilter/XP18/EnKF_2021120106_2022050106_daily_alp.nc',
     )
 
 tmp = dict(
@@ -190,7 +194,7 @@ algo = dict(
         #KD06         = 'EnsembleKalmanFilter/XP06/EnKF_2021120106_2022050106_daily_alp.nc',
         #KD07         = 'EnsembleKalmanFilter/XP07/EnKF_2021120106_2022050106_daily_alp.nc',
         #KD08         = 'EnsembleKalmanFilter/XP08/EnKF_2021120106_2022050106_daily_alp.nc',
-        KD09         = 'EnsembleKalmanFilter/XP09/EnKF_2021120106_2022050106_daily_alp.nc',
+#        KD09         = 'EnsembleKalmanFilter/XP09/EnKF_2021120106_2022050106_daily_alp.nc',
         #KD10         = 'EnsembleKalmanFilter/XP10/EnKF_2021120106_2022050106_daily_alp.nc',
         #KD11         = 'EnsembleKalmanFilter/XP11/EnKF_2021120106_2022050106_daily_alp.nc',
         #KD12         = 'EnsembleKalmanFilter/XP12/EnKF_2021120106_2022050106_daily_alp.nc',
@@ -198,18 +202,18 @@ algo = dict(
         #KD14         = 'EnsembleKalmanFilter/XP14/EnKF_2021120106_2022050106_daily_alp.nc',
         #KD15         = 'EnsembleKalmanFilter/XP15/EnKF_2021120106_2022050106_daily_alp.nc',
         #KD16         = 'EnsembleKalmanFilter/XP16/EnKF_2021120106_2022050106_daily_alp.nc',
-        #LDM9D3        = 'XP28_mask9_debiaising3_0.1_2/Assimilation_locale_2021120106_2022050106_daily_alp_mask9_debiasing3.nc',
-        #KD17         = 'EnsembleKalmanFilter/XP17/EnKF_2021120106_2022050106_daily_alp.nc',
-        #KD18         = 'EnsembleKalmanFilter/XP18/EnKF_2021120106_2022050106_daily_alp.nc',
+        LDM9D3        = 'XP28_mask9_debiaising3_0.1_2/Assimilation_locale_2021120106_2022050106_daily_alp_mask9_debiasing3.nc',
+#        KD17         = 'EnsembleKalmanFilter/XP17/EnKF_2021120106_2022050106_daily_alp.nc',
+        KD18         = 'EnsembleKalmanFilter/XP18/EnKF_2021120106_2022050106_daily_alp.nc',
         #KD19         = 'EnsembleKalmanFilter/XP19/EnKF_2021120106_2022050106_daily_alp.nc',
         #KD20         = 'EnsembleKalmanFilter/XP20/EnKF_2021120106_2022050106_daily_alp.nc',
         #KD21         = 'EnsembleKalmanFilter/XP21/EnKF_2021120106_2022050106_daily_alp.nc',
-        KD22         = 'EnsembleKalmanFilter/XP22/EnKF_2021120106_2022050106_daily_alp.nc',
+#        KD22         = 'EnsembleKalmanFilter/XP22/EnKF_2021120106_2022050106_daily_alp.nc',
         #KD23         = 'EnsembleKalmanFilter/XP23/EnKF_2021120106_2022050106_daily_alp.nc',
         #KD24         = 'EnsembleKalmanFilter/XP24/EnKF_2021120106_2022050106_daily_alp.nc',
         #KD25         = 'EnsembleKalmanFilter/XP25/EnKF_2021120106_2022050106_daily_alp.nc',
         #KD26         = 'EnsembleKalmanFilter/XP26/EnKF_2021120106_2022050106_daily_alp.nc',
-        KD27         = 'EnsembleKalmanFilter/XP27/EnKF_2021120106_2022050106_daily_alp.nc',
+#        KD27         = 'EnsembleKalmanFilter/XP27/EnKF_2021120106_2022050106_daily_alp.nc',
     )
 
 
@@ -283,13 +287,14 @@ xpid_label = dict(
         KD09          = 'EnKF, mask9=estimated_ratio, debiaisage3=0.1_2',
         KD10          = 'EnKF, mask9=estimated_ratio, debiaisage3=0.15_2',
         KD11          = 'EnKF, mask9=smooth, debiaisage3=smooth15',
-        KD12          = 'EnKF, mask9=estimated_ratio, debiaisage3=0.15_1',
+        #KD12          = 'EnKF, mask9=estimated_ratio, debiaisage3=0.15_1',
+        #KD12          = 'EnKF, d0=0.15, c0=1',
         KD13          = 'EnKF, mask9=estimated_ratio, debiaisage3=0.5_1',
-        KD14          = 'EnKF, mask9=estimated_ratio, debiaisage3=0.1_1',
-        KD15          = 'EnKF, mask9=estimated_ratio, debiaisage3=0.25_1',
-        KD16          = 'EnKF, mask9=estimated_ratio, debiaisage3=0.25_2',
+        KD14          = 'EnKF, d0=0.1, c0=1',
+        KD15          = 'EnKF, d0=0.25, c0=1',
+        KD16          = 'EnKF, d0=0.25, c0=2',
         KD17          = 'EnKF, mask9=estimated_ratio, debiaisage3=25_0.15_2',
-        KD18          = 'EnKF, mask9=estimated_ratio, debiaisage3=25_0.1_2',
+        KD18          = 'EnKF, d0=0.1, c0=2',
         KD19          = 'EnKF, mask9=estimated_ratio, debiaisage3=10_0.1_2',
         KD20          = 'EnKF, mask9=estimated_ratio, debiaisage3=25_0.15_2, R=((Y+1)*std)²',
         KD22          = 'EnKF, mask9=estimated_ratio, debiaisage3=0.2_2, localisation=0.05',
@@ -298,7 +303,8 @@ xpid_label = dict(
         KD25          = 'EnKF, mask9=estimated_ratio, debiaisage3=0.2_2, localisation=0.06, Rstat*50',
         KD26          = 'EnKF, mask9=estimated_ratio, debiaisage3=0.2_2, localisation=0.06, Rstat*30, Rdyn=ref_field*std',
         KD27          = 'EnKF, mask9=estimated_ratio, debiaisage3=0.2_2, localisation=0.06, Rstat*100, Rdyn=Y*std',
-        LDM9D3        = 'PF, mask9=estimated_ratio, debiaisage3=0.1_2',
+        #LDM9D3        = 'PF, mask9=estimated_ratio, debiaisage3=0.1_2',
+        LDM9D3        = 'PF, d0=0.1, c0=2',
 
     )
 

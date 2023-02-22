@@ -581,10 +581,10 @@ if __name__ == "__main__":
     #antilope.lat.data = antilope.lat.data+0.005  # TODO : comprendre et resoudre le probleme de decallage des coordonnees
     antilope = antilope.where((antilope.lon>=lonmin) & (antilope.lon<=lonmax) & (antilope.lat<=latmax) & (antilope.lat>=latmin), drop=True)
 
-    plot(antilope, datebegin, dateend, categories=True, baiscorrection=True)
+#    plot(antilope, datebegin, dateend, categories=True, baiscorrection=True)
 #    plot(antilope, datebegin, dateend, categories=True)
 
-#    ratio_estimation(antilope)
+    ratio_estimation(antilope)
 #    animation_mask(antilope)
 
 #    krigeage_scores(antilope)
