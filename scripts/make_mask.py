@@ -46,8 +46,8 @@ onlypostes = [73257400]
 onlypostes = [74056416, 5001400,38548400]
 onlypostes = [74056416, 73132400, 73176400, 73257400, 73194401]
 
-d0 = 0.3
-c0 = 1
+d0 = 0.25
+c0 = 0.5
 
 # TODO ajouter les postes clim non utilisés par ANTILOPE temps réel
 fic_score = os.path.join(datadir, 'scores_2021110106_2022043006_alpes.csv')
@@ -446,19 +446,17 @@ def ratio_estimation(field, moving_window=25):
     scores = scores.sort_values('lats')
 
     lons, lats = np.meshgrid(field.lon.data, field.lat.data)
-    estimated_ratio = np.ones(np.shape(field.rr_cumul.data))*scores.ratio.mean()
-    #estimated_ratio = np.ones(np.shape(field.rr_cumul.data))
+    #estimated_ratio = np.ones(np.shape(field.rr_cumul.data))*scores.ratio.mean()
+    estimated_ratio = np.ones(np.shape(field.rr_cumul.data))
+    ##estimated_ratio = smoothratio
     #inov = np.zeros(np.shape(field.rr_cumul.data))
     inov = np.ones(np.shape(field.rr_cumul.data))
     weight = np.ones(np.shape(field.rr_cumul.data))
     #weight = np.zeros(np.shape(field.rr_cumul.data))
-    #estimated_ratio = smoothratio
-    #onlypostes = scores.index
     scores = scores
     used_scores = []
 
     # TODO : trouver un moyen de rendre l'estimation indépendante de l'ordre de traitement
-    N = 0
     onlypostes = scores.index
     for i,poste in enumerate(scores.index):
     #for i,poste in enumerate(reversed(scores.index)):
@@ -483,11 +481,12 @@ def ratio_estimation(field, moving_window=25):
             #estimated_ratio = estimated_ratio+(ratio*cumul_ratio-estimated_ratio)*np.exp(-dist/d0)*np.exp(-np.abs(cumul_dist)/(ref_cumul/c0))
             #estimated_ratio = estimated_ratio+(ratio*cumul_ratio-1)*np.exp(-(dist/d0)**2)*np.exp(-(np.abs(cumul_dist)/(ref_cumul/c0))**2)
 
-            w = np.exp(-(dist/d0)**2)*np.exp(-(np.abs(cumul_dist)/(ref_cumul/c0))**2)
-            #w = np.exp(-(dist/d0))*np.exp(-(np.abs(cumul_dist)/(ref_cumul/c0)))
+            #w = np.exp(-(dist/d0)**2)*np.exp(-(np.abs(cumul_dist)/(ref_cumul/c0))**2)
+            w = np.exp(-(dist/d0))*np.exp(-(np.abs(cumul_dist)/(ref_cumul/c0)))
             inov = inov + (ratio*cumul_ratio-estimated_ratio)*w
             weight = weight + w
     estimated_ratio = estimated_ratio + (inov-estimated_ratio)/weight
+    #estimated_ratio = estimated_ratio + (inov-estimated_ratio)*weight/(len(onlypostes))
 
     #weight = np.ones(np.shape(field.rr_cumul.data))
     #estimated_ratio = estimated_ratio*(1+inov*(weight/(N+weight)))
@@ -502,11 +501,11 @@ def ratio_estimation(field, moving_window=25):
     #observation_error = (np.abs(ratio_field-1)*5 + 5*np.abs(diff))**2
     #observation_error = ratio_field-1  # r=06 ==> err = -1.4
     # To take into account spatial correlation we must keep the sign of the observtaion error
-    observation_error = ratio_field-1  # r=06 ==> err = -1.4
-    pos = np.where(observation_error.data>0)
-    observation_error.data[pos] = observation_error.data[pos] + 1  # r=1.4 ==> err = 1.4
+    observation_error = ratio_field - 1
     neg = np.where(observation_error.data<0)
-    observation_error.data[neg] = observation_error.data[neg] - 1  # r=1.4 ==> err = 1.4
+    observation_error.data[neg] = 4*observation_error.data[neg]  # r=0.5 ==> err = -2
+    pos= np.where(observation_error.data>=0)
+    observation_error.data[pos] = 2*observation_error.data[pos]  # r=1.5 ==> err = 1
     #observation_error = 1+np.abs(smoothratio-1)
 
     #observation_error = np.abs(ratio_field-1)
@@ -532,7 +531,7 @@ def ratio_estimation(field, moving_window=25):
     #plot_and_save(np.abs(diff), f'Observation_error_absolute_value_smoothingsize{moving_window}_{domain}', cmap=plt.cm.Greys, scores=scores)
     #plot_and_save(smoothratio, f'Observation_error_ratio_smoothingsize{moving_window}_{domain}', vmin=0.6, vmax=1.4, cmap=plt.cm.coolwarm, scores=scores)
     #plot_and_save(observation_error, f'Observation_error_{moving_window}_{d0}_{c0}_{domain}', cmap=plt.cm.coolwarm, scores=scores)
-    plot_and_save(observation_error, f'Observation_error_{d0}_{c0}_{domain}', cmap=plt.cm.coolwarm, scores=scores)
+    plot_and_save(observation_error, f'Observation_error_{d0}_{c0}_{domain}', vmin=-2, vmax=2, cmap=plt.cm.coolwarm, scores=scores)
 
 def animation_mask(field):
 
