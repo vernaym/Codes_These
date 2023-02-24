@@ -100,13 +100,15 @@ all_experiments = dict(
 
 mask_experiments = dict(
         #GD0      = 'Assimilation_globale_2021073106_2022070106_daily.nc',
-        LD0      = 'XP00_assimilation_quotidienne_sans_masque_sans_localisation/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
-        LDM4     = 'XP02_assimilation_quotidienne_avec_masque/Assimilation_locale_2021120106_2022050106_daily_alp_mask4.nc',
+        #LD0      = 'XP00_assimilation_quotidienne_sans_masque_sans_localisation/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
+        #LDM4     = 'XP02_assimilation_quotidienne_avec_masque/Assimilation_locale_2021120106_2022050106_daily_alp_mask4.nc',
         #LDM3     = 'XP10_assimilation_quotidienne_avec_masque3/Assimilation_locale_2021120106_2022050106_daily_alp_mask3.nc',
-        LDM1     = 'XP11_assimilation_quotidienne_avec_masque1/Assimilation_locale_2021120106_2022050106_daily_alp_mask1.nc',
-        LDM2     = 'XP12_assimilation_quotidienne_avec_masque2/Assimilation_locale_2021120106_2022050106_daily_alp_mask2.nc',
-        LDM5     = 'XP17_assimilation_quotidienne_avec_masque5/Assimilation_locale_2021120106_2022050106_daily_alp_mask5.nc',
+        #LDM1     = 'XP11_assimilation_quotidienne_avec_masque1/Assimilation_locale_2021120106_2022050106_daily_alp_mask1.nc',
+        #LDM2     = 'XP12_assimilation_quotidienne_avec_masque2/Assimilation_locale_2021120106_2022050106_daily_alp_mask2.nc',
+        #LDM5     = 'XP17_assimilation_quotidienne_avec_masque5/Assimilation_locale_2021120106_2022050106_daily_alp_mask5.nc',
         #LDM5D2    = 'XP15_assimilation_quotidienne_avec_masque5_et_debiaisage2/Assimilation_locale_2021120106_2022050106_daily_alp_mask5_debiasing2.nc',
+        KD09      = 'EnsembleKalmanFilter/XP09/EnKF_2021120106_2022050106_daily_alp.nc',
+        KD28      = 'EnsembleKalmanFilter/XP28/EnKF_2021120106_2022050106_daily_alp.nc',
     )
 
 daily_experiments = dict(
@@ -304,6 +306,7 @@ xpid_label = dict(
         KD25          = 'EnKF, mask9=estimated_ratio, debiaisage3=0.2_2, localisation=0.06, Rstat*50',
         KD26          = 'EnKF, mask9=estimated_ratio, debiaisage3=0.2_2, localisation=0.06, Rstat*30, Rdyn=ref_field*std',
         KD27          = 'EnKF, mask9=estimated_ratio, debiaisage3=0.2_2, localisation=0.06, Rstat*100, Rdyn=Y*std',
+        KD28          = 'EnKF, debiaisage=0.2_1_new, localisation=0.06, Rstat*20, Rdyn=Y*std',
         #LDM9D3        = 'PF, mask9=estimated_ratio, debiaisage3=0.1_2',
         LDM9D3        = 'PF, d0=0.1, c0=2',
 
@@ -718,6 +721,10 @@ class Evaluation(object):
             lat = tmp.lat
             lon = tmp.lon
             obs = tmp.obs.data
+#            if num_poste == 73015400:
+#                import pdb
+#                pdb.set_trace()
+#                toto = ratio.sel({'lat':nearest(ratio.lat, lat), 'lon':nearest(ratio.lon, lon)})
             alti = tmp.alti.data.max()
             t2 = time.time()
             print(f'Reading obs informations took {(t2-t1)*1000.}ms')

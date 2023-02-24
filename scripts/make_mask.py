@@ -46,8 +46,8 @@ onlypostes = [73257400]
 onlypostes = [74056416, 5001400,38548400]
 onlypostes = [74056416, 73132400, 73176400, 73257400, 73194401]
 
-d0 = 0.25
-c0 = 0.5
+d0 = 0.2
+c0 = 0.1
 
 # TODO ajouter les postes clim non utilisés par ANTILOPE temps réel
 fic_score = os.path.join(datadir, 'scores_2021110106_2022043006_alpes.csv')

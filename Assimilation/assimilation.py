@@ -429,8 +429,8 @@ def read_obs(args):
 #            print(f'WARNING : no file named {filename} under {datadir}, using default file ANTILOPEQ_2021080106_2022070106_GrandesRousses.nc')
 #            filename = os.path.join(datadir, f'ANTILOPE{suffix[args.frequency]}_2021073106_2022070106_GrandesRousses.nc')
 #        else:
-        print(f'WARNING : no file named {filename} under {datadir}, using default file ANTILOPEH_2021103000_2022060200_alp.nc')
-        filename = os.path.join(datadir, f'ANTILOPEH_2021103000_2022060200_alp.nc')
+            print(f'WARNING : no file named {filename} under {datadir}, using default file ANTILOPEH_2021103000_2022060200_alp.nc')
+            filename = os.path.join(datadir, f'ANTILOPEH_2021103000_2022060200_alp.nc')
     if os.path.exists(filename):
         antilope = xr.open_dataset(filename)
         latmax = domain_coords[args.domain]['latmax']
@@ -439,7 +439,7 @@ def read_obs(args):
         lonmax = domain_coords[args.domain]['lonmax']
         sel_lat = np.round(np.arange(latmin-max_dist, latmax+max_dist, 0.01), 2)
         sel_lon = np.round(np.arange(lonmin-max_dist, lonmax+max_dist, 0.01), 2)
-        antilope = antilope.sel({'lat':sel_lat, 'lon':sel_lon})
+        antilope = antilope.sel({'lat':np.intersect1d(sel_lat, antilope.lat.data), 'lon':np.intersect1d(sel_lon, antilope.lon.data)})
         #antilope = antilope.where((antilope.lon>=lonmin) & (antilope.lon<=lonmax) & (antilope.lat>=latmin) & (antilope.lat<=latmax), drop=True)
         # Pour une assimilation quotidienne, sommer les cumuls horaires
         if args.frequency == 'daily' and  'ANTILOPEH' in filename:
@@ -1096,7 +1096,7 @@ class EnsembleKalmanFilter(Assimilation):
 #        Rstat = self.pond.multiply(np.outer(std,std))  # TODO : fixer l'erreur d'obs en absence de precipitation
 #        Rdyn = self.pond.multiply(np.outer(ref_field, ref_field))
         # La dispersion de l'analyse est principalement augmentée par Rstat
-        X = diags(std.flatten()*10)
+        X = diags(std.flatten()*20)
         #Rstat = self.pond.multiply(np.outer(std*10, std*10))  # TODO : fixer l'erreur d'obs en absence de precipitation
         Rstat = X.dot(self.pond.dot(X))
 
