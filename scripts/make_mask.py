@@ -45,9 +45,11 @@ onlypostes = [73194401]
 onlypostes = [73257400]
 onlypostes = [74056416, 5001400,38548400]
 onlypostes = [74056416, 73132400, 73176400, 73257400, 73194401]
+onlypostes = [73257400]
+onlypostes = [73306403]
 
-d0 = 0.2
-c0 = 0.1
+d0 = 0.3
+c0 = 1
 
 # TODO ajouter les postes clim non utilisés par ANTILOPE temps réel
 fic_score = os.path.join(datadir, 'scores_2021110106_2022043006_alpes.csv')
@@ -198,6 +200,7 @@ def add_scores(scores, ax, mycmap=None, vmin=None, vmax=None):
             return '^'
     scores_domain["marker"] = scores_domain.apply(set_marker, axis=1)  # axis=1 makes sure that function is applied to each row
     for marker, info in scores_domain.groupby('marker'):
+        #onlypostes = set(info.index) - set(blacklist)
         onlypostes = info.index
         info = info[info.index.isin(onlypostes)]
         if mycmap is None:
@@ -451,13 +454,21 @@ def ratio_estimation(field, moving_window=25):
     ##estimated_ratio = smoothratio
     #inov = np.zeros(np.shape(field.rr_cumul.data))
     inov = np.ones(np.shape(field.rr_cumul.data))
-    weight = np.ones(np.shape(field.rr_cumul.data))
+    #weight = np.ones(np.shape(field.rr_cumul.data))
+    #wsum  = np.ones(np.shape(field.rr_cumul.data))
+    weight  = np.ones(np.shape(field.rr_cumul.data))
     #weight = np.zeros(np.shape(field.rr_cumul.data))
     scores = scores
     used_scores = []
 
+    xx = np.where(field.lon==6.9)
+    yy = np.where(field.lat==45.8)
+
     # TODO : trouver un moyen de rendre l'estimation indépendante de l'ordre de traitement
+    #onlypostes = set(scores.index) - set(blacklist)
     onlypostes = scores.index
+    rr = list()
+    ww = list()
     for i,poste in enumerate(scores.index):
     #for i,poste in enumerate(reversed(scores.index)):
         if poste in onlypostes:
@@ -481,11 +492,32 @@ def ratio_estimation(field, moving_window=25):
             #estimated_ratio = estimated_ratio+(ratio*cumul_ratio-estimated_ratio)*np.exp(-dist/d0)*np.exp(-np.abs(cumul_dist)/(ref_cumul/c0))
             #estimated_ratio = estimated_ratio+(ratio*cumul_ratio-1)*np.exp(-(dist/d0)**2)*np.exp(-(np.abs(cumul_dist)/(ref_cumul/c0))**2)
 
-            #w = np.exp(-(dist/d0)**2)*np.exp(-(np.abs(cumul_dist)/(ref_cumul/c0))**2)
-            w = np.exp(-(dist/d0))*np.exp(-(np.abs(cumul_dist)/(ref_cumul/c0)))
-            inov = inov + (ratio*cumul_ratio-estimated_ratio)*w
+            #w = np.exp(-(dist/d0)**2)*np.exp(-(np.abs(cumul_dist)/(ref_cumul/c0))**2)  # PROBLEME : ref_cumul/c0 donne plus de poids aux bias >0 !!
+
+            # TODO : on veut que dans le cercle de corrélation, un gros écart de cumul entraine une forte correction du biais (et non pas une décroissance indépendante)
+
+            #w = np.exp(-1/2*(dist/d0)**2)*np.exp(-1/2*(np.abs(cumul_dist)/(ref_cumul/(ratio*c0))))
+            #w = np.exp(-(dist/d0)**2*np.abs(cumul_dist)/(ref_cumul/(ratio*c0)))
+            w = np.exp(-(dist/d0)**2)
+            #w = np.exp(-(dist/d0))
+            #w = np.exp(-(dist/d0))*np.exp(-(np.abs(cumul_dist)/(ref_cumul/(ratio*c0))))
+            #w = np.exp(-(dist/d0)**2)*np.exp(-(np.abs(cumul_dist)/1000)**2)
+            #w = np.exp(-(dist/d0))*np.exp(-(np.abs(cumul_dist)/800))
+            #w = np.exp(-(dist/d0))*np.exp(-(np.abs(cumul_dist)/(ref_cumul/c0)))
+            #inov = inov + (ratio*cumul_ratio-estimated_ratio)*w
+            toto = (1+(ratio*cumul_ratio-1)*w)*w
+            #print(poste)
+            #print(toto[xx,yy], w[xx,yy])
+            rr.append(toto[xx,yy][0,0])
+            ww.append(w[xx,yy][0,0])
+            #inov = inov + (1+(ratio*cumul_ratio-1)*w)*w
+            inov = inov + ratio*cumul_ratio*w
+#            toto=ratio*cumul_ratio
+#            print('ratio=',toto[111,118])
             weight = weight + w
-    estimated_ratio = estimated_ratio + (inov-estimated_ratio)/weight
+    #estimated_ratio =  estimated_ratio + (inov/weight-estimated_ratio) * ?
+    estimated_ratio =  inov/weight
+    #estimated_ratio = estimated_ratio + (inov-estimated_ratio)*weight/(1+weight)
     #estimated_ratio = estimated_ratio + (inov-estimated_ratio)*weight/(len(onlypostes))
 
     #weight = np.ones(np.shape(field.rr_cumul.data))
@@ -523,15 +555,16 @@ def ratio_estimation(field, moving_window=25):
     #plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}', vmin=0.5, vmax=1.5, cmap=plt.cm.coolwarm, scores=scores)
     #plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{moving_window}_{d0}_{c0}', vmin=0.4, vmax=1.6, cmap=plt.cm.coolwarm, scores=scores)  # To add scores
     #plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{moving_window}_{d0}_{c0}', vmin=0.4, vmax=1.6, cmap=plt.cm.coolwarm, scores=scores)
-    plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}_{c0}', vmin=0.4, vmax=1.6, cmap=plt.cm.coolwarm, scores=scores)
-    #plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}_{c0}', cmap=plt.cm.coolwarm, scores=scores)
+    plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}', vmin=0.4, vmax=1.6, cmap=plt.cm.coolwarm, scores=scores)
+#    plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}', cmap=plt.cm.coolwarm, scores=scores)
 
     #plot_and_save(smoothed, f'Smoothed_field_{moving_window}_{domain}', cmap=plt.cm.YlGnBu)
     #plot_and_save(diff, f'Observation_error_smoothingsize{moving_window}_{domain}', cmap=plt.cm.coolwarm)
     #plot_and_save(np.abs(diff), f'Observation_error_absolute_value_smoothingsize{moving_window}_{domain}', cmap=plt.cm.Greys, scores=scores)
     #plot_and_save(smoothratio, f'Observation_error_ratio_smoothingsize{moving_window}_{domain}', vmin=0.6, vmax=1.4, cmap=plt.cm.coolwarm, scores=scores)
     #plot_and_save(observation_error, f'Observation_error_{moving_window}_{d0}_{c0}_{domain}', cmap=plt.cm.coolwarm, scores=scores)
-    plot_and_save(observation_error, f'Observation_error_{d0}_{c0}_{domain}', vmin=-2, vmax=2, cmap=plt.cm.coolwarm, scores=scores)
+    plot_and_save(observation_error, f'Observation_error_{d0}_{domain}', vmin=-2, vmax=2, cmap=plt.cm.coolwarm, scores=scores)
+#    plot_and_save(observation_error, f'Observation_error_{d0}_{domain}', cmap=plt.cm.coolwarm, scores=scores)
 
 def animation_mask(field):
 
@@ -620,7 +653,8 @@ if __name__ == "__main__":
     #antilope.lat.data = antilope.lat.data+0.005  # TODO : comprendre et resoudre le probleme de decallage des coordonnees
     antilope = antilope.where((antilope.lon>=lonmin) & (antilope.lon<=lonmax) & (antilope.lat<=latmax) & (antilope.lat>=latmin), drop=True)
 
-#    plot(antilope, datebegin, dateend, categories=True, baiscorrection=True)
+    #plot(antilope, datebegin, dateend, categories=True, baiscorrection=True)
+#    plot(antilope, datebegin, dateend, categories=False, baiscorrection=True)
 #    plot(antilope, datebegin, dateend, categories=True)
 
     ratio_estimation(antilope)
