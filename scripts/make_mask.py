@@ -48,8 +48,8 @@ onlypostes = [74056416, 73132400, 73176400, 73257400, 73194401]
 onlypostes = [73257400]
 onlypostes = [73306403]
 
-d0 = 0.3
-c0 = 1
+d0 = 1
+c0 = 4
 
 # TODO ajouter les postes clim non utilisés par ANTILOPE temps réel
 fic_score = os.path.join(datadir, 'scores_2021110106_2022043006_alpes.csv')
@@ -396,6 +396,8 @@ def plot_field(fig, ax, field, cmap=plt.cm.Greys, vmin=None, vmax=None, scores=N
         else:
             sc = add_scores(scores, ax)
 
+#    plt.plot(6.82, 45.85, marker='+', color='red')
+
     add_radar_positions(ax)
     add_boundaries()
     add_massifs()
@@ -453,16 +455,20 @@ def ratio_estimation(field, moving_window=25):
     estimated_ratio = np.ones(np.shape(field.rr_cumul.data))
     ##estimated_ratio = smoothratio
     #inov = np.zeros(np.shape(field.rr_cumul.data))
-    inov = np.ones(np.shape(field.rr_cumul.data))
-    #weight = np.ones(np.shape(field.rr_cumul.data))
-    #wsum  = np.ones(np.shape(field.rr_cumul.data))
     weight  = np.ones(np.shape(field.rr_cumul.data))
+    inov = np.ones(np.shape(field.rr_cumul.data))
+    #inov = smoothratio
+    #wsum  = np.ones(np.shape(field.rr_cumul.data))
     #weight = np.zeros(np.shape(field.rr_cumul.data))
     scores = scores
     used_scores = []
 
-    xx = np.where(field.lon==6.9)
-    yy = np.where(field.lat==45.8)
+#    xx = np.where(field.lon==6.82)[0][0]
+#    yy = np.where(field.lat==45.85)[0][0]
+#    xx = np.where(field.lon==6.85)[0][0]
+#    yy = np.where(field.lat==45.63)[0][0]
+    xx = 0
+    yy = 0
 
     # TODO : trouver un moyen de rendre l'estimation indépendante de l'ordre de traitement
     #onlypostes = set(scores.index) - set(blacklist)
@@ -498,24 +504,33 @@ def ratio_estimation(field, moving_window=25):
 
             #w = np.exp(-1/2*(dist/d0)**2)*np.exp(-1/2*(np.abs(cumul_dist)/(ref_cumul/(ratio*c0))))
             #w = np.exp(-(dist/d0)**2*np.abs(cumul_dist)/(ref_cumul/(ratio*c0)))
-            w = np.exp(-(dist/d0)**2)
+            #w = np.exp(-(dist/d0))*np.exp(-np.abs(cumul_dist)/(ref_cumul/(ratio*c0)))
+            w = np.exp(-(dist/d0)**2)*np.exp(-np.abs(cumul_dist)/(ref_cumul/(ratio*c0)))
+            #w = np.exp(-(dist/d0)**2)
             #w = np.exp(-(dist/d0))
             #w = np.exp(-(dist/d0))*np.exp(-(np.abs(cumul_dist)/(ref_cumul/(ratio*c0))))
             #w = np.exp(-(dist/d0)**2)*np.exp(-(np.abs(cumul_dist)/1000)**2)
             #w = np.exp(-(dist/d0))*np.exp(-(np.abs(cumul_dist)/800))
             #w = np.exp(-(dist/d0))*np.exp(-(np.abs(cumul_dist)/(ref_cumul/c0)))
             #inov = inov + (ratio*cumul_ratio-estimated_ratio)*w
-            toto = (1+(ratio*cumul_ratio-1)*w)*w
+            #toto = (1+(ratio*cumul_ratio-1)*w)*w
+            toto = ratio*cumul_ratio
             #print(poste)
             #print(toto[xx,yy], w[xx,yy])
-            rr.append(toto[xx,yy][0,0])
-            ww.append(w[xx,yy][0,0])
+            rr.append(toto[yy,xx])
+            ww.append(w[yy,xx])
             #inov = inov + (1+(ratio*cumul_ratio-1)*w)*w
             inov = inov + ratio*cumul_ratio*w
 #            toto=ratio*cumul_ratio
 #            print('ratio=',toto[111,118])
+            wmax = np.maximum(weight, w)
             weight = weight + w
     #estimated_ratio =  estimated_ratio + (inov/weight-estimated_ratio) * ?
+    rr = np.array(rr)
+    ww = np.array(ww)
+    ee = (1+np.sum(rr*ww))/(1+np.sum(ww))
+    #import pdb
+    #pdb.set_trace()
     estimated_ratio =  inov/weight
     #estimated_ratio = estimated_ratio + (inov-estimated_ratio)*weight/(1+weight)
     #estimated_ratio = estimated_ratio + (inov-estimated_ratio)*weight/(len(onlypostes))
@@ -555,16 +570,16 @@ def ratio_estimation(field, moving_window=25):
     #plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}', vmin=0.5, vmax=1.5, cmap=plt.cm.coolwarm, scores=scores)
     #plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{moving_window}_{d0}_{c0}', vmin=0.4, vmax=1.6, cmap=plt.cm.coolwarm, scores=scores)  # To add scores
     #plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{moving_window}_{d0}_{c0}', vmin=0.4, vmax=1.6, cmap=plt.cm.coolwarm, scores=scores)
-    plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}', vmin=0.4, vmax=1.6, cmap=plt.cm.coolwarm, scores=scores)
-#    plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}', cmap=plt.cm.coolwarm, scores=scores)
+#    plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}_{c0}', vmin=0.4, vmax=1.6, cmap=plt.cm.coolwarm, scores=scores)
+    plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}_{c0}', cmap=plt.cm.coolwarm, scores=scores)
 
     #plot_and_save(smoothed, f'Smoothed_field_{moving_window}_{domain}', cmap=plt.cm.YlGnBu)
     #plot_and_save(diff, f'Observation_error_smoothingsize{moving_window}_{domain}', cmap=plt.cm.coolwarm)
     #plot_and_save(np.abs(diff), f'Observation_error_absolute_value_smoothingsize{moving_window}_{domain}', cmap=plt.cm.Greys, scores=scores)
     #plot_and_save(smoothratio, f'Observation_error_ratio_smoothingsize{moving_window}_{domain}', vmin=0.6, vmax=1.4, cmap=plt.cm.coolwarm, scores=scores)
     #plot_and_save(observation_error, f'Observation_error_{moving_window}_{d0}_{c0}_{domain}', cmap=plt.cm.coolwarm, scores=scores)
-    plot_and_save(observation_error, f'Observation_error_{d0}_{domain}', vmin=-2, vmax=2, cmap=plt.cm.coolwarm, scores=scores)
-#    plot_and_save(observation_error, f'Observation_error_{d0}_{domain}', cmap=plt.cm.coolwarm, scores=scores)
+    plot_and_save(observation_error, f'Observation_error_{d0}_{c0}_{domain}', vmin=-2, vmax=2, cmap=plt.cm.coolwarm, scores=scores)
+#    plot_and_save(observation_error, f'Observation_error_{d0}_{c0}_{domain}', cmap=plt.cm.coolwarm, scores=scores)
 
 def animation_mask(field):
 
@@ -650,7 +665,7 @@ if __name__ == "__main__":
     datebegin = filename.split('.')[0].split('_')[-2]
     dateend = filename.split('.')[0].split('_')[-1]
     antilope = xr.open_dataset(os.path.join(datadir, filename))
-    #antilope.lat.data = antilope.lat.data+0.005  # TODO : comprendre et resoudre le probleme de decallage des coordonnees
+#    antilope.lat.data = antilope.lat.data+0.005  # TODO : comprendre et resoudre le probleme de decallage des coordonnees
     antilope = antilope.where((antilope.lon>=lonmin) & (antilope.lon<=lonmax) & (antilope.lat<=latmax) & (antilope.lat>=latmin), drop=True)
 
     #plot(antilope, datebegin, dateend, categories=True, baiscorrection=True)

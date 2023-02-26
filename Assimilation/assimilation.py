@@ -974,7 +974,7 @@ class EnsembleKalmanFilter(Assimilation):
         return dist
 
     @speedtest
-    def run(self):
+    def run(self, covariance=False):
         """ 
         Main method that loop over the assimilation dates and grid points.
         TODO : compléter la doc sur la méthode
@@ -999,7 +999,7 @@ class EnsembleKalmanFilter(Assimilation):
         actual_ensemble = self.ensemble
         actual_parameters = self.parameters
 
-        if self.gridded:
+        if covariance:
             codistances = os.path.join('/home/vernaym/These/DATA', f'codistance_max_dist_{self.max_dist}_{domain}.npz')
 #            if not os.path.exists(codistances):
 #                # Compute inter-distances
@@ -1009,6 +1009,8 @@ class EnsembleKalmanFilter(Assimilation):
 #                self.pond = scipy.sparse.load_npz(codistances)
             coords=[(lon,lat) for lat in actual_parameters.lat.data for lon in actual_parameters.lon.data]
             self.pond = self.codistances(coords)
+        else:
+            self.pond = scipy.sparse.eye(len(actual_parameters.lat)*len(actual_parameters.lon))
 
 #        print('DBUG0')
 #        tmp=0.0000001*scipy.sparse.identity(np.shape(self.pond)[0])
@@ -1096,7 +1098,7 @@ class EnsembleKalmanFilter(Assimilation):
 #        Rstat = self.pond.multiply(np.outer(std,std))  # TODO : fixer l'erreur d'obs en absence de precipitation
 #        Rdyn = self.pond.multiply(np.outer(ref_field, ref_field))
         # La dispersion de l'analyse est principalement augmentée par Rstat
-        X = diags(std.flatten()*20)
+        X = diags(std.flatten()*10)
         #Rstat = self.pond.multiply(np.outer(std*10, std*10))  # TODO : fixer l'erreur d'obs en absence de precipitation
         Rstat = X.dot(self.pond.dot(X))
 
