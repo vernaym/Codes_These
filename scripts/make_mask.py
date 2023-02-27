@@ -53,7 +53,7 @@ onlypostes = [74056416, 73132400, 73176400, 73257400, 73194401]
 onlypostes = [73257400]
 onlypostes = [73306403]
 
-d0 = 0.3
+d0 = 0.2
 c0 = 2
 max_dist = 0.5
 
@@ -297,7 +297,7 @@ def plot(antilope, datebegin, dateend, categories=True, biascorrection=False):
     lonmax = np.max(antilope.lon.data)
 
     if biascorrection:
-        filename ='Estimated_ratio_alp.nc'
+        filename = os.path.join('/home/vernaym/These/DATA/mask', 'Estimated_ratio.nc')
         ratio = xr.open_dataset(filename)
         #ratio.lat.data = ratio.lat.data+0.005  # TODO : comprendre et resoudre le probleme de decallage des coordonnees
         ratio = ratio.where((ratio.lon>=lonmin) & (ratio.lon<=lonmax) & (ratio.lat<=latmax) & (ratio.lat>=latmin), drop=True)
@@ -321,8 +321,8 @@ def plot(antilope, datebegin, dateend, categories=True, biascorrection=False):
         #cml = plt.contourf(antilope.lon, antilope.lat, antilope.rr_cumul, cmap=cmap, norm=norm, add_colorbar=False)
         #cml = antilope.rr_cumul.plot(ax=ax, cmap=plt.cm.YlGnBu, add_colorbar=False, alpha=0.5)
     else:
-        #cml = antilope.rr_cumul.plot(ax=ax, vmin=100, vmax=1200, cmap=plt.cm.YlGnBu, add_colorbar=False)
-        cml = antilope.rr_cumul.plot(ax=ax, cmap=plt.cm.YlGnBu, add_colorbar=False)
+        cml = antilope.rr_cumul.plot(ax=ax, vmin=100, vmax=1200, cmap=plt.cm.YlGnBu, add_colorbar=False)
+        #cml = antilope.rr_cumul.plot(ax=ax, cmap=plt.cm.YlGnBu, add_colorbar=False)
         #cml = antilope.rr_cumul.plot(ax=ax, vmin=150, vmax=500, cmap=plt.cm.YlGnBu, add_colorbar=False)
 
     #add_landmarks(ax)
@@ -565,17 +565,19 @@ def ratio_estimation(field, moving_window=25):
     #estimated_ratio = np.ones(np.shape(field.rr_cumul.data))*scores.ratio.mean()
     estimated_ratio = np.ones(np.shape(field.rr_cumul.data))
     ##estimated_ratio = smoothratio
-    #inov = np.zeros(np.shape(field.rr_cumul.data))
-    weight  = np.ones(np.shape(field.rr_cumul.data))
-    inov = np.ones(np.shape(field.rr_cumul.data))
+    inov = np.zeros(np.shape(field.rr_cumul.data))
+    #inov = np.ones(np.shape(field.rr_cumul.data))
+    #weight  = np.ones(np.shape(field.rr_cumul.data))
+    weight = np.zeros(np.shape(field.rr_cumul.data))
     #inov = smoothratio
     #wsum  = np.ones(np.shape(field.rr_cumul.data))
-    #weight = np.zeros(np.shape(field.rr_cumul.data))
     scores = scores
     used_scores = []
 
+    # Mont-Blanc
 #    xx = np.where(field.lon==6.82)[0][0]
 #    yy = np.where(field.lat==45.85)[0][0]
+    # poste n° 73176400
     xx = np.where(field.lon==6.85)[0][0]
     yy = np.where(field.lat==45.63)[0][0]
 #    xx = 0
@@ -597,6 +599,9 @@ def ratio_estimation(field, moving_window=25):
             dist = np.sqrt((lats-scores.loc[poste,'lats'])**2+(lons-scores.loc[poste, 'lons'])**2)  # Euclidian horizontal distance
             idx, idy = np.where(dist==np.min(dist))
             ref_cumul = field.rr_cumul.data[idx[0],idy[0]]
+            if poste == 74056416:
+                rcc = ref_cumul.copy()
+                rr0 = ratio.copy()
             cumul_dist = field.rr_cumul.data-ref_cumul
             cumul_ratio = field.rr_cumul.data/ref_cumul
             #estimated_ratio = estimated_ratio+(cumul_ratio-estimated_ratio)*np.exp(-np.abs(cumul_dist)/(ref_cumul/5))*np.exp(-dist/0.3)  # Marche bien mais n'utilise pas le score !
@@ -619,9 +624,13 @@ def ratio_estimation(field, moving_window=25):
             #w = np.exp(-(dist/d0)**2*np.abs(cumul_dist)/(ref_cumul/(ratio*c0)))
             #w = np.exp(-(dist/d0))*np.exp(-np.abs(cumul_dist)/(ref_cumul/(ratio*c0)))
             #w = np.exp(-(dist/d0)**2)*np.exp(-np.abs(cumul_dist)/(ref_cumul/(ratio*c0)))
+
+            #w = np.exp(-(dist/d0))*np.exp(-np.abs(cumul_dist)/(ref_cumul/(ratio*c0)))
+            #w = np.exp(-(dist/d0)**2)*np.exp(-np.abs(cumul_dist)/(ref_cumul/(ratio*c0))**2)
             w = np.exp(-(dist/d0))*np.exp(-np.abs(cumul_dist)/(ref_cumul/(ratio*c0)))
             weights.append(w)
             ratios.append(ratio*cumul_ratio)
+
             #w = np.exp(-(dist/d0)**2)
             #w = np.exp(-(dist/d0))
             #w = np.exp(-(dist/d0))*np.exp(-(np.abs(cumul_dist)/(ref_cumul/(ratio*c0))))
@@ -630,26 +639,43 @@ def ratio_estimation(field, moving_window=25):
             #w = np.exp(-(dist/d0))*np.exp(-(np.abs(cumul_dist)/(ref_cumul/c0)))
             #inov = inov + (ratio*cumul_ratio-estimated_ratio)*w
             #toto = (1+(ratio*cumul_ratio-1)*w)*w
-            toto = ratio*cumul_ratio
+            guess = ratio*cumul_ratio
             #print(poste)
             #print(toto[xx,yy], w[xx,yy])
-            rr.append(toto[yy,xx])
+            rr.append(guess[yy,xx])
             ww.append(w[yy,xx])
             #inov = inov + (1+(ratio*cumul_ratio-1)*w)*w
             inov = inov + ratio*cumul_ratio*w
-#            toto=ratio*cumul_ratio
-#            print('ratio=',toto[111,118])
             wmax = np.maximum(weight, w)
             weight = weight + w
+
     #estimated_ratio =  estimated_ratio + (inov/weight-estimated_ratio) * ?
     rr = np.array(rr)
     ww = np.array(ww)
-    ee = (1+np.sum(rr*ww))/(1+np.sum(ww))
-    import pdb
-    pdb.set_trace()
-    #import pdb
-    #pdb.set_trace()
-    estimated_ratio =  inov/weight
+    w0 = max(0, 1-np.sum(ww))
+    ee = (1*w0+np.sum(rr*ww))/(w0+np.sum(ww))
+    mask = np.flip(np.argsort(ww))
+    wws = ww[mask]
+    rrs = rr[mask]
+    cc = field.rr_cumul.data[yy,xx]
+
+
+    mask = np.flip(np.argsort(weights, axis=0), axis=0)
+    sweights = np.take_along_axis(np.array(weights), mask, axis=0)
+    sratios  = np.take_along_axis(np.array(ratios), mask, axis=0)
+    tmp = np.cumsum(sweights,axis=0)  # ex [0.8, 1.1, 1.3, 1.4]
+    tmp[tmp>1] = 1  # Filter values > 1 : [0.8, 1, 1, 1]
+    tmp = np.diff(tmp, axis=0, prepend=0)  # "Un-cumsum" : [0.8, 1, 0, 0]
+    totalweight = np.sum(tmp, axis=0)  # =1 if enough info else <1
+    w0 = 1 - totalweight
+    estimated_ratio = 1*w0 + np.sum(tmp*sratios, axis=0)
+    #tmp.apply_along_axis(
+    #np.take_along_axis(
+    #(np.cumsum(sweights,axis=0)<=1).argmin()  #TODO
+
+#    w0 = 1 - weight
+#    w0[w0<0] = 0
+#    estimated_ratio =  (1*w0+inov)/(w0+weight)
     #estimated_ratio = estimated_ratio + (inov-estimated_ratio)*weight/(1+weight)
     #estimated_ratio = estimated_ratio + (inov-estimated_ratio)*weight/(len(onlypostes))
 
@@ -688,8 +714,24 @@ def ratio_estimation(field, moving_window=25):
     #plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}', vmin=0.5, vmax=1.5, cmap=plt.cm.coolwarm, scores=scores)
     #plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{moving_window}_{d0}_{c0}', vmin=0.4, vmax=1.6, cmap=plt.cm.coolwarm, scores=scores)  # To add scores
     #plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{moving_window}_{d0}_{c0}', vmin=0.4, vmax=1.6, cmap=plt.cm.coolwarm, scores=scores)
-#    plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}_{c0}', vmin=0.4, vmax=1.6, cmap=plt.cm.coolwarm, scores=scores)
-    plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}_{c0}', cmap=plt.cm.coolwarm, scores=scores)
+    plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}_{c0}', vmin=0.4, vmax=1.6, cmap=plt.cm.coolwarm, scores=scores)
+#    plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}_{c0}', cmap=plt.cm.coolwarm, scores=scores)
+
+
+#    estimated_ratio = np.ones(np.shape(field.rr_cumul.data))
+#    #for i,poste in enumerate(scores.index):
+#    for i,poste in enumerate(reversed(scores.index)):
+#        if poste in onlypostes:
+#            ratio = scores.loc[poste, 'ratio']
+#            dist = np.sqrt((lats-scores.loc[poste,'lats'])**2+(lons-scores.loc[poste, 'lons'])**2)  # Euclidian horizontal distance
+#            idx, idy = np.where(dist==np.min(dist))
+#            ref_cumul = field.rr_cumul.data[idx[0],idy[0]]
+#            cumul_dist = field.rr_cumul.data-ref_cumul
+#            cumul_ratio = field.rr_cumul.data/ref_cumul
+#            w = np.exp(-(dist/d0)**2)*np.exp(-np.abs(cumul_dist)/(ref_cumul/(ratio*c0))**2)
+#            estimated_ratio = estimated_ratio+(ratio*cumul_ratio-estimated_ratio)*w
+#    ratio_field = to_xarray(estimated_ratio, field, varname='ratio')
+#    plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}_{c0}_reverse', cmap=plt.cm.coolwarm, scores=scores)
 
     #plot_and_save(smoothed, f'Smoothed_field_{moving_window}_{domain}', cmap=plt.cm.YlGnBu)
     #plot_and_save(diff, f'Observation_error_smoothingsize{moving_window}_{domain}', cmap=plt.cm.coolwarm)
@@ -786,12 +828,12 @@ if __name__ == "__main__":
 #    antilope.lat.data = antilope.lat.data+0.005  # TODO : comprendre et resoudre le probleme de decallage des coordonnees
     antilope = antilope.where((antilope.lon>=lonmin) & (antilope.lon<=lonmax) & (antilope.lat<=latmax) & (antilope.lat>=latmin), drop=True)
 
-    #plot(antilope, datebegin, dateend, categories=True, biascorrection=True)
-#    plot(antilope, datebegin, dateend, categories=False, biascorrection=True)
+#    plot(antilope, datebegin, dateend, categories=True, biascorrection=True)
+    plot(antilope, datebegin, dateend, categories=False, biascorrection=True)
 #    plot(antilope, datebegin, dateend, categories=True)
 
 #    ratio_estimation(antilope)
-    KalmanFilter(antilope)
+#    KalmanFilter(antilope)
 #    animation_mask(antilope)
 
 #    krigeage_scores(antilope)
