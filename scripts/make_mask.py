@@ -13,6 +13,10 @@ import pandas as pd
 # To avoid pandas warning when modifying a copy of a dataframe :
 pd.options.mode.chained_assignment = None  # default='warn'
 
+import scipy
+from scipy.sparse import csr_matrix, diags
+from scipy.spatial import cKDTree
+
 import shapefile
 
 import matplotlib
@@ -32,7 +36,8 @@ domain = sys.argv[1]
 
 datadir = '/home/vernaym/These/DATA'
 #savedir = '/home/vernaym/workdir/ASSIMILATION/mask'
-savedir = '/home/vernaym/workdir/ASSIMILATION/mask/illustration_methode'
+#savedir = '/home/vernaym/workdir/ASSIMILATION/mask/illustration_methode'
+savedir = '/home/vernaym/workdir/ASSIMILATION/mask/KalmanFilter'
 
 onlypostes = [5001400, 5085403]
 onlypostes = [5001400, 5085403, 5133400]
@@ -48,8 +53,9 @@ onlypostes = [74056416, 73132400, 73176400, 73257400, 73194401]
 onlypostes = [73257400]
 onlypostes = [73306403]
 
-d0 = 1
-c0 = 4
+d0 = 0.3
+c0 = 2
+max_dist = 0.5
 
 # TODO ajouter les postes clim non utilisés par ANTILOPE temps réel
 fic_score = os.path.join(datadir, 'scores_2021110106_2022043006_alpes.csv')
@@ -272,7 +278,7 @@ def add_cities(latmin, latmax, lonmin, lonmax):
     for idx in tmp.index:
         plt.text(tmp.lng[idx], tmp.lat[idx], tmp.city[idx], alpha=0.5)
 
-def plot(antilope, datebegin, dateend, categories=True, baiscorrection=False):
+def plot(antilope, datebegin, dateend, categories=True, biascorrection=False):
 
     #if not os.path.exists(os.path.join(savedir, f'CUMUL_ANTILOPE_2021080106_2022070106_{domain}.pdf')):
 
@@ -290,7 +296,7 @@ def plot(antilope, datebegin, dateend, categories=True, baiscorrection=False):
     lonmin = np.min(antilope.lon.data)
     lonmax = np.max(antilope.lon.data)
 
-    if baiscorrection:
+    if biascorrection:
         filename ='Estimated_ratio_alp.nc'
         ratio = xr.open_dataset(filename)
         #ratio.lat.data = ratio.lat.data+0.005  # TODO : comprendre et resoudre le probleme de decallage des coordonnees
@@ -410,6 +416,111 @@ def plot_field(fig, ax, field, cmap=plt.cm.Greys, vmin=None, vmax=None, scores=N
 
     return ax
 
+def codistances(coords):
+    """
+    Solution pour le calcul des inter-distances trouvée sur : https://stackoverflow.com/questions/35296935/python-calculate-lots-of-distances-quickly
+    """
+    tree = cKDTree(coords)
+    dist = tree.sparse_distance_matrix(tree, max_distance=max_dist, p=2, output_type='coo_matrix')
+    dist = csr_matrix(dist)
+    dist[dist.nonzero()] = dist[dist.nonzero()]/d0
+    #np.exp(-dist.data**2, out=dist.data)
+    np.exp(-dist.data, out=dist.data)
+    return dist
+
+
+def KalmanFilter(field, moving_window=40):
+    #rawdata = field.rr_cumul.data/334  # 334 is the number of days over wich the field cumul is made : we want a mean daily (24h) error
+    rawdata = field.rr_cumul.data  # 334 is the number of days over wich the field cumul is made : we want a mean daily (24h) error
+    tmp = uniform_filter(rawdata, size=moving_window)
+    smoothed = to_xarray(tmp, field)
+    smoothratio = rawdata/smoothed
+
+    smoothdiff = rawdata-smoothed
+    plot_and_save(smoothdiff, f'Observation_error_smoothingsize{moving_window}_{domain}', cmap=plt.cm.coolwarm)
+
+    lons, lats = np.meshgrid(field.lon.data, field.lat.data)
+
+    filename = os.path.join('/home/vernaym/These/DATA', f'codistance_{max_dist}_{c0}_alp.npz')
+    if not os.path.exists(filename):
+        # Compute inter-distances
+        coords=[(lon,lat) for lat in field.lat.data for lon in field.lon.data]
+        codist = codistances(coords)
+        scipy.sparse.save_npz(filename, codist, compressed=False)
+    else:
+        codist = scipy.sparse.load_npz(filename)
+
+#    tmp = codist.getrow(10000).toarray()[0].reshape((len(field.lat), len(field.lon)))
+#    tmp = to_xarray(tmp, field)
+#    plot_and_save(tmp, f'correlation', cmap=plt.cm.Greys)
+
+    smoothdiff = np.where(np.isnan(smoothdiff.data), 0, smoothdiff.data)
+    smoothdiff = smoothdiff / np.max(np.abs(smoothdiff))
+    diff = diags(smoothdiff.flatten(), 0)
+    #diff = diags(np.ones(np.shape(smoothdiff)).flatten())
+    P = diff.dot(codist.dot(diff))
+    P = csr_matrix(P)
+
+    #P = np.diag([1]*42716)
+
+    scores = pd.read_csv(fic_score, sep=';')
+    scores = scores.set_index('num_poste')
+    scores = scores.sort_values('lats')
+
+    X = rawdata.flatten()
+    X = np.where(np.isnan(X), 0, X)
+    Y = list()
+    H = list()
+    for i,poste in enumerate(scores.index):
+    #for i,poste in enumerate(scores.index[[55, -15,-20]]):
+        if poste == 74056416:
+            print(i)
+            P0 = to_xarray(P[idx*len(field.lon)+idy].reshape((len(field.lat), len(field.lon))).todense(), field)
+            plot_and_save(P0, f'P0', cmap=plt.cm.Greys)
+
+        ratio = scores.loc[poste, 'ratio']
+        dist = np.sqrt((lats-scores.loc[poste,'lats'])**2+(lons-scores.loc[poste, 'lons'])**2)  # Euclidian horizontal distance
+        idx, idy = np.where(dist==np.min(dist))
+        Y.append(field.rr_cumul.data[idx[0],idy[0]]/ratio)  # Construction of the "observation vector"
+
+        tmp = np.zeros(len(field.lat)*len(field.lon))
+        tmp[idx*len(field.lon)+idy] = 1
+        H.append(tmp)
+
+
+    R = R = np.diag(np.array(Y)/100000)
+    H = np.array(H)
+    HX = np.dot(H, X)
+    Ht = np.transpose(H)
+    H = csr_matrix(H)
+    #HP = np.dot(H, P)
+    HP = H.dot(P)
+    #HP=HP.todense()
+    #HPHt = HP.dot(Ht).todense()
+    HPHt = HP.dot(Ht)
+    K = P.dot(np.dot(Ht, np.linalg.inv(HPHt+R)))
+    A = X+np.dot(K, (Y-HX))
+    A = A.reshape((len(field.lat), len(field.lon)))
+
+    tmp = to_xarray(np.dot(Ht, np.linalg.inv(HPHt+R))[:,0].reshape((len(field.lat), len(field.lon))), field)
+    plot_and_save(tmp, f'Ht(HPHt+R)^-1', cmap=plt.cm.coolwarm)
+
+    tmp = to_xarray(np.dot(K, (Y-HX)).reshape((len(field.lat), len(field.lon))), field)
+    plot_and_save(tmp, f'Inovation', cmap=plt.cm.coolwarm)
+
+    tmp = to_xarray(K[:,0].reshape((len(field.lat), len(field.lon))), field)
+    plot_and_save(tmp, f'Kalman_Gain0', cmap=plt.cm.coolwarm)
+
+    tmp = to_xarray(K[:,1].reshape((len(field.lat), len(field.lon))), field)
+    plot_and_save(tmp, f'Kalman_Gain1', cmap=plt.cm.coolwarm)
+
+    A = to_xarray(A, field, varname='ratio')
+    plot_and_save(A, 'TMP', cmap=plt.cm.YlGnBu)
+
+    import pdb
+    pdb.set_trace()
+
+
 def ratio_estimation(field, moving_window=25):
     """
     Two steps :
@@ -465,16 +576,18 @@ def ratio_estimation(field, moving_window=25):
 
 #    xx = np.where(field.lon==6.82)[0][0]
 #    yy = np.where(field.lat==45.85)[0][0]
-#    xx = np.where(field.lon==6.85)[0][0]
-#    yy = np.where(field.lat==45.63)[0][0]
-    xx = 0
-    yy = 0
+    xx = np.where(field.lon==6.85)[0][0]
+    yy = np.where(field.lat==45.63)[0][0]
+#    xx = 0
+#    yy = 0
 
     # TODO : trouver un moyen de rendre l'estimation indépendante de l'ordre de traitement
     #onlypostes = set(scores.index) - set(blacklist)
     onlypostes = scores.index
     rr = list()
     ww = list()
+    weights = list()
+    ratios  = list()
     for i,poste in enumerate(scores.index):
     #for i,poste in enumerate(reversed(scores.index)):
         if poste in onlypostes:
@@ -505,7 +618,10 @@ def ratio_estimation(field, moving_window=25):
             #w = np.exp(-1/2*(dist/d0)**2)*np.exp(-1/2*(np.abs(cumul_dist)/(ref_cumul/(ratio*c0))))
             #w = np.exp(-(dist/d0)**2*np.abs(cumul_dist)/(ref_cumul/(ratio*c0)))
             #w = np.exp(-(dist/d0))*np.exp(-np.abs(cumul_dist)/(ref_cumul/(ratio*c0)))
-            w = np.exp(-(dist/d0)**2)*np.exp(-np.abs(cumul_dist)/(ref_cumul/(ratio*c0)))
+            #w = np.exp(-(dist/d0)**2)*np.exp(-np.abs(cumul_dist)/(ref_cumul/(ratio*c0)))
+            w = np.exp(-(dist/d0))*np.exp(-np.abs(cumul_dist)/(ref_cumul/(ratio*c0)))
+            weights.append(w)
+            ratios.append(ratio*cumul_ratio)
             #w = np.exp(-(dist/d0)**2)
             #w = np.exp(-(dist/d0))
             #w = np.exp(-(dist/d0))*np.exp(-(np.abs(cumul_dist)/(ref_cumul/(ratio*c0))))
@@ -529,6 +645,8 @@ def ratio_estimation(field, moving_window=25):
     rr = np.array(rr)
     ww = np.array(ww)
     ee = (1+np.sum(rr*ww))/(1+np.sum(ww))
+    import pdb
+    pdb.set_trace()
     #import pdb
     #pdb.set_trace()
     estimated_ratio =  inov/weight
@@ -668,11 +786,12 @@ if __name__ == "__main__":
 #    antilope.lat.data = antilope.lat.data+0.005  # TODO : comprendre et resoudre le probleme de decallage des coordonnees
     antilope = antilope.where((antilope.lon>=lonmin) & (antilope.lon<=lonmax) & (antilope.lat<=latmax) & (antilope.lat>=latmin), drop=True)
 
-    #plot(antilope, datebegin, dateend, categories=True, baiscorrection=True)
-#    plot(antilope, datebegin, dateend, categories=False, baiscorrection=True)
+    #plot(antilope, datebegin, dateend, categories=True, biascorrection=True)
+#    plot(antilope, datebegin, dateend, categories=False, biascorrection=True)
 #    plot(antilope, datebegin, dateend, categories=True)
 
-    ratio_estimation(antilope)
+#    ratio_estimation(antilope)
+    KalmanFilter(antilope)
 #    animation_mask(antilope)
 
 #    krigeage_scores(antilope)
