@@ -37,7 +37,9 @@ domain = sys.argv[1]
 datadir = '/home/vernaym/These/DATA'
 #savedir = '/home/vernaym/workdir/ASSIMILATION/mask'
 #savedir = '/home/vernaym/workdir/ASSIMILATION/mask/illustration_methode'
-savedir = '/home/vernaym/workdir/ASSIMILATION/mask/KalmanFilter'
+savedir = '/home/vernaym/workdir/ASSIMILATION/mask/'
+savedir = '/home/vernaym/workdir/ASSIMILATION/mask/all_points'
+#savedir = '/home/vernaym/workdir/ASSIMILATION/mask/all_points/r2'
 
 onlypostes = [5001400, 5085403]
 onlypostes = [5001400, 5085403, 5133400]
@@ -52,6 +54,14 @@ onlypostes = [74056416, 5001400,38548400]
 onlypostes = [74056416, 73132400, 73176400, 73257400, 73194401]
 onlypostes = [73257400]
 onlypostes = [73306403]
+
+# Random selection of station for evaluation
+#import random
+#draw=random.sample(range(1, 64), 22)
+blacklist = [ 5139405, 73034400, 38006400,  5026400,  5096402,  5114402,
+        38020400, 74014402,  6120400, 74136400, 73257400, 73157400,
+            73232400, 73024400, 74056416,  5085403, 74191406,  5064403,
+            38253400, 73173400, 38548400, 73227400]  # Random draw of stations to use for evaluation
 
 d0 = 0.2
 c0 = 2
@@ -328,18 +338,18 @@ def plot(antilope, datebegin, dateend, categories=True, biascorrection=False):
     #add_landmarks(ax)
     add_radar_positions(ax)
     scores = pd.read_csv(fic_score, sep=';')
-    sc = add_scores(scores, ax)
+#    sc = add_scores(scores, ax)
     add_boundaries()
     add_cities(latmin, latmax, lonmin, lonmax)
-    cb = fig.colorbar(sc)
-    #cb.set_label(label='Mean ANTILOPE / rain-gauges ratio', fontsize=22, weight='bold')
-    cb.set_label(label='ANTILOPE / rain-gauges ratio', fontsize=22)
-    #cb.set_label(label='ANTILOPE / rain-gauges ratio', fontsize=14)
-    cb.ax.tick_params(labelsize=16)
-    cb2 = fig.colorbar(cml, extend='both')
-    cb2.set_label(label=f'Total precipitation between \n {datebegin} and {dateend} (mm)', fontsize=22)
-    #cb2.set_label(label=f'Total precipitation between \n {datebegin} and {dateend} (mm)', fontsize=14)
-    cb2.ax.tick_params(labelsize=16)
+#    cb = fig.colorbar(sc)
+#    #cb.set_label(label='Mean ANTILOPE / rain-gauges ratio', fontsize=22, weight='bold')
+#    cb.set_label(label='ANTILOPE / rain-gauges ratio', fontsize=22)
+#    #cb.set_label(label='ANTILOPE / rain-gauges ratio', fontsize=14)
+#    cb.ax.tick_params(labelsize=16)
+#    cb2 = fig.colorbar(cml, extend='both')
+#    cb2.set_label(label=f'Total precipitation between \n {datebegin} and {dateend} (mm)', fontsize=22)
+#    #cb2.set_label(label=f'Total precipitation between \n {datebegin} and {dateend} (mm)', fontsize=14)
+#    cb2.ax.tick_params(labelsize=16)
     #cb2.ax.tick_params(labelsize=12)
     ax.grid(False)  # Remove grid lines (does not work !)
     #fig.legend()
@@ -517,9 +527,6 @@ def KalmanFilter(field, moving_window=40):
     A = to_xarray(A, field, varname='ratio')
     plot_and_save(A, 'TMP', cmap=plt.cm.YlGnBu)
 
-    import pdb
-    pdb.set_trace()
-
 
 def ratio_estimation(field, moving_window=25):
     """
@@ -578,8 +585,8 @@ def ratio_estimation(field, moving_window=25):
 #    xx = np.where(field.lon==6.82)[0][0]
 #    yy = np.where(field.lat==45.85)[0][0]
     # poste n° 73176400
-    xx = np.where(field.lon==6.85)[0][0]
-    yy = np.where(field.lat==45.63)[0][0]
+#    xx = np.where(field.lon==6.85)[0][0]
+#    yy = np.where(field.lat==45.63)[0][0]
 #    xx = 0
 #    yy = 0
 
@@ -593,6 +600,7 @@ def ratio_estimation(field, moving_window=25):
     for i,poste in enumerate(scores.index):
     #for i,poste in enumerate(reversed(scores.index)):
         if poste in onlypostes:
+        #if poste not in blacklist:
             used_scores.append(poste)
             #print(scores.loc[poste])
             ratio = scores.loc[poste, 'ratio']
@@ -625,50 +633,52 @@ def ratio_estimation(field, moving_window=25):
             #w = np.exp(-(dist/d0))*np.exp(-np.abs(cumul_dist)/(ref_cumul/(ratio*c0)))
             #w = np.exp(-(dist/d0)**2)*np.exp(-np.abs(cumul_dist)/(ref_cumul/(ratio*c0)))
 
-            #w = np.exp(-(dist/d0))*np.exp(-np.abs(cumul_dist)/(ref_cumul/(ratio*c0)))
-            #w = np.exp(-(dist/d0)**2)*np.exp(-np.abs(cumul_dist)/(ref_cumul/(ratio*c0))**2)
+#            w = np.exp(-(dist/d0)**2)*np.exp(-np.abs(cumul_dist)/(ref_cumul/(ratio*c0))**2)
+#            w = np.exp(-(dist/d0)**2)*np.exp(-np.abs(cumul_dist)/(ref_cumul/(ratio*c0)))
             w = np.exp(-(dist/d0))*np.exp(-np.abs(cumul_dist)/(ref_cumul/(ratio*c0)))
             weights.append(w)
             ratios.append(ratio*cumul_ratio)
 
-            #w = np.exp(-(dist/d0)**2)
-            #w = np.exp(-(dist/d0))
-            #w = np.exp(-(dist/d0))*np.exp(-(np.abs(cumul_dist)/(ref_cumul/(ratio*c0))))
-            #w = np.exp(-(dist/d0)**2)*np.exp(-(np.abs(cumul_dist)/1000)**2)
-            #w = np.exp(-(dist/d0))*np.exp(-(np.abs(cumul_dist)/800))
-            #w = np.exp(-(dist/d0))*np.exp(-(np.abs(cumul_dist)/(ref_cumul/c0)))
-            #inov = inov + (ratio*cumul_ratio-estimated_ratio)*w
-            #toto = (1+(ratio*cumul_ratio-1)*w)*w
-            guess = ratio*cumul_ratio
+#            guess = ratio*cumul_ratio
             #print(poste)
             #print(toto[xx,yy], w[xx,yy])
-            rr.append(guess[yy,xx])
-            ww.append(w[yy,xx])
+#            rr.append(guess[yy,xx])
+#            ww.append(w[yy,xx])
             #inov = inov + (1+(ratio*cumul_ratio-1)*w)*w
-            inov = inov + ratio*cumul_ratio*w
-            wmax = np.maximum(weight, w)
-            weight = weight + w
+#            inov = inov + ratio*cumul_ratio*w
+#            wmax = np.maximum(weight, w)
+#            weight = weight + w
 
     #estimated_ratio =  estimated_ratio + (inov/weight-estimated_ratio) * ?
-    rr = np.array(rr)
-    ww = np.array(ww)
-    w0 = max(0, 1-np.sum(ww))
-    ee = (1*w0+np.sum(rr*ww))/(w0+np.sum(ww))
-    mask = np.flip(np.argsort(ww))
-    wws = ww[mask]
-    rrs = rr[mask]
-    cc = field.rr_cumul.data[yy,xx]
+#    rr = np.array(rr)
+#    ww = np.array(ww)
+#    w0 = max(0, 1-np.sum(ww))
+#    ee = (1*w0+np.sum(rr*ww))/(w0+np.sum(ww))
+#    mask = np.flip(np.argsort(ww))
+#    wws = ww[mask]
+#    rrs = rr[mask]
+#    cc = field.rr_cumul.data[yy,xx]
+
+    weights = np.array(weights)
+    ratios = np.array(ratios)
+
+    # To consider only stations with a cumulated weight up to 1
+#    mask = np.flip(np.argsort(weights, axis=0), axis=0)
+#    sweights = np.take_along_axis(weights, mask, axis=0)
+#    sratios  = np.take_along_axis(ratios, mask, axis=0)
+#    tmp = np.cumsum(sweights,axis=0)  # ex [0.8, 1.1, 1.3, 1.4]
+#    tmp[tmp>1] = 1  # Filter values > 1 : [0.8, 1, 1, 1]
+#    tmp = np.diff(tmp, axis=0, prepend=0)  # "Un-cumsum" : [0.8, 1, 0, 0]
+#    totalweight = np.sum(tmp, axis=0)  # =1 if enough info else <1
+#    w0 = 1 - totalweight
+#    estimated_ratio = 1*w0 + np.sum(tmp*sratios, axis=0)
+
+    totalweight = np.sum(weights, axis=0)  # =1 if enough info else <1
+    w0 = 1-totalweight
+    w0[w0<0] = 0
+    estimated_ratio = (1*w0 + np.sum(weights*ratios, axis=0)) / (w0+totalweight)
 
 
-    mask = np.flip(np.argsort(weights, axis=0), axis=0)
-    sweights = np.take_along_axis(np.array(weights), mask, axis=0)
-    sratios  = np.take_along_axis(np.array(ratios), mask, axis=0)
-    tmp = np.cumsum(sweights,axis=0)  # ex [0.8, 1.1, 1.3, 1.4]
-    tmp[tmp>1] = 1  # Filter values > 1 : [0.8, 1, 1, 1]
-    tmp = np.diff(tmp, axis=0, prepend=0)  # "Un-cumsum" : [0.8, 1, 0, 0]
-    totalweight = np.sum(tmp, axis=0)  # =1 if enough info else <1
-    w0 = 1 - totalweight
-    estimated_ratio = 1*w0 + np.sum(tmp*sratios, axis=0)
     #tmp.apply_along_axis(
     #np.take_along_axis(
     #(np.cumsum(sweights,axis=0)<=1).argmin()  #TODO
@@ -714,7 +724,7 @@ def ratio_estimation(field, moving_window=25):
     #plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}', vmin=0.5, vmax=1.5, cmap=plt.cm.coolwarm, scores=scores)
     #plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{moving_window}_{d0}_{c0}', vmin=0.4, vmax=1.6, cmap=plt.cm.coolwarm, scores=scores)  # To add scores
     #plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{moving_window}_{d0}_{c0}', vmin=0.4, vmax=1.6, cmap=plt.cm.coolwarm, scores=scores)
-    plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}_{c0}', vmin=0.4, vmax=1.6, cmap=plt.cm.coolwarm, scores=scores)
+    plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}_{c0}', vmin=0.3, vmax=1.7, cmap=plt.cm.coolwarm, scores=scores)
 #    plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}_{c0}', cmap=plt.cm.coolwarm, scores=scores)
 
 
@@ -829,10 +839,10 @@ if __name__ == "__main__":
     antilope = antilope.where((antilope.lon>=lonmin) & (antilope.lon<=lonmax) & (antilope.lat<=latmax) & (antilope.lat>=latmin), drop=True)
 
 #    plot(antilope, datebegin, dateend, categories=True, biascorrection=True)
-    plot(antilope, datebegin, dateend, categories=False, biascorrection=True)
+#    plot(antilope, datebegin, dateend, categories=False, biascorrection=True)
 #    plot(antilope, datebegin, dateend, categories=True)
 
-#    ratio_estimation(antilope)
+    ratio_estimation(antilope)
 #    KalmanFilter(antilope)
 #    animation_mask(antilope)
 
