@@ -69,7 +69,8 @@ max_dist = 0.5
 
 # TODO ajouter les postes clim non utilisés par ANTILOPE temps réel
 fic_score = os.path.join(datadir, 'scores_2021110106_2022043006_alpes.csv')
-#fic_score = os.path.join(datadir, 'scores_2018110106_2019043006_alpes_10.csv')
+#fic_score = os.path.join(datadir, 'scores_2018110106_2019043006_alpes.csv')
+#fic_score = os.path.join(datadir, 'scores_2018110106_2019043006_alpes_10.csv')  # WARNING : scores valid for precipitation >10mm
 #fic_score = os.path.join(datadir, 'scores_2021110106_2022043006_alpes_10.csv')  # WARNING : scores valid for precipitation >10mm
 
 landmarks = {
@@ -310,7 +311,7 @@ def plot(antilope, datebegin, dateend, categories=True, biascorrection=False):
         filename = os.path.join('/home/vernaym/These/DATA/mask', 'Estimated_ratio.nc')
         ratio = xr.open_dataset(filename)
         #ratio.lat.data = ratio.lat.data+0.005  # TODO : comprendre et resoudre le probleme de decallage des coordonnees
-        ratio = ratio.where((ratio.lon>=lonmin) & (ratio.lon<=lonmax) & (ratio.lat<=latmax) & (ratio.lat>=latmin), drop=True)
+        ratio = ratio.where((ratio.lon>=lonmin) & (ratio.lon<=lonmax) & (ratio.lat<=latmax) & (ratio.lat>latmin-0.01), drop=True)  # # >=44.1 ne fonctionne pas pour ANTILOPEQ (np.where(antilope.lat==44.1) renvoie une liste vide...)
         antilope.rr_cumul.data = antilope.rr_cumul.data / ratio.ratio.data
 
     cmap = plt.cm.YlGnBu
@@ -836,7 +837,7 @@ if __name__ == "__main__":
     dateend = filename.split('.')[0].split('_')[-1]
     antilope = xr.open_dataset(os.path.join(datadir, filename))
 #    antilope.lat.data = antilope.lat.data+0.005  # TODO : comprendre et resoudre le probleme de decallage des coordonnees
-    antilope = antilope.where((antilope.lon>=lonmin) & (antilope.lon<=lonmax) & (antilope.lat<=latmax) & (antilope.lat>=latmin), drop=True)
+    antilope = antilope.where((antilope.lon>=lonmin) & (antilope.lon<=lonmax) & (antilope.lat<=latmax) & (antilope.lat>latmin-0.01), drop=True)  # >=44.1 ne fonctionne pas pour ANTILOPEQ (np.where(antilope.lat==44.1) renvoie une liste vide...)
 
 #    plot(antilope, datebegin, dateend, categories=True, biascorrection=True)
 #    plot(antilope, datebegin, dateend, categories=False, biascorrection=True)
