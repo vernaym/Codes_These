@@ -40,6 +40,14 @@ elif len(sys.argv) == 3:
     domain = sys.argv[2]
     xpid = sys.argv[1]
 
+# Random selection of station for evaluation
+#import random
+#draw=random.sample(range(1, 64), 22)
+indep = [ 5139405, 73034400, 38006400,  5026400,  5096402,  5114402,
+        38020400, 74014402,  6120400, 74136400, 73257400, 73157400,
+            73232400, 73024400, 74056416,  5085403, 74191406,  5064403,
+            38253400, 73173400, 38548400, 73227400]  # Random draw of stations to use for evaluation
+
 datadir = '/home/vernaym/These/DATA'
 workdir = '/home/vernaym/workdir/ASSIMILATION/'
 
@@ -57,8 +65,6 @@ coords = dict(
     GrandesRousses = ['45210', '45020', '6040', '6460'],  # TODO : modifier quand les bords du domaines seront inclus dans la localisation
     ange = ['45240', '44990', '6010', '6490']
 )
-
-
 
 all_experiments = dict(
         #GD0      = 'Assimilation_globale_2021073106_2022070106_daily.nc',
@@ -365,7 +371,7 @@ class Evaluation(object):
         obs = obs[~np.isnan(obs)]
 
         if np.shape(simu) == np.shape(obs):  # "Simulation" déterministe
-            rmse = np.sqrt(np.nanmean(np.square(simu-obs))) if np.nanmean(simu-obs) > 0 else np.nan
+            rmse = np.sqrt(np.nanmean(np.square(simu-obs))) if np.nanmean(np.square(simu-obs)) > 0 else np.nan
         else:  # Simulation d'ensemble
             rmse = np.sqrt(np.nanmean(np.square(np.median(simu, axis=1) - obs)))
         return rmse
@@ -557,6 +563,7 @@ class Evaluation(object):
 
         latmax, latmin, lonmin, lonmax = np.array(coords[domain]).astype(float)/1000.
         nivometeo = nivometeo.loc[(nivometeo['lat']>=latmin) & (nivometeo['lat']<=latmax) & (nivometeo['lon']>=lonmin) & (nivometeo['lon']<=lonmax)]  # Select area
+        #nivometeo = nivometeo[nivometeo['num_poste'].isin(indep)]  # Select evaluation stations
         nivometeo.date = nivometeo.date + pd.Timedelta("1d6h")   #BDClim extraction for date ymd is the observation from ymd6h to ym(d+1)6h
         #nivometeo.groupby('num_poste')['nom', 'lat', 'lon', 'alti'].agg(set)
         #nivometeo = nivometeo.set_index(['num_poste', 'lat', 'lon', 'nom', 'alti', 'date'])  # Utilité de passer en index ?
@@ -711,6 +718,7 @@ class Evaluation(object):
         #dates = dates[:10]
         liste_postes = np.array([])
         for idx, num_poste in enumerate(self.data.num_poste.data):
+        #for idx, num_poste in enumerate(indep):
             print(f'Station {idx+1}/{len(self.data.num_poste.data)}')
 #            num_poste = row['num_poste']
 #            lat       = row['lat']
