@@ -41,12 +41,20 @@ elif len(sys.argv) == 3:
     xpid = sys.argv[1]
 
 # Random selection of station for evaluation
+# --> a coordonner avec make_mask.py
 #import random
 #draw=random.sample(range(1, 64), 22)
-indep = [ 5139405, 73034400, 38006400,  5026400,  5096402,  5114402,
-        38020400, 74014402,  6120400, 74136400, 73257400, 73157400,
-            73232400, 73024400, 74056416,  5085403, 74191406,  5064403,
-            38253400, 73173400, 38548400, 73227400]  # Random draw of stations to use for evaluation
+#indep = [ 5139405, 73034400, 38006400,  5026400,  5096402,  5114402,
+#        38020400, 74014402,  6120400, 74136400, 73257400, 73157400,
+#            73232400, 73024400, 74056416,  5085403, 74191406,  5064403,
+#            38253400, 73173400, 38548400, 73227400]  # Random draw of stations to use for evaluation
+indep = [38253400,  4019404, 73318400, 73004400, 74063405, 38006400,
+            38186400, 73040400, 74056416, 38527400,  6120400,  5064403,
+            73322401,  5001400, 38020400, 73034400, 73232400, 38548400,
+             5133400, 73257400,  5098402,  5079400, 73307400,  4073400,
+             4006400, 73227400, 74134400, 74136400, 73054401, 73024400,
+             5114402,  5085403]
+
 
 datadir = '/home/vernaym/These/DATA'
 workdir = '/home/vernaym/workdir/ASSIMILATION/'
@@ -58,7 +66,7 @@ lonmax = 6.490
 
 # Liste des coordonnées des domaines connus lat_max, lat_min, lon_max, lon_min
 coords = dict(
-    alp = ['46875', '43125', '4500', '8500'],
+    alp = ['46450', '44100', '5400', '7200'],
     pyr = ['43500', '42000', '-2000', '3500'],
     cor = ['43000', '41000', '8000', '10500'],
     #GrandesRousses = ['45240', '44990', '6010', '6490'],
@@ -563,13 +571,26 @@ class Evaluation(object):
 
         latmax, latmin, lonmin, lonmax = np.array(coords[domain]).astype(float)/1000.
         nivometeo = nivometeo.loc[(nivometeo['lat']>=latmin) & (nivometeo['lat']<=latmax) & (nivometeo['lon']>=lonmin) & (nivometeo['lon']<=lonmax)]  # Select area
-        #nivometeo = nivometeo[nivometeo['num_poste'].isin(indep)]  # Select evaluation stations
+        nivometeo = nivometeo[nivometeo['num_poste'].isin(indep)]  # Select evaluation stations
         nivometeo.date = nivometeo.date + pd.Timedelta("1d6h")   #BDClim extraction for date ymd is the observation from ymd6h to ym(d+1)6h
         #nivometeo.groupby('num_poste')['nom', 'lat', 'lon', 'alti'].agg(set)
         #nivometeo = nivometeo.set_index(['num_poste', 'lat', 'lon', 'nom', 'alti', 'date'])  # Utilité de passer en index ?
         nivometeo.set_index(['num_poste','date'], inplace=True)
 
         return nivometeo.to_xarray()
+
+    def read_obs_clim(self):
+
+        obs = pd.read_csv(os.path.join(datadir, "obs_quotidienne_clim_RR.data"), sep=';', parse_dates=['date'], header=0,
+                names = ['num_poste', 'lat', 'lon', 'alti', 'nom', 'reseau_poste', 'date', 'obs'],
+                usecols=['num_poste', 'lat', 'lon', 'alti', 'nom', 'date', 'obs'],
+                dtype={'num_poste':int, 'nom':str, 'alti':int, 'lat':float, 'lon':float, 'obs':float},
+                )
+        latmax, latmin, lonmin, lonmax = np.array(coords[domain]).astype(float)/1000.
+        obs = obs.loc[(obs['lat']>=latmin) & (obs['lat']<=latmax) & (obs['lon']>=lonmin) & (obs['lon']<=lonmax)]  # Select area
+        obs.set_index(['num_poste','date'], inplace=True)
+
+        return obs.to_xarray()
 
     def read_lpn(self):
         lpn = pd.read_csv(os.path.join(datadir, 'LPN_nivometeo_20210801_20220801.csv'), sep=';', parse_dates=['H_NIVO.DAT'], dtype={'H_NIVO.NUM_POSTE':int, 'H_NIVO.ALTI_LPNX':int})
@@ -683,7 +704,9 @@ class Evaluation(object):
 #        liste_poste = self.read_nivometeo_coords(domain).keys()
 #        latmax, latmin, lonmin, lonmax = np.array(coords[domain]).astype(float)/1000.
 
-        self.data = self.read_nivometeo_obs()  # Read observation --> self.obs
+        #self.data = self.read_nivometeo_obs()  # Read observation --> self.obs
+        self.data = self.read_obs_clim()  # Read observation --> self.obs
+
         # Remove time dimension from metadata :
         self.data['lon']=np.max(self.data.lon, axis=1)
         self.data['lat']=np.max(self.data.lat, axis=1)
@@ -692,15 +715,21 @@ class Evaluation(object):
 #        data = self.obs.loc[self.obs["Q.num_poste"].isin(liste_poste)]  # TODO a adapter
 #        self.stations = self.data[['num_poste', 'nom', 'lat', 'lon', 'alti']].drop_duplicates()
 
-        dates = self.data.date
-
         antilope = self.read_antilope()
+
+        dates_obs = self.data.date
+        dates_antilope = antilope.time.data
+        dates = np.intersect1d(dates_obs, dates_antilope)
+
         antilope = antilope.loc[{'time':dates}]
+        self.data = self.data.loc[{'date':dates}]
+
         mask = xr.open_dataset(os.path.join(datadir, 'mask', f"Estimated_ratio.nc"))
         ratio = mask.ratio
         def debiaise(ds):
             return ds / ratio
-        antiloped = antilope.groupby('date').apply(debiaise)
+        #antiloped = antilope.groupby('date').apply(debiaise)
+        antiloped = antilope.apply(debiaise)
 
         raw = self.read_raw_ensemble()
         raw = raw.loc[{'time':dates}]

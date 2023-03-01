@@ -58,10 +58,18 @@ onlypostes = [73306403]
 # Random selection of station for evaluation
 #import random
 #draw=random.sample(range(1, 64), 22)
-blacklist = [ 5139405, 73034400, 38006400,  5026400,  5096402,  5114402,
-        38020400, 74014402,  6120400, 74136400, 73257400, 73157400,
-            73232400, 73024400, 74056416,  5085403, 74191406,  5064403,
-            38253400, 73173400, 38548400, 73227400]  # Random draw of stations to use for evaluation
+#blacklist = [ 5139405, 73034400, 38006400,  5026400,  5096402,  5114402,
+#        38020400, 74014402,  6120400, 74136400, 73257400, 73157400,
+#            73232400, 73024400, 74056416,  5085403, 74191406,  5064403,
+#            38253400, 73173400, 38548400, 73227400]  # Random draw of stations to use for evaluation
+
+#draw=random.sample(range(1, 64), 32)
+blacklist = [38253400,  4019404, 73318400, 73004400, 74063405, 38006400,
+            38186400, 73040400, 74056416, 38527400,  6120400,  5064403,
+            73322401,  5001400, 38020400, 73034400, 73232400, 38548400,
+             5133400, 73257400,  5098402,  5079400, 73307400,  4073400,
+             4006400, 73227400, 74134400, 74136400, 73054401, 73024400,
+             5114402,  5085403]
 
 d0 = 0.2
 c0 = 2
@@ -600,8 +608,8 @@ def ratio_estimation(field, moving_window=25):
     ratios  = list()
     for i,poste in enumerate(scores.index):
     #for i,poste in enumerate(reversed(scores.index)):
-        if poste in onlypostes:
-        #if poste not in blacklist:
+        #if poste in onlypostes:
+        if poste not in blacklist:
             used_scores.append(poste)
             #print(scores.loc[poste])
             ratio = scores.loc[poste, 'ratio']
@@ -703,12 +711,19 @@ def ratio_estimation(field, moving_window=25):
     #observation_error = (np.abs(ratio_field-1)*5 + 5*np.abs(diff))**2
     #observation_error = ratio_field-1  # r=06 ==> err = -1.4
     # To take into account spatial correlation we must keep the sign of the observtaion error
+    # The following values are based on the rmse vs ratio linear regression of the ANTILOPE evaluation
+    # (figure rmse_vs_ratio_scatterplot_yyyymmdd_YYYYmmddhh_10.pdf)
     observation_error = ratio_field - 1
     neg = np.where(observation_error.data<0)
-    observation_error.data[neg] = 4*observation_error.data[neg]  # r=0.5 ==> err = -2
+    #observation_error.data[neg] = 21.391*observation_error.data[neg]  # r=0.5 ==> err=-10.7  # 2018/2019
+    observation_error.data[neg] = 20.137*observation_error.data[neg]  # r=0.5 ==> err=-10  # 2021/2022
+#    observation_error.data[neg] = 4*observation_error.data[neg]  # r=0.5 ==> err=-2
     pos= np.where(observation_error.data>=0)
-    observation_error.data[pos] = 2*observation_error.data[pos]  # r=1.5 ==> err = 1
+    #observation_error.data[pos] = 15.148*observation_error.data[pos]  # r=1.5 ==> err=7.574  " 2018/2019
+    observation_error.data[pos] = 16.787*observation_error.data[pos]  # r=1.5 ==> err=8.574  " 2021/2022
+#    observation_error.data[pos] = 2*observation_error.data[pos]  # r=1.5 ==> err = 1
     #observation_error = 1+np.abs(smoothratio-1)
+
 
     #observation_error = np.abs(ratio_field-1)
     #observation_error = np.abs(ratio_field**2-1)*50
@@ -721,35 +736,12 @@ def ratio_estimation(field, moving_window=25):
     #######
     scores = scores.loc[(scores.lats>=latmin) & (scores.lats<=latmax) & (scores.lons>=lonmin) & (scores.lons<=lonmax)]
     scores = scores.loc[used_scores]
-    #plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}_{moving_window}', vmin=0.5, vmax=1.5, cmap=plt.cm.coolwarm, scores=scores)
-    #plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}', vmin=0.5, vmax=1.5, cmap=plt.cm.coolwarm, scores=scores)
-    #plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{moving_window}_{d0}_{c0}', vmin=0.4, vmax=1.6, cmap=plt.cm.coolwarm, scores=scores)  # To add scores
-    #plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{moving_window}_{d0}_{c0}', vmin=0.4, vmax=1.6, cmap=plt.cm.coolwarm, scores=scores)
-    plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}_{c0}', vmin=0.3, vmax=1.7, cmap=plt.cm.coolwarm, scores=scores)
+#    plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}_{c0}', vmin=0.3, vmax=1.7, cmap=plt.cm.coolwarm, scores=scores)
+    plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}_{c0}', vmin=0.5, vmax=1.5, cmap=plt.cm.coolwarm, scores=scores)
 #    plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}_{c0}', cmap=plt.cm.coolwarm, scores=scores)
 
-
-#    estimated_ratio = np.ones(np.shape(field.rr_cumul.data))
-#    #for i,poste in enumerate(scores.index):
-#    for i,poste in enumerate(reversed(scores.index)):
-#        if poste in onlypostes:
-#            ratio = scores.loc[poste, 'ratio']
-#            dist = np.sqrt((lats-scores.loc[poste,'lats'])**2+(lons-scores.loc[poste, 'lons'])**2)  # Euclidian horizontal distance
-#            idx, idy = np.where(dist==np.min(dist))
-#            ref_cumul = field.rr_cumul.data[idx[0],idy[0]]
-#            cumul_dist = field.rr_cumul.data-ref_cumul
-#            cumul_ratio = field.rr_cumul.data/ref_cumul
-#            w = np.exp(-(dist/d0)**2)*np.exp(-np.abs(cumul_dist)/(ref_cumul/(ratio*c0))**2)
-#            estimated_ratio = estimated_ratio+(ratio*cumul_ratio-estimated_ratio)*w
-#    ratio_field = to_xarray(estimated_ratio, field, varname='ratio')
-#    plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}_{c0}_reverse', cmap=plt.cm.coolwarm, scores=scores)
-
-    #plot_and_save(smoothed, f'Smoothed_field_{moving_window}_{domain}', cmap=plt.cm.YlGnBu)
-    #plot_and_save(diff, f'Observation_error_smoothingsize{moving_window}_{domain}', cmap=plt.cm.coolwarm)
-    #plot_and_save(np.abs(diff), f'Observation_error_absolute_value_smoothingsize{moving_window}_{domain}', cmap=plt.cm.Greys, scores=scores)
-    #plot_and_save(smoothratio, f'Observation_error_ratio_smoothingsize{moving_window}_{domain}', vmin=0.6, vmax=1.4, cmap=plt.cm.coolwarm, scores=scores)
-    #plot_and_save(observation_error, f'Observation_error_{moving_window}_{d0}_{c0}_{domain}', cmap=plt.cm.coolwarm, scores=scores)
-    plot_and_save(observation_error, f'Observation_error_{d0}_{c0}_{domain}', vmin=-2, vmax=2, cmap=plt.cm.coolwarm, scores=scores)
+#    plot_and_save(observation_error, f'Observation_error_{d0}_{c0}_{domain}', vmin=-6, vmax=6, cmap=plt.cm.coolwarm, scores=scores)
+    plot_and_save(observation_error, f'Observation_error_{d0}_{c0}_{domain}', vmin=-12, vmax=12, cmap=plt.cm.coolwarm, scores=scores)
 #    plot_and_save(observation_error, f'Observation_error_{d0}_{c0}_{domain}', cmap=plt.cm.coolwarm, scores=scores)
 
 def animation_mask(field):

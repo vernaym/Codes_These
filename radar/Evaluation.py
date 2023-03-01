@@ -335,6 +335,46 @@ def ratio_scatterplot(workdf, datebegin, dateend, **kw):
     plt.tight_layout()
     fig.savefig(f'ratio_scatterplot_{datebegin.strftime("%Y%m%d")}_{dateend.strftime("%Y%m%d")}.pdf', format='pdf', bbox_inches='tight')
 
+def rmse_vs_ratio(workdf, datebegin, dateend, threshold=None, **kw):
+
+    fig, ax = plt.subplots(figsize=(12,9))
+    workdf['diff']=np.square(workdf[f'rr_{kw["product"]}'] - workdf['rr_nivometeo'])
+    workdf['rmse']  = np.sqrt(workdf.groupby(['num_poste'])["diff"].mean())
+    workdf['ratio'] = workdf[f'rr_{kw["product"]}'] / workdf['rr_nivometeo'] - 1
+    workdf.replace([np.inf, -np.inf], np.nan, inplace=True)
+    workdf = workdf.loc[~workdf['ratio'].isna()]
+    nbpoint = len(workdf['elevation'].to_numpy())
+
+    # 1. scatterplot
+    ax.scatter(workdf['ratio'], workdf['rmse'], marker='D', s=10)
+
+    # The scatterplot has a "V" shape (rmse min for ratio=1) so we make 2 separate regression
+    #2. linear regression for ratio<=1
+    tmp = workdf[workdf['ratio']<=0]
+    reg = LinearRegression().fit(tmp['ratio'].to_numpy().reshape((-1, 1)), tmp['rmse'].to_numpy())
+    model = reg.predict(tmp['ratio'].to_numpy().reshape((-1,1)))
+    r2 = reg.score(tmp['ratio'].to_numpy().reshape((-1, 1)), tmp['rmse'].to_numpy())
+    ax.plot(tmp['ratio'].to_numpy(), model, color='blue', linewidth=2)
+    ax.text(-0.2, max(workdf['rmse'].to_numpy()), f'Slope={reg.coef_[0]:.3f}, Intercept={reg.intercept_:.3f}, R²={r2:.4}', fontsize=18, color='blue')
+    ax.text(-0.2, max(workdf['rmse'].to_numpy()) * 0.95, f'{nbpoint} stations', fontsize=18, color='blue')
+
+    #3. linear regression for ratio>=1
+    tmp = workdf[workdf['ratio']>=0]
+    reg = LinearRegression().fit(tmp['ratio'].to_numpy().reshape((-1, 1)), tmp['rmse'].to_numpy())
+    model = reg.predict(tmp['ratio'].to_numpy().reshape((-1,1)))
+    r2 = reg.score(tmp['ratio'].to_numpy().reshape((-1, 1)), tmp['rmse'].to_numpy())
+    ax.plot(tmp['ratio'].to_numpy(), model, color='red', linewidth=2)
+    ax.text(-0.2, max(workdf['rmse'].to_numpy())*0.85, f'Slope={reg.coef_[0]:.3f}, Intercept={reg.intercept_:.3f}, R²={r2:.4}', fontsize=18, color='red')
+    ax.text(-0.2, max(workdf['rmse'].to_numpy())*0.8, f'{nbpoint} stations', fontsize=18, color='red')
+
+    ax.set_xlabel(f'ANTILOPE / rain gauge ratio', fontsize=12)
+    ax.set_ylabel('Mean daily rmse (mm)', fontsize=12)
+    plt.tight_layout()
+    if threshold is not None:
+        fig.savefig(f'rmse_vs_ratio_scatterplot_{datebegin.strftime("%Y%m%d")}_{dateend.strftime("%Y%m%d")}_{threshold}.pdf', format='pdf', bbox_inches='tight')
+    else:
+        fig.savefig(f'rmse_vs_ratio_scatterplot_{datebegin.strftime("%Y%m%d")}_{dateend.strftime("%Y%m%d")}.pdf', format='pdf', bbox_inches='tight')
+
 def elevation_scatterplot(workdf, datebegin, dateend, suffix=None, **kw):
 
     fig1, ax1 = plt.subplots(figsize=(12,9))
@@ -716,7 +756,7 @@ def fill_all_massifs(domain, lat, lon, df, suffix=None, **kw):
     fig.save(f'{filename}.pdf', formatout='pdf', bbox_inches='tight')
     fig.close()
 
-def error_vs_RR(df, datebegin, dateend, **kw):
+def error_vs_RR(df, datebegin, dateend, threshold=None, **kw):
     #import seaborn as sns
 
     df['error'] = np.sqrt(np.square(df[f'rr_{kw["product"]}'] - df['rr_nivometeo']))
@@ -741,7 +781,10 @@ def error_vs_RR(df, datebegin, dateend, **kw):
     plt.ylabel('ANTILOPE root mean square deviation (mm)', fontsize=12)
     plt.legend(fontsize=12)
     plt.tight_layout()
-    fig.savefig(f'ANTILOPE_rmsd_vs_ANTILOPE_RR_{datebegin.strftime("%Y%m%d")}_{dateend.strftime("%Y%m%d")}.pdf', format='pdf', bbox_inches='tight')
+    if threshold is not None:
+        fig.savefig(f'ANTILOPE_rmsd_vs_ANTILOPE_RR_{datebegin.strftime("%Y%m%d")}_{dateend.strftime("%Y%m%d")}_{threshold}.pdf', format='pdf', bbox_inches='tight')
+    else:
+        fig.savefig(f'ANTILOPE_rmsd_vs_ANTILOPE_RR_{datebegin.strftime("%Y%m%d")}_{dateend.strftime("%Y%m%d")}.pdf', format='pdf', bbox_inches='tight')
 
     fig, ax = plt.subplots()
     outname = 'Histogram_rr_antilope=0'
@@ -964,8 +1007,10 @@ if __name__ == "__main__":
     names         = df.groupby(['num_poste']).name.first()
     # Regroupement dans une nouvelle dataframe (il est surement possible d'extraire directement cette DF depuis 'df' pour simplifier le code)
     num_poste = df.groupby(['num_poste']).num_poste.mean()
+#    workdict = {'elevation':elevations, 'rr_nivometeo':rr_nivometeo, f'rr_{args.product}':rr_antilope, 'ndays':nb_values, 'massif_number':massif_number,
+#            'lats':lats, 'lons':lons, 'num_poste':num_poste}
     workdict = {'elevation':elevations, 'rr_nivometeo':rr_nivometeo, f'rr_{args.product}':rr_antilope, 'ndays':nb_values, 'massif_number':massif_number,
-            'lats':lats, 'lons':lons, 'num_poste':num_poste}
+            'lats':lats, 'lons':lons}
     #workdict = {'elevation':elevations, 'rr_nivometeo':rr_nivometeo, f'rr_{args.product}':rr_antilope, 'ndays':nb_values, 'massif_number':massif_number, 'lats':lats, 'lons':lons}
     df_stat   = pd.DataFrame(workdict)
     #workdf = workdf.loc[workdf['ndays']>nb_obs_min] # Consider only points with at least 100 observations
@@ -992,7 +1037,8 @@ if __name__ == "__main__":
         # 4. Daily scatter plot
         daily_scatterplot(df, args.datebegin, args.dateend, suffix=suffix, product=args.product)
         # 5. Ratio scatterplot
-        ratio_scatterplot(df_stat, args.datebegin, args.dateend, product=args.product)
+        ratio_scatterplot(df_stat, args.datebegin, args.dateend, product=args.product, threshold=args.threshold)
+        rmse_vs_ratio(df_stat, args.datebegin, args.dateend, product=args.product, threshold=args.threshold)
 
         # 5. Maps
         #for domain in ['alpes', 'pyrenees', 'corse']:
