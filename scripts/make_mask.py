@@ -76,7 +76,8 @@ c0 = 2
 max_dist = 0.5
 
 # TODO ajouter les postes clim non utilisés par ANTILOPE temps réel
-fic_score = os.path.join(datadir, 'scores_2021110106_2022043006_alpes.csv')
+#fic_score = os.path.join(datadir, 'scores_2021110106_2022043006_alpes.csv')
+fic_score = os.path.join(datadir, 'scores_2021103106_2022060206_alpes_postes_clim.csv')
 #fic_score = os.path.join(datadir, 'scores_2018110106_2019043006_alpes.csv')
 #fic_score = os.path.join(datadir, 'scores_2018110106_2019043006_alpes_10.csv')  # WARNING : scores valid for precipitation >10mm
 #fic_score = os.path.join(datadir, 'scores_2021110106_2022043006_alpes_10.csv')  # WARNING : scores valid for precipitation >10mm
