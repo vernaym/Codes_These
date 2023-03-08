@@ -704,8 +704,8 @@ class Evaluation(object):
 #        liste_poste = self.read_nivometeo_coords(domain).keys()
 #        latmax, latmin, lonmin, lonmax = np.array(coords[domain]).astype(float)/1000.
 
-        #self.data = self.read_nivometeo_obs()  # Read observation --> self.obs
-        self.data = self.read_obs_clim()  # Read observation --> self.obs
+        self.data = self.read_nivometeo_obs()  # Read observation --> self.obs
+#        self.data = self.read_obs_clim()  # Read observation --> self.obs
 
         # Remove time dimension from metadata :
         self.data['lon']=np.max(self.data.lon, axis=1)

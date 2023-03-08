@@ -38,8 +38,8 @@ datadir = '/home/vernaym/These/DATA'
 #savedir = '/home/vernaym/workdir/ASSIMILATION/mask'
 #savedir = '/home/vernaym/workdir/ASSIMILATION/mask/illustration_methode'
 savedir = '/home/vernaym/workdir/ASSIMILATION/mask/'
-savedir = '/home/vernaym/workdir/ASSIMILATION/mask/all_points'
-#savedir = '/home/vernaym/workdir/ASSIMILATION/mask/all_points/r2'
+savedir = '/home/vernaym/workdir/ASSIMILATION/mask/ref'
+#savedir = '/home/vernaym/workdir/ASSIMILATION/mask/ref/r2'
 
 onlypostes = [5001400, 5085403]
 onlypostes = [5001400, 5085403, 5133400]
@@ -76,8 +76,8 @@ c0 = 2
 max_dist = 0.5
 
 # TODO ajouter les postes clim non utilisés par ANTILOPE temps réel
-#fic_score = os.path.join(datadir, 'scores_2021110106_2022043006_alpes.csv')
-fic_score = os.path.join(datadir, 'scores_2021103106_2022060206_alpes_postes_clim.csv')
+fic_score = os.path.join(datadir, 'scores_2021110106_2022043006_alpes.csv')
+#fic_score = os.path.join(datadir, 'scores_2021103106_2022060206_alpes_postes_clim.csv')
 #fic_score = os.path.join(datadir, 'scores_2018110106_2019043006_alpes.csv')
 #fic_score = os.path.join(datadir, 'scores_2018110106_2019043006_alpes_10.csv')  # WARNING : scores valid for precipitation >10mm
 #fic_score = os.path.join(datadir, 'scores_2021110106_2022043006_alpes_10.csv')  # WARNING : scores valid for precipitation >10mm
@@ -235,7 +235,7 @@ def add_scores(scores, ax, mycmap=None, vmin=None, vmax=None):
             sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=300, edgecolors='black', alpha=1)
         else:
             #sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, vmin=vmin, vmax=vmax, marker=marker, s=300, edgecolors='black', alpha=1)
-            sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, vmin=vmin, vmax=vmax, marker=marker, s=200, edgecolors='black', alpha=0.1)
+            sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, vmin=vmin, vmax=vmax, marker=marker, s=200, edgecolors='black', alpha=0.5)
 
         #labels = [str(num_poste) for num_poste in info['num_poste']]
         labels = [str(np.around(ratio, decimals=2)) for ratio in info['ratio']]
@@ -303,7 +303,8 @@ def plot(antilope, datebegin, dateend, categories=True, biascorrection=False):
     #if not os.path.exists(os.path.join(savedir, f'CUMUL_ANTILOPE_2021080106_2022070106_{domain}.pdf')):
 
     if domain == 'alp':
-        fig, ax = plt.subplots(figsize=(16,16))
+        #fig, ax = plt.subplots(figsize=(16,16))
+        fig, ax = plt.subplots(figsize=(14,16))
     elif domain == 'GrandesRousses':
         fig, ax = plt.subplots(figsize=(19,8))
     elif domain == 'HautesAlpes':
@@ -347,6 +348,7 @@ def plot(antilope, datebegin, dateend, categories=True, biascorrection=False):
 
     #add_landmarks(ax)
     add_radar_positions(ax)
+    add_massifs()
     scores = pd.read_csv(fic_score, sep=';')
 #    sc = add_scores(scores, ax)
     add_boundaries()
@@ -391,8 +393,8 @@ def plot_and_save(field, name, cmap=plt.cm.Greys, vmin=None, vmax=None, scores=N
     elif domain == 'MontBlanc':
         fig, ax = plt.subplots(figsize=(12,11))
     elif domain == 'alp':
-        fig, ax = plt.subplots(figsize=(16,16))
-        #fig, ax = plt.subplots(figsize=(14,16))
+        #fig, ax = plt.subplots(figsize=(16,16))
+        fig, ax = plt.subplots(figsize=(14,16))
     else:
         fig, ax = plt.subplots()
     ax = plot_field(fig, ax, field, cmap=cmap, vmin=vmin, vmax=vmax, scores=scores)
@@ -609,8 +611,8 @@ def ratio_estimation(field, moving_window=25):
     ratios  = list()
     for i,poste in enumerate(scores.index):
     #for i,poste in enumerate(reversed(scores.index)):
-        #if poste in onlypostes:
-        if poste not in blacklist:
+        if poste in onlypostes:
+        #if poste not in blacklist:
             used_scores.append(poste)
             #print(scores.loc[poste])
             ratio = scores.loc[poste, 'ratio']
@@ -724,7 +726,7 @@ def ratio_estimation(field, moving_window=25):
     observation_error.data[pos] = 16.787*observation_error.data[pos]  # r=1.5 ==> err=8.574  " 2021/2022
 #    observation_error.data[pos] = 2*observation_error.data[pos]  # r=1.5 ==> err = 1
     #observation_error = 1+np.abs(smoothratio-1)
-
+    observation_error = observation_error.rename('Observation error (mm)')
 
     #observation_error = np.abs(ratio_field-1)
     #observation_error = np.abs(ratio_field**2-1)*50
@@ -741,8 +743,8 @@ def ratio_estimation(field, moving_window=25):
     plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}_{c0}', vmin=0.5, vmax=1.5, cmap=plt.cm.coolwarm, scores=scores)
 #    plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}_{c0}', cmap=plt.cm.coolwarm, scores=scores)
 
-#    plot_and_save(observation_error, f'Observation_error_{d0}_{c0}_{domain}', vmin=-6, vmax=6, cmap=plt.cm.coolwarm, scores=scores)
-    plot_and_save(observation_error, f'Observation_error_{d0}_{c0}_{domain}', vmin=-12, vmax=12, cmap=plt.cm.coolwarm, scores=scores)
+    plot_and_save(observation_error, f'Observation_error_{d0}_{c0}_{domain}', vmin=-6, vmax=6, cmap=plt.cm.coolwarm, scores=scores)
+#    plot_and_save(observation_error, f'Observation_error_{d0}_{c0}_{domain}', vmin=-12, vmax=12, cmap=plt.cm.coolwarm, scores=scores)
 #    plot_and_save(observation_error, f'Observation_error_{d0}_{c0}_{domain}', cmap=plt.cm.coolwarm, scores=scores)
 
 def animation_mask(field):
