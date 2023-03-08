@@ -303,8 +303,8 @@ def plot(antilope, datebegin, dateend, categories=True, biascorrection=False):
     #if not os.path.exists(os.path.join(savedir, f'CUMUL_ANTILOPE_2021080106_2022070106_{domain}.pdf')):
 
     if domain == 'alp':
-        #fig, ax = plt.subplots(figsize=(16,16))
-        fig, ax = plt.subplots(figsize=(14,16))
+        fig, ax = plt.subplots(figsize=(16,16))
+        #fig, ax = plt.subplots(figsize=(14,16))
     elif domain == 'GrandesRousses':
         fig, ax = plt.subplots(figsize=(19,8))
     elif domain == 'HautesAlpes':
@@ -350,18 +350,18 @@ def plot(antilope, datebegin, dateend, categories=True, biascorrection=False):
     add_radar_positions(ax)
     add_massifs()
     scores = pd.read_csv(fic_score, sep=';')
-#    sc = add_scores(scores, ax)
+    sc = add_scores(scores, ax)
     add_boundaries()
     add_cities(latmin, latmax, lonmin, lonmax)
-#    cb = fig.colorbar(sc)
-#    #cb.set_label(label='Mean ANTILOPE / rain-gauges ratio', fontsize=22, weight='bold')
-#    cb.set_label(label='ANTILOPE / rain-gauges ratio', fontsize=22)
-#    #cb.set_label(label='ANTILOPE / rain-gauges ratio', fontsize=14)
-#    cb.ax.tick_params(labelsize=16)
-#    cb2 = fig.colorbar(cml, extend='both')
-#    cb2.set_label(label=f'Total precipitation between \n {datebegin} and {dateend} (mm)', fontsize=22)
-#    #cb2.set_label(label=f'Total precipitation between \n {datebegin} and {dateend} (mm)', fontsize=14)
-#    cb2.ax.tick_params(labelsize=16)
+    cb = fig.colorbar(sc)
+    #cb.set_label(label='Mean ANTILOPE / rain-gauges ratio', fontsize=22, weight='bold')
+    cb.set_label(label='ANTILOPE / rain-gauges ratio', fontsize=22)
+    #cb.set_label(label='ANTILOPE / rain-gauges ratio', fontsize=14)
+    cb.ax.tick_params(labelsize=16)
+    cb2 = fig.colorbar(cml, extend='both')
+    cb2.set_label(label=f'Total precipitation between \n {datebegin} and {dateend} (mm)', fontsize=22)
+    #cb2.set_label(label=f'Total precipitation between \n {datebegin} and {dateend} (mm)', fontsize=14)
+    cb2.ax.tick_params(labelsize=16)
     #cb2.ax.tick_params(labelsize=12)
     ax.grid(False)  # Remove grid lines (does not work !)
     #fig.legend()
@@ -837,6 +837,7 @@ if __name__ == "__main__":
 #    plot(antilope, datebegin, dateend, categories=True, biascorrection=True)
 #    plot(antilope, datebegin, dateend, categories=False, biascorrection=True)
 #    plot(antilope, datebegin, dateend, categories=True)
+#    plot(antilope, datebegin, dateend, categories=False)
 
     ratio_estimation(antilope)
 #    KalmanFilter(antilope)
