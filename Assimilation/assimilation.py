@@ -13,7 +13,7 @@ from scipy.spatial.distance import cdist
 from scipy import sparse
 from scipy.sparse import csc_matrix, csr_matrix
 from scipy.sparse import linalg as splinalg
-from scipy.sparse.linalg import inv
+from scipy.sparse.linalg import inv, spsolve
 from scipy.spatial import cKDTree
 from scipy.sparse import diags
 import xarray as xr
@@ -61,14 +61,12 @@ domain_coords = dict(
 )
 
 figsize = dict(
-        alp            = dict(singleplot=(14,16), ensembleplot=(16,7)),
+        alp            = dict(singleplot=(14,16), ensembleplot=(32,20)),
         GrandesRousses = dict(singleplot=(16,8), ensembleplot=(16,7)),
         HauteSavoie    = dict(singleplot=(12,12), ensembleplot=(12,12)),
         Savoie         = dict(singleplot=(16,8), ensembleplot=(16,7)),
         Isere          = dict(singleplot=(16,8), ensembleplot=(16,7)),
 )
-
-max_dist = 0.06
 
 landmarks = {
         "Alpe d'Huez" : dict(lon=6.070, lat=45.092, alt=1800, marker='o'),
@@ -95,6 +93,12 @@ landmarks = {
         "Pic Blanc"   : dict(lon=6.131, lat=45.128, alt=3000, marker='^'),  # real alt = 3333
         "Valloire"    : dict(lon=6.463500, lat=45.160833, alt=3000, marker='p'),
     }
+
+# Parameters to compute Euclidian distance between all points in the domain
+ld = 0.05 # correlation lenght. WARNING : ne pas trop augmenter la distance de correlation (analyse trop proche de l'obs ==> perte de dispersion)
+# ld = 0.02 marche plutot bien (sous dispersion), ld=0.03 pas du tout !!!
+max_dist = ld*3
+#max_dist = 0.5  # Memory limit reached at 0.2 for domain Alp. WARNING : very high analysis sensibility to this parameter !!
 
 def parse_command_line():
     description = "Evaluation of RADAR products (ANTILOPE or PANTHERE) using nivo-météo network observations"
@@ -574,40 +578,46 @@ class Assimilation(object):
         return draw
 
     def plot_obs(self, field, var='rr', domain=None):
-        mnt = xr.open_dataset('/home/vernaym/QGIS/MNT/DEM_ALPES_WGS84_250m_bilinear.nc')  # Pour tracer sur toutes les Alpes
-        # Plot ANTILOPE precipitation field
-        fig = plt.figure(figsize=figsize[domain]['singleplot'])
-        #fig = plt.figure(figsize=(14,16))  Alps
-        field[var].plot(vmin=0, vmax=self.rrmax, cmap=plt.cm.YlGnBu, cbar_kwargs={'label': "24 hour precipitation (mm)"})  # quadmesh object
 
-        if domain is None:
-            domain = self.domain
-
-        # Add landmarks
-        if domain == 'GrandesRousses':
-            for landmark, infos in landmarks.items():
-                plt.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='red', markersize=10)
-                plt.annotate(landmark, (infos['lon']+0.003, infos['lat']+0.003), color='red', fontsize=20)
-
-        latmin = domain_coords[domain]['latmin']
-        latmax = domain_coords[domain]['latmax']
-        lonmin = domain_coords[domain]['lonmin']
-        lonmax = domain_coords[domain]['lonmax']
-        add_cities(latmin, latmax, lonmin, lonmax)
-        add_boundaries()
-
-        plt.xticks(fontsize=16)
-        plt.yticks(fontsize=16)
-        ax = plt.gca()
-        ax.set_aspect('equal')
-        ax.set_title(f'Date {self.date_str}', fontsize=20)
-        ax.axes.get_xaxis().get_label().set_visible(False)
-        ax.axes.get_yaxis().get_label().set_visible(False)
-        fig.tight_layout()
         if var == 'rr':
-            fig.savefig(f'{self.date_str}/OBS_{self.date_str}_{domain}.pdf', format='pdf')
+            savename = f'{self.date_str}/OBS_{self.date_str}_{domain}.pdf'
         elif var == 'mu':
-            fig.savefig(f'{self.date_str}/DEBIASED_OBS_{self.date_str}_{domain}.pdf', format='pdf')
+            savename = f'{self.date_str}/DEBIASED_OBS_{self.date_str}_{domain}.pdf'
+
+        if not os.path.exists(savename):
+
+            mnt = xr.open_dataset('/home/vernaym/QGIS/MNT/DEM_ALPES_WGS84_250m_bilinear.nc')  # Pour tracer sur toutes les Alpes
+            # Plot ANTILOPE precipitation field
+            fig = plt.figure(figsize=figsize[domain]['singleplot'])
+            #fig = plt.figure(figsize=(14,16))  Alps
+            field[var].plot(vmin=0, vmax=self.rrmax, cmap=plt.cm.YlGnBu, cbar_kwargs={'label': "24 hour precipitation (mm)"})  # quadmesh object
+
+            if domain is None:
+                domain = self.domain
+
+            # Add landmarks
+            if domain == 'GrandesRousses':
+                for landmark, infos in landmarks.items():
+                    plt.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='red', markersize=10)
+                    plt.annotate(landmark, (infos['lon']+0.003, infos['lat']+0.003), color='red', fontsize=20)
+
+            latmin = domain_coords[domain]['latmin']
+            latmax = domain_coords[domain]['latmax']
+            lonmin = domain_coords[domain]['lonmin']
+            lonmax = domain_coords[domain]['lonmax']
+            add_cities(latmin, latmax, lonmin, lonmax)
+            add_boundaries()
+
+            plt.xticks(fontsize=16)
+            plt.yticks(fontsize=16)
+            ax = plt.gca()
+            ax.set_aspect('equal')
+            ax.set_title(f'Date {self.date_str}', fontsize=20)
+            ax.axes.get_xaxis().get_label().set_visible(False)
+            ax.axes.get_yaxis().get_label().set_visible(False)
+            fig.tight_layout()
+
+            fig.savefig(savename, format='pdf')
 
 
         # Plot 3D ANTILOPE precipitation field
@@ -822,10 +832,8 @@ class EnsembleKalmanFilter(Assimilation):
         super(EnsembleKalmanFilter, self).__init__(period, obs, ensemble, nivometeo, plot, frequency, gridded, localisation, mask, debiasing, domain, likelyhood)
 
         # Parameters to compute Euclidian distance between all points in the domain
-        self.ld = 0.02 # correlation lenght. WARNING : ne pas trop augmenter la distance de correlation (analyse trop proche de l'obs ==> perte de dispersion)
-        # ld = 0.02 marche plutot bien (sous dispersion), ld=0.03 pas du tout !!!
-        self.max_dist = self.ld*3
-        #max_dist = 0.5  # Memory limit reached at 0.2 for domain Alp. WARNING : very high analysis sensibility to this parameter !!
+        self.ld = ld
+        self.max_dist = max_dist
 
     def analyseKF(self, X, P, H, Y, R):
         """Kalman filter analysis
@@ -1146,14 +1154,15 @@ class EnsembleKalmanFilter(Assimilation):
         B = self.background_error_covariance(ensemble)  # Background error covariance matrix
         R, Rstat, Rdyn, ref_field = self.observation_ECM(parameters, date)
 
-        K = B.dot(np.linalg.inv((B+R).toarray()))
+#        K = B.dot(np.linalg.inv((B+R).toarray()))
         # Working inversion of large sparse matrix
 #        A = B+R
 #        A = A + 0.001*scipy.sparse.eye(A.shape[0])
 #        K = B.dot(scipy.sparse.linalg.inv(A))
 
         if self.plot:
-            fig1,ax1 = plt.subplots(nrows=4, ncols=4, figsize=figsize[domain]['ensembleplot'])
+            if not os.path.exists(f'{self.date_str}/RAW_{self.date_str}_{self.domain}.pdf'):
+                fig1,ax1 = plt.subplots(nrows=4, ncols=4, figsize=figsize[domain]['ensembleplot'])
             fig2,ax2 = plt.subplots(nrows=4, ncols=4, figsize=figsize[domain]['ensembleplot'])
             fig3,ax3 = plt.subplots(nrows=4, ncols=4, figsize=figsize[domain]['ensembleplot'])
             #fig2,ax2 = plt.subplots(nrows=2, ncols=8, figsize=(16,10))
@@ -1165,7 +1174,17 @@ class EnsembleKalmanFilter(Assimilation):
         for member in ensemble.member.data:
             raw = ensemble.sel({'member':member}).rr
             X = raw.data.flatten()  # Ensemble member vector
-            A = X + K.dot(Y-X)
+
+            #A = X + K.dot(Y-X)
+#            Solution to avoid the "B+R" matrix inversion :
+#            1. solve (B+R).Z=Y-X
+#            --> the matrix is already "band diagonal" but could be converted using a
+#            reverse_cuthill_mckee algorithm
+#            --> use "spsolve" method for sparse matrices (solveh_banded for dense
+#            matrices)
+#            2. compute anlaysis as A=Y+BZ
+            Z = spsolve(B+R, Y-X)
+            A = Y+B.dot(Z)
 
             # On peut maintenant extraire les vrais domaines (on a plus besoind e la marge sur les bords)
             analysis[member] = xr.DataArray(
@@ -1177,10 +1196,11 @@ class EnsembleKalmanFilter(Assimilation):
             )
 
             if self.plot:
-                im1 = plot_field(raw, ax1[i,j], self.rrmin, self.rrmax)
+                if not os.path.exists(f'{self.date_str}/RAW_{self.date_str}_{self.domain}.pdf'):
+                    im1 = plot_field(raw, ax1[i,j], self.rrmin, self.rrmax)
+                    ax1[i,j].set_title(None)
                 im2 = plot_field(analysis[member], ax2[i,j], self.rrmin, self.rrmax)
                 im3 = plot_field(parameters.mu-raw, ax3[i,j], np.min(parameters.mu.data-raw.data), np.max(parameters.mu.data-raw.data))
-                ax1[i,j].set_title(None)
                 ax2[i,j].set_title(None)
                 j = j + 1
                 if j==4:
@@ -1190,8 +1210,8 @@ class EnsembleKalmanFilter(Assimilation):
         if self.plot:
 
             #line = K.getrow(600).toarray()[0].reshape((len(parameters.lat), len(parameters.lon)))
-            line = K[600].reshape((len(parameters.lat), len(parameters.lon)))
-            self.plot_array(line, parameters.rr, 'Kalman_Gain', f'{self.date_str}/Kalman_Gain_{domain}_L1.pdf', cmap=plt.cm.coolwarm)
+            #line = K[600].reshape((len(parameters.lat), len(parameters.lon)))
+            #self.plot_array(line, parameters.rr, 'Kalman_Gain', f'{self.date_str}/Kalman_Gain_{domain}_L1.pdf', cmap=plt.cm.coolwarm)
             #self.plot_array(dist[0].reshape((len(parameters.lat), len(parameters.lon))), parameters.rr, 'Distance to point 1', f'{self.date_str}/Distance_1.pdf', cmap=plt.cm.coolwarm)
             line = B.getrow(600).toarray()[0].reshape((len(parameters.lat), len(parameters.lon)))
             #line = B[600].reshape((len(parameters.lat), len(parameters.lon)))
@@ -1209,7 +1229,7 @@ class EnsembleKalmanFilter(Assimilation):
             #self.plot_matrix(Rdyn, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_dyn_ECM_{domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.viridis)
             self.plot_matrix(Rstat, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_stat_ECM_{domain}.pdf', vmin=0, vmax=80, cmap=plt.cm.viridis)
             self.plot_matrix(Rdyn, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_dyn_ECM_{domain}.pdf', vmin=0, vmax=80, cmap=plt.cm.viridis)
-            self.plot_matrix(K, parameters.rr, 'Kalman_Gain', f'{self.date_str}/Kalman_Gain_{domain}.pdf', cmap=plt.cm.coolwarm, vmin=0, vmax=1)
+            #self.plot_matrix(K, parameters.rr, 'Kalman_Gain', f'{self.date_str}/Kalman_Gain_{domain}.pdf', cmap=plt.cm.coolwarm, vmin=0, vmax=1)
 
             self.plot_obs(parameters, domain=domain)
             if self.debiasing:
@@ -1220,7 +1240,8 @@ class EnsembleKalmanFilter(Assimilation):
             # TODO : comprendre pourquoi la dispersion est plus importante sur les bords du domaine (distance de coorélation moins impactante ?
             disp = self.ensemble_dispersion(analysis)
             self.plot_array(disp, parameters.rr, 'Dispersion (mm)', f'{self.date_str}/Analysis_dispersion_{self.domain}.pdf', vmin=0, vmax=15, cmap=plt.cm.YlGnBu)
-            finalize_fig(fig1, im1, label='24-hour precipitation (mm)', outname=f'{self.date_str}/RAW_{self.date_str}_{self.domain}.pdf')
+            if not os.path.exists(f'{self.date_str}/RAW_{self.date_str}_{self.domain}.pdf'):
+                finalize_fig(fig1, im1, label='24-hour precipitation (mm)', outname=f'{self.date_str}/RAW_{self.date_str}_{self.domain}.pdf')
             finalize_fig(fig2, im2, label='24-hour precipitation (mm)', outname=f'{self.date_str}/ANALYSIS_{self.date_str}_{self.domain}.pdf')
             finalize_fig(fig3, im3, label='24-hour precipitation difference (mm)', outname=f'{self.date_str}/INNOVATION_{self.date_str}_{self.domain}.pdf')
 
