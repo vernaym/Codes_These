@@ -38,8 +38,8 @@ datadir = '/home/vernaym/These/DATA'
 #savedir = '/home/vernaym/workdir/ASSIMILATION/mask'
 #savedir = '/home/vernaym/workdir/ASSIMILATION/mask/illustration_methode'
 savedir = '/home/vernaym/workdir/ASSIMILATION/mask/'
-savedir = '/home/vernaym/workdir/ASSIMILATION/mask/ref'
 #savedir = '/home/vernaym/workdir/ASSIMILATION/mask/ref/r2'
+savedir = f'/home/vernaym/workdir/ASSIMILATION/mask/{domain}'
 
 onlypostes = [5001400, 5085403]
 onlypostes = [5001400, 5085403, 5133400]
@@ -76,11 +76,11 @@ c0 = 2
 max_dist = 0.5
 
 # TODO ajouter les postes clim non utilisés par ANTILOPE temps réel
-fic_score = os.path.join(datadir, 'scores_2021110106_2022043006_alpes.csv')
 #fic_score = os.path.join(datadir, 'scores_2021103106_2022060206_alpes_postes_clim.csv')
 #fic_score = os.path.join(datadir, 'scores_2018110106_2019043006_alpes.csv')
 #fic_score = os.path.join(datadir, 'scores_2018110106_2019043006_alpes_10.csv')  # WARNING : scores valid for precipitation >10mm
 #fic_score = os.path.join(datadir, 'scores_2021110106_2022043006_alpes_10.csv')  # WARNING : scores valid for precipitation >10mm
+fic_score = os.path.join(datadir, f'scores_2018110106_2019043006_{domain}.csv')
 
 landmarks = {
         "Alpe d'Huez" : dict(lon=6.070, lat=45.092, alt=1800, marker='o'),
@@ -121,6 +121,12 @@ extract_dom = dict(
             latmin = 44.1,
             lonmin = 5.4,
             lonmax = 7.2,
+        ),
+        pyr = dict(
+            latmax = 43.5,
+            latmin = 42.0,
+            lonmin = -2.0,
+            lonmax = 3.5,
         ),
     )
 
@@ -231,18 +237,18 @@ def add_scores(scores, ax, mycmap=None, vmin=None, vmax=None):
         info = info[info.index.isin(onlypostes)]
         if mycmap is None:
             #sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=450, edgecolors='black', linewidth=3, alpha=1)
-            #sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=150, edgecolors='black', alpha=0.5)
-            sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=300, edgecolors='black', alpha=1)
+            sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=50, edgecolors='black', alpha=0.5)
+            #sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=300, edgecolors='black', alpha=1)
         else:
             #sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, vmin=vmin, vmax=vmax, marker=marker, s=300, edgecolors='black', alpha=1)
-            sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, vmin=vmin, vmax=vmax, marker=marker, s=200, edgecolors='black', alpha=0.5)
+            sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, vmin=vmin, vmax=vmax, marker=marker, s=50, edgecolors='black', alpha=0.5)
 
         #labels = [str(num_poste) for num_poste in info['num_poste']]
         labels = [str(np.around(ratio, decimals=2)) for ratio in info['ratio']]
         # TODO : add score value
         #for idx, label in enumerate(labels):
         for idx in info.index:
-            txt = plt.text(info['lons'][idx], info['lats'][idx], np.around(info['ratio'][idx], decimals=2), fontsize=16)
+            txt = plt.text(info['lons'][idx], info['lats'][idx], np.around(info['ratio'][idx], decimals=2), fontsize=12)
             #txt = plt.text(info['lons'][idx], info['lats'][idx], info['num_poste'][idx])
     #cb = ax.colorbar(sc, label=legend)
     #ax.colorbar(sc, label=legend, shrink=shrink, anchor=anchor)
@@ -305,6 +311,8 @@ def plot(antilope, datebegin, dateend, categories=True, biascorrection=False):
     if domain == 'alp':
         fig, ax = plt.subplots(figsize=(16,16))
         #fig, ax = plt.subplots(figsize=(14,16))
+    elif domain =='pyr':
+        fig, ax = plt.subplots(figsize=(24,8))
     elif domain == 'GrandesRousses':
         fig, ax = plt.subplots(figsize=(19,8))
     elif domain == 'HautesAlpes':
@@ -342,7 +350,8 @@ def plot(antilope, datebegin, dateend, categories=True, biascorrection=False):
         #cml = plt.contourf(antilope.lon, antilope.lat, antilope.rr_cumul, cmap=cmap, norm=norm, add_colorbar=False)
         #cml = antilope.rr_cumul.plot(ax=ax, cmap=plt.cm.YlGnBu, add_colorbar=False, alpha=0.5)
     else:
-        cml = antilope.rr_cumul.plot(ax=ax, vmin=100, vmax=1200, cmap=plt.cm.YlGnBu, add_colorbar=False)
+#        cml = antilope.rr_cumul.plot(ax=ax, vmin=100, vmax=1200, cmap=plt.cm.YlGnBu, add_colorbar=False)
+        cml = antilope.rr_cumul.plot(ax=ax, cmap=plt.cm.YlGnBu, add_colorbar=False)
         #cml = antilope.rr_cumul.plot(ax=ax, cmap=plt.cm.YlGnBu, add_colorbar=False)
         #cml = antilope.rr_cumul.plot(ax=ax, vmin=150, vmax=500, cmap=plt.cm.YlGnBu, add_colorbar=False)
 
@@ -395,6 +404,9 @@ def plot_and_save(field, name, cmap=plt.cm.Greys, vmin=None, vmax=None, scores=N
     elif domain == 'alp':
         #fig, ax = plt.subplots(figsize=(16,16))
         fig, ax = plt.subplots(figsize=(14,16))
+    elif domain == 'pyr':
+        #fig, ax = plt.subplots(figsize=(16,16))
+        fig, ax = plt.subplots(figsize=(24,8))
     else:
         fig, ax = plt.subplots()
     ax = plot_field(fig, ax, field, cmap=cmap, vmin=vmin, vmax=vmax, scores=scores)
@@ -826,7 +838,7 @@ if __name__ == "__main__":
     if domain == 'GrandesRousses':
         filename = 'CUMUL_ANTILOPEH_GrandesRousses_2021073106_2022070106.nc'
     else:
-        filename ='CUMUL_ANTILOPEH_alp_2021103000_2022060200.nc'
+        filename =f'CUMUL_ANTILOPEH_{domain}_2021103000_2022060200.nc'
         #filename ='CUMUL_ANTILOPEQ_alp_2018080106_2019043006.nc'
     datebegin = filename.split('.')[0].split('_')[-2]
     dateend = filename.split('.')[0].split('_')[-1]

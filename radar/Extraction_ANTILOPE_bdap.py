@@ -22,7 +22,7 @@ import epygram
 # TODO : vérifier si ce n'est pas plus rapide d'extraire un grib complet (peu probable).
 ##############################################################################################
 
-datadir = '/home/vernaym/These/DATA'
+datadir = os.path.join(os.environ['HOME'], 'These', 'DATA')
 
 # Identifiant du modèle dans la BDAP
 #model_id = 'ANTILOPEQJP1'
@@ -128,7 +128,7 @@ def goto(path):
     os.chdir(path)
 
 def read_nivometeo_coords(domain):
-    metadata = pd.read_csv(os.path.join('/home/vernaym/These/DATA', 'postes_nivometeo.csv'), sep=';')
+    metadata = pd.read_csv(os.path.join(datadir, 'postes_nivometeo.csv'), sep=';')
     latmax, latmin, lonmin, lonmax = np.array(coords[domain]).astype(float)/1000.
     subdata = metadata[(metadata['poste_nivo.lat_dg']>=latmin) & (metadata['poste_nivo.lat_dg']<=latmax) & (metadata['poste_nivo.lon_dg']>=lonmin) & (metadata['poste_nivo.lon_dg']<=lonmax)]
     return dict(zip(np.array(subdata['poste_nivo.num_poste']), zip(np.array(subdata['poste_nivo.lat_dg']), np.array(subdata['poste_nivo.lon_dg']))))
@@ -204,14 +204,15 @@ if __name__ == "__main__":
     elif args.model in ['ANTILOPEH', 'ANTILOPEJP1H']:
         dt = 1
     extract_period = date_range(args.datebegin, args.dateend, dt)
+    workdir = os.getcwd()
     for domain in args.domain:
         print(domain)
-        #goto(args.workdir)
-        #nivometeo = read_nivometeo_coords(domain)
-        nivometeo = read_obs_clim()
+        goto(workdir)
+        nivometeo = read_nivometeo_coords(domain)
+        #nivometeo = read_obs_clim()
         missing_grib = list()
         #workdir = os.path.join(args.workdir, domain)
-        #goto(domain)
+        goto(domain)
         cumul = None
         reference_time = pd.Timestamp(args.datebegin)
         rr24 = None
@@ -233,7 +234,8 @@ if __name__ == "__main__":
                     gribname = '{0:s}_{1:s}.grib'.format(args.model, date.strftime('%Y%m%d%H'))
                 if result:
                     data = epygram.formats.resource(gribname, openmode='r', fmt='GRIB')
-                    rr_field = data.readfield({'indicatorOfTypeOfLevel':1, 'paramId': 0, 'indicatorOfParameter': 61}, getdata= True)
+                    #rr_field = data.readfield({'indicatorOfTypeOfLevel':1, 'paramId': 0, 'indicatorOfParameter': 61}, getdata= True)
+                    rr_field = data.readfield({'indicatorOfTypeOfLevel':1, 'paramId': 85029, 'indicatorOfParameter': 61}, getdata= True)
                     metadata = data.get_message_at_position(0).asfield(getdata=False)
                     geometry = metadata.geometry
                     lon = geometry.get_lonlat_grid()[0]
@@ -299,7 +301,7 @@ if __name__ == "__main__":
             selection = pd.concat([selection, new], ignore_index=True)
 
         selection.set_index('date')
-        #goto(args.workdir)
+        goto(args.workdir)
         outname = f'{args.model}_{args.datebegin.strftime("%Y%m%d%H")}_{args.dateend.strftime("%Y%m%d%H")}_{domain}.csv'
         selection.to_csv(outname, index=False, sep=';')
 

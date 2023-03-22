@@ -933,8 +933,9 @@ if __name__ == "__main__":
 
     extract_period = date_range(args.datebegin, args.dateend)
     if args.product == 'antilope':
+        # TODO : read ANNTILOPEH and extract data from 7h UTC to 7h UTC before march 20th and from 8h UTC to 8h UTC after
         RADAR_data = 'ANTILOPEQ_{0:s}_{1:s}.csv'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))
-        RADAR_data = 'ANTILOPEQ_2021103100_2022060200_alp_postes_clim.csv'
+        #RADAR_data = 'ANTILOPEQ_2021103100_2022060200_alp_postes_clim.csv'
     elif args.product == 'antilopejp1':
         RADAR_data = 'ANTILOPEJP1Q_{0:s}_{1:s}.csv'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))
     elif args.product == 'kriging':
@@ -1061,7 +1062,8 @@ if __name__ == "__main__":
         # 5. Maps
         #for domain in ['alpes', 'pyrenees', 'corse']:
         #for domain in ['alpes', 'pyrenees']:
-        for domain in ['alpes']:
+#        for domain in ['alpes']:
+        for domain in ['pyrenees']:
             plot_full_domain(domain, lats.to_numpy(), lons.to_numpy(), df_stat, suffix=suffix, product=args.product)
             plot_massif(df, suffix=suffix, product=args.product, domain=domain, threshold=args.threshold)
             #plot_massif(df.loc[df['massif_number'].isin(map_massifs[domain])], suffix=suffix, product=args.product, domain=domain, threshold=args.threshold)
