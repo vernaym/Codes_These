@@ -1,0 +1,137 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+# Auteur: Matthieu Vernay
+# Date : 02/02/2022
+
+import os, sys
+from datetime import datetime,timedelta
+import pandas as pd  # Version 0.25.3
+import numpy as np
+import xarray as xr
+#import copy
+
+import matplotlib
+import matplotlib.pyplot as plt
+
+#plt.rcParams["figure.figsize"] = [7.50, 3.50]
+#plt.rcParams["axes.grid"] = False
+#plt.rcParams["figure.autolayout"] = True
+
+
+##############################################################################################
+##############################################################################################
+
+domain = sys.argv[1]
+
+datadir = '/home/vernaym/QGIS/MNT'
+savedir = '/home/vernaym/These/figures'
+
+# Domaine des Grandes Rousses
+domain_coords = dict(
+        GrandesRousses = dict(latmax=45.240, latmin=44.990, lonmin=6.010, lonmax = 6.490),
+        NorthernAlps   = dict(lonmin=6.0, lonmax=6.9, latmin=45.6, latmax=46.35),
+        CentralAlps    = dict(lonmin=5.6, lonmax=7.0, latmin=45.0, latmax=45.6),
+        SouthernAlps   = dict(lonmin=5.7, lonmax=7.0, latmin=44.2, latmax=45.0),
+        HauteSavoie    = dict(lonmin=6.45, lonmax=6.95, latmin=45.67, latmax=46.35),
+        Savoie         = dict(lonmin=6.06, lonmax=7.06, latmin=45.15, latmax=45.65),
+        Isere          = dict(lonmin=5.54, lonmax=6.19, latmin=44.89, latmax=45.16),
+        Brianconnais   = dict(lonmin=6.48, lonmax=6.95, latmin=44.67, latmax=44.95),
+        HautesAlpes    = dict(lonmin=5.90, lonmax=6.36, latmin=44.58, latmax=44.81),
+        AlpesSud       = dict(lonmin=6.56, lonmax=6.92, latmin=44.18, latmax=40.49),
+        alp            = dict(latmax=46.450, latmin=44.100, lonmin=5.400, lonmax=7.200),
+)
+latmin = domain_coords[domain]['latmin']
+latmax = domain_coords[domain]['latmax']
+lonmin = domain_coords[domain]['lonmin']
+lonmax = domain_coords[domain]['lonmax']
+
+
+blacklist = [5063407, 5063410, 38191408]  # La Meije, LA GRAVE, Huez 2350
+
+landmarks = {
+        "Alpe d'Huez" : dict(lon=6.070, lat=45.092, alt=1800, marker='o'),
+        "Les 2 Alpes" : dict(lon=6.127, lat=45.013, alt=1800, marker='o'),
+        "Lautaret"    : dict(lon=6.408, lat=45.038, alt=2058, marker='X'),
+        "La Meije"    : dict(lon=6.311, lat=45.008, alt=3500, marker='^'),  # real alt = 3984
+        "Pic Blanc"   : dict(lon=6.131, lat=45.128, alt=3000, marker='^'),  # real alt = 3333
+    }
+
+def goto(path):
+    if not os.path.exists(path):
+        os.makedirs(path)
+    os.chdir(path)
+
+def proj_mnt(mnt):
+    outProj = Proj(init='epsg:4326')
+    inProj = Proj(init='epsg:2154')
+    x, y = np.meshgrid(mnt['x'], mnt['y'])
+    X, Y = transform(inProj, outProj, x, y)
+    Z = mnt['ZS']
+    mnt_proj = xr.DataArray(
+        data=Z,
+        name='elevation',
+        dims=["lat", "lon"],
+        coords=dict(lon=X[0], lat=Y[:,0]),
+        attrs=dict(description="Elevation",units="m"),
+    )
+    return mnt_proj
+
+def add_landmarks(ax):
+    # Add landmarks
+    for landmark, infos in landmarks.items():
+        ax.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='red', markersize=5)
+        ax.annotate(landmark, (infos['lon']+0.003, infos['lat']+0.003), color='red', fontsize=12)
+
+def add_scores(ax):
+    fic_score = os.path.join(datadir, 'scores_2021080106_2022080106_alp.csv')
+    scores = pd.read_csv(fic_score, sep=';')
+    cmap = matplotlib.colors.LinearSegmentedColormap.from_list("", ["black", "blue", "green", "orange", "red"], 5)
+    thresholds = [0., 0.5, 0.80, 1.2, 1.5, 10]
+    norm = matplotlib.colors.BoundaryNorm(thresholds, cmap.N)
+
+    def set_marker(row):
+        if row['ratio'] <= 0.8:
+            return 'v'
+        elif row['ratio'] > 0.8 and row['ratio'] < 1.2:
+            return 'o'
+        else:
+            return '^'
+    scores["marker"] = scores.apply(set_marker, axis=1)  # axis=1 makes sure that function is applied to each row
+    for marker, info in scores.groupby('marker'):
+        #sc = ax.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=150, edgecolors='black')
+        sc = ax.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=50, edgecolors='black')
+#        labels = [str(num_poste) for num_poste in info['num_poste']]
+#        for idx, label in enumerate(labels):
+#            txt = ax.text(info['lons'].data[idx], info['lats'].data[idx], label)
+
+def add_radar_positions(ax):
+    radars = dict(
+        moucherotte = dict(lat=45.14776, lon=5.63933, alt=1920,name='Moucherotte'),
+        colombis    = dict(lat=44.49664, lon=6.21729, alt=1742, name='Colombis'),
+        ladole      = dict(lat=46.42565, lon=6.10001, alt=1677, name='La Dole'),
+    )
+    def getImage(path):
+       return OffsetImage(plt.imread(path, format="png"), zoom=.1)
+
+    symbole_radar = '/home/vernaym/These/figures/symbole_radar.png'
+    for radar, infos in radars.items():
+       ab = AnnotationBbox(getImage(symbole_radar), (infos['lon'], infos['lat']), frameon=False)
+       ax.add_artist(ab)
+
+mnt = xr.open_dataset(os.path.join(datadir, "DEM_ALPES_WGS84_250m_bilinear.nc"))
+mnt=mnt.where((mnt['lat']>=latmin) & (mnt['lat']<=latmax) & (mnt['lon']>=lonmin) & (mnt['lon']<=lonmax), drop=True)
+fig,ax = plt.subplots(figsize=(14,16))
+ax.set_frame_on(False)
+#https://discourse.holoviz.org/t/cannot-remove-grid-for-hv-quadmesh/2211/8
+mnt.Band1.plot(ax=ax, cmap=plt.cm.terrain, subplot_kws={'frame_on':False}, linewidth=0)
+ax.set_frame_on(False)
+fig.savefig(os.path.join(savedir, 'ReliefAlpes.pdf'))
+mnt['delta'] = np.abs(mnt['Band1']-1000)
+fig,ax = plt.subplots(figsize=(14,16))
+mnt.delta.plot(ax=ax)
+fig.savefig(os.path.join(savedir, 'Elevation_diff.pdf'))
+
+
+
+
+
