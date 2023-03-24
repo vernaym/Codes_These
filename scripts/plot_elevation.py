@@ -8,7 +8,10 @@ from datetime import datetime,timedelta
 import pandas as pd  # Version 0.25.3
 import numpy as np
 import xarray as xr
-#import copy
+import scipy
+from scipy import sparse
+from scipy.spatial import cKDTree
+from scipy.sparse import csr_matrix
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -44,6 +47,9 @@ latmin = domain_coords[domain]['latmin']
 latmax = domain_coords[domain]['latmax']
 lonmin = domain_coords[domain]['lonmin']
 lonmax = domain_coords[domain]['lonmax']
+
+d0 = 0.08
+max_dist = d0*3
 
 
 blacklist = [5063407, 5063410, 38191408]  # La Meije, LA GRAVE, Huez 2350
@@ -118,20 +124,66 @@ def add_radar_positions(ax):
        ab = AnnotationBbox(getImage(symbole_radar), (infos['lon'], infos['lat']), frameon=False)
        ax.add_artist(ab)
 
+def codistances(coords):
+    """
+    Solution pour le calcul des inter-distances trouvée sur : https://stackoverflow.com/questions/35296935/python-calculate-lots-of-distances-quickly
+    """
+    tree = cKDTree(coords)
+    dist = tree.sparse_distance_matrix(tree, max_distance=max_dist, p=2, output_type='coo_matrix')
+    dist = csr_matrix(dist)
+    dist[dist.nonzero()] = dist[dist.nonzero()]/d0
+    #np.exp(-dist.data**2, out=dist.data)
+    np.exp(-dist.data, out=dist.data)
+    return dist
+
+def plot_correlation(ax, mnt):
+    filename = os.path.join('/home/vernaym/These/DATA', f'codistance_alp_{d0}.npz')
+    if not os.path.exists(filename):
+        # Compute inter-distances
+        coords=[(lon,lat) for lat in mnt.lat.data for lon in mnt.lon.data]
+        codist = codistances(coords)
+        scipy.sparse.save_npz(filename, codist, compressed=False)
+    else:
+        codist = scipy.sparse.load_npz(filename)
+
+    corr = codist.getrow(9882).toarray()[0].reshape((len(mnt.lat), len(mnt.lon)))
+    corr = to_xarray(corr, mnt, varname='correlation')
+    corr = corr.where(corr>0)
+    cml = corr.plot(ax=ax, cmap=plt.cm.Greys, add_colorbar=False, alpha=0.5)
+    circle = plt.Circle((5.685, 44.365), max_dist, color='k', fill=False, linewidth=2)
+    ax.add_artist(circle)
+
+def to_xarray(array, field, varname=''):
+    output = xr.DataArray(
+    name   = varname,
+    data   = array,
+    dims   = ["lat", "lon"],
+    coords = dict(lon=field.lon, lat=field.lat),
+    #attrs  = dict(description="Difference between each pixel cumul and the max of its neighbours"),
+    )
+    return output
+
+
 mnt = xr.open_dataset(os.path.join(datadir, "DEM_ALPES_WGS84_250m_bilinear.nc"))
 mnt=mnt.where((mnt['lat']>=latmin) & (mnt['lat']<=latmax) & (mnt['lon']>=lonmin) & (mnt['lon']<=lonmax), drop=True)
+filename = os.path.join(savedir, 'ReliefAlpes.pdf')
+
+# Plot elevation
+#if not os.path.exists(filename):
 fig,ax = plt.subplots(figsize=(14,16))
 ax.set_frame_on(False)
 #https://discourse.holoviz.org/t/cannot-remove-grid-for-hv-quadmesh/2211/8
 mnt.Band1.plot(ax=ax, cmap=plt.cm.terrain, subplot_kws={'frame_on':False}, linewidth=0)
 ax.set_frame_on(False)
-fig.savefig(os.path.join(savedir, 'ReliefAlpes.pdf'))
-mnt['delta'] = np.abs(mnt['Band1']-1000)
-fig,ax = plt.subplots(figsize=(14,16))
-mnt.delta.plot(ax=ax)
-fig.savefig(os.path.join(savedir, 'Elevation_diff.pdf'))
+plot_correlation(ax, mnt)
+fig.savefig(filename, format='pdf')
 
-
-
+# Plot elevation difference
+#filename = os.path.join(savedir, 'Elevation_diff.pdf')
+##if not os.path.exists(filename):
+#mnt['delta'] = np.abs(mnt['Band1']-1000)
+#fig,ax = plt.subplots(figsize=(14,16))
+#mnt.delta.plot(ax=ax)
+#fig.savefig(os.path.join(savedir, 'Elevation_diff.pdf'))
 
 
