@@ -146,6 +146,10 @@ def plot_correlation(ax, mnt):
     else:
         codist = scipy.sparse.load_npz(filename)
 
+    fig2,ax2 = plt.subplots(figsize=(20,20))
+    ax2.spy(codist, precision=0.5)
+    fig2.savefig(os.path.join(savedir, f'codistance_matrix_correlation{d0}.png'), format='png')
+
     corr = codist.getrow(9882).toarray()[0].reshape((len(mnt.lat), len(mnt.lon)))
     corr = to_xarray(corr, mnt, varname='correlation')
     corr = corr.where(corr>0)
@@ -166,7 +170,7 @@ def to_xarray(array, field, varname=''):
 
 mnt = xr.open_dataset(os.path.join(datadir, "DEM_ALPES_WGS84_250m_bilinear.nc"))
 mnt=mnt.where((mnt['lat']>=latmin) & (mnt['lat']<=latmax) & (mnt['lon']>=lonmin) & (mnt['lon']<=lonmax), drop=True)
-filename = os.path.join(savedir, 'ReliefAlpes.pdf')
+filename = os.path.join(savedir, f'ReliefAlpes_correlation{d0}.pdf')
 
 # Plot elevation
 #if not os.path.exists(filename):
