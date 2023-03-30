@@ -193,7 +193,7 @@ basic = dict(
     )
 
 algo = dict(
-        #LD0         = 'XP00_assimilation_quotidienne_sans_masque_sans_localisation/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
+        LD0         = 'XP00_assimilation_quotidienne_sans_masque_sans_localisation/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
         #LDM5D2L5    = 'XP18_assimilation_quotidienne_avec_masque5_et_debiaisage2_et_localisation5/Assimilation_locale_2021120106_2022050106_daily_alp_localisation5_mask5_debiasing2.nc',
         #KD0         = 'EnsembleKalmanFilter/XP00_Rstat/EnKF_2021120106_2022050106_daily_alp.nc',
         #KD1         = 'EnsembleKalmanFilter/XP01_Rstat_Rdyn/EnKF_2021120106_2022050106_daily_alp.nc',
@@ -214,7 +214,7 @@ algo = dict(
         #KD06         = 'EnsembleKalmanFilter/XP06/EnKF_2021120106_2022050106_daily_alp.nc',
         #KD07         = 'EnsembleKalmanFilter/XP07/EnKF_2021120106_2022050106_daily_alp.nc',
         #KD08         = 'EnsembleKalmanFilter/XP08/EnKF_2021120106_2022050106_daily_alp.nc',
-        KD09         = 'EnsembleKalmanFilter/XP09/EnKF_2021120106_2022050106_daily_alp.nc',
+#        KD09         = 'EnsembleKalmanFilter/XP09/EnKF_2021120106_2022050106_daily_alp.nc',
         #KD10         = 'EnsembleKalmanFilter/XP10/EnKF_2021120106_2022050106_daily_alp.nc',
         #KD11         = 'EnsembleKalmanFilter/XP11/EnKF_2021120106_2022050106_daily_alp.nc',
         #KD12         = 'EnsembleKalmanFilter/XP12/EnKF_2021120106_2022050106_daily_alp.nc',
@@ -235,6 +235,7 @@ algo = dict(
         #KD26         = 'EnsembleKalmanFilter/XP26/EnKF_2021120106_2022050106_daily_alp.nc',
 #        KD27         = 'EnsembleKalmanFilter/XP27/EnKF_2021120106_2022050106_daily_alp.nc',
         KD29          = 'EnsembleKalmanFilter/XP29/EnKF_2021120106_2022050106_daily_alp.nc',
+        KD30          = 'EnsembleKalmanFilter/XP30/EnKF_2021120106_2022050106_daily_alp.nc',
     )
 
 
@@ -327,6 +328,7 @@ xpid_label = dict(
         KD27          = 'EnKF, mask9=estimated_ratio, debiaisage3=0.2_2, localisation=0.06, Rstat*100, Rdyn=Y*std',
         KD28          = 'EnKF, debiaisage=0.2_1_new, localisation=0.06, Rstat*20, Rdyn=Y*std',
         KD29          = 'EnKF, debiaisage=0.2_2, Rstat from eval, Bstat',
+        KD30          = 'Daily analysis with Ensemble Kalman Filter',
         #LDM9D3        = 'PF, mask9=estimated_ratio, debiaisage3=0.1_2',
         LDM9D3        = 'PF, d0=0.1, c0=2',
 
@@ -577,7 +579,7 @@ class Evaluation(object):
 
         latmax, latmin, lonmin, lonmax = np.array(coords[domain]).astype(float)/1000.
         nivometeo = nivometeo.loc[(nivometeo['lat']>=latmin) & (nivometeo['lat']<=latmax) & (nivometeo['lon']>=lonmin) & (nivometeo['lon']<=lonmax)]  # Select area
-        nivometeo = nivometeo[nivometeo['num_poste'].isin(indep)]  # Select evaluation stations
+        #nivometeo = nivometeo[nivometeo['num_poste'].isin(indep)]  # Select evaluation stations
         nivometeo.date = nivometeo.date + pd.Timedelta("1d6h")   #BDClim extraction for date ymd is the observation from ymd6h to ym(d+1)6h
         #nivometeo.groupby('num_poste')['nom', 'lat', 'lon', 'alti'].agg(set)
         #nivometeo = nivometeo.set_index(['num_poste', 'lat', 'lon', 'nom', 'alti', 'date'])  # Utilité de passer en index ?

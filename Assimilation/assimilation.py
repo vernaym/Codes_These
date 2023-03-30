@@ -96,7 +96,7 @@ landmarks = {
     }
 
 # Parameters to compute Euclidian distance between all points in the domain
-ld = 0.08 # correlation lenght. WARNING : ne pas trop augmenter la distance de correlation (analyse trop proche de l'obs ==> perte de dispersion)
+ld = 0.03 # correlation lenght. WARNING : ne pas trop augmenter la distance de correlation (analyse trop proche de l'obs ==> perte de dispersion)
 # ld = 0.02 marche plutot bien (sous dispersion), ld=0.03 pas du tout !!!
 max_dist = ld*3
 #max_dist = 0.5  # Memory limit reached at 0.2 for domain Alp. WARNING : very high analysis sensibility to this parameter !!
@@ -914,17 +914,19 @@ class EnsembleKalmanFilter(Assimilation):
         # TODO : assurer une erreur d'ébauche minimale si la dispersion est nulle (par ex tous les membres ratent une précipitation observée)
         # cf Lussana et al., 2021 : https://npg.copernicus.org/articles/28/61/2021/
 
-        # TODO : utiliser une moyenne pondérée par le likelyhood des membres comment dans Atencia 2000 ?
+        # TODO : utiliser une moyenne pondérée par le likelyhood des membres comment dans Atencia 2020 ?
 
         ensemble_mean = ensemble.mean('member').rr.data  # flatten is optionnal since 'outer' method already flattens a 2D array
 #        M = np.mean(ensemble_mean)
 #        P = np.outer(ensemble_mean-M, ensemble_mean-M)/len(ensemble_mean)
         #P = np.empty((len(ensemble_mean), len(ensemble_mean)))
 
+        B = csc_matrix(np.shape(self.pond))
 # To add a static background error :
-        X = 2*scipy.sparse.eye(self.pond.shape[0])
-        B = X.dot(self.pond.dot(X))
-#        B = csc_matrix(np.shape(self.pond))
+        #X = 2*scipy.sparse.eye(self.pond.shape[0])
+        #B = B + X.dot(self.pond.dot(X))
+        X = diags([5]*self.pond.shape[0], 0)
+        B = B + X.dot(self.pond.dot(X))
 
         for mb in ensemble.member.data:
             member = ensemble.sel(member=mb).rr.data
@@ -999,9 +1001,9 @@ class EnsembleKalmanFilter(Assimilation):
         ref_field = self.ref_field(parameters.mu, date)
         std = parameters.sigma.data
         #X = diags((np.sqrt(parameters.mu.data)*std).flatten(), 0)
-#        X = diags((np.sqrt(parameters.mu.data)).flatten(), 0)
+        X = diags((np.sqrt(parameters.mu.data)).flatten(), 0)
 #        X = diags((np.sqrt(ref_field.data)).flatten(), 0)
-        X = diags(ref_field.data.flatten(), 0)
+#        X = diags(ref_field.data.flatten(), 0)
         Rdyn = X.dot(self.pond.dot(X))
 #        Rdyn = 0.263 * X.dot(self.pond.dot(X))  # To minimize the impact on large precipitation ?
         #Rdyn = self.pond.multiply(np.outer(np.sqrt(parameters.mu)*std, np.sqrt(parameters.mu)*std))
@@ -1022,7 +1024,7 @@ class EnsembleKalmanFilter(Assimilation):
 
     def ref_field(self, field, date):
 
-        smoothobs = uniform_filter(self.parameters.sel({'time':date}).mu, size=10)  # numpy array
+        smoothobs = uniform_filter(self.parameters.sel({'time':date}).mu, size=20)  # numpy array
         #smoothobs = uniform_filter(parameters.sel({'time':date}).mu, size=10)  # numpy array
         smoothobs = xr.DataArray(
             name   = 'rr',
@@ -1118,28 +1120,32 @@ class EnsembleKalmanFilter(Assimilation):
             if self.gridded:
                 self.gridded_analysis(date, idd,  ensemble, parameters, domain)
             else:
-                self.ponctual_analysis(date, idd, ensemble, parameters)
+                self.ponctual_analysis(date, idd, ensemble, parameters, covariance=covariance)
 
     @speedtest
-    def ponctual_analysis(self, date, idd, ensemble, parameters):
+    def ponctual_analysis(self, date, idd, ensemble, parameters, covariance=False):
         evaluation_points = zip(self.nivometeo.num_poste.data, np.max(self.nivometeo.lat, axis=1).data, np.max(self.nivometeo.lon, axis=1).data)
         for idp, (num_poste, lat, lon) in enumerate(evaluation_points):
             print(num_poste, idp)
             # Extract rectangle around evaluation point
             nearest_lat = nearest(parameters.lat, lat)
             nearest_lon = nearest(parameters.lon, lon)
-            sel_lat = np.round(np.arange(nearest_lat-self.max_dist, nearest_lat+self.max_dist, 0.01), 2)
-            sel_lon = np.round(np.arange(nearest_lon-self.max_dist, nearest_lon+self.max_dist, 0.01), 2)
-
             try:
+                if covariance:
+                    sel_lat = np.round(np.arange(nearest_lat-self.max_dist, nearest_lat+self.max_dist, 0.01), 2)
+                    sel_lon = np.round(np.arange(nearest_lon-self.max_dist, nearest_lon+self.max_dist, 0.01), 2)
+                    # Compute inter-distances
+                    coords=[(lon,lat) for lat in sel_lat for lon in sel_lon]
+                    self.pond = self.codistances(coords)
+                else:  # Verrue !
+                    sel_lat   = np.round([nearest_lat], 2)
+                    sel_lon   = np.round([nearest_lon], 2)
+                    self.pond = scipy.sparse.eye(1)
+
                 ensemble_loc = ensemble.sel({'lat':sel_lat, 'lon':sel_lon})
                 parameters_loc = parameters.sel({'lat':sel_lat, 'lon':sel_lon})
 
                 Y = parameters_loc.mu.data  # Observation vector. WARNING : Use mu to take debiasing into account !
-
-                # Compute inter-distances
-                coords=[(lon,lat) for lat in parameters_loc.lat.data for lon in parameters_loc.lon.data]
-                self.pond = self.codistances(coords)
 
                 B = self.background_error_covariance(ensemble_loc)  # Background error covariance matrix
 
@@ -1202,7 +1208,7 @@ class EnsembleKalmanFilter(Assimilation):
 #            reverse_cuthill_mckee algorithm
 #            --> use "spsolve" method for sparse matrices (solveh_banded for dense
 #            matrices)
-#            2. compute anlaysis as A=Y+BZ
+#            2. compute anlaysis as A=X+BZ
             Z = spsolve(B+R, Y-X)
             A = X+B.dot(Z)
 
