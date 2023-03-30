@@ -44,7 +44,8 @@ extract_dom = dict(
 outProj = Proj(init='epsg:4326')
 inProj = Proj(init='epsg:2154')
 
-norm = plt.Normalize()
+norm = plt.Normalize(vmin=300, vmax=1200)
+#norm = plt.Normalize()
 
 if not os.path.isfile(filename):
     print(f'WARNING : no such file or directory {filename}')

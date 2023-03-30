@@ -21,18 +21,21 @@ from pyproj import Proj, transform
 # It interpolates a DEM grid on the grided precipitation data to plot 3D
 # precipitation fields
 
-print('USAGE : plot_radar_cumuls.py inputfile')
+print('USAGE : plot_radar_cumuls.py [datebegin] [dateend]')
 datadir = '/home/vernaym/These/DATA'
 savedir = '/home/vernaym/These/figures'
 
-datebegin = sys.argv[1]
-dateend   = sys.argv[2]
+if len(sys.argv) > 1:
+    datebegin = sys.argv[1]
+    dateend   = sys.argv[2]
+else:
+    datebegin = '2021102806'
+    dateend  = '2022060206'
 print(f'Datebegin={datebegin}')
 print(f'Dateend={dateend}')
 
-
 # Domaine des Grandes Rousses
-domaine = 'GrandesRousses'
+domain = 'GrandesRousses'
 extract_dom = dict(
     latmax = 45.240,
     latmin = 44.990,
@@ -52,7 +55,8 @@ landmarks = {
         "Pic Blanc"   : dict(lon=6.131, lat=45.128, alt=3000, marker='^'),  # real alt = 3333
     }
 
-norm = plt.Normalize()
+norm = plt.Normalize(vmin=300, vmax=1200)
+#norm = plt.Normalize()
 #colormap = plt.cm.gist_ncar
 colormap = plt.cm.YlGnBu
 
@@ -76,7 +80,7 @@ def finalize_fig(fig, im, savename):
 
 
 def plot_arome():
-    filename = f'arome_{datebegin}_{dateend}_{domaine}.nc'
+    filename = f'arome_{datebegin}_{dateend}_{domain}.nc'
     cumul = read_data(filename)
     fig, ax = plt.subplots(figsize=(13,6))
     im = cumul.plot(ax=ax, cmap=colormap)
@@ -87,7 +91,7 @@ def plot_pearome(model):
     vmin = None
     vmax = None
     for member in range(1, 17):
-        filename = f'{model}_{member:03d}_{datebegin}_{dateend}_{domaine}.nc'
+        filename = f'{model}_{member:03d}_{datebegin}_{dateend}_{domain}.nc'
         cumul[member] = read_data(filename)
         vmin = min(np.nanmin(cumul[member]), vmin) if vmin is not None else np.nanmin(cumul[member])
         vmax = max(np.nanmax(cumul[member]), vmax) if vmax is not None else np.nanmax(cumul[member])
@@ -117,8 +121,61 @@ def plot_pearome(model):
         outname = f'CUMULS_Q50_{datebegin}_{dateend}.pdf'
     finalize_fig(fig, im, outname)
 
+def plot_mean_pearome_3D():
+    filename = os.path.join(datadir, f'CUMUL_aspearome_mean_{datebegin}_{dateend}_alp.nc')
+    if not os.path.exists(filename):
+        filenames = [os.path.join(datadir, f"aspearome_{mb:03d}_{datebegin}_{dateend}_alp_hourly.nc") for mb in range(1,17)]
+        pearome = xr.open_mfdataset(filenames, combine='nested', concat_dim='member', chunks={'time': 24})  # Setting chunks is critical (read the doc !)
+        ds = pearome.mean(dim='member').sum(dim='time')
+        ds.to_netcdf(filename)
+    else:
+        ds = xr.open_dataset(filename)
+    mnt = xr.open_dataset('/home/vernaym/QGIS/MNT/DEM_ALPES_WGS84_250m_bilinear.nc')  # Pour tracer sur toutes les Alpes
+    #tmp = mnt.interp(lon=ds.lon, lat=ds.lat, method='nearest')  # Pour interpoller le MNT sur la grille PEAROME
+    tmp = ds.interp(lon=mnt.lon, lat=mnt.lat)  # Pour interpoller la PEAROME sur le  MNT
+    mnt['Z'] = mnt['Band1']
+    mnt['Z'].values = np.nan_to_num(mnt['Z'].values)
+
+    latmin = extract_dom['latmin']
+    lonmin = extract_dom['lonmin']
+    latmax = extract_dom['latmax']
+    lonmax = extract_dom['lonmax']
+
+    # On selectionne le sous domaine d'intéret avant de plotter...
+    mnt = mnt.where((mnt.lon>=lonmin) & (mnt.lon<=lonmax) & (mnt.lat>=latmin) & (mnt.lat<=latmax), drop=True)
+    X = mnt['lon'].values
+    Y = mnt['lat'].values
+    X, Y = np.meshgrid(X, Y)
+    Z = mnt['Z']
+
+    # define pixel colors
+    #radar = ds.where((ds.longitude>=lonmin) & (ds.longitude<=lonmax) & (ds.latitude>=latmin) & (ds.latitude<=latmax), drop=True).rr_cumul
+    rr = tmp.where((tmp.lon>=lonmin) & (tmp.lon<=lonmax) & (tmp.lat>=latmin) & (tmp.lat<=latmax), drop=True).rr
+    #colors = plt.cm.coolwarm(norm(np.nan_to_num(radar.values)))
+    colors = plt.cm.YlGnBu(norm(np.nan_to_num(rr.values)))
+
+    fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
+    ax.view_init(elev=50., azim=135)  # Set point of view
+    surf = ax.plot_surface(X=X, Y=Y, Z=Z, linewidth=0, antialiased=False, facecolors=colors)
+    ax.xaxis.pane.fill = False
+    ax.xaxis.pane.set_edgecolor('white')
+    ax.yaxis.pane.fill = False
+    ax.yaxis.pane.set_edgecolor('white')
+    ax.zaxis.pane.fill = False
+    ax.zaxis.pane.set_edgecolor('white')
+    ax.grid(False)
+    ax.set_xlabel('Longitude', labelpad=20)
+    ax.set_ylabel('Latitude', labelpad=20)
+    ax.set_zlabel('Elevation (m)')
+    ax.set_zlim(0., 3500.)
+    fig.colorbar(cm.ScalarMappable(norm=norm, cmap=plt.cm.YlGnBu), ax=ax, shrink=0.75, aspect=8, label=f'PEAROME mean cumulated precipitation \n between {datebegin} and {dateend} (mm)')
+    plt.tight_layout()
+    plt.savefig(f'{savedir}/CUMUL3D_ASPEAROME_{datebegin}_{dateend}.pdf', format='pdf')
+
+
 if __name__ == "__main__":
 
-    plot_arome()
-    plot_pearome('stats')
-    plot_pearome('aspearome')
+    plot_mean_pearome_3D()
+#    plot_arome()
+#    plot_pearome('stats')
+#    plot_pearome('aspearome')
