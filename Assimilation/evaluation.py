@@ -166,10 +166,12 @@ debiaising_experiments = dict(
 #        LDD0      = 'XP21_assimilation_quotidienne_avec_debiaisage_uniforme/Assimilation_locale_2021120106_2022050106_daily_alp_debiasing0.nc',
 #        LDD1      = 'XP22_assimilation_quotidienne_avec_debiaisage1/Assimilation_locale_2021120106_2022050106_daily_alp_debiasing1.nc',
 #        LDD2      = 'XP20_assimilation_quotidienne_avec_debiaisage2/Assimilation_locale_2021120106_2022050106_daily_alp_debiasing2.nc',
-        KD14         = 'EnsembleKalmanFilter/XP14/EnKF_2021120106_2022050106_daily_alp.nc',
-        KD15         = 'EnsembleKalmanFilter/XP15/EnKF_2021120106_2022050106_daily_alp.nc',
-        KD16         = 'EnsembleKalmanFilter/XP16/EnKF_2021120106_2022050106_daily_alp.nc',
-        KD18         = 'EnsembleKalmanFilter/XP18/EnKF_2021120106_2022050106_daily_alp.nc',
+#        KD14         = 'EnsembleKalmanFilter/XP14/EnKF_2021120106_2022050106_daily_alp.nc',
+#        KD15         = 'EnsembleKalmanFilter/XP15/EnKF_2021120106_2022050106_daily_alp.nc',
+#        KD16         = 'EnsembleKalmanFilter/XP16/EnKF_2021120106_2022050106_daily_alp.nc',
+#        KD18         = 'EnsembleKalmanFilter/XP18/EnKF_2021120106_2022050106_daily_alp.nc',
+        KD30          = 'EnsembleKalmanFilter/XP30/EnKF_2021120106_2022050106_daily_alp.nc',
+        KD31          = 'EnsembleKalmanFilter/XP31/EnKF_2021120106_2022050106_daily_alp.nc',
     )
 
 tmp = dict(
@@ -234,9 +236,10 @@ algo = dict(
         #KD25         = 'EnsembleKalmanFilter/XP25/EnKF_2021120106_2022050106_daily_alp.nc',
         #KD26         = 'EnsembleKalmanFilter/XP26/EnKF_2021120106_2022050106_daily_alp.nc',
 #        KD27         = 'EnsembleKalmanFilter/XP27/EnKF_2021120106_2022050106_daily_alp.nc',
-        KD29          = 'EnsembleKalmanFilter/XP29/EnKF_2021120106_2022050106_daily_alp.nc',
+#        KD29          = 'EnsembleKalmanFilter/XP29/EnKF_2021120106_2022050106_daily_alp.nc',
         KD30          = 'EnsembleKalmanFilter/XP30/EnKF_2021120106_2022050106_daily_alp.nc',
     )
+
 
 
 experiments_map = dict(
@@ -328,7 +331,8 @@ xpid_label = dict(
         KD27          = 'EnKF, mask9=estimated_ratio, debiaisage3=0.2_2, localisation=0.06, Rstat*100, Rdyn=Y*std',
         KD28          = 'EnKF, debiaisage=0.2_1_new, localisation=0.06, Rstat*20, Rdyn=Y*std',
         KD29          = 'EnKF, debiaisage=0.2_2, Rstat from eval, Bstat',
-        KD30          = 'Daily analysis with Ensemble Kalman Filter',
+        KD30          = 'Daily analysis with Ensemble Kalman Filter and debiaising',
+        KD31          = 'Daily analysis with Ensemble Kalman Filter and no debiasing',  # Idem KD30 mais sans débiaisage
         #LDM9D3        = 'PF, mask9=estimated_ratio, debiaisage3=0.1_2',
         LDM9D3        = 'PF, d0=0.1, c0=2',
 
