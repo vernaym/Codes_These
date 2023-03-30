@@ -39,7 +39,8 @@ datadir = '/home/vernaym/These/DATA'
 #savedir = '/home/vernaym/workdir/ASSIMILATION/mask/illustration_methode'
 savedir = '/home/vernaym/workdir/ASSIMILATION/mask/'
 #savedir = '/home/vernaym/workdir/ASSIMILATION/mask/ref/r2'
-savedir = f'/home/vernaym/workdir/ASSIMILATION/mask/{domain}'
+#savedir = f'/home/vernaym/workdir/ASSIMILATION/mask/{domain}'
+savedir = '/home/vernaym/workdir/ASSIMILATION/mask/ref'
 
 onlypostes = [5001400, 5085403]
 onlypostes = [5001400, 5085403, 5133400]
@@ -77,10 +78,10 @@ max_dist = 0.5
 
 # TODO ajouter les postes clim non utilisés par ANTILOPE temps réel
 #fic_score = os.path.join(datadir, 'scores_2021103106_2022060206_alpes_postes_clim.csv')
-#fic_score = os.path.join(datadir, 'scores_2018110106_2019043006_alpes.csv')
 #fic_score = os.path.join(datadir, 'scores_2018110106_2019043006_alpes_10.csv')  # WARNING : scores valid for precipitation >10mm
 #fic_score = os.path.join(datadir, 'scores_2021110106_2022043006_alpes_10.csv')  # WARNING : scores valid for precipitation >10mm
-fic_score = os.path.join(datadir, f'scores_2018110106_2019043006_{domain}.csv')
+#fic_score = os.path.join(datadir, f'scores_2018110106_2019043006_{domain}.csv')
+fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_{domain}.csv')
 
 landmarks = {
         "Alpe d'Huez" : dict(lon=6.070, lat=45.092, alt=1800, marker='o'),
@@ -661,6 +662,8 @@ def ratio_estimation(field, moving_window=25):
 #            w = np.exp(-(dist/d0)**2)*np.exp(-np.abs(cumul_dist)/(ref_cumul/(ratio*c0)))
             w = np.exp(-(dist/d0))*np.exp(-np.abs(cumul_dist)/(ref_cumul/(ratio*c0)))
             weights.append(w)
+            # To take into account the increasing difference of cumuls with the distance
+#            ratios.append(field.rr_cumul.data/(ref_cumul/ratio+(field.rr_cumul.data-ref_cumul/ratio)*np.exp(-(dist/d0))))
             ratios.append(ratio*cumul_ratio)
 
 #            guess = ratio*cumul_ratio
@@ -751,12 +754,12 @@ def ratio_estimation(field, moving_window=25):
     #######
     scores = scores.loc[(scores.lats>=latmin) & (scores.lats<=latmax) & (scores.lons>=lonmin) & (scores.lons<=lonmax)]
     scores = scores.loc[used_scores]
-#    plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}_{c0}', vmin=0.3, vmax=1.7, cmap=plt.cm.coolwarm, scores=scores)
-    plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}_{c0}', vmin=0.5, vmax=1.5, cmap=plt.cm.coolwarm, scores=scores)
+    plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}_{c0}', vmin=0.3, vmax=1.7, cmap=plt.cm.coolwarm, scores=scores)
+#    plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}_{c0}', vmin=0.5, vmax=1.5, cmap=plt.cm.coolwarm, scores=scores)
 #    plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}_{c0}', cmap=plt.cm.coolwarm, scores=scores)
 
-    plot_and_save(observation_error, f'Observation_error_{d0}_{c0}_{domain}', vmin=-6, vmax=6, cmap=plt.cm.coolwarm, scores=scores)
-#    plot_and_save(observation_error, f'Observation_error_{d0}_{c0}_{domain}', vmin=-12, vmax=12, cmap=plt.cm.coolwarm, scores=scores)
+#    plot_and_save(observation_error, f'Observation_error_{d0}_{c0}_{domain}', vmin=-6, vmax=6, cmap=plt.cm.coolwarm, scores=scores)
+    plot_and_save(observation_error, f'Observation_error_{d0}_{c0}_{domain}', vmin=-12, vmax=12, cmap=plt.cm.coolwarm, scores=scores)
 #    plot_and_save(observation_error, f'Observation_error_{d0}_{c0}_{domain}', cmap=plt.cm.coolwarm, scores=scores)
 
 def animation_mask(field):
@@ -845,6 +848,8 @@ if __name__ == "__main__":
     antilope = xr.open_dataset(os.path.join(datadir, filename))
 #    antilope.lat.data = antilope.lat.data+0.005  # TODO : comprendre et resoudre le probleme de decallage des coordonnees
     antilope = antilope.where((antilope.lon>=lonmin) & (antilope.lon<=lonmax) & (antilope.lat<=latmax) & (antilope.lat>latmin-0.01), drop=True)  # >=44.1 ne fonctionne pas pour ANTILOPEQ (np.where(antilope.lat==44.1) renvoie une liste vide...)
+    import pdb
+    pdb.set_trace()
 
 #    plot(antilope, datebegin, dateend, categories=True, biascorrection=True)
 #    plot(antilope, datebegin, dateend, categories=False, biascorrection=True)
