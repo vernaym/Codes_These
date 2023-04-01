@@ -53,99 +53,97 @@ def resample(weights, Ne):
         rdm += step
     return selected_particles
 
-fig,(ax0,ax1) = plt.subplots(2,1, gridspec_kw={'height_ratios': [8, 1]})
+def plot(mu, std, N, obs, obs_std, vmin, vmax):
+
+    fig,(ax0,ax1) = plt.subplots(2,1, gridspec_kw={'height_ratios': [8, 1]})
+    # Draw ensemble
+    #TODO : draw ensemble from different distributions to see the differences
+    ensemble = np.random.normal(loc=mu, scale=std, size=N)
+    ensemble[ensemble<0]=0
+    ensemble = np.sort(ensemble)
+
+    #ax0.plot(ensemble, norm.pdf(ensemble, loc=mu, scale=std), label=f'Background (mean={mu}mm, std={std}mm)', color='k')
+    ax0.plot(ensemble, norm.pdf(ensemble, loc=mu, scale=std), color='k')
+    ax0.hist(ensemble,density=True,bins=100, color='k', alpha=0.5, label='Background')
+    drawmask = [np.where(ensemble==ensemble[(ensemble>obs-obs_std)&(ensemble<obs-obs_std+1)][0])[0][0], np.where(ensemble==ensemble[(ensemble>obs+2*std)&(ensemble<obs+2*std+1)][0])[0][0]]
+    drawbackground = ensemble[drawmask]
+    #drawbackground = np.array([ensemble[(ensemble>10)&(ensemble<11)][0], ensemble[(ensemble>29)&(ensemble<30)][0]])
+    #ax1.plot(drawbackground, [2]*len(drawbackground), linestyle='', marker='.', color='k', markersize=10)
+
+    # Draw observation
+    #ax0,ax1 = plot_distribution(ax0, ax1, obs, obs_std, data=[obs], color='red', marker='.', vmin=vmin, vmax=vmax, label='Observation distribution')
+    #ax0,ax1 = plot_distribution(ax0, ax1, obs, obs_std, data=[obs], color='red', marker='.', vmin=vmin, vmax=vmax, label='Observation distribution')
+    #ax0 = plot_normal_distribution(ax0, obs, obs_std, f'Observation (Y={obs}mm, std={obs_std}mm)', color='red')
+    ax0 = plot_normal_distribution(ax0, obs, obs_std, f'Observation', color='red')
+    ax1.plot(obs, [3], color='red', marker='|', markersize=100)
+    ax1.plot([obs-std, obs+std], [1.5, 1.5], marker='|', markersize=10, color='red', linewidth=1, linestyle='--')
+
+    # EnKF analysis
+    enkf = ensemble + std/(std+obs_std)*(obs-ensemble)
+    enkf_mean = np.mean(enkf)
+    enkf_std = np.sqrt(1/N*np.sum((enkf-enkf_mean)**2))
+    color = next(ax0._get_lines.prop_cycler)['color']
+    ax0.hist(enkf,density=True,bins=100, alpha=0.5, label='EnKF', color=color)
+    ax0 = plot_normal_distribution(ax0, enkf_mean, enkf_std, color=color)
+    drawenkf = drawbackground + std/(std+obs_std)*(obs-drawbackground)
+    #ax1.plot(drawenkf, [2]*len(drawenkf), linestyle='', marker='.', color='blue', markersize=10)
+    ax1.scatter(drawenkf, [2]*len(drawenkf), s=50, facecolors=color, edgecolors=None)
+
+
+    # PF analysis
+    weights = norm.pdf(ensemble, loc=obs, scale=obs_std)
+    weights = weights / np.sum(weights)  # Normalisation
+    selection = resample(weights, N)
+    pf = ensemble[selection]
+    pf_mean = np.mean(pf)
+    pf_std  = np.sqrt(1/N*np.sum((pf-pf_mean)**2))
+    color = next(ax0._get_lines.prop_cycler)['color']
+    color = next(ax0._get_lines.prop_cycler)['color']  # call next twice to avoid orange color
+    ax0.hist(pf, density=True,bins=100, alpha=0.5, label='PF', color=color)
+    ax0 = plot_normal_distribution(ax0, pf_mean, pf_std, color=color)
+    #drawpf = pf[drawmask]  # To plot analysis for the full ensemble
+    # To plot PF analysis for a 2 members enemble :
+    weights=norm.pdf(drawbackground, loc=obs, scale=obs_std)
+    weights = weights / np.sum(weights)  # Normalisation
+    selection = resample(weights, 2)
+    drawpf = drawbackground[selection]
+    ax1.scatter(drawpf,[1]*len(drawpf), s=50, facecolors=color, edgecolors=None)
+
+    # Draw background now to be visible
+    ax1.scatter(drawbackground, [2]*len(drawbackground), s=50, facecolors='none', edgecolors='k')
+    ax1.scatter(drawbackground, [1]*len(drawbackground), s=50, facecolors='none', edgecolors='k')
+
+    # Plot displacment arrows
+    for i in range(len(drawbackground)):
+        #ax1.arrow(drawbackground[i], 1, drawenkf[i]-drawbackground[i], 0, head_width=0.05, head_length=0.1, fc='k', ec='k', linewidth=0.5)
+        ax1.arrow(drawbackground[i], 2, drawenkf[i]-drawbackground[i], 0, head_width=0.5, head_length=1, linewidth=0.5, linestyle=':', length_includes_head=True, color='k')
+        ax1.arrow(drawbackground[i], 1, drawpf[i]-drawbackground[i], 0, head_width=0.5, head_length=1, linewidth=0.5, linestyle=':', length_includes_head=True, color='k')
+
+    ax0.get_xaxis().set_visible(False)
+    ax0.spines['top'].set_visible(False)
+    ax0.spines['right'].set_visible(False)
+    ax0.spines['bottom'].set_visible(False)
+    ax0.set_xlim(left=vmin, right=vmax)
+    ax0.legend(fontsize=10)
+
+    ax1.get_yaxis().set_visible(False)
+    ax1.spines['top'].set_visible(False)
+    ax1.spines['right'].set_visible(False)
+    ax1.spines['left'].set_visible(False)
+    ax1.set_xlabel('Precipitation (mm)', fontsize=10)
+    ax1.set_xlim(left=vmin, right=vmax)
+    ax1.set_ylim(bottom=0, top=3)
+
+    plt.tight_layout()
+    fig.savefig(f"illustration_assimilation_{mu}_{std}_{obs}_{obs_std}.pdf", format='pdf')
 
 # Definition of the background distribution statistics:
 N = 1000000  # Ensemble size
 #N = 1000  # To run PF faster
-mu  = 30  # mean = 30mm
-std = 10  # Standard deviation=10mm
+mu  = 10  # mean = 30mm
+std = 5  # Standard deviation=10mm
+obs = 6
+obs_std = 3
 vmin = 0
-vmax = 60
-
-# Draw ensemble
-#TODO : draw ensemble from different distributions to see the differences
-ensemble = np.random.normal(loc=mu, scale=std, size=N)
-ensemble[ensemble<0]=0
-ensemble = np.sort(ensemble)
-
-#ax0.plot(ensemble, norm.pdf(ensemble, loc=mu, scale=std), label=f'Background (mean={mu}mm, std={std}mm)', color='k')
-ax0.plot(ensemble, norm.pdf(ensemble, loc=mu, scale=std), color='k')
-ax0.hist(ensemble,density=True,bins=100, color='k', alpha=0.5, label='Background')
-drawmask = [np.where(ensemble==ensemble[(ensemble>10)&(ensemble<11)][0])[0][0], np.where(ensemble==ensemble[(ensemble>29)&(ensemble<30)][0])[0][0]]
-drawbackground = ensemble[drawmask]
-#drawbackground = np.array([ensemble[(ensemble>10)&(ensemble<11)][0], ensemble[(ensemble>29)&(ensemble<30)][0]])
-#ax1.plot(drawbackground, [2]*len(drawbackground), linestyle='', marker='.', color='k', markersize=10)
-
-# Draw observation
-obs = 25
-obs_std = 5
-#ax0,ax1 = plot_distribution(ax0, ax1, obs, obs_std, data=[obs], color='red', marker='.', vmin=vmin, vmax=vmax, label='Observation distribution')
-#ax0,ax1 = plot_distribution(ax0, ax1, obs, obs_std, data=[obs], color='red', marker='.', vmin=vmin, vmax=vmax, label='Observation distribution')
-#ax0 = plot_normal_distribution(ax0, obs, obs_std, f'Observation (Y={obs}mm, std={obs_std}mm)', color='red')
-ax0 = plot_normal_distribution(ax0, obs, obs_std, f'Observation', color='red')
-ax1.plot(obs, [3], color='red', marker='|', markersize=100)
-
-# EnKF analysis
-enkf = ensemble + std/(std+obs_std)*(obs-ensemble)
-enkf_mean = np.mean(enkf)
-enkf_std = np.sqrt(1/N*np.sum((enkf-enkf_mean)**2))
-color = next(ax0._get_lines.prop_cycler)['color']
-ax0.hist(enkf,density=True,bins=100, alpha=0.5, label='EnKF', color=color)
-ax0 = plot_normal_distribution(ax0, enkf_mean, enkf_std, color=color)
-drawenkf = drawbackground + std/(std+obs_std)*(obs-drawbackground)
-#ax1.plot(drawenkf, [2]*len(drawenkf), linestyle='', marker='.', color='blue', markersize=10)
-ax1.scatter(drawenkf, [2]*len(drawenkf), s=50, facecolors=color, edgecolors=None)
-
-# PF analysis
-#if likelyhood == 'normal':
-#    draw = self.normal_dist(x, mu, sigma)
-#elif likelyhood == 'gamma':
-#    draw = self.gamma_dist(x, mu, sigma)
-weights = norm.pdf(ensemble, loc=obs, scale=obs_std)
-weights = weights / np.sum(weights)  # Normalisation
-selection = resample(weights, N)
-pf = ensemble[selection]
-color = next(ax0._get_lines.prop_cycler)['color']
-color = next(ax0._get_lines.prop_cycler)['color']  # call next twice to avoid orange color
-ax0.hist(pf, density=True,bins=100, alpha=0.5, label='PF', color=color)
-#drawpf = pf[drawmask]  # To plot analysis for the full ensemble
-# To plot PF analysis for a 2 members enemble :
-weights=norm.pdf(drawbackground, loc=obs, scale=obs_std)
-weights = weights / np.sum(weights)  # Normalisation
-selection = resample(weights, 2)
-drawpf = drawbackground[selection]
-ax1.scatter(drawpf,[1]*len(drawpf), s=50, facecolors=color, edgecolors=None)
-
-# Draw background now to be visible
-ax1.scatter(drawbackground, [2]*len(drawbackground), s=50, facecolors='none', edgecolors='k')
-ax1.scatter(drawbackground, [1]*len(drawbackground), s=50, facecolors='none', edgecolors='k')
-
-# Plot displacment arrows
-for i in range(len(drawbackground)):
-    #ax1.arrow(drawbackground[i], 1, drawenkf[i]-drawbackground[i], 0, head_width=0.05, head_length=0.1, fc='k', ec='k', linewidth=0.5)
-    ax1.arrow(drawbackground[i], 2, drawenkf[i]-drawbackground[i], 0, head_width=0.5, head_length=1, linewidth=0.5, linestyle=':', length_includes_head=True, color='k')
-    ax1.arrow(drawbackground[i], 1, drawpf[i]-drawbackground[i], 0, head_width=0.5, head_length=1, linewidth=0.5, linestyle=':', length_includes_head=True, color='k')
-
-
-
-#ax0,ax1 = plot_distribution(ax0, ax1, enkf_mean, enkf_std, data=enkf, color='green', marker='x', vmin=vmin, vmax=vmax, label='enkf distribution')
-
-#ax0.axis('off')
-ax0.get_xaxis().set_visible(False)
-ax0.spines['top'].set_visible(False)
-ax0.spines['right'].set_visible(False)
-ax0.spines['bottom'].set_visible(False)
-ax0.set_xlim(left=vmin, right=vmax)
-ax0.legend(fontsize=10)
-
-ax1.get_yaxis().set_visible(False)
-ax1.spines['top'].set_visible(False)
-ax1.spines['right'].set_visible(False)
-ax1.spines['left'].set_visible(False)
-ax1.set_xlabel('Precipitation (mm)', fontsize=10)
-ax1.set_xlim(left=vmin, right=vmax)
-ax1.set_ylim(bottom=0, top=3)
-
-plt.tight_layout()
-fig.savefig(f"illustration_assimilation.pdf", format='pdf')
+vmax = 20
+plot(mu, std, N, obs, obs_std, vmin, vmax)
