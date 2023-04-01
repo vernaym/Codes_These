@@ -89,7 +89,7 @@ def plot(mu, std, N, obs, obs_std, vmin, vmax, distribution='norm'):
     if obs-obs_std+1>0:
         drawmask = [np.where(ensemble==ensemble[(ensemble>obs-obs_std)&(ensemble<obs-obs_std+1)][0])[0][0], np.where(ensemble==ensemble[(ensemble>obs+2*std)&(ensemble<obs+2*std+1)][0])[0][0]]
     else:
-        drawmask = [np.where(ensemble==0)[0][0], np.where(ensemble==ensemble[(ensemble>obs+2*std)&(ensemble<obs+2*std+1)][0])[0][0]]
+        drawmask = [np.where(ensemble==ensemble[(ensemble>=0)&(ensemble<=0.01)][0])[0][0], np.where(ensemble==ensemble[(ensemble>obs+std)&(ensemble<obs+std+0.1)][0])[0][0]]
 
     drawbackground = ensemble[drawmask]
     #drawbackground = np.array([ensemble[(ensemble>10)&(ensemble<11)][0], ensemble[(ensemble>29)&(ensemble<30)][0]])
@@ -167,6 +167,7 @@ def plot(mu, std, N, obs, obs_std, vmin, vmax, distribution='norm'):
     ax0.spines['right'].set_visible(False)
     ax0.spines['bottom'].set_visible(False)
     ax0.set_xlim(left=vmin, right=vmax)
+    ax0.set_ylim(top=0.7)
     ax0.legend(fontsize=10)
 
     ax1.get_yaxis().set_visible(False)
@@ -183,6 +184,7 @@ def plot(mu, std, N, obs, obs_std, vmin, vmax, distribution='norm'):
 # Definition of the background distribution statistics:
 N = 1000000  # Ensemble size
 #N = 1000  # To run PF faster
+# TODO : géréer le cas de rr=0
 mu  = 0  # ensemble mean
 #mu  = 10  # ensemble mean
 std = 5  # ensemble dispersion / std
