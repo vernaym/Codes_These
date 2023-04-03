@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy.stats import norm, gamma
 import random
+from scipy.interpolate import interp1d
 
 
 def violin(raw, assim, obs, xpid, num_poste, date, ref=None):
@@ -31,17 +32,36 @@ def violin(raw, assim, obs, xpid, num_poste, date, ref=None):
 
     #sns.violinplot(data=data, y='24 hour precipitation (mm)', split=True, hue='Simulation')
 
+def inverse_sample_function(dist, N, x_min=0, x_max=60, n=1e5, **kwargs):
+    """
+    Method to draw a sample of 'N' points from a user-defined distribution 'dist'
+    from : https://stackoverflow.com/questions/21100716/fast-arbitrary-distribution-random-sampling-inverse-transform-sampling
+    """
+    x = np.linspace(x_min, x_max, int(n))
+    cumulative = np.cumsum(methods[dist](x, **kwargs))
+    cumulative -= cumulative.min()
+    f = interp1d(cumulative/cumulative.max(), x)
+
+    return f(np.random.random(N))
+
+def EGP_distribution(x, P0=0, k=5, sigma=1, ksi=0.5, **kw):
+    """ Definition of the extended Pareto distribution in Taillardat 2020 or Papastathopoulos 2013"""
+    EGP = P0 + (1 - P0) * (1 - (1 + ksi * x / sigma)**(-1 / ksi))**k
+    return EGP
+
 def plot_distribution(ax, mean, sd, label=None, color='k', distribution='norm', linewidth=0.5):
     x = np.linspace(0, 60, 10000)
     if distribution == 'norm':
         ax.plot(x, norm.pdf(x, loc=mean, scale=sd), 'r-', lw=1, color=color, label=label, linewidth=linewidth)
-    else:
+    elif distribution == 'gamma':
         #k = mean**2/sd
         #theta = sd/mean
         #on veut que mu soit le mode de la distribution gamma (< à la moyenne)
         theta = (np.sqrt(mean**2+4*sd)-mean)/2
         k     = 4*sd/(np.sqrt(mean**2+4*sd)-mean)**2
         ax.plot(x, gamma.pdf(x, k, scale=theta), 'r-', lw=1, color=color, label=label, linestyle='--', linewidth=0.5)
+    elif distribution == 'EGP':
+        pass
 
     return ax
 
@@ -67,7 +87,7 @@ def plot(mu, std, N, obs, obs_std, vmin, vmax, distribution='norm'):
     #TODO : draw ensemble from different distributions to see the differences
     if distribution == 'norm':
         ensemble = np.random.normal(loc=mu, scale=std, size=N)
-    else:
+    elif distribution == 'gamma':
 #        k = mu**2/std
 #        theta = std/mu
         #on veut que mu soit le mode de la distribution gamma (< à la moyenne)
@@ -82,7 +102,7 @@ def plot(mu, std, N, obs, obs_std, vmin, vmax, distribution='norm'):
     #ax0.plot(ensemble, norm.pdf(ensemble, loc=mu, scale=std), label=f'Background (mean={mu}mm, std={std}mm)', color='k')
     if distribution == 'norm':
         ax0.plot(ensemble, norm.pdf(ensemble, loc=mu, scale=std), color='k')
-    else:
+    elif distribution == 'gamma':
         ax0.plot(ensemble, gamma.pdf(ensemble, k, scale=theta), color='k', linestyle='--', label='Gamma', linewidth=0.5)
         ax0.plot(np.NaN, np.NaN, color='k', label='Norm', linewidth=0.5)  # To add a legend entry without plotting anything
     ax0.hist(ensemble,density=True,bins=100, color='k', alpha=0.5, label='Background')
@@ -121,7 +141,7 @@ def plot(mu, std, N, obs, obs_std, vmin, vmax, distribution='norm'):
     # PF analysis
     if distribution == 'norm':
         weights = norm.pdf(ensemble, loc=obs, scale=obs_std)
-    else:
+    elif distribution == 'gamma':
         theta = (np.sqrt(obs**2+4*obs_std)-obs)/2
         k     = 4*obs_std/(np.sqrt(obs**2+4*obs_std)-obs)**2
         weights = gamma.pdf(ensemble, k, scale=theta)
@@ -140,7 +160,7 @@ def plot(mu, std, N, obs, obs_std, vmin, vmax, distribution='norm'):
     # To plot PF analysis for a 2 members enemble :
     if distribution == 'norm':
         weights=norm.pdf(drawbackground, loc=obs, scale=obs_std)
-    else:
+    elif distribution == 'gamma':
         #k = pf_mean**2/pf_std
         #theta = pf_std/pf_mean
         #on veut que mu soit le mode de la distribution gamma (< à la moyenne)
@@ -181,10 +201,29 @@ def plot(mu, std, N, obs, obs_std, vmin, vmax, distribution='norm'):
     plt.tight_layout()
     fig.savefig(f"illustration_assimilation_{distribution}_{mu}_{std}_{obs}_{obs_std}.pdf", format='pdf')
 
+
+methods = {'EGP_distribution':EGP_distribution}  # To call function fro string (see EGP_distribution)
+
 # Definition of the background distribution statistics:
 N = 1000000  # Ensemble size
 #N = 1000  # To run PF faster
 # TODO : géréer le cas de rr=0
+
+# To plot EGP
+#P0 = 0
+#k = 5
+#sigma = 1
+#ksi = 0.5
+#draw = inverse_sample_function('EGP_distribution', N, x_min=0, x_max=60, n=1e5, P0=0, k=k, sigma=sigma, ksi=ksi)
+##x = np.random.uniform(0, 100, 1000000)
+##draw = EGP_distribution(x, P0=P0, k=k, sigma=sigma, ksi=ksi)
+##plt.plot(np.sort(draw))
+#plt.hist(draw, density=True, bins=100, label='EGP')
+#plt.show()
+#import pdb
+#pdb.set_trace()
+
+
 mu  = 0  # ensemble mean
 #mu  = 10  # ensemble mean
 std = 5  # ensemble dispersion / std
