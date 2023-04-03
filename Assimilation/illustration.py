@@ -5,6 +5,7 @@
 
 import os, sys
 import numpy as np
+import pandas as pd
 
 import matplotlib as mpl
 #matplotlib.use('Agg')
@@ -15,20 +16,27 @@ import random
 from scipy.interpolate import interp1d
 
 
-def violin(raw, assim, obs, xpid, num_poste, date, ref=None):
+def violin(raw, pf, enkf, obs):
     """ References :
     https://stackoverflow.com/questions/64646449/how-to-create-asymmetric-violin-plot-in-python-using-matplotlib
     https://seaborn.pydata.org/generated/seaborn.violinplot.html
     """
     fig, ax = plt.subplots()
-    data = pd.DataFrame({'raw':raw, 'assim':assim})
+    data = pd.DataFrame({'raw':raw, 'pf':pf, 'enkf':enkf})
     data = data.melt()
     data['dummy'] = 0
-    sns.violinplot(data=data, split=True, y='value', hue='variable', x='dummy', inner="stick", palette=['sandybrown', 'skyblue'])
+    #sns.violinplot(data=data, split=True, y='value', hue='variable', x='dummy', inner="stick", palette=['sandybrown', 'skyblue', 'green'])
+    #sns.violinplot([raw], positions=[0], show_boxplot=False, side='left', ax=ax, plot_opts={'violin_fc':'C0'})
+    sns.violinplot(positions=[0], data=raw, split=True, ax=ax, side='left', scale="count", scale_hue=False, saturation=0.75, inner=None, color='orange')
+    sns.violinplot(positions=[0], data=pf, split=True, ax=ax, side='right', scale="count", scale_hue=False, saturation=0.75, inner=None, color='blue')
+    sns.violinplot(positions=[0], data=enkf, split=True, ax=ax, side='right', scale="count", scale_hue=False, saturation=0.75, inner=None, color='green')
+    #sns.violinplot(positions=[0], data=enkf, split=True, ax=ax, scale="count", scale_hue=False, saturation=0.75, inner=None, side='right')
+
+#    violinplot([raw], positions=[0], side='left', ax=ax, plot_opts={'violin_fc':'C0'})
+#    violinplot([pf], positions=[0], show_boxplot=False, side='right', ax=ax, plot_opts={'violin_fc':'C1'})
+#    violinplot([enkf], positions=[0], show_boxplot=False, side='right', ax=ax, plot_opts={'violin_fc':'C1'})
     plt.plot(obs, marker='_', markersize=30, markeredgewidth=3, color='red')
-    if ref is not None:
-        plt.plot(ref, marker='_', markersize=30, markeredgewidth=3, color='dark')
-    fig.savefig(f'{savedir}/assim_{xpid}_{num_poste}_{date}.pdf', formatout='pdf',  bbox_inches='tight')
+    fig.savefig(f'violin.pdf', formatout='pdf',  bbox_inches='tight')
 
     #sns.violinplot(data=data, y='24 hour precipitation (mm)', split=True, hue='Simulation')
 
@@ -201,6 +209,7 @@ def plot(mu, std, N, obs, obs_std, vmin, vmax, distribution='norm'):
     plt.tight_layout()
     fig.savefig(f"illustration_assimilation_{distribution}_{mu}_{std}_{obs}_{obs_std}.pdf", format='pdf')
 
+    violin(ensemble, pf, enkf, obs)
 
 methods = {'EGP_distribution':EGP_distribution}  # To call function fro string (see EGP_distribution)
 
@@ -224,15 +233,14 @@ N = 1000000  # Ensemble size
 #pdb.set_trace()
 
 
-mu  = 0  # ensemble mean
+mu  = 30  # ensemble mean
 #mu  = 10  # ensemble mean
-std = 5  # ensemble dispersion / std
+std = 10  # ensemble dispersion / std
 #std = 5  # ensemble dispersion / std
-obs = 0
-obs_std = 2
+obs = 40
+obs_std =5
 vmin = 0
 vmax = 20
 vmax = 60
-vmax = 5
 plot(mu, std, N, obs, obs_std, vmin, vmax)
-plot(mu, std, N, obs, obs_std, vmin, vmax, distribution='gamma')
+#plot(mu, std, N, obs, obs_std, vmin, vmax, distribution='gamma')
