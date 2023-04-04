@@ -96,7 +96,7 @@ landmarks = {
     }
 
 # Parameters to compute Euclidian distance between all points in the domain
-ld = 0.03 # correlation lenght. WARNING : ne pas trop augmenter la distance de correlation (analyse trop proche de l'obs ==> perte de dispersion)
+ld = 0.05 # correlation lenght. WARNING : ne pas trop augmenter la distance de correlation (analyse trop proche de l'obs ==> perte de dispersion)
 # ld = 0.02 marche plutot bien (sous dispersion), ld=0.03 pas du tout !!!
 max_dist = ld*3
 #max_dist = 0.5  # Memory limit reached at 0.2 for domain Alp. WARNING : very high analysis sensibility to this parameter !!
@@ -1093,25 +1093,31 @@ class EnsembleKalmanFilter(Assimilation):
     def observation_ECM_new(self, parameters, date):
 
         std = parameters.sigma.data
-        #X = diags((np.sqrt(parameters.mu.data)*std).flatten(), 0)
-        X = diags((np.sqrt(parameters.mu.data)).flatten(), 0)
-#        X = diags((np.sqrt(ref_field.data)).flatten(), 0)
-#        X = diags(ref_field.data.flatten(), 0)
-        Rdyn = X.dot(self.pond.dot(X))
-#        Rdyn = 0.263 * X.dot(self.pond.dot(X))  # To minimize the impact on large precipitation ?
-        #Rdyn = self.pond.multiply(np.outer(np.sqrt(parameters.mu)*std, np.sqrt(parameters.mu)*std))
-#        Rstat = self.pond.multiply(np.outer(std,std))  # TODO : fixer l'erreur d'obs en absence de precipitation
-#        Rdyn = self.pond.multiply(np.outer(ref_field, ref_field))
-        # La dispersion de l'analyse est principalement augmentée par Rstat
-        X = diags(std.flatten())
-        #Rstat = self.pond.multiply(np.outer(std*10, std*10))  # TODO : fixer l'erreur d'obs en absence de precipitation
-        Rstat = X.dot(self.pond.dot(X))
-        # TODO : add static error depending on the vertical distance to the radar elevation ?
+        std = np.square(std)
+        Rstat = diags(std.flatten())
 
-        R = Rstat + Rdyn  # Rstat améliore sensiblement les petites precip (sinon error obs=0).
-#        R = Rstat.multiply(Rdyn)+Rstat
+        std = np.sqrt(std)  # Variable transformation R --> R^1/2
 
-        R.data = np.nan_to_num(R.data, copy=False)
+        # 1. Calcul de la moyenne pondérée par la distance ET l'erreur statique
+        pond = diags(1/std.flatten(), 0).dot(self.pond)  # Pondération par la distance et l'erreur statique
+        weight = pond.sum(axis=0).getA1()  # The sum of the weights
+        obs = diags(parameters.mu.data.flatten(), 0)
+        mean = pond.dot(obs).sum(axis=0).getA1()
+        mean = mean / weight
+
+        # Calcul de la dispersion
+        super_ensemble = pond
+        super_ensemble[super_ensemble.nonzero()] = 1  # Position of pixels to inclue in the spread computation
+        se_mean = diags(mean.flatten(), 0).dot(super_ensemble)
+        X = super_ensemble.dot(obs)-se_mean  # # M.diag(obs)-diag(e).M
+        R = X.multiply(X).multiply(pond).sum(axis=0).getA1()
+        R = R / weight
+        R = np.nan_to_num(R)
+        R = diags(R, 0) + Rstat
+
+        # verrue pour renvoyer la même chose que la méthode initiale
+        Rdyn = R
+        ref_field = std
 
         return R, Rstat, Rdyn, ref_field
 
@@ -1245,9 +1251,12 @@ class EnsembleKalmanFilter(Assimilation):
 
                 Y = parameters_loc.mu.data  # Observation vector. WARNING : Use mu to take debiasing into account !
 
-                B = self.background_error_covariance_new(ensemble_loc)  # Background error covariance matrix
-
-                R, Rstat, Rdyn, ref_field = self.observation_ECM(parameters_loc, date)
+                if self.localisation is None:
+                    B = self.background_error_covariance(ensemble_loc)  # Background error covariance matrix
+                    R, Rstat, Rdyn, ref_field = self.observation_ECM(parameters_loc, date)
+                else:
+                    R, Rstat, Rdyn, ref_field = self.observation_ECM_new(parameters_loc, date)
+                    B = self.background_error_covariance_new(ensemble_loc)  # Background error covariance matrix
 
                 K = B.dot(np.linalg.inv((B+R).toarray()))
 
@@ -1276,14 +1285,21 @@ class EnsembleKalmanFilter(Assimilation):
     def gridded_analysis(self, date, idd, ensemble, parameters, domain):
 
         Y = parameters.mu.data  # Observation vector. WARNING : Use mu to take debiasing into account !
+
+        # TODO : reconvertir en précipitation (R --> R^2) avant de plotter !
+
         self.rrmin = 0.
         self.rrmax = max(
-                np.nanmax(ensemble.rr.data),
+                np.nanmax(np.square(ensemble.rr.data)),
                 np.nanmax(Y)
                 )
 
-        B = self.background_error_covariance_new(ensemble)  # Background error covariance matrix
-        R, Rstat, Rdyn, ref_field = self.observation_ECM(parameters, date)
+        if self.localisation is None:
+            B = self.background_error_covariance(ensemble)  # Background error covariance matrix
+            R, Rstat, Rdyn, ref_field = self.observation_ECM(parameters, date)
+        else:
+            R, Rstat, Rdyn, ref_field = self.observation_ECM_new(parameters, date)
+            B = self.background_error_covariance_new(ensemble)  # Background error covariance matrix
 
         if self.plot:
             if not os.path.exists(f'{self.date_str}/RAW_{self.date_str}_{self.domain}.pdf'):
@@ -1314,7 +1330,8 @@ class EnsembleKalmanFilter(Assimilation):
             # On peut maintenant extraire les vrais domaines (on a plus besoind e la marge sur les bords)
             analysis[member] = xr.DataArray(
                 name   = 'rr',
-                data   = A.reshape((len(raw.lat), len(raw.lon))),
+                data   = np.square(A.reshape((len(raw.lat), len(raw.lon)))),  # Go back in the real precipitation space
+                #data   = A.reshape((len(raw.lat), len(raw.lon))),
                 #data   = A,  # Without spatial correlations
                 dims   = ["lat", "lon"],
                 coords = dict(lon=raw.lon, lat=raw.lat),
@@ -1353,15 +1370,15 @@ class EnsembleKalmanFilter(Assimilation):
             line = B.getrow(600).toarray()[0].reshape((len(parameters.lat), len(parameters.lon)))
             #line = B[600].reshape((len(parameters.lat), len(parameters.lon)))
             self.plot_array(line, parameters.rr, 'Background_ECM', f'{self.date_str}/Background_ECM_{domain}_L1.pdf', vmin=0, vmax=120, cmap=plt.cm.coolwarm)
-            line = R.getrow(600).toarray()[0].reshape((len(parameters.lat), len(parameters.lon)))
+            iline = R.getrow(600).toarray()[0].reshape((len(parameters.lat), len(parameters.lon)))
             #line = R[600].reshape((len(parameters.lat), len(parameters.lon)))
             self.plot_array(line, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_ECM_{domain}_L1.pdf', vmin=0, vmax=120, cmap=plt.cm.coolwarm)
             self.plot_array(ref_field, parameters.rr, 'Dynamic error', f'{self.date_str}/Ref_field.pdf', cmap=plt.cm.coolwarm)
 
             # Plot matrices
             ECM_max = max(np.max(R.diagonal()), np.max(B.diagonal()))
-            self.plot_matrix(B, parameters.rr, 'Background_ECM', f'{self.date_str}/Background_ECM_{domain}.pdf', vmin=0, cmap=plt.cm.viridis)
-            self.plot_matrix(R, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_ECM_{domain}.pdf', vmin=0, vmax=120, cmap=plt.cm.viridis)
+            self.plot_matrix(B, parameters.rr, 'Background_ECM', f'{self.date_str}/Background_ECM_{domain}.pdf', vmin=0, vmax=20, cmap=plt.cm.viridis)
+            self.plot_matrix(R, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_ECM_{domain}.pdf', vmin=0, vmax=20, cmap=plt.cm.viridis)
             #self.plot_matrix(Rstat, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_stat_ECM_{domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.viridis)
             #self.plot_matrix(Rdyn, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_dyn_ECM_{domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.viridis)
             self.plot_matrix(Rstat, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_stat_ECM_{domain}.pdf', vmin=0, vmax=120, cmap=plt.cm.viridis)
