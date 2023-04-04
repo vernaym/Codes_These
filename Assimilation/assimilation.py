@@ -11,7 +11,7 @@ import scipy
 from scipy.ndimage import uniform_filter
 from scipy.spatial.distance import cdist
 from scipy import sparse
-from scipy.sparse import csc_matrix, csr_matrix
+from scipy.sparse import csc_matrix, csr_matrix, dia_matrix
 from scipy.sparse import linalg as splinalg
 from scipy.sparse.linalg import inv, spsolve
 from scipy.spatial import cKDTree
@@ -953,6 +953,73 @@ class EnsembleKalmanFilter(Assimilation):
 
         return B
 
+    @speedtest
+    def background_error_covariance_new(self, ensemble):
+        """
+        But : calculer la dispersion d'un "super ensemble" dont le poid de chaque memebre
+        est mondéré par la matrice "self.pond".
+
+        Méthode :
+        ---------
+
+        1. Calcul de la moyenne pondérée des membres du super ensemble (membres de chaque 
+        pixel + ceux du voisinages pondérés par la matrice self.pond)
+
+        2. calcul de la dispersion du super ensemble de chaque pixel :
+            - identification des pixels à prendre en compte par la matrice "super_ensemble"
+            - pour chaque membre : calcul de la dispersion des membres du super ensemble de
+              chaque pixel
+            - somme et normalisation de la dispersion sur tous les membres
+
+        WARNING : la valeur prévue par un membre sur 1 pixel est utilisée plusieurs fois !
+        """
+
+        weight = 16*self.pond.sum(axis=0).getA1()  # The sum of the weights
+
+        # 1. Calcul de la moyenne pondérée
+        #ensemble_mean = csc_matrix(np.shape(self.pond))
+        #ensemble_mean = dia_matrix(np.shape(self.pond))
+        t1 = time.time()
+        ensemble_mean = np.zeros(len(ensemble.lat)*len(ensemble.lon))
+        for mb in ensemble.member.data:
+            member = ensemble.sel(member=mb).rr.data
+            #X = diags(member.flatten(), 0)
+            X = member.flatten()
+            ensemble_mean = ensemble_mean + self.pond.dot(X)
+        ensemble_mean = ensemble_mean / weight  # TODO : à véridier
+        t2 = time.time()
+        print(f'Calcul de la moyenne : {(t2-t1)*1000.}ms')
+
+        #ensemble_mean = diags(ensemble_mean.flatten(), 0)
+
+        # 2. Calcul de la dispersion
+        super_ensemble = self.pond
+        super_ensemble[super_ensemble.nonzero()] = 1  # Position of pixels to inclue in the spread computation
+        se_mean = diags(ensemble_mean, 0).dot(super_ensemble)
+
+        #B = dia_matrix(np.shape(self.pond))
+        B = np.zeros(len(ensemble.lat)*len(ensemble.lon))
+        for mb in ensemble.member.data:
+            member = ensemble.sel(member=mb).rr.data
+            t3 = time.time()
+            X = super_ensemble.dot(diags(member.flatten(), 0))-se_mean   # M.diag(x)-diag(e).M
+            t4 = time.time()
+            B = B + X.multiply(X).multiply(self.pond).sum(axis=0).getA1()  # X*XT.Pond  (Attention à l'ordre des opérations !)
+            t5 = time.time()
+            #B = B + X.dot(self.pond.dot(X)).sum(axis=0)
+
+        t6 = time.time()
+        print(f'Calcul de la matrice de covariances : {(t3-t2)*1000.}ms')
+        print(f'{(t6-t5)*1000}ms')
+        print(f'{(t5-t4)*1000}ms')
+        print(f'{(t4-t3)*1000}ms')
+        B = B / weight
+        #B.data = np.nan_to_num(B.data, copy=False)
+        B = np.nan_to_num(B)
+
+        B = diags(B, 0)
+
+        return B
 
     @speedtest
     def ensemble_dispersion(self, ensemble):
@@ -999,6 +1066,32 @@ class EnsembleKalmanFilter(Assimilation):
     def observation_ECM(self, parameters, date):
 
         ref_field = self.ref_field(parameters.mu, date)
+        std = parameters.sigma.data
+        #X = diags((np.sqrt(parameters.mu.data)*std).flatten(), 0)
+        X = diags((np.sqrt(parameters.mu.data)).flatten(), 0)
+#        X = diags((np.sqrt(ref_field.data)).flatten(), 0)
+#        X = diags(ref_field.data.flatten(), 0)
+        Rdyn = X.dot(self.pond.dot(X))
+#        Rdyn = 0.263 * X.dot(self.pond.dot(X))  # To minimize the impact on large precipitation ?
+        #Rdyn = self.pond.multiply(np.outer(np.sqrt(parameters.mu)*std, np.sqrt(parameters.mu)*std))
+#        Rstat = self.pond.multiply(np.outer(std,std))  # TODO : fixer l'erreur d'obs en absence de precipitation
+#        Rdyn = self.pond.multiply(np.outer(ref_field, ref_field))
+        # La dispersion de l'analyse est principalement augmentée par Rstat
+        X = diags(std.flatten())
+        #Rstat = self.pond.multiply(np.outer(std*10, std*10))  # TODO : fixer l'erreur d'obs en absence de precipitation
+        Rstat = X.dot(self.pond.dot(X))
+        # TODO : add static error depending on the vertical distance to the radar elevation ?
+
+        R = Rstat + Rdyn  # Rstat améliore sensiblement les petites precip (sinon error obs=0).
+#        R = Rstat.multiply(Rdyn)+Rstat
+
+        R.data = np.nan_to_num(R.data, copy=False)
+
+        return R, Rstat, Rdyn, ref_field
+
+
+    def observation_ECM_new(self, parameters, date):
+
         std = parameters.sigma.data
         #X = diags((np.sqrt(parameters.mu.data)*std).flatten(), 0)
         X = diags((np.sqrt(parameters.mu.data)).flatten(), 0)
@@ -1117,6 +1210,11 @@ class EnsembleKalmanFilter(Assimilation):
             ensemble   = actual_ensemble.sel({'time':date}).compute()  # Load data into memory now
             parameters = actual_parameters.sel({'time':date})
 
+            # Change variable R --> R^(1/2) to bring the distributions closer to a Normal one
+            ensemble.rr.data = np.sqrt(ensemble.rr.data)
+            parameters.mu.data = np.sqrt(parameters.mu.data)
+            parameters.rr.data = np.sqrt(parameters.rr.data)
+
             if self.gridded:
                 self.gridded_analysis(date, idd,  ensemble, parameters, domain)
             else:
@@ -1147,7 +1245,7 @@ class EnsembleKalmanFilter(Assimilation):
 
                 Y = parameters_loc.mu.data  # Observation vector. WARNING : Use mu to take debiasing into account !
 
-                B = self.background_error_covariance(ensemble_loc)  # Background error covariance matrix
+                B = self.background_error_covariance_new(ensemble_loc)  # Background error covariance matrix
 
                 R, Rstat, Rdyn, ref_field = self.observation_ECM(parameters_loc, date)
 
@@ -1162,7 +1260,8 @@ class EnsembleKalmanFilter(Assimilation):
                     # On peut maintenant extraire les vrais domaines (on a plus besoind e la marge sur les bords)
                     analysis = xr.DataArray(
                         name   = 'rr',
-                        data   = A.reshape((len(raw.lat), len(raw.lon))),
+                        data   = np.square(A.reshape((len(raw.lat), len(raw.lon)))),  # Go back in the real precipitation space
+                        #data   = A.reshape((len(raw.lat), len(raw.lon))),
                         #data   = A,  # Without spatial correlations
                         dims   = ["lat", "lon"],
                         coords = dict(lon=raw.lon, lat=raw.lat),
@@ -1183,7 +1282,7 @@ class EnsembleKalmanFilter(Assimilation):
                 np.nanmax(Y)
                 )
 
-        B = self.background_error_covariance(ensemble)  # Background error covariance matrix
+        B = self.background_error_covariance_new(ensemble)  # Background error covariance matrix
         R, Rstat, Rdyn, ref_field = self.observation_ECM(parameters, date)
 
         if self.plot:
@@ -1261,7 +1360,7 @@ class EnsembleKalmanFilter(Assimilation):
 
             # Plot matrices
             ECM_max = max(np.max(R.diagonal()), np.max(B.diagonal()))
-            self.plot_matrix(B, parameters.rr, 'Background_ECM', f'{self.date_str}/Background_ECM_{domain}.pdf', vmin=0, vmax=120, cmap=plt.cm.viridis)
+            self.plot_matrix(B, parameters.rr, 'Background_ECM', f'{self.date_str}/Background_ECM_{domain}.pdf', vmin=0, cmap=plt.cm.viridis)
             self.plot_matrix(R, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_ECM_{domain}.pdf', vmin=0, vmax=120, cmap=plt.cm.viridis)
             #self.plot_matrix(Rstat, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_stat_ECM_{domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.viridis)
             #self.plot_matrix(Rdyn, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_dyn_ECM_{domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.viridis)
