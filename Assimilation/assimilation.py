@@ -895,11 +895,11 @@ class Assimilation(object):
 #        sd   = np.abs(maxprob-ensemble[point])
 #        plot_distribution(ax, maxprob, sd, f'tmp', distribution='norm', linewidth=1, color='red')
 
-        #newobs = obs*obsweight + mean * np.mean(weights[weights>0]) / (obsweight+np.mean(weights[weights>0]))
+        newobs = (obs*obsweight + mean * np.mean(weights[weights>0])) / (obsweight+np.mean(weights[weights>0]))
         #sd   = np.sum(weights*(ensemble-obs)**2)/np.sum(weights)
         sd   = np.sum((ensemble[weights>0]-obs)**2)/len(weights[weights>0])
         print(sd)
-        plot_distribution(ax, obs, sd, f'tmp', distribution='norm', linewidth=1, color='blue')
+        plot_distribution(ax, newobs, sd, f'tmp', distribution='norm', linewidth=1, color='blue')
 
 #        sd   = np.sum(weights*(ensemble-mu)**2)/np.sum(weights)
 #        plot_distribution(ax, mu, std, f'tmp', distribution='norm', linewidth=1, color='green')  # mu est ma valeur du pixel
@@ -1078,7 +1078,11 @@ class EnsembleKalmanFilter(Assimilation):
         ensemble_mean = new_ensemble.mean('member').data.flatten()  # = la moyenne de l'ensemble si rr>0, sinon la moyenne des pixels du voisinage
 
         # 2. Calcul de la dispersion
-        # TODO : voir si on prend la moyenne de l'ensemble initial ou de l'ensemble modifié
+        # TODO : Choisir si la dispersion est :
+        # - autour de la moyenne de l'ensemble initial
+        # - autour de la moyenne de l'ensemble modifié
+        # - atour de la moyenne pondérée
+
 #        se_mean = diags(ensemble_mean, 0).dot(super_ensemble)  # moyenne de l'ensemble modifié
         #se_mean = diags(ensemble.mean('member'.data.flatten(), 0).dot(super_ensemble)  # moyenne de l'ensemble modifié
         #B = dia_matrix(np.shape(self.pond))
@@ -1163,6 +1167,7 @@ class EnsembleKalmanFilter(Assimilation):
 
     def get_parameters(self, field, pond, weight=None, super_ensemble=None):
 
+        initial_field = field.flatten()
         X = diags(field.flatten(), 0)
 
         # 1. Calcul de la moyenne pondérée par la distance ET l'erreur statique
@@ -1174,7 +1179,6 @@ class EnsembleKalmanFilter(Assimilation):
 
         # TODO : trouver une solution pour changer la valeur de du champ quand la moyenne de la distribution est plus
         # pertinente mais pas quand la distribution n'est pas complète (par ex pour le pixel avec le max de rr)
-
         # Pour conserver la valeur initiale pour éviter un rappel vers un champ moyen
         # WARNING : c'est indispensable pour ne pas lisser les membres de l'ensemble
         # TODO : voir si on fait le remplacement ici ou après le calcul de le dispersion
@@ -1183,10 +1187,28 @@ class EnsembleKalmanFilter(Assimilation):
         # TODO : pour l'instannt on gère ça séparélent pour l'obs et le modèle
         #mean[np.where(X.diagonal()>0)]=X.diagonal[np.where(X.diagonal>0)]
 
-        # 2. Calcul de la dispersion
-        sd = self.get_std(X, mean, pond, weight=weight, super_ensemble=super_ensemble)
+        # Transformation of the field :
+        # The goal is to update a value toward the weighted average of the neighborhood in proportion of its weight
+        # and the average weight in the neighborhood.
+        # The goal is to ensure that :
+        # - only pixels with a significantly lower weight than the pixels around are updated (since the pixel weight is
+        # not penalised by the distance weighting
+        # - the standard deviation around this value is higher than the one around the super-ensemble weighted mean,
+        # especially if the original pixel value stands far from the mass accumulation of the super ensemble.
+        # TODO : plot original and new fields to see the impact
+        pixel_weight = pond.diagonal()  # = exp(-erreur_statique)
+        sums = pond.sum(axis=1).A1
+        nb_nonzero = (pond != 0).sum(0).getA1()  # Count non zero elements of each row
+        meanweight = sums / nb_nonzero
+        newfield = (initial_field * pixel_weight + mean * meanweight) / (pixel_weight + meanweight)
 
-        return mean, sd
+        # 2. Calcul de la dispersion
+        #sd = self.get_std(X, mean, pond, weight=weight, super_ensemble=super_ensemble)
+        # X is the original field as diagonal matrix
+        # Computation of the dispersion around the original value to increase the spread
+        sd = self.get_std(X, initial_field, pond, weight=weight, super_ensemble=super_ensemble)
+
+        return newfield, sd
 
     def get_std(self, data, mean, pond, weight=None, super_ensemble=None):
 
@@ -1499,14 +1521,14 @@ class EnsembleKalmanFilter(Assimilation):
 
             # Plot matrices
             self.plot_matrix(K, parameters.rr, 'Kalman_Gain', f'{self.date_str}/Kalman_Gain_{domain}.pdf', cmap=plt.cm.coolwarm, vmin=0, vmax=1)
-            ECM_max = max(np.max(R.diagonal()), np.max(B.diagonal()))
+            #ECM_max = max(np.max(R.diagonal()), np.max(B.diagonal()))
             #self.plot_matrix(B, parameters.rr, 'Background_ECM', f'{self.date_str}/Background_ECM_{domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.viridis)
             self.plot_matrix(B, parameters.rr, 'Background_ECM', f'{self.date_str}/Background_ECM_{domain}.pdf', vmin=0, cmap=plt.cm.viridis)
             #self.plot_matrix(R, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_ECM_{domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.viridis)
             self.plot_matrix(R, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_ECM_{domain}.pdf', vmin=0, cmap=plt.cm.viridis)
             #self.plot_matrix(Rdyn, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_dyn_ECM_{domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.viridis)
             self.plot_matrix(Rdyn, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_dyn_ECM_{domain}.pdf', vmin=0, cmap=plt.cm.viridis)
-            self.plot_matrix(Rstat, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_stat_ECM_{domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.viridis)
+            self.plot_matrix(Rstat, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_stat_ECM_{domain}.pdf', vmin=0, cmap=plt.cm.viridis)
 
             ensemble.rr.data = np.square(ensemble.rr.data)
             ensemble.raw.data = np.square(ensemble.raw.data)
