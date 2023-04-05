@@ -420,14 +420,14 @@ def plot_field(field, ax, vmin, vmax, domain, title=None, cmap=plt.cm.YlGnBu):
 def plot_distribution(ax, mean, sd, label=None, color='k', distribution='norm', linewidth=0.5):
     x = np.linspace(0, 60, 10000)
     if distribution == 'norm':
-        ax.plot(x, norm.pdf(x, loc=mean, scale=sd), 'r-', lw=1, color=color, label=label, linewidth=linewidth)
+        ax.plot(x, norm.pdf(x, loc=mean, scale=sd), 'r-', color=color, label=label, linewidth=linewidth)
     elif distribution == 'gamma':
         #k = mean**2/sd
         #theta = sd/mean
         #on veut que mu soit le mode de la distribution gamma (< à la moyenne)
         theta = (np.sqrt(mean**2+4*sd)-mean)/2
         k     = 4*sd/(np.sqrt(mean**2+4*sd)-mean)**2
-        ax.plot(x, gamma.pdf(x, k, scale=theta), 'r-', lw=1, color=color, label=label, linestyle='--', linewidth=0.5)
+        ax.plot(x, gamma.pdf(x, k, scale=theta), 'r-', color=color, label=label, linestyle='--', linewidth=0.5)
     elif distribution == 'EGP':
         pass
 
@@ -447,6 +447,7 @@ def finalize_fig(figure, imm, label, outname):
     #t2 = time.time()
     #print(f'Finalising figures took {(t2-t1)*1000.}ms')
     figure.savefig(outname, format='pdf')
+    plt.close(figure)
     #t3 = time.time()
     #print(f'Saving figures took {(t3-t2)*1000.}ms')
 
@@ -878,14 +879,13 @@ class Assimilation(object):
         ax.hist(ensemble, density=True, bins=np.arange(np.floor(np.min(ensemble))-0.1, np.ceil(np.max(ensemble)) + 0.1, 0.1), weights=weights/np.sum(weights))
         #ax.bar(ensemble, weights/np.sum(weights))
         ax.plot(obs, obsweight, marker='+', color='red')
+        ax.bar(mu, 1, width=0.01, color='k')
 
         # TODO : try to fit a gaussian to the distribution to get the new value (the mean of that distribution)
         mean = np.sum(weights*ensemble)/np.sum(weights)
         sd   = np.sum(weights*(ensemble-mean)**2)/np.sum(weights)
         # TODO : voir quelle formule est la plus adaptée
         # Note that individual member's standard deviation are not used
-        print(sd)
-        print(std)
         plot_distribution(ax, mean, sd, f'tmp', distribution='norm', linewidth=1)  # mean est la moyenne pondérée du super ensemble
         plot_distribution(ax, mu, std, f'tmp', distribution='norm', linewidth=1, color='red')  # mu est la valeur du pixel
 
@@ -898,7 +898,6 @@ class Assimilation(object):
         newobs = (obs*obsweight + mean * np.mean(weights[weights>0])) / (obsweight+np.mean(weights[weights>0]))
         #sd   = np.sum(weights*(ensemble-obs)**2)/np.sum(weights)
         sd   = np.sum((ensemble[weights>0]-obs)**2)/len(weights[weights>0])
-        print(sd)
         plot_distribution(ax, newobs, sd, f'tmp', distribution='norm', linewidth=1, color='blue')
 
 #        sd   = np.sum(weights*(ensemble-mu)**2)/np.sum(weights)
@@ -914,7 +913,10 @@ class Assimilation(object):
         #ax.set_ylim(bottom=0)
         ax.set_xlim(left=0, right=np.max(ensemble)+sd)
 
+        if not os.path.exists(f'{self.date_str}/distributions'):
+            os.makedirs(f'{self.date_str}/distributions')
         fig.savefig(f'{self.date_str}/distributions/DISTRIBUTION_{product}_{point}.pdf')
+        plt.close(fig)
 
 
 class EnsembleKalmanFilter(Assimilation):
@@ -1069,8 +1071,10 @@ class EnsembleKalmanFilter(Assimilation):
             mean[np.where(X > 0)] = X[np.where(X > 0)]
 
             # Plot data
-            point = 1616
-            point = 2059
+            # Plot data
+            #point = 2059  #max obs 20220110
+            #point = 1988  #max std 20220110
+            point = 887 #max obs 20210825
             self.plot_super_ensemble(point, X, mean[point], std[point], self.pond, f'membre{mb}')
 
             new_ensemble.loc[{'member':mb}] = mean.reshape(len(ensemble.lat), len(ensemble.lon))
@@ -1104,7 +1108,6 @@ class EnsembleKalmanFilter(Assimilation):
 #        B = diags(B, 0)
 
         # TODO : plot the distribution of the super-super-ensemble and the associated Gaussian
-        point = 2059
         # TODO : construire explicitement le super ensemble pour le plotter
         self.plot_super_ensemble(point, np.zeros(np.shape(ensemble_mean)), ensemble_mean[point], B.diagonal()[point], self.pond, f'super_ensemble')
 
@@ -1187,7 +1190,7 @@ class EnsembleKalmanFilter(Assimilation):
         # TODO : pour l'instannt on gère ça séparélent pour l'obs et le modèle
         #mean[np.where(X.diagonal()>0)]=X.diagonal[np.where(X.diagonal>0)]
 
-        # Transformation of the field :
+        # Transformation of the observation field :
         # The goal is to update a value toward the weighted average of the neighborhood in proportion of its weight
         # and the average weight in the neighborhood.
         # The goal is to ensure that :
@@ -1195,6 +1198,9 @@ class EnsembleKalmanFilter(Assimilation):
         # not penalised by the distance weighting
         # - the standard deviation around this value is higher than the one around the super-ensemble weighted mean,
         # especially if the original pixel value stands far from the mass accumulation of the super ensemble.
+        # Background fields are (almost) not impacted since the weights only take into account the distance, the target pixel
+        # always has the highest weight
+
         # TODO : plot original and new fields to see the impact
         pixel_weight = pond.diagonal()  # = exp(-erreur_statique)
         sums = pond.sum(axis=1).A1
@@ -1239,12 +1245,14 @@ class EnsembleKalmanFilter(Assimilation):
         obs = parameters.mu.data.flatten()
 
         mean, sd = self.get_parameters(obs, pond)
+        sd = sd*16  # !!!! TODO : TMP !!!!!
         Rdyn = diags(sd, 0)
         R    = diags(sd, 0) + Rstat
 
         # Plot data
-        point = 2059  #max obs
-        #point = 1988  #max std
+        #point = 2059  #max obs 20220110
+        #point = 1988  #max std 20220110
+        point = 887 #max obs 20210825
         self.plot_super_ensemble(point, obs, mean[point], sd[point], pond, 'obs')
 
         # WARNING : modification de l'obs !
@@ -1255,7 +1263,7 @@ class EnsembleKalmanFilter(Assimilation):
             dims   = ["lat", "lon"],
             coords = dict(lon=parameters.lon, lat=parameters.lat)
         )
-        new_obs = parameters.mu
+#        new_obs = parameters.mu
 
         return R, Rstat, Rdyn, new_obs
 
