@@ -290,6 +290,22 @@ def add_cities(latmin, latmax, lonmin, lonmax):
     for idx in tmp.index:
         plt.text(tmp.lng[idx], tmp.lat[idx], tmp.city[idx], alpha=0.5)
 
+def plot_correlation(ax, field, corr, point=1000):
+
+    # Plot correlation matrix
+    if not os.path.exists(f'codistance_matrix_correlation{max_dist}.png'):
+        fig2,ax2 = plt.subplots(figsize=(20,20))
+        ax2.spy(codist, precision=0.5)
+        fig2.savefig(f'codistance_matrix_correlation{max_dist}.png', format='png')
+        plt.close(fig2)
+
+    corr = corr.where(corr>0)
+    cml = corr.plot(ax=ax, cmap=plt.cm.Greys, add_colorbar=False, alpha=0.3)
+    circle = plt.Circle((6.27, 45.07), max_dist, color='red', fill=False, linewidth=4)
+    ax.add_artist(circle)
+
+    return ax
+
 class Annotation3D(Annotation):
     """ From : https://datascience.stackexchange.com/questions/11430/how-to-annotate-labels-in-a-3d-matplotlib-scatter-plot"""
 
@@ -625,6 +641,7 @@ class Assimilation(object):
             domain = self.domain
 
         if not os.path.exists(savename):
+        #if True:
 
             mnt = xr.open_dataset('/home/vernaym/QGIS/MNT/DEM_ALPES_WGS84_250m_bilinear.nc')  # Pour tracer sur toutes les Alpes
             latmin = domain_coords[domain]['latmin']
@@ -633,7 +650,18 @@ class Assimilation(object):
             lonmax = domain_coords[domain]['lonmax']
             sel_lat = np.round(np.arange(latmin, latmax, 0.01), 2)
             sel_lon = np.round(np.arange(lonmin, lonmax, 0.01), 2)
+
+            # Add correlation area
+            point = 1200
+            corr = xr.DataArray(
+                    name   = 'correlation',
+                    data   = self.pond.getrow(point).toarray()[0].reshape((len(field.lat), len(field.lon))),
+                    dims   = ["lat", "lon"],
+                    coords = dict(lon=field.lon, lat=field.lat),
+                )
+
             field = field.sel({'lat':np.intersect1d(sel_lat, field.lat.data), 'lon':np.intersect1d(sel_lon, field.lon.data)})
+            corr = corr.sel({'lat':np.intersect1d(sel_lat, corr.lat.data), 'lon':np.intersect1d(sel_lon, corr.lon.data)})
 
             # Plot ANTILOPE precipitation field
             #fig = plt.figure(figsize=figsize[domain]['singleplot'])
@@ -643,6 +671,8 @@ class Assimilation(object):
             #field[var].plot(vmin=0, vmax=self.rrmax, cmap=plt.cm.YlGnBu, cbar_kwargs={'label': "24 hour precipitation (mm)", 'labelsize':18})  # quadmesh object
             im = field[var].plot(ax=ax, vmin=0, vmax=self.rrmax, add_colorbar=False, cmap=plt.cm.YlGnBu)  # quadmesh object
 
+            # Add correlation area
+            #ax = plot_correlation(ax, field, corr, point=1000)
 
             # Add landmarks
             if domain == 'GrandesRousses':
@@ -651,7 +681,6 @@ class Assimilation(object):
                     plt.annotate(landmark, (infos['lon']+0.003, infos['lat']+0.003), color='red', fontsize=20)
             add_boundaries(ax)
             add_cities(latmin, latmax, lonmin, lonmax)
-
 
             # Add colorbar
             cbar_ax = fig.add_axes([0.92, 0.15, 0.02, 0.7])
@@ -669,7 +698,6 @@ class Assimilation(object):
             fig.tight_layout()
 
             fig.savefig(savename, format='pdf')
-
 
         # Plot 3D ANTILOPE precipitation field
 #        tmp = mnt.interp(lon=self.radar.lon, lat=self.radar.lat, method='nearest')  # Pour interpoller le MNT sur la grille ANTILOPE
@@ -878,32 +906,45 @@ class Assimilation(object):
     def plot_super_ensemble(self, point, ensemble, mu, std, pond, product, label=None, ax=None):
 
         if ax is None:
-            fig,ax = plt.subplots()
+            now = True
+            fig, ax = plt.subplots()
+        else:
+            now = False
 
         weights = pond.getrow(point).toarray()[0]
         obs = ensemble[point]
-        obsweight = weights[point]/np.sum(weights)
+        #obsweight = weights[point]/np.sum(weights)
+        obsweight = weights[point]
 
-        ax.hist(ensemble, density=True, bins=np.arange(np.floor(np.min(ensemble))-0.1, np.ceil(np.max(ensemble)) + 0.1, 0.1), weights=weights/np.sum(weights))
+        ax.hist(ensemble, density=True, bins=np.arange(np.floor(np.min(ensemble))-0.1, np.ceil(np.max(ensemble)) + 0.1, 0.1), weights=weights/np.sum(weights), label='Neighborhood distribution')
         #ax.bar(ensemble, weights/np.sum(weights))
-        ax.plot(obs, obsweight, marker='+', color='red')
-        ax.bar(mu, 1, width=0.01, color='k')
+        #ax.plot(obs, obsweight, marker='+', color='orange', label='Initial Observation')
+        ax.bar(mu, 2.54, width=0.005, color='red')
 
         # Plot the actual distribution used for the assimilation :
-        plot_distribution(ax, mu, std, distribution='norm', linewidth=1)  # mu est la valeur du pixel
+        plot_distribution(ax, mu, std, distribution='norm', linewidth=1, label='Observation distribution', color='red')  # mu est la valeur du pixel
+#        plot_distribution(ax, obs, std, distribution='norm', linewidth=1, label='Observation distribution')  # mu est la valeur du pixel
 
         # To test a new method (the goal is that it gives the same distribution as the red one in the final version) :
-#        mean = np.sum(weights*ensemble)/np.sum(weights)
+        mean = np.sum(weights*ensemble)/np.sum(weights)
+        ax.bar(mean, 2.54, width=0.005, color='k')
+        plot_distribution(ax, mean, std, distribution='norm', linewidth=1, color='k')  # mu est la valeur du pixel
+
+        ax.plot(obs, obsweight, marker='+', color='orange', label='Initial Observation', linestyle='', markersize=10)
+
 #        newobs = (obs*obsweight + mean * np.mean(weights[weights>0])) / (obsweight+np.mean(weights[weights>0]))
 #        #sd   = np.sum(weights*(ensemble-obs)**2)/np.sum(weights)
-#        sd   = np.sum((ensemble[weights>0]-obs)**2)/len(weights[weights>0])
-#        plot_distribution(ax, newobs, sd, f'tmp', distribution='norm', linewidth=1, color='blue')
+#        sd   = np.sum(weights*(ensemble-mean)**2)/np.sum(weights)
+#        plot_distribution(ax, newobs, sd, distribution='norm', linewidth=1, color='blue', label='Observation distribution')
 
-        # Set figure boundaries
-#        ax.set_ylim(bottom=0, top=1)
-#        ax.set_xlim(left=0, right=np.max(ensemble)+sd)
-
-        if ax is None:
+        if now:
+            # Set figure boundaries
+            ax.set_ylim(bottom=0, top=2.8)
+            #ax.set_xlim(left=4, right=np.max(ensemble)+std)
+            ax.set_xlim(left=4, right=np.max(ensemble))
+            ax.set_xlabel('R^1/2 (mm^1/2)')
+            ax.set_ylabel('Weight')
+            ax.legend()
             if not os.path.exists(f'{self.date_str}/distributions'):
                 os.makedirs(f'{self.date_str}/distributions')
             fig.savefig(f'{self.date_str}/distributions/DISTRIBUTION_{product}_{point}.pdf')
@@ -1212,7 +1253,11 @@ class EnsembleKalmanFilter(Assimilation):
         pond = self.pond.dot(diags(np.exp(-std).flatten(), 0))  # Pondération par la distance et l'erreur statique !! ATTENTION A L'ORDRE !!
         obs = parameters.mu.data.flatten()
 
-        #mean, sd = self.get_parameters(obs, pond, replacement_strategy='keep')  # Keep original observation value
+        # It is necessary to update observations with large static error since it is the way to account for correlations
+        # But the observation must be significantly modified only for point with a very high static error
+        # TODO : trouver une meilleur façon de modifier l'obs vers la moyenne du super ensemble de façon plus pondérée
+        #mean, sd = self.get_parameters(obs, pond, replacement_strategy='keep')  # Keep original observation value to avoid double penalty
+        # TODO : calculer l'erreur par rapport à la vraie moyenne pour éviter de suretimer l'erreur d'obs !
         mean, sd = self.get_parameters(obs, pond, replacement_strategy='toward_mean')  # Update obs
         Rdyn = diags(sd, 0)
         R    = dia_matrix(diags(sd, 0) + Rstat)  # WARNING : the sum of 2 dia_matrix returns a csr_matrix...
@@ -1221,7 +1266,7 @@ class EnsembleKalmanFilter(Assimilation):
         #point = 2059  #max obs 20220110
         #point = 1988  #max std 20220110
         point = 887 #max obs 20210825
-        #self.plot_super_ensemble(point, obs, mean[point], sd[point], pond, 'obs')
+        self.plot_super_ensemble(point, obs, mean[point], sd[point], pond, 'obs')
 
         # !! WARNING : modification de l'obs !!
         # --> cela a tendance à lisser le champs en diminuant/augmenatant les valeurs extremes !!
