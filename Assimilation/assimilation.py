@@ -1054,7 +1054,6 @@ class EnsembleKalmanFilter(Assimilation):
             # --> Now useless since it is considered in the mean computation in the 'get_parameters' method
             # The pixel value can be slightly modified but since it has the highest weight it remains close from
             # the original value but can become >0 if the original value is 0 (exactly what we want !)
-            #mean[np.where(X > 0)] = X[np.where(X > 0)]
 
             # Plot data
             # Plot data
@@ -1063,6 +1062,19 @@ class EnsembleKalmanFilter(Assimilation):
             point = 887 #max obs 20210825
             self.plot_super_ensemble(point, X, mean[point], sd[point], self.pond, f'membre{mb}')
 
+            # !! WARNING : modification des champs !!
+            # Choisir entre les 3 solutions suivantes :
+
+            # 1. take all new values (weighted average between the original value and the average of
+            # the local super-ensemble weighted by the average weight
+            # --> cela a tendance à lisser le champs en diminuant/augmenatant les valeurs extremes !!
+            #new_ensemble.loc[{'member':mb}] = mean.reshape(len(ensemble.lat), len(ensemble.lon))
+
+            # 2. Keep the original (debiased) field
+            new_ensemble.loc[{'member':mb}] = member
+
+            # 3. Change only values when the original value is 0 and the local weighted average is >0
+            mean[np.where(X > 0)] = X[np.where(X > 0)]
             new_ensemble.loc[{'member':mb}] = mean.reshape(len(ensemble.lat), len(ensemble.lon))
 
         ensemble_mean = new_ensemble.mean('member').data.flatten()  # = la moyenne de l'ensemble si rr>0, sinon la moyenne des pixels du voisinage
@@ -1165,6 +1177,39 @@ class EnsembleKalmanFilter(Assimilation):
 
         return R, Rstat, Rdyn, ref_field
 
+    def observation_ECM_new(self, parameters, date):
+
+        std = np.abs(parameters.sigma.data)  # !! WARNING sigma peut être <0 !!
+        #Rstat = diags(std.flatten())
+        Rstat = np.sqrt(diags(std.flatten()))  # !! TODO : TMP !! revoir plutot la conversion ratio estimé --> erreur obs
+
+        # TODO : revoir la pondération pour assurer que une erreur statique importante a un poids moins élevé qu'un point très loin avec une faible erreur statique
+        pond = self.pond.dot(diags(np.exp(-std).flatten(), 0))  # Pondération par la distance et l'erreur statique !! ATTENTION A L'ORDRE !!
+        obs = parameters.mu.data.flatten()
+
+        mean, sd = self.get_parameters(obs, pond)
+        Rdyn = diags(sd, 0)
+        R    = diags(sd, 0) + Rstat
+
+        # Plot data
+        #point = 2059  #max obs 20220110
+        #point = 1988  #max std 20220110
+        point = 887 #max obs 20210825
+        self.plot_super_ensemble(point, obs, mean[point], sd[point], pond, 'obs')
+
+        # !! WARNING : modification de l'obs !!
+        # --> cela a tendance à lisser le champs en diminuant/augmenatant les valeurs extremes !!
+        new_obs = xr.DataArray(
+            data   = mean.reshape((len(parameters.lat), len(parameters.lon))),
+            name   = 'obs',
+            dims   = ["lat", "lon"],
+            coords = dict(lon=parameters.lon, lat=parameters.lat)
+        )
+        # To keep the original (debiased) field
+        new_obs = parameters.mu
+
+        return R, Rstat, Rdyn, new_obs
+
     def get_parameters(self, field, pond, weight=None, super_ensemble=None):
 
         initial_field = field.flatten()
@@ -1224,38 +1269,6 @@ class EnsembleKalmanFilter(Assimilation):
         sd = np.nan_to_num(sd)
 
         return sd
-
-    def observation_ECM_new(self, parameters, date):
-
-        std = np.abs(parameters.sigma.data)  # !! WARNING sigma peut être <0 !!
-        #Rstat = diags(std.flatten())
-        Rstat = np.sqrt(diags(std.flatten()))  # !! TODO : TMP !! revoir plutot la conversion ratio estimé --> erreur obs
-
-        # TODO : revoir la pondération pour assurer que une erreur statique importante a un poids moins élevé qu'un point très loin avec une faible erreur statique
-        pond = self.pond.dot(diags(np.exp(-std).flatten(), 0))  # Pondération par la distance et l'erreur statique !! ATTENTION A L'ORDRE !!
-        obs = parameters.mu.data.flatten()
-
-        mean, sd = self.get_parameters(obs, pond)
-        Rdyn = diags(sd, 0)
-        R    = diags(sd, 0) + Rstat
-
-        # Plot data
-        #point = 2059  #max obs 20220110
-        #point = 1988  #max std 20220110
-        point = 887 #max obs 20210825
-        self.plot_super_ensemble(point, obs, mean[point], sd[point], pond, 'obs')
-
-        # WARNING : modification de l'obs !
-        # --> cela a tendance à lisser le champs en diminuant/augmenatant les valeurs extremes !!
-        new_obs = xr.DataArray(
-            data   = mean.reshape((len(parameters.lat), len(parameters.lon))),
-            name   = 'obs',
-            dims   = ["lat", "lon"],
-            coords = dict(lon=parameters.lon, lat=parameters.lat)
-        )
-#        new_obs = parameters.mu
-
-        return R, Rstat, Rdyn, new_obs
 
     def ref_field(self, field, date):
 
