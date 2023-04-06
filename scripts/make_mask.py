@@ -39,8 +39,9 @@ datadir = '/home/vernaym/These/DATA'
 #savedir = '/home/vernaym/workdir/ASSIMILATION/mask/illustration_methode'
 savedir = '/home/vernaym/workdir/ASSIMILATION/mask/'
 #savedir = '/home/vernaym/workdir/ASSIMILATION/mask/ref/r2'
-#savedir = f'/home/vernaym/workdir/ASSIMILATION/mask/{domain}'
-savedir = '/home/vernaym/workdir/ASSIMILATION/mask/ref'
+savedir = f'/home/vernaym/workdir/ASSIMILATION/mask/{domain}'
+if not os.path.exists(savedir):
+    os.makedirs(savedir)
 
 onlypostes = [5001400, 5085403]
 onlypostes = [5001400, 5085403, 5133400]
@@ -81,7 +82,11 @@ max_dist = 0.5
 #fic_score = os.path.join(datadir, 'scores_2018110106_2019043006_alpes_10.csv')  # WARNING : scores valid for precipitation >10mm
 #fic_score = os.path.join(datadir, 'scores_2021110106_2022043006_alpes_10.csv')  # WARNING : scores valid for precipitation >10mm
 #fic_score = os.path.join(datadir, f'scores_2018110106_2019043006_{domain}.csv')
-fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_{domain}.csv')
+if domain == 'pyr':
+    fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_{domain}.csv')
+else:
+    fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_alp.csv')
+
 
 landmarks = {
         "Alpe d'Huez" : dict(lon=6.070, lat=45.092, alt=1800, marker='o'),
@@ -754,13 +759,14 @@ def ratio_estimation(field, moving_window=25):
     #######
     scores = scores.loc[(scores.lats>=latmin) & (scores.lats<=latmax) & (scores.lons>=lonmin) & (scores.lons<=lonmax)]
     scores = scores.loc[used_scores]
-    plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}_{c0}', vmin=0.3, vmax=1.7, cmap=plt.cm.coolwarm, scores=scores)
-#    plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}_{c0}', vmin=0.5, vmax=1.5, cmap=plt.cm.coolwarm, scores=scores)
-#    plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}_{c0}', cmap=plt.cm.coolwarm, scores=scores)
-
-#    plot_and_save(observation_error, f'Observation_error_{d0}_{c0}_{domain}', vmin=-6, vmax=6, cmap=plt.cm.coolwarm, scores=scores)
-    plot_and_save(observation_error, f'Observation_error_{d0}_{c0}_{domain}', vmin=-12, vmax=12, cmap=plt.cm.coolwarm, scores=scores)
-#    plot_and_save(observation_error, f'Observation_error_{d0}_{c0}_{domain}', cmap=plt.cm.coolwarm, scores=scores)
+    if domain == 'alp':
+        plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}_{c0}', vmin=0.3, vmax=1.7, cmap=plt.cm.coolwarm, scores=scores)
+        #plot_and_save(observation_error, f'Observation_error_{d0}_{c0}_{domain}', vmin=-12, vmax=12, cmap=plt.cm.coolwarm, scores=scores)
+        plot_and_save(np.abs(observation_error), f'Observation_error_{d0}_{c0}_{domain}', vmin=0, vmax=12, cmap=plt.cm.viridis, scores=scores)
+    elif domain == 'GrandesRousses':
+        plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}_{c0}', vmin=0.6, vmax=1.4, cmap=plt.cm.coolwarm, scores=scores)
+        #plot_and_save(observation_error, f'Observation_error_{d0}_{c0}_{domain}', vmin=-6, vmax=6, cmap=plt.cm.coolwarm, scores=scores)
+        plot_and_save(np.abs(observation_error), f'Observation_error_{d0}_{c0}_{domain}', vmin=0, vmax=8, cmap=plt.cm.viridis, scores=scores)
 
 def animation_mask(field):
 
@@ -848,8 +854,6 @@ if __name__ == "__main__":
     antilope = xr.open_dataset(os.path.join(datadir, filename))
 #    antilope.lat.data = antilope.lat.data+0.005  # TODO : comprendre et resoudre le probleme de decallage des coordonnees
     antilope = antilope.where((antilope.lon>=lonmin) & (antilope.lon<=lonmax) & (antilope.lat<=latmax) & (antilope.lat>latmin-0.01), drop=True)  # >=44.1 ne fonctionne pas pour ANTILOPEQ (np.where(antilope.lat==44.1) renvoie une liste vide...)
-    import pdb
-    pdb.set_trace()
 
 #    plot(antilope, datebegin, dateend, categories=True, biascorrection=True)
 #    plot(antilope, datebegin, dateend, categories=False, biascorrection=True)
