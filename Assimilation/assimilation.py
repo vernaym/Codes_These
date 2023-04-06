@@ -417,10 +417,16 @@ def plot_field(field, ax, vmin, vmax, domain, title=None, cmap=plt.cm.YlGnBu):
 
     return im
 
-def plot_distribution(ax, mean, sd, label=None, color='k', distribution='norm', linewidth=0.5):
-    x = np.linspace(0, 60, 10000)
+def plot_distribution(ax, mean, sd, ensemble=None, label=None, color=None, distribution='norm', linewidth=1):
+    x = np.linspace(0, 20, 10000)
+    if color == None:
+        color = next(ax._get_lines.prop_cycler)['color']
+
     if distribution == 'norm':
         ax.plot(x, norm.pdf(x, loc=mean, scale=sd), 'r-', color=color, label=label, linewidth=linewidth)
+        if ensemble is not None:
+            #ax.bar(ensemble, norm.pdf(ensemble, loc=mean, scale=sd), 'r-', color=color, label='members', linewidth=linewidth)
+            ax.bar(ensemble, norm.pdf(ensemble, loc=mean, scale=sd), width=0.01, color=color)
     elif distribution == 'gamma':
         #k = mean**2/sd
         #theta = sd/mean
@@ -869,10 +875,12 @@ class Assimilation(object):
 
         return prob_density
 
-    def plot_super_ensemble(self, point, ensemble, mu, std, pond, product):
-        fig,ax = plt.subplots()
-        weights = pond.getrow(point).toarray()[0]
+    def plot_super_ensemble(self, point, ensemble, mu, std, pond, product, label=None, ax=None):
 
+        if ax is None:
+            fig,ax = plt.subplots()
+
+        weights = pond.getrow(point).toarray()[0]
         obs = ensemble[point]
         obsweight = weights[point]/np.sum(weights)
 
@@ -881,24 +889,25 @@ class Assimilation(object):
         ax.plot(obs, obsweight, marker='+', color='red')
         ax.bar(mu, 1, width=0.01, color='k')
 
-        # Plot the actual observation distribution used for the assimilation :
-        plot_distribution(ax, mu, std, f'tmp', distribution='norm', linewidth=1, color='red')  # mu est la valeur du pixel
+        # Plot the actual distribution used for the assimilation :
+        plot_distribution(ax, mu, std, distribution='norm', linewidth=1)  # mu est la valeur du pixel
 
         # To test a new method (the goal is that it gives the same distribution as the red one in the final version) :
-        mean = np.sum(weights*ensemble)/np.sum(weights)
-        newobs = (obs*obsweight + mean * np.mean(weights[weights>0])) / (obsweight+np.mean(weights[weights>0]))
-        #sd   = np.sum(weights*(ensemble-obs)**2)/np.sum(weights)
-        sd   = np.sum((ensemble[weights>0]-obs)**2)/len(weights[weights>0])
-        plot_distribution(ax, newobs, sd, f'tmp', distribution='norm', linewidth=1, color='blue')
+#        mean = np.sum(weights*ensemble)/np.sum(weights)
+#        newobs = (obs*obsweight + mean * np.mean(weights[weights>0])) / (obsweight+np.mean(weights[weights>0]))
+#        #sd   = np.sum(weights*(ensemble-obs)**2)/np.sum(weights)
+#        sd   = np.sum((ensemble[weights>0]-obs)**2)/len(weights[weights>0])
+#        plot_distribution(ax, newobs, sd, f'tmp', distribution='norm', linewidth=1, color='blue')
 
-        ax.set_ylim(bottom=0, top=1)
-        #ax.set_ylim(bottom=0)
-        ax.set_xlim(left=0, right=np.max(ensemble)+sd)
+        # Set figure boundaries
+#        ax.set_ylim(bottom=0, top=1)
+#        ax.set_xlim(left=0, right=np.max(ensemble)+sd)
 
-        if not os.path.exists(f'{self.date_str}/distributions'):
-            os.makedirs(f'{self.date_str}/distributions')
-        fig.savefig(f'{self.date_str}/distributions/DISTRIBUTION_{product}_{point}.pdf')
-        plt.close(fig)
+        if ax is None:
+            if not os.path.exists(f'{self.date_str}/distributions'):
+                os.makedirs(f'{self.date_str}/distributions')
+            fig.savefig(f'{self.date_str}/distributions/DISTRIBUTION_{product}_{point}.pdf')
+            plt.close(fig)
 
 
 class EnsembleKalmanFilter(Assimilation):
@@ -1056,11 +1065,10 @@ class EnsembleKalmanFilter(Assimilation):
             # the original value but can become >0 if the original value is 0 (exactly what we want !)
 
             # Plot data
-            # Plot data
             #point = 2059  #max obs 20220110
             #point = 1988  #max std 20220110
-            point = 887 #max obs 20210825
-            self.plot_super_ensemble(point, X, mean[point], sd[point], self.pond, f'membre{mb}')
+            #point = 887 #max obs 20210825
+            #self.plot_super_ensemble(point, X, mean[point], sd[point], self.pond, f'membre{mb}')
 
             # !! WARNING : modification des champs !!
             # Choisir entre les 3 solutions suivantes :
@@ -1119,7 +1127,7 @@ class EnsembleKalmanFilter(Assimilation):
         # TODO : plot the distribution of the super-super-ensemble and the associated Gaussian
         # TODO : construire explicitement le super ensemble pour le plotter
         # TODO : plotter le super-ensemble de chaque membre lors des itérations
-        self.plot_super_ensemble(point, np.zeros(np.shape(ensemble_mean)), ensemble_mean[point], B.diagonal()[point], self.pond, f'super_ensemble')
+        #self.plot_super_ensemble(point, np.zeros(np.shape(ensemble_mean)), ensemble_mean[point], B.diagonal()[point], self.pond, f'super_ensemble')
 
         ensemble = ensemble.rename({'rr':'raw'})
         ensemble = ensemble.update({'rr':new_ensemble})
@@ -1195,7 +1203,7 @@ class EnsembleKalmanFilter(Assimilation):
         #point = 2059  #max obs 20220110
         #point = 1988  #max std 20220110
         point = 887 #max obs 20210825
-        self.plot_super_ensemble(point, obs, mean[point], sd[point], pond, 'obs')
+        #self.plot_super_ensemble(point, obs, mean[point], sd[point], pond, 'obs')
 
         # !! WARNING : modification de l'obs !!
         # --> cela a tendance à lisser le champs en diminuant/augmenatant les valeurs extremes !!
@@ -1452,6 +1460,21 @@ class EnsembleKalmanFilter(Assimilation):
             Y = updated_obs.data  # Observation vector. WARNING : Use mu to take debiasing into account !
             parameters = parameters.update({'obs':updated_obs})
 
+            # plot distributions
+            fig, ax = plt.subplots()
+            #point = 887 #max obs 20210825  # TODO : get index dynamically
+            point = np.where(Y==np.max(Y))  # max observation
+            #point = np.where(Y==np.min(Y))  # min observation
+            original_obs = parameters.rr.data[point]
+            plt.bar(original_obs, 1, width=0.05, label='Original observation', color='red', alpha=0.5)
+            obs = Y[point][0]
+            std = R.diagonal().reshape((len(parameters.lat), len(parameters.lon)))[point][0]
+            ax = plot_distribution(ax, obs, std, label='Observation', color='red')
+            ens = ensemble.isel(lat=point[0], lon=point[1]).rr.data.flatten()
+            mu = np.mean(ens)
+            std = B.diagonal().reshape((len(parameters.lat), len(parameters.lon)))[point][0]
+            ax = plot_distribution(ax, mu, std, ensemble=ens, label='Background', color='k')
+
         # TODO : reconvertir en précipitation (R --> R^2) avant de plotter !
         self.rrmin = 0.
         self.rrmax = max(
@@ -1521,6 +1544,19 @@ class EnsembleKalmanFilter(Assimilation):
                     i = i + 1
 
         if self.plot:
+
+            # Plot analysis distribution
+            ens = np.sqrt(analysis.isel(lat=point[0], lon=point[1]).data.flatten())
+            mu = np.mean(ens)
+            std = np.sum((ens-mu)**2)/16
+            ax = plot_distribution(ax, mu, std, ensemble=ens, label='Analysis', color='blue')
+            ax.legend()
+            ax.set_xlim(right=10)
+            if not os.path.exists(f'{self.date_str}/distributions'):
+                os.makedirs(f'{self.date_str}/distributions')
+            fig.savefig(f'{self.date_str}/distributions/DISTRIBUTION_ANALYSE.pdf')
+            plt.close(fig)
+
 #            if domain != 'alp' and self.localisation is None:
             # Compute and plot K
             # Working inversion of large sparse matrix
