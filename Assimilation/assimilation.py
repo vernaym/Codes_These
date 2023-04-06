@@ -981,7 +981,8 @@ class EnsembleKalmanFilter(Assimilation):
 #        P = np.outer(ensemble_mean-M, ensemble_mean-M)/len(ensemble_mean)
         #P = np.empty((len(ensemble_mean), len(ensemble_mean)))
 
-        B = csc_matrix(np.shape(self.pond))
+        #B = csc_matrix(np.shape(self.pond))
+        B = dia_matrix(np.shape(self.pond))
 # To add a static background error :
         #X = 2*scipy.sparse.eye(self.pond.shape[0])
         #B = B + X.dot(self.pond.dot(X))
@@ -1014,7 +1015,7 @@ class EnsembleKalmanFilter(Assimilation):
         return B
 
     @speedtest
-    def background_error_covariance_new(self, ensemble):
+    def background_error_covariance_new(self, ensemble, obs, stdobs, replacement_strategy='max_weight'):
         """
         But : calculer les statistiques de la distribution d'ébauche.
 
@@ -1025,7 +1026,7 @@ class EnsembleKalmanFilter(Assimilation):
         Méthode :
         ---------
 
-        1. Calcul d'une distribution de probabilité pour chaquen membre avec les valeurs
+        1. Calcul d'une distribution de probabilité pour chaque membre avec les valeurs
         du voisinage (pondération avec 'self.pond')
             --> mu(i), sd(i)
         Remplacement de la valeur d'ébauche par mu(i) (ce qui permet de mettre des précipitations
@@ -1039,9 +1040,8 @@ class EnsembleKalmanFilter(Assimilation):
         Identification des pixels à prendre en compte par la matrice 'super_ensemble'
         """
 
-        # TODO : plot distribution for one pixel to understand why the obtained background field is so smooth
-
-        weight = self.pond.sum(axis=1).getA1()  # The sum of the weights (axis=1 <==> sum over rows)
+        super_ensemble = self.pond.copy()
+        super_ensemble[super_ensemble.nonzero()] = 1  # Position of pixels to inclue in the spread computation = L
 
         new_ensemble = xr.DataArray(
             name   = 'rr',
@@ -1049,16 +1049,32 @@ class EnsembleKalmanFilter(Assimilation):
             coords = dict(lon=ensemble.lon, lat=ensemble.lat, member=ensemble.member),
         )
 
-        super_ensemble = self.pond.copy()
-        super_ensemble[super_ensemble.nonzero()] = 1  # Position of pixels to inclue in the spread computation = L
-
         # 1. calcul de la distribution locale de chaque membre
         for mb in ensemble.member.data:
             member = ensemble.sel(member=mb).rr.data
-
-            mean, sd = self.get_parameters(member, self.pond, weight=weight, super_ensemble=super_ensemble)
-
             X = member.flatten()
+
+            # Goal : compute the likelyhood of each pixel of the super-ensemble
+            # The final weight of a pixel is the product of distance weight and the likelyhood
+
+            # Computation of the likelyhood of each pixel of the super-ensemble
+            O = super_ensemble.dot(diags(obs.data.flatten()))
+            M = super_ensemble.dot(diags(member.flatten()))
+            S = super_ensemble.dot(dia_matrix(np.linalg.inv(stdobs.todense())))
+            A = (M-O).multiply(S)
+            likelyhood = -A.multiply(A)
+            np.exp(likelyhood.data, out=likelyhood.data)  # likelyhood = exp(-((O-M).S)**2)
+
+#            X = super_ensemble.dot(diags(member.flatten(), 0))-se_mean   # M.diag(x)-diag(e).M
+            # TODO : revoir la pondération pour assurer que une erreur statique importante a un poids moins élevé qu'un point très loin avec une faible erreur statique
+            # TODO : pondérer les poids avecle likelyhood de l'obs
+            pond = self.pond.multiply(likelyhood)  # likelyhood ponderation
+
+            weight = pond.sum(axis=1).getA1()  # The sum of the weights (axis=1 <==> sum over rows)
+
+            # TODO : remplacer la valeur initial de chaque pixel par la valeur du super-ensemble avec le poids le plus élevé
+            mean, sd = self.get_parameters(member, pond, weight=weight, super_ensemble=super_ensemble, replacement_strategy=replacement_strategy)
+
             # To avoid to smooth member but allow precipitation on pixels originaly without precipitation
             # --> Now useless since it is considered in the mean computation in the 'get_parameters' method
             # The pixel value can be slightly modified but since it has the highest weight it remains close from
@@ -1068,22 +1084,23 @@ class EnsembleKalmanFilter(Assimilation):
             #point = 2059  #max obs 20220110
             #point = 1988  #max std 20220110
             #point = 887 #max obs 20210825
-            #self.plot_super_ensemble(point, X, mean[point], sd[point], self.pond, f'membre{mb}')
+            #self.plot_super_ensemble(point, X, mean[point], sd[point], pond, f'membre{mb}')
 
             # !! WARNING : modification des champs !!
             # Choisir entre les 3 solutions suivantes :
 
-            # 1. take all new values (weighted average between the original value and the average of
-            # the local super-ensemble weighted by the average weight
-            # --> cela a tendance à lisser le champs en diminuant/augmenatant les valeurs extremes !!
-            #new_ensemble.loc[{'member':mb}] = mean.reshape(len(ensemble.lat), len(ensemble.lon))
-
-            # 2. Keep the original (debiased) field
-            new_ensemble.loc[{'member':mb}] = member
-
-            # 3. Change only values when the original value is 0 and the local weighted average is >0
-            mean[np.where(X > 0)] = X[np.where(X > 0)]
-            new_ensemble.loc[{'member':mb}] = mean.reshape(len(ensemble.lat), len(ensemble.lon))
+            if replacement_strategy == 'max_weight':
+                # 1. take all new values (weighted average between the original value and the average of
+                # the local super-ensemble weighted by the average weight
+                # --> cela a tendance à lisser le champs en diminuant/augmenatant les valeurs extremes !!
+                new_ensemble.loc[{'member':mb}] = mean.reshape(len(ensemble.lat), len(ensemble.lon))
+            elif replacement_strategy == 'keep':
+                # 2. Keep the original (debiased) field
+                new_ensemble.loc[{'member':mb}] = member
+            elif replacement_strategy == 'only_zeros':
+                # 3. Change only values when the original value is 0 and the local weighted average is >0
+                mean[np.where(X > 0)] = X[np.where(X > 0)]
+                new_ensemble.loc[{'member':mb}] = mean.reshape(len(ensemble.lat), len(ensemble.lon))
 
         ensemble_mean = new_ensemble.mean('member').data.flatten()  # = la moyenne de l'ensemble si rr>0, sinon la moyenne des pixels du voisinage
 
@@ -1105,19 +1122,19 @@ class EnsembleKalmanFilter(Assimilation):
 
             # TODO : il faut quand même diviser par la somme des poids à la fin avec les méthodes a1 et a2 !!
             # Methode a.1
-            #sd = self.get_std(data, ensemble.mean('member').data.flatten(), self.pond, weight=weight, super_ensemble=super_ensemble)
+            #sd = self.get_std(data, ensemble.mean('member').data.flatten(), pond, weight=weight, super_ensemble=super_ensemble)
             # Methode a.2
-            sd = self.get_std(data, ensemble_mean, self.pond, weight=weight, super_ensemble=super_ensemble)
+#            sd = self.get_std(data, ensemble_mean, pond, weight=weight, super_ensemble=super_ensemble)
 
             # Methode b.1
-            #sd = (data - ensemble_mean)**2
+            sd = (member.flatten() - ensemble_mean)**2
             # Methode b.2  TODO : implémenter la pondération par la dispersion locale de chaque memebre
             #sd = (data - ensemble_mean)**2
 
             B = B + diags(sd, 0)
 
 #            X = super_ensemble.dot(diags(member.flatten(), 0))-se_mean   # M.diag(x)-diag(e).M
-#            B = B + X.multiply(X).multiply(self.pond).sum(axis=1).getA1()  # X*XT.Pond  (Attention à l'ordre des opérations !)
+#            B = B + X.multiply(X).multiply(pond).sum(axis=1).getA1()  # X*XT.Pond  (Attention à l'ordre des opérations !)
 
         B = B / 16
         #B.data = np.nan_to_num(B.data, copy=False)
@@ -1127,7 +1144,7 @@ class EnsembleKalmanFilter(Assimilation):
         # TODO : plot the distribution of the super-super-ensemble and the associated Gaussian
         # TODO : construire explicitement le super ensemble pour le plotter
         # TODO : plotter le super-ensemble de chaque membre lors des itérations
-        #self.plot_super_ensemble(point, np.zeros(np.shape(ensemble_mean)), ensemble_mean[point], B.diagonal()[point], self.pond, f'super_ensemble')
+        #self.plot_super_ensemble(point, np.zeros(np.shape(ensemble_mean)), ensemble_mean[point], B.diagonal()[point], pond, f'super_ensemble')
 
         ensemble = ensemble.rename({'rr':'raw'})
         ensemble = ensemble.update({'rr':new_ensemble})
@@ -1195,9 +1212,10 @@ class EnsembleKalmanFilter(Assimilation):
         pond = self.pond.dot(diags(np.exp(-std).flatten(), 0))  # Pondération par la distance et l'erreur statique !! ATTENTION A L'ORDRE !!
         obs = parameters.mu.data.flatten()
 
-        mean, sd = self.get_parameters(obs, pond)
+        #mean, sd = self.get_parameters(obs, pond, replacement_strategy='keep')  # Keep original observation value
+        mean, sd = self.get_parameters(obs, pond, replacement_strategy='toward_mean')  # Update obs
         Rdyn = diags(sd, 0)
-        R    = diags(sd, 0) + Rstat
+        R    = dia_matrix(diags(sd, 0) + Rstat)  # WARNING : the sum of 2 dia_matrix returns a csr_matrix...
 
         # Plot data
         #point = 2059  #max obs 20220110
@@ -1218,7 +1236,7 @@ class EnsembleKalmanFilter(Assimilation):
 
         return R, Rstat, Rdyn, new_obs
 
-    def get_parameters(self, field, pond, weight=None, super_ensemble=None):
+    def get_parameters(self, field, pond, weight=None, super_ensemble=None, replacement_strategy='keep'):
 
         initial_field = field.flatten()
         X = diags(field.flatten(), 0)
@@ -1241,24 +1259,29 @@ class EnsembleKalmanFilter(Assimilation):
         # Background fields are (almost) not impacted since the weights only take into account the distance, the target pixel
         # always has the highest weight ==> not true : small precipitation cores and precpitation extrems are smmothed
         #
-        # TODO : trouver une solution pour changer la valeur de du champ quand la moyenne de la distribution est plus
-        # pertinente mais pas quand la distribution n'est pas complète (par ex pour le pixel avec le max de rr)
-        # Pour conserver la valeur initiale pour éviter un rappel vers un champ moyen
-        # WARNING : c'est indispensable pour ne pas lisser les membres de l'ensemble
+        # TODO : trouver une solution pour changer la valeur de l'obs quand la moyenne de la distribution est plus
+        # pertinente, sans trop affecter les valeurs extrêmes (seuil sur l'erreur statique ?)
 
-        # TODO : plot original and new fields to see the impact
-        pixel_weight = pond.diagonal()  # = exp(-erreur_statique) pour l'obs et = 1 pour les membres de l'ensemble
-        sums = pond.sum(axis=1).A1
-        nb_nonzero = (pond != 0).sum(0).getA1()  # Count non zero elements of each row
-        meanweight = sums / nb_nonzero
-        newfield = (initial_field * pixel_weight + mean * meanweight) / (pixel_weight + meanweight)
-
-        # 2. Calcul de la dispersion (X is the original field as diagonal matrix)
-
-        # 2.1 Computation of the dispersion around the original value (--> increase Rdyn !)
-        #sd = self.get_std(X, initial_field, pond, weight=weight, super_ensemble=super_ensemble)
-        # 2.2 Computation of the dispersion around the local ensemble mean value
-        sd = self.get_std(X, mean, pond, weight=weight, super_ensemble=super_ensemble)
+        # 2. Calcul de la dispersion et mise à jour des champs
+        # X is the original field as diagonal matrix)
+        if replacement_strategy == 'keep':  # Default behavior (for observation)
+            newfield = initial_field
+            # 2.1 Computation of the dispersion around the original value (--> increase Rdyn !)
+            sd = self.get_std(X, initial_field, pond, weight=weight, super_ensemble=super_ensemble)
+        elif replacement_strategy == 'toward_mean':
+            pixel_weight = pond.diagonal()  # = exp(-erreur_statique) pour l'obs et =likelyhood du pixel pour les membres de l'ensemble
+            sums = pond.sum(axis=1).A1
+            nb_nonzero = (pond != 0).sum(0).getA1()  # Count non zero elements of each row
+            meanweight = sums / nb_nonzero
+            newfield = (initial_field * pixel_weight + mean * meanweight) / (pixel_weight + meanweight)
+            # 2.2 Computation of the dispersion around the local ensemble mean value
+            sd = self.get_std(X, mean, pond, weight=weight, super_ensemble=super_ensemble)
+        elif replacement_strategy == 'max_weight':  # To pull background members toward the observation
+            # Get maximum weight of each line of the pond matrix
+            idx = pond.argmax(axis=1).A1  # get the index of the maximum value of each line
+            newfield = initial_field[idx]
+            # 2.3 Computation of the dispersion around the new mean mean value
+            sd = self.get_std(X, newfield, pond, weight=weight, super_ensemble=super_ensemble)
 
         return newfield, sd
 
@@ -1455,7 +1478,7 @@ class EnsembleKalmanFilter(Assimilation):
             Y = parameters.mu.data  # Observation vector. WARNING : Use mu to take debiasing into account !
         else:
             R, Rstat, Rdyn, updated_obs = self.observation_ECM_new(parameters, date)
-            B, updated_ensemble = self.background_error_covariance_new(ensemble)  # Background error covariance matrix
+            B, updated_ensemble = self.background_error_covariance_new(ensemble, updated_obs, R)  # Background error covariance matrix
             ensemble = updated_ensemble
             Y = updated_obs.data  # Observation vector. WARNING : Use mu to take debiasing into account !
             parameters = parameters.update({'obs':updated_obs})
@@ -1552,6 +1575,7 @@ class EnsembleKalmanFilter(Assimilation):
             ax = plot_distribution(ax, mu, std, ensemble=ens, label='Analysis', color='blue')
             ax.legend()
             ax.set_xlim(right=10)
+            ax.set_ylim(top=1)
             if not os.path.exists(f'{self.date_str}/distributions'):
                 os.makedirs(f'{self.date_str}/distributions')
             fig.savefig(f'{self.date_str}/distributions/DISTRIBUTION_ANALYSE.pdf')
