@@ -64,7 +64,7 @@ domain_coords = dict(
 
 figsize = dict(
         alp            = dict(singleplot=(14,16), ensembleplot=(32,20)),
-        GrandesRousses = dict(singleplot=(16,7), ensembleplot=(16,7)),
+        GrandesRousses = dict(singleplot=(15,7), ensembleplot=(16,7)),
         HauteSavoie    = dict(singleplot=(12,12), ensembleplot=(12,12)),
         Savoie         = dict(singleplot=(16,8), ensembleplot=(16,7)),
         Isere          = dict(singleplot=(16,8), ensembleplot=(16,7)),
@@ -220,6 +220,8 @@ def read_ensemble(datebegin, dateend, frequency, domain, antilope):
         filenames = [os.path.join(datadir, f"aspearome_{mb:03d}_2021073106_2022070106_{domain}_hourly.nc") for mb in range(1,17)]
     else:
         filenames = [os.path.join(datadir, f"aspearome_{mb:03d}_2021102806_2022060206_alp_hourly.nc") for mb in range(1,17)]
+    filenames = [os.path.join(datadir, f"aspearome_{mb:03d}_2021102806_2022060206_alp_hourly.nc") for mb in range(1,17)]
+
 
     # open_mfdataset returns a dask.array<chunksize=(...), meta=np.ndarray> object that divides arrays into many small pieces, called chunks, 
     # each of which is presumed to be small enough to fit into memory in order to avoid a memory overload. 
@@ -231,9 +233,9 @@ def read_ensemble(datebegin, dateend, frequency, domain, antilope):
     # Chunks of a multiple of 24 time steps seem optimal (~0.6s by iteration vs >1.2 for other chunk sizes)
     pearome = xr.open_mfdataset(filenames, combine='nested', concat_dim='member', chunks={'time': 24})  # Setting chunks is critical (read the doc !)
     pearome = pearome.interp(lon=antilope.lon, lat=antilope.lat).clip(0)  # Avoid <0 precipitation values
-#    sel_lat = np.round(np.arange(domain_coords[domain]['latmin']-max_dist, domain_coords[domain]['latmax']+max_dist, 0.01), 2)
-#    sel_lon = np.round(np.arange(domain_coords[domain]['lonmin']-max_dist, domain_coords[domain]['lonmax']+max_dist, 0.01), 2)
-#    pearome = pearome.sel({'lat':sel_lat, 'lon':sel_lon})
+    sel_lat = np.round(np.arange(domain_coords[domain]['latmin']-max_dist, domain_coords[domain]['latmax']+max_dist, 0.01), 2)
+    sel_lon = np.round(np.arange(domain_coords[domain]['lonmin']-max_dist, domain_coords[domain]['lonmax']+max_dist, 0.01), 2)
+    pearome = pearome.sel({'lat':sel_lat, 'lon':sel_lon})
 
     pearome['member'] = np.arange(1,17)
     if frequency == 'daily':
@@ -487,6 +489,8 @@ def read_obs(args):
         else:
             print(f'WARNING : no file named {filename} under {datadir}, using default file ANTILOPEH_2021103000_2022060200_alp.nc')
             filename = os.path.join(datadir, f'ANTILOPEH_2021103000_2022060200_alp.nc')
+        filename = os.path.join(datadir, f'ANTILOPEH_2021103000_2022060200_alp.nc')
+
     if os.path.exists(filename):
         antilope = xr.open_dataset(filename)
         latmax = domain_coords[args.domain]['latmax']
@@ -1272,7 +1276,10 @@ class EnsembleKalmanFilter(Assimilation):
 
         # TODO : revoir la pondération pour assurer que une erreur statique importante a un poids moins élevé qu'un point très loin avec une faible erreur statique
         pond = self.pond.dot(diags(np.exp(-std).flatten(), 0))  # Pondération par la distance et l'erreur statique !! ATTENTION A L'ORDRE !!
+
+        # TODO : essaye d'inverser l'ordre (calcul de l'erreur et modification de l'obs PUIS débiaisage)
         obs = parameters.mu.data.flatten()
+        #obs = parameters.rr.data.flatten()  # To apply correction directly on the original observation  !! TODO : TMP !!
 
         # It is necessary to update observations with large static error since it is the way to account for correlations
         # But the observation must be significantly modified only for point with a very high static error
@@ -1570,13 +1577,13 @@ class EnsembleKalmanFilter(Assimilation):
 
         # TODO : reconvertir en précipitation (R --> R^2) avant de plotter !
         self.rrmin = 0.
-        self.rrmax = max(
+        self.rrmax = min(80, max(
                 np.nanmax(np.square(ensemble.raw.data)),
                 np.nanmax(np.square(ensemble.rr.data)),
                 np.nanmax(np.square(parameters.obs.data)),
                 np.nanmax(np.square(parameters.rr.data)),
                 np.nanmax(np.square(parameters.mu.data)),
-                )
+                ))
 
         # TODO Ajouter une étape de comparaison des distribution d'ébauche et d'obs (augmentation de l'erreur d'ébauche
         # si distribution disjointes : on fait plus confiance à l'obs dans ce cas)
@@ -1618,7 +1625,8 @@ class EnsembleKalmanFilter(Assimilation):
             # TODO : gérer le seuillage à 0
             analysis.loc[{'member':member}] = np.square(A.reshape((len(ensemble.lat), len(ensemble.lon))))  # Go back in the real precipitation space
 
-            # TODO : réduire le domain en enlevant la marge de bordure
+            # Reduction du domain en enlevant la marge en bordure
+            # Inutile : la domain est réduit au moment de plotter les champs
 #            raw = raw.sel({'lat':np.intersect1d(sel_lat, raw.lat.data), 'lon':np.intersect1d(sel_lon, raw.lon.data)})
 
             if self.plot:
