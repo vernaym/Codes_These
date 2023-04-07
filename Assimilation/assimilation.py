@@ -1554,26 +1554,28 @@ class EnsembleKalmanFilter(Assimilation):
             Y = parameters.mu.data  # Observation vector. WARNING : Use mu to take debiasing into account !
         else:
             R, Rstat, Rdyn, updated_obs = self.observation_ECM_new(parameters, date)
-            B, updated_ensemble = self.background_error_covariance_new(ensemble, updated_obs, R)  # Background error covariance matrix
-            ensemble = updated_ensemble
             Y = updated_obs.data  # Observation vector. WARNING : Use mu to take debiasing into account !
+            B, updated_ensemble = self.background_error_covariance_new(ensemble, updated_obs, R)  # Background error covariance matrix
+            point = np.where(Y==np.max(Y))  # max observation (plot only)
+            original_ens = ensemble.isel(lat=point[0], lon=point[1]).rr.data.flatten()  # (plot only)
+            ensemble = updated_ensemble
             parameters = parameters.update({'obs':updated_obs})
 
             # plot distributions
             fig, ax = plt.subplots()
             #point = 887 #max obs 20210825  # TODO : get index dynamically
-            point = np.where(Y==np.max(Y))  # max observation
             #point = np.where(Y==np.min(Y))  # min observation
             original_obs = parameters.rr.data[point]
-            plt.bar(original_obs, 1, width=0.05, label='Original observation', color='red', alpha=0.5)
+            plt.bar(original_obs, 1, width=0.03, label='Original observation', color='red', alpha=0.5)
             obs = Y[point][0]
+            plt.bar(obs, 1, width=0.03, color='red')
             std = R.diagonal().reshape((len(parameters.lat), len(parameters.lon)))[point][0]
             ax = plot_distribution(ax, obs, std, label='Observation', color='red')
             ens = ensemble.isel(lat=point[0], lon=point[1]).rr.data.flatten()
             mu = np.mean(ens)
             std = B.diagonal().reshape((len(parameters.lat), len(parameters.lon)))[point][0]
+            ax = plot_distribution(ax, mu, std, ensemble=original_ens, label='Raw ensemble', color='grey')
             ax = plot_distribution(ax, mu, std, ensemble=ens, label='Background', color='k')
-            # TODO : plot initial ensemble
 
         # TODO : reconvertir en précipitation (R --> R^2) avant de plotter !
         self.rrmin = 0.
@@ -1670,7 +1672,7 @@ class EnsembleKalmanFilter(Assimilation):
             std = np.sum((ens-mu)**2)/16
             ax = plot_distribution(ax, mu, std, ensemble=ens, label='Analysis', color='blue')
             ax.legend()
-            ax.set_xlim(right=9)
+            ax.set_xlim(right=10)
             ax.set_ylim(top=1)
             ax.set_xlabel('R^1/2 (mm^1/2)')
             if not os.path.exists(f'{self.date_str}/distributions'):
