@@ -291,6 +291,7 @@ def add_cities(latmin, latmax, lonmin, lonmax):
         plt.text(tmp.lng[idx], tmp.lat[idx], tmp.city[idx], alpha=0.5)
 
 def plot_correlation(ax, field, corr, point=1000):
+    # TODO : give corr matrix and extract point / cooordinates here
 
     # Plot correlation matrix
     if not os.path.exists(f'codistance_matrix_correlation{max_dist}.png'):
@@ -636,12 +637,14 @@ class Assimilation(object):
             savename = f'{self.date_str}/DEBIASED_OBS_{self.date_str}_{domain}.pdf'
         elif var == 'obs':
             savename = f'{self.date_str}/ASSIMILATED_OBS_{self.date_str}_{domain}.pdf'
+        elif var == 'diff':
+            savename = f'{self.date_str}/DIFF_OBS_{self.date_str}_{domain}.pdf'
+
 
         if domain is None:
             domain = self.domain
 
-        if not os.path.exists(savename):
-        #if True:
+        if not os.path.exists(savename) or var in ['obs', 'diff']:
 
             mnt = xr.open_dataset('/home/vernaym/QGIS/MNT/DEM_ALPES_WGS84_250m_bilinear.nc')  # Pour tracer sur toutes les Alpes
             latmin = domain_coords[domain]['latmin']
@@ -669,10 +672,13 @@ class Assimilation(object):
             #fig = plt.figure(figsize=(14,16))  Alps
 
             #field[var].plot(vmin=0, vmax=self.rrmax, cmap=plt.cm.YlGnBu, cbar_kwargs={'label': "24 hour precipitation (mm)", 'labelsize':18})  # quadmesh object
-            im = field[var].plot(ax=ax, vmin=0, vmax=self.rrmax, add_colorbar=False, cmap=plt.cm.YlGnBu)  # quadmesh object
+            if var == 'diff':
+                im = field[var].plot(ax=ax, add_colorbar=False, cmap=plt.cm.coolwarm)  # quadmesh object
+            else:
+                im = field[var].plot(ax=ax, vmin=0, vmax=self.rrmax, add_colorbar=False, cmap=plt.cm.YlGnBu)  # quadmesh object
 
             # Add correlation area
-            #ax = plot_correlation(ax, field, corr, point=1000)
+            #ax = plot_correlation(ax, field, corr, point=1200)
 
             # Add landmarks
             if domain == 'GrandesRousses':
@@ -922,7 +928,7 @@ class Assimilation(object):
         ax.bar(mu, 2.54, width=0.005, color='red')
 
         # Plot the actual distribution used for the assimilation :
-        plot_distribution(ax, mu, std, distribution='norm', linewidth=1, label='Observation distribution', color='red')  # mu est la valeur du pixel
+        plot_distribution(ax, mu, std, distribution='norm', linewidth=1, label='Background distribution', color='red')  # mu est la valeur du pixel
 #        plot_distribution(ax, obs, std, distribution='norm', linewidth=1, label='Observation distribution')  # mu est la valeur du pixel
 
         # To test a new method (the goal is that it gives the same distribution as the red one in the final version) :
@@ -930,7 +936,7 @@ class Assimilation(object):
         ax.bar(mean, 2.54, width=0.005, color='k')
         plot_distribution(ax, mean, std, distribution='norm', linewidth=1, color='k')  # mu est la valeur du pixel
 
-        ax.plot(obs, obsweight, marker='+', color='orange', label='Initial Observation', linestyle='', markersize=10)
+        ax.plot(obs, obsweight, marker='+', color='orange', label='Initial Background', linestyle='', markersize=10)
 
 #        newobs = (obs*obsweight + mean * np.mean(weights[weights>0])) / (obsweight+np.mean(weights[weights>0]))
 #        #sd   = np.sum(weights*(ensemble-obs)**2)/np.sum(weights)
@@ -941,7 +947,7 @@ class Assimilation(object):
             # Set figure boundaries
             ax.set_ylim(bottom=0, top=2.8)
             #ax.set_xlim(left=4, right=np.max(ensemble)+std)
-            ax.set_xlim(left=4, right=np.max(ensemble))
+            ax.set_xlim(left=2, right=np.max(ensemble))
             ax.set_xlabel('R^1/2 (mm^1/2)')
             ax.set_ylabel('Weight')
             ax.legend()
@@ -1091,6 +1097,7 @@ class EnsembleKalmanFilter(Assimilation):
         )
 
         # 1. calcul de la distribution locale de chaque membre
+        std = dict()
         for mb in ensemble.member.data:
             member = ensemble.sel(member=mb).rr.data
             X = member.flatten()
@@ -1114,7 +1121,8 @@ class EnsembleKalmanFilter(Assimilation):
             weight = pond.sum(axis=1).getA1()  # The sum of the weights (axis=1 <==> sum over rows)
 
             # TODO : remplacer la valeur initial de chaque pixel par la valeur du super-ensemble avec le poids le plus élevé
-            mean, sd = self.get_parameters(member, pond, weight=weight, super_ensemble=super_ensemble, replacement_strategy=replacement_strategy)
+            replacement_strategy = 'mean'  # !! TODO : TMP !!
+            mean, std[mb] = self.get_parameters(member, pond, weight=weight, super_ensemble=super_ensemble, replacement_strategy=replacement_strategy)
 
             # To avoid to smooth member but allow precipitation on pixels originaly without precipitation
             # --> Now useless since it is considered in the mean computation in the 'get_parameters' method
@@ -1124,8 +1132,8 @@ class EnsembleKalmanFilter(Assimilation):
             # Plot data
             #point = 2059  #max obs 20220110
             #point = 1988  #max std 20220110
-            #point = 887 #max obs 20210825
-            #self.plot_super_ensemble(point, X, mean[point], sd[point], pond, f'membre{mb}')
+            point = 887 #max obs 20210825
+            self.plot_super_ensemble(point, X, mean[point], std[mb][point], pond, f'membre{mb}')
 
             # !! WARNING : modification des champs !!
             # Choisir entre les 3 solutions suivantes :
@@ -1142,8 +1150,9 @@ class EnsembleKalmanFilter(Assimilation):
                 # 3. Change only values when the original value is 0 and the local weighted average is >0
                 mean[np.where(X > 0)] = X[np.where(X > 0)]
                 new_ensemble.loc[{'member':mb}] = mean.reshape(len(ensemble.lat), len(ensemble.lon))
-
-        ensemble_mean = new_ensemble.mean('member').data.flatten()  # = la moyenne de l'ensemble si rr>0, sinon la moyenne des pixels du voisinage
+            elif replacement_strategy == 'mean':
+                # 4. Change values by the mean local average weighted by the observation likelyhood
+                new_ensemble.loc[{'member':mb}] = mean.reshape(len(ensemble.lat), len(ensemble.lon))
 
         # 2. Calcul de la dispersion
         # TODO : Choisir la méthode de calcul de la dispersion
@@ -1151,26 +1160,38 @@ class EnsembleKalmanFilter(Assimilation):
         # a.1 autour de la moyenne de l'ensemble initial ?
         # a.2 autour de la moyenne de l'ensemble modifié ?
         # a.3 autour de la moyenne pondérée ?
+        #
         # b) calcul de la disperion des nouveaux membres 
         # 1. sans pondération par la dispersion locale
         # 2. avec pondération par la dispersion locale de chaque membre ?
+        #
+        # c) Somme des dispersions individuelles (moyenne des dispersions)
+
+        ensemble_mean = new_ensemble.mean('member').data.flatten()
 
         B = np.zeros(len(ensemble.lat)*len(ensemble.lon))
         B = diags(B, 0)
         for mb in ensemble.member.data:
-            member = ensemble.sel(member=mb).rr.data
+            initial_member = ensemble.sel(member=mb).rr.data
+            initial_data = diags(initial_member.flatten())
+            member = new_ensemble.sel(member=mb).data
             data = diags(member.flatten())
 
             # TODO : il faut quand même diviser par la somme des poids à la fin avec les méthodes a1 et a2 !!
             # Methode a.1
-            #sd = self.get_std(data, ensemble.mean('member').data.flatten(), pond, weight=weight, super_ensemble=super_ensemble)
+            sd = self.get_std(initial_data, ensemble.mean('member').rr.data.flatten(), pond, weight=weight, super_ensemble=super_ensemble)
             # Methode a.2
-#            sd = self.get_std(data, ensemble_mean, pond, weight=weight, super_ensemble=super_ensemble)
+            #sd = self.get_std(initial_data, ensemble_mean, pond, weight=weight, super_ensemble=super_ensemble)
 
             # Methode b.1
-            sd = (member.flatten() - ensemble_mean)**2
+            #sd = (member.flatten() - ensemble_mean)**2
             # Methode b.2  TODO : implémenter la pondération par la dispersion locale de chaque memebre
             #sd = (data - ensemble_mean)**2
+
+            # Methode c
+            # Si cette méthode est retenue, cette deuxième boucle sur les membres est inutile !
+            # ==> sous dispersif
+            #sd = std[mb]
 
             B = B + diags(sd, 0)
 
@@ -1266,7 +1287,7 @@ class EnsembleKalmanFilter(Assimilation):
         #point = 2059  #max obs 20220110
         #point = 1988  #max std 20220110
         point = 887 #max obs 20210825
-        self.plot_super_ensemble(point, obs, mean[point], sd[point], pond, 'obs')
+        #self.plot_super_ensemble(point, obs, mean[point], sd[point], pond, 'obs')
 
         # !! WARNING : modification de l'obs !!
         # --> cela a tendance à lisser le champs en diminuant/augmenatant les valeurs extremes !!
@@ -1277,7 +1298,7 @@ class EnsembleKalmanFilter(Assimilation):
             coords = dict(lon=parameters.lon, lat=parameters.lat)
         )
         # To keep the original (debiased) field
-        new_obs = parameters.mu
+        #new_obs = parameters.mu
 
         return R, Rstat, Rdyn, new_obs
 
@@ -1327,6 +1348,9 @@ class EnsembleKalmanFilter(Assimilation):
             newfield = initial_field[idx]
             # 2.3 Computation of the dispersion around the new mean mean value
             sd = self.get_std(X, newfield, pond, weight=weight, super_ensemble=super_ensemble)
+        elif replacement_strategy == 'mean':  # To replace background value by the average weighted by observation likelyhood
+            newfield = mean
+            sd = self.get_std(X, mean, pond, weight=weight, super_ensemble=super_ensemble)
 
         return newfield, sd
 
@@ -1542,6 +1566,7 @@ class EnsembleKalmanFilter(Assimilation):
             mu = np.mean(ens)
             std = B.diagonal().reshape((len(parameters.lat), len(parameters.lon)))[point][0]
             ax = plot_distribution(ax, mu, std, ensemble=ens, label='Background', color='k')
+            # TODO : plot initial ensemble
 
         # TODO : reconvertir en précipitation (R --> R^2) avant de plotter !
         self.rrmin = 0.
@@ -1600,6 +1625,24 @@ class EnsembleKalmanFilter(Assimilation):
                 if not os.path.exists(f'{self.date_str}/RAW_{self.date_str}_{self.domain}.pdf'):
                     im1 = plot_field(np.square(raw), ax1[i,j], self.rrmin, self.rrmax, self.domain)
                     ax1[i,j].set_title(None)
+
+                    #######################  TMP  ################
+#                    if member == 8:
+#                        circle = plt.Circle((6.27, 45.07), max_dist, color='red', fill=False, linewidth=4)
+#                        ax1[i,j].add_artist(circle)
+##                        pt = 1200
+##                        corr = xr.DataArray(
+##                                name   = 'correlation',
+##                                data   = self.pond.getrow(pt).toarray()[0].reshape((len(raw.lat), len(raw.lon))),
+##                                dims   = ["lat", "lon"],
+##                                coords = dict(lon=raw.lon, lat=raw.lat),
+##                            )
+##
+###                        field = field.sel({'lat':np.intersect1d(sel_lat, field.lat.data), 'lon':np.intersect1d(sel_lon, field.lon.data)})
+###                        corr = corr.sel({'lat':np.intersect1d(sel_lat, corr.lat.data), 'lon':np.intersect1d(sel_lon, corr.lon.data)})
+##                        plot_correlation(ax1[i,j], raw, corr, point=pt)
+                    #######################  TMP  ################
+
                 if not os.path.exists(f'{self.date_str}/BACKGROUND_{self.date_str}_{self.domain}.pdf'):
                     im4 = plot_field(np.square(background), ax4[i,j], self.rrmin, self.rrmax, self.domain)
                     ax4[i,j].set_title(None)
@@ -1614,13 +1657,14 @@ class EnsembleKalmanFilter(Assimilation):
         if self.plot:
 
             # Plot analysis distribution
-            ens = np.sqrt(analysis.isel(lat=point[0], lon=point[1]).data.flatten())
+            ens = np.sqrt(analysis.isel(lat=point[0], lon=point[1]).data.flatten())  # TODO :
             mu = np.mean(ens)
             std = np.sum((ens-mu)**2)/16
             ax = plot_distribution(ax, mu, std, ensemble=ens, label='Analysis', color='blue')
             ax.legend()
-            ax.set_xlim(right=10)
+            ax.set_xlim(right=9)
             ax.set_ylim(top=1)
+            ax.set_xlabel('R^1/2 (mm^1/2)')
             if not os.path.exists(f'{self.date_str}/distributions'):
                 os.makedirs(f'{self.date_str}/distributions')
             fig.savefig(f'{self.date_str}/distributions/DISTRIBUTION_ANALYSE.pdf')
@@ -1658,6 +1702,9 @@ class EnsembleKalmanFilter(Assimilation):
             if self.debiasing:
                 self.plot_obs(parameters, var='mu', domain=domain)
                 self.plot_obs(parameters, var='obs', domain=domain)
+                parameters['diff'] = parameters.obs-parameters.mu
+                #parameters['diff'] = parameters.obs-parameters.rr  # !! TODO : TMP !!
+                self.plot_obs(parameters, var='diff', domain=domain)
 
             mean = self.ensemble_mean(analysis)
             self.plot_array(mean, parameters.rr, 'Mean precipitation (mm)', f'{self.date_str}/Analysis_mean_{self.domain}.pdf', cmap=plt.cm.YlGnBu, vmin=self.rrmin, vmax=self.rrmax)
