@@ -35,6 +35,8 @@ from matplotlib.text import Annotation
 from matplotlib import offsetbox
 import seaborn as sns
 
+import plotly.express as px
+
 #plt.rcParams["figure.autolayout"] = True
 
 from mpl_toolkits.mplot3d import proj3d
@@ -54,6 +56,7 @@ domain_coords = dict(
         CentralAlps    = dict(lonmin=5.6, lonmax=7.0, latmin=45.0, latmax=45.6),
         SouthernAlps   = dict(lonmin=5.7, lonmax=7.0, latmin=44.2, latmax=45.0),
         HauteSavoie    = dict(lonmin=6.45, lonmax=6.95, latmin=45.67, latmax=46.35),
+        MontBlanc      = dict(lonmin=6.45, lonmax=7.1, latmin=45.65, latmax=46.1),
         Savoie         = dict(lonmin=6.06, lonmax=7.06, latmin=45.15, latmax=45.65),
         Isere          = dict(lonmin=5.54, lonmax=6.19, latmin=44.89, latmax=45.16),
         Brianconnais   = dict(lonmin=6.48, lonmax=6.95, latmin=44.67, latmax=44.95),
@@ -66,6 +69,7 @@ figsize = dict(
         alp            = dict(singleplot=(14,16), ensembleplot=(32,20)),
         GrandesRousses = dict(singleplot=(15,7), ensembleplot=(16,7)),
         HauteSavoie    = dict(singleplot=(12,12), ensembleplot=(12,12)),
+        MontBlanc      = dict(singleplot=(15,10), ensembleplot=(15,10)),
         Savoie         = dict(singleplot=(16,8), ensembleplot=(16,7)),
         Isere          = dict(singleplot=(16,8), ensembleplot=(16,7)),
 )
@@ -235,7 +239,7 @@ def read_ensemble(datebegin, dateend, frequency, domain, antilope):
     pearome = pearome.interp(lon=antilope.lon, lat=antilope.lat).clip(0)  # Avoid <0 precipitation values
     sel_lat = np.round(np.arange(domain_coords[domain]['latmin']-max_dist, domain_coords[domain]['latmax']+max_dist, 0.01), 2)
     sel_lon = np.round(np.arange(domain_coords[domain]['lonmin']-max_dist, domain_coords[domain]['lonmax']+max_dist, 0.01), 2)
-    pearome = pearome.sel({'lat':sel_lat, 'lon':sel_lon})
+    pearome = pearome.sel({'lat':np.intersect1d(sel_lat, pearome.lat.data), 'lon':np.intersect1d(sel_lon, pearome.lon.data)})
 
     pearome['member'] = np.arange(1,17)
     if frequency == 'daily':
@@ -410,7 +414,7 @@ def plot3D(X, Y, Z, colors, date):
             np.array([[d['lon'], d['lat'], d['alt']] for d in landmarks.values()]),
             list(landmarks.keys()), ax, ax2)
 
-    #ax.set_zlim(0., np.max(Z))
+    #ax.set_zlim(0., np.nanmax(Z))
     ax.set_zlim(0., 3500.)
     fig.colorbar(cm.ScalarMappable(norm=pltnorm, cmap=plt.cm.coolwarm), ax=ax, shrink=0.75, aspect=8, label=f'ANTILOPE precipitation (mm)')
     plt.savefig(f'{date}/OBS_3D_{date}.pdf', format='pdf')
@@ -585,7 +589,7 @@ class Assimilation(object):
 
         if plot_distribution:
             dy = 0.01
-            num = np.max(((4*k + delta) / dy).astype(int))
+            num = np.nanmax(((4*k + delta) / dy).astype(int))
             y = np.linspace(-delta, 20*k, num=num)  # WARNING : 'y' doit ABSOLUMENT couvrir toute la distribution
                                             # de gamma sinon la probabilité en 0 est artificiellement surestimée !
             gamma = np.array(list(map(
@@ -676,10 +680,30 @@ class Assimilation(object):
             #fig = plt.figure(figsize=(14,16))  Alps
 
             #field[var].plot(vmin=0, vmax=self.rrmax, cmap=plt.cm.YlGnBu, cbar_kwargs={'label': "24 hour precipitation (mm)", 'labelsize':18})  # quadmesh object
-            if var == 'diff':
-                im = field[var].plot(ax=ax, add_colorbar=False, cmap=plt.cm.coolwarm)  # quadmesh object
-            else:
-                im = field[var].plot(ax=ax, vmin=0, vmax=self.rrmax, add_colorbar=False, cmap=plt.cm.YlGnBu)  # quadmesh object
+#            if var == 'diff':
+#                im = field[var].plot(ax=ax, add_colorbar=False, cmap=plt.cm.coolwarm)  # quadmesh object
+#            else:
+#                im = field[var].plot(ax=ax, vmin=0, vmax=self.rrmax, add_colorbar=False, cmap=plt.cm.YlGnBu)  # quadmesh object
+
+            # TODO : reverse field
+            fig = px.imshow(field[var].data, color_continuous_scale='YlGnBu', origin='lower')  # https://plotly.com/python/2D-Histogram/
+#            fig.add_scattermapbox(lat=field.lat, lon=field.lon,marker_size=field['sigma'],marker_symbol='x',showlegend = False)  # https://stackoverflow.com/questions/68762104/plotly-adding-scatter-geo-points-and-traces-on-top-of-density-mapbox
+            lat, lon = np.meshgrid(range(len(field.lat.data)), range(len(field.lon.data)))
+            fig.add_scatter(
+                    x=lon.flatten(),
+                    y=lat.flatten(),
+                    mode = 'markers',
+                    marker = dict(
+                        symbol='x-thin',
+                        size=np.abs(np.transpose(field['sigma'].data).flatten()),
+                        color='grey'
+                    ),
+#                    color_discrete_sequence=['grey']
+                    )
+#                    ).update_traces(marker=dict(color='grey'))
+            fig.show()
+            import pdb
+            pdb.set_trace()
 
             # Add correlation area
             #ax = plot_correlation(ax, field, corr, point=1200)
@@ -926,7 +950,7 @@ class Assimilation(object):
         #obsweight = weights[point]/np.sum(weights)
         obsweight = weights[point]
 
-        ax.hist(ensemble, density=True, bins=np.arange(np.floor(np.min(ensemble))-0.1, np.ceil(np.max(ensemble)) + 0.1, 0.1), weights=weights/np.sum(weights), label='Neighborhood distribution', alpha=0.5)
+        ax.hist(ensemble, density=True, bins=np.arange(np.floor(np.nanmin(ensemble))-0.1, np.ceil(np.nanmax(ensemble)) + 0.1, 0.1), weights=weights/np.sum(weights), label='Neighborhood distribution', alpha=0.5)
         #ax.bar(ensemble, weights/np.sum(weights))
         #ax.plot(obs, obsweight, marker='+', color='orange', label='Initial Observation')
         ax.bar(mu, 2.54, width=0.005, color='red')
@@ -942,7 +966,7 @@ class Assimilation(object):
 
         ax.plot(obs, obsweight, marker='.', color='k', label=f'Initial {product}', linestyle='', markersize=15)
 
-#        newobs = (obs*obsweight + mean * np.mean(weights[weights>0])) / (obsweight+np.mean(weights[weights>0]))
+#        newobs = (obs*obsweight + mean * np.nanmean(weights[weights>0])) / (obsweight+np.nanmean(weights[weights>0]))
 #        #sd   = np.sum(weights*(ensemble-obs)**2)/np.sum(weights)
 #        sd   = np.sum(weights*(ensemble-mean)**2)/np.sum(weights)
 #        plot_distribution(ax, newobs, sd, distribution='norm', linewidth=1, color='blue', label='Observation distribution')
@@ -950,7 +974,7 @@ class Assimilation(object):
         if now:
             # Set figure boundaries
             ax.set_ylim(bottom=0, top=1)
-            #ax.set_xlim(left=4, right=np.max(ensemble)+std)
+            #ax.set_xlim(left=4, right=np.nanmax(ensemble)+std)
             ax.set_xlim(left=0, right=3)
             ax.set_xlabel('R^1/2 (mm^1/2)')
             ax.set_ylabel('Weight')
@@ -1028,7 +1052,7 @@ class EnsembleKalmanFilter(Assimilation):
         # TODO : utiliser une moyenne pondérée par le likelyhood des membres comment dans Atencia 2020 ?
 
         ensemble_mean = ensemble.mean('member').rr.data  # flatten is optionnal since 'outer' method already flattens a 2D array
-#        M = np.mean(ensemble_mean)
+#        M = np.nanmean(ensemble_mean)
 #        P = np.outer(ensemble_mean-M, ensemble_mean-M)/len(ensemble_mean)
         #P = np.empty((len(ensemble_mean), len(ensemble_mean)))
 
@@ -1112,7 +1136,7 @@ class EnsembleKalmanFilter(Assimilation):
             # Computation of the likelyhood of each pixel of the super-ensemble
             O = super_ensemble.dot(diags(obs.data.flatten()))
             M = super_ensemble.dot(diags(member.flatten()))
-            S = super_ensemble.dot(dia_matrix(np.linalg.inv(stdobs.todense())))
+            S = super_ensemble.dot(diags(1/stdobs.diagonal()))
             A = (M-O).multiply(S)
             likelyhood = -A.multiply(A)
             np.exp(likelyhood.data, out=likelyhood.data)  # likelyhood = exp(-((O-M).S)**2)
@@ -1299,8 +1323,8 @@ class EnsembleKalmanFilter(Assimilation):
         point = 887 #max obs 20210825
         point = 2065
         #point = 78 # min obs 20211230
-        #point = np.where(obs==np.min(obs))[0][0]
-        #point = np.where(obs==np.max(obs))[0][0]
+        #point = np.where(obs==np.nanmin(obs))[0][0]
+        #point = np.where(obs==np.nanmax(obs))[0][0]
         self.plot_super_ensemble(point, obs, mean[point], sd[point], pond, 'Observation')
 
         # !! WARNING : modification de l'obs !!
@@ -1485,11 +1509,11 @@ class EnsembleKalmanFilter(Assimilation):
             fig, ax = plt.subplots()
             R1 = parameters.mu.data.flatten()
             R2 = np.sqrt(R1)
-            ax.hist(R2, density=True, bins=np.arange(np.floor(np.min(R2))-0.1, np.ceil(np.max(R2)) + 0.1, 0.1), label='R* (mm^1/2)', alpha=0.5)
-            mu = np.mean(R2)
+            ax.hist(R2, density=True, bins=np.arange(np.floor(np.nanmin(R2))-0.1, np.ceil(np.nanmax(R2)) + 0.1, 0.1), label='R* (mm^1/2)', alpha=0.5)
+            mu = np.nanmean(R2)
             sd = np.sum((R2-mu)**2)/len(R2)
             ax = plot_distribution(ax, mu, sd, color='blue')
-            ax.hist(R1, density=True, bins=np.arange(np.floor(np.min(R1))-0.1, np.ceil(np.max(R1)) + 0.1, 0.1), label='R (mm)', alpha=0.5)
+            ax.hist(R1, density=True, bins=np.arange(np.floor(np.nanmin(R1))-0.1, np.ceil(np.nanmax(R1)) + 0.1, 0.1), label='R (mm)', alpha=0.5)
             ax.legend()
             ax.set_xlim(right=13)
             if not os.path.exists(f'{self.date_str}/distributions'):
@@ -1508,9 +1532,42 @@ class EnsembleKalmanFilter(Assimilation):
             else:
                 self.ponctual_analysis(date, idd, ensemble, parameters, covariance=covariance)
 
+            # Add methode to simply contruct and ensemble by random draws around the observation
+            #self.random_draw(date, idd, ensemble, parameters, domain)
+
+    @speedtest
+    def random_draw(self, date, idd, parameters, domain, nmembers):
+
+        R, Rstat, Rdyn, updated_obs = self.observation_ECM_new(parameters, date)
+        Y = updated_obs.data  # Observation vector. WARNING : Use mu to take debiasing into account !
+
+        if self.plot:
+            point = np.where(Y==np.nanmax(Y))  # max observation (plot only)
+            #point = np.where(Y==np.nanmin(Y))  # min observation (plot only)
+            # plot distributions
+            fig, ax = plt.subplots()
+            original_obs = parameters.rr.data[point]
+            plt.bar(original_obs, 1, width=0.03, label='Original observation', color='red', alpha=0.5)
+            obs = Y[point][0]
+            plt.bar(obs, 1, width=0.03, color='red')
+            std = R.diagonal().reshape((len(parameters.lat), len(parameters.lon)))[point][0]
+            ax = plot_distribution(ax, obs, std, label='Observation', color='red')
+
+        analysis = xr.DataArray(
+            name   = 'rr',
+            dims   = ["member", "lat", "lon"],
+            coords = dict(lon=ensemble.lon, lat=ensemble.lat, member=range(1, nmembers+1)),
+        )
+        for member in analysis.member.data:
+            random = np.random.normal(loc=0.0, scale=1.0, size=1)[0]  # Draw random element from normal distribution
+            sd = R.diagonal().reshape((len(ensemble.lat), len(ensemble.lon)))  # Get standard deviation field
+            obs = Y.reshape((len(ensemble.lat), len(ensemble.lon)))  # Get ensemble field
+            analysis.loc[{'member':member}] = np.square(obs+random*sd/5)  # Draw member
+
+
     @speedtest
     def ponctual_analysis(self, date, idd, ensemble, parameters, covariance=False):
-        evaluation_points = zip(self.nivometeo.num_poste.data, np.max(self.nivometeo.lat, axis=1).data, np.max(self.nivometeo.lon, axis=1).data)
+        evaluation_points = zip(self.nivometeo.num_poste.data, np.nanmax(self.nivometeo.lat, axis=1).data, np.nanmax(self.nivometeo.lon, axis=1).data)
         for idp, (num_poste, lat, lon) in enumerate(evaluation_points):
             print(num_poste, idp)
             # Extract rectangle around evaluation point
@@ -1583,8 +1640,8 @@ class EnsembleKalmanFilter(Assimilation):
             R, Rstat, Rdyn, updated_obs = self.observation_ECM_new(parameters, date)
             Y = updated_obs.data  # Observation vector. WARNING : Use mu to take debiasing into account !
             B, updated_ensemble = self.background_error_covariance_new(ensemble, updated_obs, R)  # Background error covariance matrix
-            point = np.where(Y==np.max(Y))  # max observation (plot only)
-            #point = np.where(Y==np.min(Y))  # min observation (plot only)
+            point = np.where(Y==np.nanmax(Y))  # max observation (plot only)
+            #point = np.where(Y==np.nanmin(Y))  # min observation (plot only)
             original_ens = ensemble.isel(lat=point[0], lon=point[1]).rr.data.flatten()  # (plot only)
             ensemble = updated_ensemble
             parameters = parameters.update({'obs':updated_obs})
@@ -1639,7 +1696,7 @@ class EnsembleKalmanFilter(Assimilation):
         for member in ensemble.member.data:
 
             ##############################  TMP  ###############################
-            # To compare ithe analysis with a random field generation
+            # To compare the analysis with a random field generation
             #random = np.random.normal(loc=0.0, scale=1.0, size=1)[0]
             #sd = R.diagonal().reshape((len(ensemble.lat), len(ensemble.lon)))
             #obs = Y.reshape((len(ensemble.lat), len(ensemble.lon)))
@@ -1696,7 +1753,7 @@ class EnsembleKalmanFilter(Assimilation):
                     ax4[i,j].set_title(None)
                 im2 = plot_field(analysis.loc[{'member':member}], ax2[i,j], self.rrmin, self.rrmax, self.domain)
                 ax2[i,j].set_title(None)
-                im3 = plot_field(np.square(parameters.mu)-np.square(raw), ax3[i,j], np.min(np.square(parameters.mu.data-raw.data)), np.max(np.square(parameters.mu.data-raw.data)), self.domain)
+                im3 = plot_field(np.square(parameters.mu)-np.square(raw), ax3[i,j], np.nanmin(np.square(parameters.mu.data-raw.data)), np.nanmax(np.square(parameters.mu.data-raw.data)), self.domain)
                 j = j + 1
                 if j==4:
                     j = 0
@@ -1729,7 +1786,7 @@ class EnsembleKalmanFilter(Assimilation):
 
             # Plot matrices
             self.plot_matrix(K, parameters.rr, 'Kalman_Gain', f'{self.date_str}/Kalman_Gain_{domain}.pdf', cmap=plt.cm.coolwarm, vmin=0, vmax=1)
-            ECM_max = max(np.max(R.diagonal()), np.max(B.diagonal()))
+            ECM_max = max(np.nanmax(R.diagonal()), np.nanmax(B.diagonal()))
             ECM_max = 3.
             self.plot_matrix(B, parameters.rr, 'Background_ECM', f'{self.date_str}/Background_ECM_{domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.viridis)
             #self.plot_matrix(B, parameters.rr, 'Background_ECM', f'{self.date_str}/Background_ECM_{domain}.pdf', vmin=0, cmap=plt.cm.viridis)
@@ -1814,9 +1871,9 @@ class EnsembleKalmanFilter(Assimilation):
         fig,ax = plt.subplots(figsize=figsize[domain]['singleplot'])
         #fig,ax = plt.subplots(figsize=(10,12))  #Alps
         if vmin is None:
-            vmin = np.min(field)
+            vmin = np.nanmin(field)
         if vmax is None:
-            vmax = np.max(field)
+            vmax = np.nanmax(field)
         im = plot_field(field, ax, vmin, vmax, self.domain, cmap=cmap)
 
         # Add correlation area (TMP)
@@ -1848,9 +1905,9 @@ class EnsembleKalmanFilter(Assimilation):
         fig,ax = plt.subplots(figsize=figsize[domain]['singleplot'])
         #fig,ax = plt.subplots(figsize=(14,16))  # Alps
         if vmin is None:
-            vmin = np.min(array)
+            vmin = np.nanmin(array)
         if vmax is None:
-            vmax=np.max(array)
+            vmax=np.nanmax(array)
         im = plot_field(field, ax, vmin, vmax, self.domain, cmap=cmap)
 
         if add_landmarks:
@@ -1916,7 +1973,7 @@ class ParticleFilter(Assimilation):
 
         if plot_distribution:
             dy = 0.01
-            num = np.max((mu+15*sigma)/dy).astype(int)
+            num = np.nanmax((mu+15*sigma)/dy).astype(int)
             y = np.linspace(0, mu+15*sigma, num=num)
             if self.likelyhood == 'normal':
                 normal = self.normal_dist(y, mu, sigma)
