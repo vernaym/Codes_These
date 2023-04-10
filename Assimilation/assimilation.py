@@ -113,7 +113,7 @@ def parse_command_line():
     parser.add_argument('-e', '--dateend', help = 'Final date of extraction (default=datebegin)')
     parser.add_argument('-d', '--domain', help='Domain of the file', choices=domain_coords.keys(), default='GrandesRousses')
     parser.add_argument('-w', '--workdir', help='Runing directory', default='/home/vernaym/workdir/ASSIMILATION')
-    parser.add_argument('-a', '--assimilation', help='Assimilation method', choices=['pf', 'enkf'], default='enkf')
+    parser.add_argument('-a', '--assimilation', help='Assimilation method (Particle Filter, Ensemble Kalman Filter or Random Sampling)', choices=['pf', 'enkf', 'rs'], default='enkf')
     parser.add_argument('-m', '--mask', help='Switch observation error mask on/off', choices=[1,2,3,4,5,6,7,8,9], default=None, type=int)
     parser.add_argument('-c', '--debiasing', help='Apply bias correction to observation (0=constant bias, 1=pseudo-kriging, 2=estimation based on homogeneity,3=smoothing+scores)', default=None, type=int, choices=[0,1,2,3])
     parser.add_argument('-t', '--threshold', default=None, help='Threshold of precipitation (mm) to apply in the data to consider', type=int)
@@ -496,7 +496,7 @@ def read_obs(args):
         filename = os.path.join(datadir, f'ANTILOPEH_2021103000_2022060200_alp.nc')
 
     if os.path.exists(filename):
-        antilope = xr.open_dataset(filename)
+        antilope = xr.open_dataset(filename, chunks={'time': 24})
         latmax = domain_coords[args.domain]['latmax']
         latmin = domain_coords[args.domain]['latmin']
         lonmin = domain_coords[args.domain]['lonmin']
@@ -984,62 +984,6 @@ class Assimilation(object):
             fig.savefig(f'{self.date_str}/distributions/DISTRIBUTION_{product}_{point}.pdf')
             plt.close(fig)
 
-
-class EnsembleKalmanFilter(Assimilation):
-
-    def __init__(self, period, obs, ensemble, nivometeo, plot, frequency, gridded, localisation, mask, debiasing, domain, likelyhood):
-
-        super(EnsembleKalmanFilter, self).__init__(period, obs, ensemble, nivometeo, plot, frequency, gridded, localisation, mask, debiasing, domain, likelyhood)
-
-        # Parameters to compute Euclidian distance between all points in the domain
-        self.ld = ld
-        self.max_dist = max_dist
-
-    def analyseKF(self, X, P, H, Y, R):
-        """Kalman filter analysis
-
-        Parameters
-        ----------
-        X: array
-            Vector of background (model) state
-
-        P: matrix
-            Background error covariance matrix
-
-        H: matrix
-            Forward operator
-
-        Y: array
-            Observation vector
-
-        R: matrix
-            Observation error covariance matrix
-
-        Returns
-        -------
-        A: array
-            Analysis vector
-        """
-
-        #Kalman gain
-        HP = np.dot(H, P)
-
-        #K  = np.dot(np.dot(P, H.T), np.linalg.inv(np.dot(HP, H.T) + R))  # K=PH'(HPH'+R)^-1
-        K  = np.matmul(np.matmul(P, H.T), np.linalg.inv(np.matmul(HP, H.T) + R))  # K=PH'(HPH'+R)^-1
-        #self.plot_matrix(K, 'Background_ECM_diagonal', f'{self.date_str}/Background_ECM.pdf')
-        #K  = P/(P+R)  # K=PH'(HPH'+R)^-1
-        # Analysis
-        #A =  X + np.dot(K, Y-np.dot(H, X))
-        #A = X + np.dot(K, Y-X)
-        A = X + np.matmul(K, Y-X)
-
-#        #Kalman gain
-#        K  = P/(P+R)
-#        # Analysis
-#        A = K*Y + (1-K)*X  # A = KY+(1-K)X
-
-        return K,A
-
     @speedtest
     def background_error_covariance(self, ensemble):
         """
@@ -1159,12 +1103,13 @@ class EnsembleKalmanFilter(Assimilation):
             # the original value but can become >0 if the original value is 0 (exactly what we want !)
 
             # Plot data
-            #point = 2059  #max obs 20220110
-            #point = 1988  #max std 20220110
-            #point = 887 #max obs 20210825
-            #point = 78 # min obs 20211230
-            point = 2065 # max obs 20211230
-            self.plot_super_ensemble(point, X, mean[point], std[mb][point], pond, f'Background ({mb})')
+            if self.plot:
+                #point = 2059  #max obs 20220110
+                #point = 1988  #max std 20220110
+                #point = 887 #max obs 20210825
+                #point = 78 # min obs 20211230
+                point = 2065 # max obs 20211230
+                self.plot_super_ensemble(point, X, mean[point], std[mb][point], pond, f'Background ({mb})')
 
             # !! WARNING : modification des champs !!
             # Choisir entre les 3 solutions suivantes :
@@ -1325,7 +1270,8 @@ class EnsembleKalmanFilter(Assimilation):
         #point = 78 # min obs 20211230
         #point = np.where(obs==np.nanmin(obs))[0][0]
         #point = np.where(obs==np.nanmax(obs))[0][0]
-        self.plot_super_ensemble(point, obs, mean[point], sd[point], pond, 'Observation')
+        if self.plot:
+            self.plot_super_ensemble(point, obs, mean[point], sd[point], pond, 'Observation')
 
         # !! WARNING : modification de l'obs !!
         # --> cela a tendance à lisser le champs en diminuant/augmenatant les valeurs extremes !!
@@ -1441,6 +1387,284 @@ class EnsembleKalmanFilter(Assimilation):
         np.exp(dist.data, out=dist.data )
         return dist
 
+    def plot_matrix(self, matrix, ref_field, label, outname, cmap=plt.cm.YlGnBu, vmin=None, vmax=None, domain=None):
+        if domain is None:
+            domain = self.domain
+        #diag = np.array([matrix[i,i] for i in range(len(matrix))])
+        diag = matrix.diagonal()
+        field = xr.DataArray(
+                name   = 'rr',
+                data   = diag.reshape((len(ref_field.lat), len(ref_field.lon))),
+                dims   = ["lat", "lon"],
+                coords = dict(lon=ref_field.lon, lat=ref_field.lat),
+                )
+
+        # Reduce the data to the actual domain (remove the potential correlation length edge)
+        latmin = domain_coords[domain]['latmin']
+        latmax = domain_coords[domain]['latmax']
+        lonmin = domain_coords[domain]['lonmin']
+        lonmax = domain_coords[domain]['lonmax']
+        sel_lat = np.round(np.arange(latmin, latmax, 0.01), 2)
+        sel_lon = np.round(np.arange(lonmin, lonmax, 0.01), 2)
+
+        # Add correlation area (TMP)
+        #point = 0
+        #corr = xr.DataArray(
+        #        name   = 'correlation',
+        #        data   = self.pond.getrow(point).toarray()[0].reshape((len(field.lat), len(field.lon))),
+        #        dims   = ["lat", "lon"],
+        #        coords = dict(lon=field.lon, lat=field.lat),
+        #    )
+        #corr = corr.sel({'lat':np.intersect1d(sel_lat, corr.lat.data), 'lon':np.intersect1d(sel_lon, corr.lon.data)})
+
+        field = field.sel({'lat':np.intersect1d(sel_lat, field.lat.data), 'lon':np.intersect1d(sel_lon, field.lon.data)})
+
+        fig,ax = plt.subplots(figsize=figsize[domain]['singleplot'])
+        #fig,ax = plt.subplots(figsize=(10,12))  #Alps
+        if vmin is None:
+            vmin = np.nanmin(field)
+        if vmax is None:
+            vmax = np.nanmax(field)
+        im = plot_field(field, ax, vmin, vmax, self.domain, cmap=cmap)
+
+        # Add correlation area (TMP)
+        #ax = plot_correlation(ax, field, corr, point=1200)
+
+        add_boundaries(ax)
+        finalize_fig(fig, im, label=label, outname=outname)
+
+    def plot_array(self, array, ref_field, label, outname, cmap=plt.cm.YlGnBu, vmin=None, vmax=None, domain=None, add_landmarks=True):
+        if domain is None:
+            domain = self.domain
+        field = xr.DataArray(
+                name   = 'rr',
+                data   = array,
+                dims   = ["lat", "lon"],
+                coords = dict(lon=ref_field.lon, lat=ref_field.lat),
+            )
+
+        # Reduce the data to the actual domain (remove the potential correlation length edge)
+        latmin = domain_coords[domain]['latmin']
+        latmax = domain_coords[domain]['latmax']
+        lonmin = domain_coords[domain]['lonmin']
+        lonmax = domain_coords[domain]['lonmax']
+        sel_lat = np.round(np.arange(latmin, latmax, 0.01), 2)
+        sel_lon = np.round(np.arange(lonmin, lonmax, 0.01), 2)
+
+        field = field.sel({'lat':np.intersect1d(sel_lat, field.lat.data), 'lon':np.intersect1d(sel_lon, field.lon.data)})
+
+        fig,ax = plt.subplots(figsize=figsize[domain]['singleplot'])
+        #fig,ax = plt.subplots(figsize=(14,16))  # Alps
+        if vmin is None:
+            vmin = np.nanmin(array)
+        if vmax is None:
+            vmax=np.nanmax(array)
+        im = plot_field(field, ax, vmin, vmax, self.domain, cmap=cmap)
+
+        if add_landmarks:
+            # Add landmarks
+            if domain == 'GrandesRousses':
+                for landmark, infos in landmarks.items():
+                    plt.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='red', markersize=10)
+                    plt.annotate(landmark, (infos['lon']+0.003, infos['lat']+0.003), color='red', fontsize=20)
+
+            latmin = domain_coords[domain]['latmin']
+            latmax = domain_coords[domain]['latmax']
+            lonmin = domain_coords[domain]['lonmin']
+            lonmax = domain_coords[domain]['lonmax']
+            add_cities(latmin, latmax, lonmin, lonmax)
+            add_boundaries(ax)
+
+        finalize_fig(fig, im, label=label, outname=outname)
+
+    @speedtest
+    def output(self, outfield):
+
+        i = 0
+        j = 0
+        for m in range(1, self.Ne+1):
+            outfield.loc[{'member':m}] = self.newlocalfield[m]  # self.newlocalfield is a numpy array
+
+        if self.plot:
+            plt.close('all')
+
+        return outfield
+
+
+class RandomSampling(Assimilation):
+
+    def __init__(self, period, obs, nivometeo, plot, frequency, gridded, localisation, mask, debiasing, domain, likelyhood, Ne=16):
+
+        self.period = period
+        self.frequency = frequency
+
+        self.radar = obs
+        self.plot = plot
+
+        self.gridded = gridded
+        self.nivometeo = nivometeo
+        self.localisation = localisation
+        self.mask = mask
+        self.debiasing = debiasing
+        self.domain = domain
+        self.likelyhood = likelyhood
+        self.Ne = Ne  # Ouptut ensemble size
+
+        # Parameters to compute Euclidian distance between all points in the domain
+        self.ld = ld
+        self.max_dist = max_dist
+
+    @speedtest
+    def run(self):
+        """ 
+        Main method that loop over the assimilation dates and grid points.
+        TODO : compléter la doc sur la méthode
+        """
+
+        domain = self.domain
+
+        # Initialisation of output fields
+        if self.gridded:
+            self.nlon, self.nlat = len(self.radar.lon), len(self.radar.lat)
+            null  = np.empty((self.nlat, self.nlon, len(self.period)))  # 2D (lat/lon) field
+        else:
+            self.nposte = len(self.nivometeo.num_poste)
+            null = np.empty((self.nposte, len(self.period)))
+
+        null[:] = np.nan
+        self.newlocalfield = {m:null.copy() for m in range(1, self.Ne+1)}  # Used only for ponctual assimilation
+        #self.newlocalfield = {m:dict() for m in range(1, self.Ne+1)}  # Used only for ponctual assimilation
+
+        actual_parameters = self.parameters
+
+        codistances = os.path.join('/home/vernaym/These/DATA', f'codistance_max_dist_{self.max_dist}_{domain}.npz')
+#            if not os.path.exists(codistances):
+#                # Compute inter-distances
+#                coords=[(lon,lat) for lat in actual_parameters.lat.data for lon in actual_parameters.lon.data]
+#                self.pond = self.codistances(coords)
+#            else:
+#                self.pond = scipy.sparse.load_npz(codistances)
+        coords=[(lon,lat) for lat in actual_parameters.lat.data for lon in actual_parameters.lon.data]
+        self.pond = self.codistances(coords)
+
+
+        for idd, date in enumerate(self.period):
+            print(date)
+            self.date_str = date.strftime('%Y%m%d%H')
+            if self.plot:
+                if not os.path.exists(self.date_str):
+                    os.makedirs(self.date_str)
+
+            parameters = actual_parameters.sel({'time':date}).compute()
+
+            ####################  TMP  #####################
+            # Plot distributions before / after conversion
+            if self.plot:
+                fig, ax = plt.subplots()
+                R1 = parameters.mu.data.flatten()
+                R2 = np.sqrt(R1)
+                ax.hist(R2, density=True, bins=np.arange(np.floor(np.nanmin(R2))-0.1, np.ceil(np.nanmax(R2)) + 0.1, 0.1), label='R* (mm^1/2)', alpha=0.5)
+                mu = np.nanmean(R2)
+                sd = np.sum((R2-mu)**2)/len(R2)
+                ax = plot_distribution(ax, mu, sd, color='blue')
+                ax.hist(R1, density=True, bins=np.arange(np.floor(np.nanmin(R1))-0.1, np.ceil(np.nanmax(R1)) + 0.1, 0.1), label='R (mm)', alpha=0.5)
+                ax.legend()
+                ax.set_xlim(right=13)
+                if not os.path.exists(f'{self.date_str}/distributions'):
+                    os.makedirs(f'{self.date_str}/distributions')
+                fig.savefig(f'{self.date_str}/distributions/conversion_rr.pdf')
+                plt.close(fig)
+            ####################  END  #####################
+
+            # Change variable R --> R^(1/2) to bring the distributions closer to a Normal one
+            parameters.mu.data = np.sqrt(parameters.mu.data)
+            parameters.rr.data = np.sqrt(parameters.rr.data)
+
+            if self.gridded:
+                self.gridded_random_draw(date, idd, parameters, domain)
+            else:
+                self.ponctual_random_draw(date, idd, parameters)
+
+    @speedtest
+    def gridded_random_draw(self, date, idd, parameters, domain, nmembers=16):
+
+        # TODO : Add plots of various fields
+
+        R, Rstat, Rdyn, updated_obs = self.observation_ECM_new(parameters, date)
+        Y = updated_obs.data  # Observation vector. WARNING : Use mu to take debiasing into account !
+
+        if self.plot:
+            point = np.where(Y==np.nanmax(Y))  # max observation (plot only)
+            #point = np.where(Y==np.nanmin(Y))  # min observation (plot only)
+            # plot distributions
+            fig, ax = plt.subplots()
+            original_obs = parameters.rr.data[point]
+            plt.bar(original_obs, 1, width=0.03, label='Original observation', color='red', alpha=0.5)
+            obs = Y[point][0]
+            plt.bar(obs, 1, width=0.03, color='red')
+            std = R.diagonal().reshape((len(parameters.lat), len(parameters.lon)))[point][0]
+            ax = plot_distribution(ax, obs, std, label='Observation', color='red')
+
+        analysis = xr.DataArray(
+            name   = 'rr',
+            dims   = ["member", "lat", "lon"],
+            coords = dict(lon=parameters.lon, lat=parameters.lat, member=range(1, nmembers+1)),
+        )
+        obs = Y.reshape((len(parameters.lat), len(parameters.lon)))  # Get observation field
+        for member in analysis.member.data:
+            random = np.random.normal(loc=0.0, scale=1.0, size=1)[0]  # Draw random element from normal distribution
+            sd = R.diagonal().reshape((len(parameters.lat), len(parameters.lon)))  # Get standard deviation field
+            analysis.loc[{'member':member}] = np.square(obs+random*sd/5)  # Draw member
+
+    @speedtest
+    def ponctual_random_draw(self, date, idd, parameters, nmembers=16):
+
+        evaluation_points = zip(self.nivometeo.num_poste.data, np.nanmax(self.nivometeo.lat, axis=1).data, np.nanmax(self.nivometeo.lon, axis=1).data)
+        for idp, (num_poste, lat, lon) in enumerate(evaluation_points):
+            print(num_poste, idp)
+            # Extract rectangle around evaluation point
+            nearest_lat = nearest(parameters.lat, lat)
+            nearest_lon = nearest(parameters.lon, lon)
+            try:
+                sel_lat = np.round(np.arange(nearest_lat-self.max_dist, nearest_lat+self.max_dist, 0.01), 2)
+                sel_lon = np.round(np.arange(nearest_lon-self.max_dist, nearest_lon+self.max_dist, 0.01), 2)
+                # Compute inter-distances
+                coords=[(lon,lat) for lat in sel_lat for lon in sel_lon]
+                self.pond = self.codistances(coords)
+
+                parameters_loc = parameters.sel({'lat':sel_lat, 'lon':sel_lon})
+                R, Rstat, Rdyn, updated_obs = self.observation_ECM_new(parameters_loc, date)
+                Y = updated_obs.data  # Observation vector. WARNING : Use mu to take debiasing into account !
+                obs = Y.reshape((len(parameters_loc.lat), len(parameters_loc.lon)))  # Get observation field
+
+                analysis = xr.DataArray(
+                    name   = 'rr',
+                    dims   = ["member", "lat", "lon"],
+                    coords = dict(lon=parameters_loc.lon, lat=parameters_loc.lat, member=range(1, nmembers+1)),
+                )
+
+                for member in analysis.member.data:
+                    random = np.random.normal(loc=0.0, scale=1.0, size=1)[0]  # Draw random element from normal distribution
+                    sd = R.diagonal().reshape((len(analysis.lat), len(analysis.lon)))  # Get standard deviation field
+                    analysis.loc[{'member':member}] = np.square(obs+random*sd/5)  # Draw member
+
+                    self.newlocalfield[member][idp,idd] = analysis.sel({'lat':nearest_lat, 'lon':nearest_lon, 'member':member}).data
+
+            except KeyError:
+                print(f'Dropping station number {num_poste} (too close from the edge of the domain)')
+
+
+class EnsembleKalmanFilter(Assimilation):
+
+    def __init__(self, period, obs, ensemble, nivometeo, plot, frequency, gridded, localisation, mask, debiasing, domain, likelyhood):
+
+        super(EnsembleKalmanFilter, self).__init__(period, obs, ensemble, nivometeo, plot, frequency, gridded, localisation, mask, debiasing, domain, likelyhood)
+
+        # Parameters to compute Euclidian distance between all points in the domain
+        self.ld = ld
+        self.max_dist = max_dist
+
+
     @speedtest
     def run(self, covariance=False):
         """ 
@@ -1506,20 +1730,21 @@ class EnsembleKalmanFilter(Assimilation):
 
             ####################  TMP  #####################
             # Plot distributions before / after conversion
-            fig, ax = plt.subplots()
-            R1 = parameters.mu.data.flatten()
-            R2 = np.sqrt(R1)
-            ax.hist(R2, density=True, bins=np.arange(np.floor(np.nanmin(R2))-0.1, np.ceil(np.nanmax(R2)) + 0.1, 0.1), label='R* (mm^1/2)', alpha=0.5)
-            mu = np.nanmean(R2)
-            sd = np.sum((R2-mu)**2)/len(R2)
-            ax = plot_distribution(ax, mu, sd, color='blue')
-            ax.hist(R1, density=True, bins=np.arange(np.floor(np.nanmin(R1))-0.1, np.ceil(np.nanmax(R1)) + 0.1, 0.1), label='R (mm)', alpha=0.5)
-            ax.legend()
-            ax.set_xlim(right=13)
-            if not os.path.exists(f'{self.date_str}/distributions'):
-                os.makedirs(f'{self.date_str}/distributions')
-            fig.savefig(f'{self.date_str}/distributions/conversion_rr.pdf')
-            plt.close(fig)
+            if self.plot:
+                fig, ax = plt.subplots()
+                R1 = parameters.mu.data.flatten()
+                R2 = np.sqrt(R1)
+                ax.hist(R2, density=True, bins=np.arange(np.floor(np.nanmin(R2))-0.1, np.ceil(np.nanmax(R2)) + 0.1, 0.1), label='R* (mm^1/2)', alpha=0.5)
+                mu = np.nanmean(R2)
+                sd = np.sum((R2-mu)**2)/len(R2)
+                ax = plot_distribution(ax, mu, sd, color='blue')
+                ax.hist(R1, density=True, bins=np.arange(np.floor(np.nanmin(R1))-0.1, np.ceil(np.nanmax(R1)) + 0.1, 0.1), label='R (mm)', alpha=0.5)
+                ax.legend()
+                ax.set_xlim(right=13)
+                if not os.path.exists(f'{self.date_str}/distributions'):
+                    os.makedirs(f'{self.date_str}/distributions')
+                fig.savefig(f'{self.date_str}/distributions/conversion_rr.pdf')
+                plt.close(fig)
             ####################  END  #####################
 
             # Change variable R --> R^(1/2) to bring the distributions closer to a Normal one
@@ -1531,39 +1756,6 @@ class EnsembleKalmanFilter(Assimilation):
                 self.gridded_analysis(date, idd,  ensemble, parameters, domain)
             else:
                 self.ponctual_analysis(date, idd, ensemble, parameters, covariance=covariance)
-
-            # Add methode to simply contruct and ensemble by random draws around the observation
-            #self.random_draw(date, idd, ensemble, parameters, domain)
-
-    @speedtest
-    def random_draw(self, date, idd, parameters, domain, nmembers):
-
-        R, Rstat, Rdyn, updated_obs = self.observation_ECM_new(parameters, date)
-        Y = updated_obs.data  # Observation vector. WARNING : Use mu to take debiasing into account !
-
-        if self.plot:
-            point = np.where(Y==np.nanmax(Y))  # max observation (plot only)
-            #point = np.where(Y==np.nanmin(Y))  # min observation (plot only)
-            # plot distributions
-            fig, ax = plt.subplots()
-            original_obs = parameters.rr.data[point]
-            plt.bar(original_obs, 1, width=0.03, label='Original observation', color='red', alpha=0.5)
-            obs = Y[point][0]
-            plt.bar(obs, 1, width=0.03, color='red')
-            std = R.diagonal().reshape((len(parameters.lat), len(parameters.lon)))[point][0]
-            ax = plot_distribution(ax, obs, std, label='Observation', color='red')
-
-        analysis = xr.DataArray(
-            name   = 'rr',
-            dims   = ["member", "lat", "lon"],
-            coords = dict(lon=ensemble.lon, lat=ensemble.lat, member=range(1, nmembers+1)),
-        )
-        for member in analysis.member.data:
-            random = np.random.normal(loc=0.0, scale=1.0, size=1)[0]  # Draw random element from normal distribution
-            sd = R.diagonal().reshape((len(ensemble.lat), len(ensemble.lon)))  # Get standard deviation field
-            obs = Y.reshape((len(ensemble.lat), len(ensemble.lon)))  # Get ensemble field
-            analysis.loc[{'member':member}] = np.square(obs+random*sd/5)  # Draw member
-
 
     @speedtest
     def ponctual_analysis(self, date, idd, ensemble, parameters, covariance=False):
@@ -1836,108 +2028,6 @@ class EnsembleKalmanFilter(Assimilation):
 
             plt.close('all')
 
-    def plot_matrix(self, matrix, ref_field, label, outname, cmap=plt.cm.YlGnBu, vmin=None, vmax=None, domain=None):
-        if domain is None:
-            domain = self.domain
-        #diag = np.array([matrix[i,i] for i in range(len(matrix))])
-        diag = matrix.diagonal()
-        field = xr.DataArray(
-                name   = 'rr',
-                data   = diag.reshape((len(ref_field.lat), len(ref_field.lon))),
-                dims   = ["lat", "lon"],
-                coords = dict(lon=ref_field.lon, lat=ref_field.lat),
-                )
-
-        # Reduce the data to the actual domain (remove the potential correlation length edge)
-        latmin = domain_coords[domain]['latmin']
-        latmax = domain_coords[domain]['latmax']
-        lonmin = domain_coords[domain]['lonmin']
-        lonmax = domain_coords[domain]['lonmax']
-        sel_lat = np.round(np.arange(latmin, latmax, 0.01), 2)
-        sel_lon = np.round(np.arange(lonmin, lonmax, 0.01), 2)
-
-        # Add correlation area (TMP)
-        #point = 0
-        #corr = xr.DataArray(
-        #        name   = 'correlation',
-        #        data   = self.pond.getrow(point).toarray()[0].reshape((len(field.lat), len(field.lon))),
-        #        dims   = ["lat", "lon"],
-        #        coords = dict(lon=field.lon, lat=field.lat),
-        #    )
-        #corr = corr.sel({'lat':np.intersect1d(sel_lat, corr.lat.data), 'lon':np.intersect1d(sel_lon, corr.lon.data)})
-
-        field = field.sel({'lat':np.intersect1d(sel_lat, field.lat.data), 'lon':np.intersect1d(sel_lon, field.lon.data)})
-
-        fig,ax = plt.subplots(figsize=figsize[domain]['singleplot'])
-        #fig,ax = plt.subplots(figsize=(10,12))  #Alps
-        if vmin is None:
-            vmin = np.nanmin(field)
-        if vmax is None:
-            vmax = np.nanmax(field)
-        im = plot_field(field, ax, vmin, vmax, self.domain, cmap=cmap)
-
-        # Add correlation area (TMP)
-        #ax = plot_correlation(ax, field, corr, point=1200)
-
-        add_boundaries(ax)
-        finalize_fig(fig, im, label=label, outname=outname)
-
-    def plot_array(self, array, ref_field, label, outname, cmap=plt.cm.YlGnBu, vmin=None, vmax=None, domain=None, add_landmarks=True):
-        if domain is None:
-            domain = self.domain
-        field = xr.DataArray(
-                name   = 'rr',
-                data   = array,
-                dims   = ["lat", "lon"],
-                coords = dict(lon=ref_field.lon, lat=ref_field.lat),
-            )
-
-        # Reduce the data to the actual domain (remove the potential correlation length edge)
-        latmin = domain_coords[domain]['latmin']
-        latmax = domain_coords[domain]['latmax']
-        lonmin = domain_coords[domain]['lonmin']
-        lonmax = domain_coords[domain]['lonmax']
-        sel_lat = np.round(np.arange(latmin, latmax, 0.01), 2)
-        sel_lon = np.round(np.arange(lonmin, lonmax, 0.01), 2)
-
-        field = field.sel({'lat':np.intersect1d(sel_lat, field.lat.data), 'lon':np.intersect1d(sel_lon, field.lon.data)})
-
-        fig,ax = plt.subplots(figsize=figsize[domain]['singleplot'])
-        #fig,ax = plt.subplots(figsize=(14,16))  # Alps
-        if vmin is None:
-            vmin = np.nanmin(array)
-        if vmax is None:
-            vmax=np.nanmax(array)
-        im = plot_field(field, ax, vmin, vmax, self.domain, cmap=cmap)
-
-        if add_landmarks:
-            # Add landmarks
-            if domain == 'GrandesRousses':
-                for landmark, infos in landmarks.items():
-                    plt.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='red', markersize=10)
-                    plt.annotate(landmark, (infos['lon']+0.003, infos['lat']+0.003), color='red', fontsize=20)
-
-            latmin = domain_coords[domain]['latmin']
-            latmax = domain_coords[domain]['latmax']
-            lonmin = domain_coords[domain]['lonmin']
-            lonmax = domain_coords[domain]['lonmax']
-            add_cities(latmin, latmax, lonmin, lonmax)
-            add_boundaries(ax)
-
-        finalize_fig(fig, im, label=label, outname=outname)
-
-    @speedtest
-    def output(self, outfield):
-
-        i = 0
-        j = 0
-        for m in range(1, self.Ne+1):
-            outfield.loc[{'member':m}] = self.newlocalfield[m]  # self.newlocalfield is a numpy array
-
-        if self.plot:
-            plt.close('all')
-
-        return outfield
 
 class ParticleFilter(Assimilation):
 
@@ -2534,7 +2624,9 @@ if __name__ == "__main__":
     extract_period = date_range(args.datebegin, args.dateend, dt=timestep[args.frequency])
 
     antilope = read_obs(args)
-    pearome = read_ensemble(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'), args.frequency, args.domain, antilope)
+    if not args.assimilation == 'rs':
+        pearome = read_ensemble(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'), args.frequency, args.domain, antilope)
+
     if args.gridded:
         localfields = xr.DataArray(
                 name   = 'rr',
@@ -2596,6 +2688,15 @@ if __name__ == "__main__":
             enkf.run()
         out = enkf.output(localfields)
         outname = f"EnKF_{args.datebegin.strftime('%Y%m%d%H')}_{args.dateend.strftime('%Y%m%d%H')}_{args.frequency}_{args.domain}"
+        out.to_netcdf(f"{outname}.nc")
+
+    elif args.assimilation == 'rs':  # Random Sampling
+
+        rs = RandomSampling(extract_period, antilope, nivometeo, args.plot, args.frequency, args.gridded, args.localisation, args.mask, args.debiasing, args.domain, args.likelyhood)
+        mask = rs.pdf_parameters()
+        rs.run()
+        out = rs.output(localfields)
+        outname = f"Random_Sampling_{args.datebegin.strftime('%Y%m%d%H')}_{args.dateend.strftime('%Y%m%d%H')}_{args.frequency}_{args.domain}"
         out.to_netcdf(f"{outname}.nc")
 
     tfin = time.time()
