@@ -12,8 +12,164 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy.stats import norm, gamma
+from scipy import signal
 import random
 from scipy.interpolate import interp1d
+from scipy.spatial import cKDTree
+from scipy.sparse import csc_matrix, csr_matrix, dia_matrix, diags
+
+savedir = '/home/vernaym/These/figures/illustration'
+
+Np = 3  # Domain size
+
+# TODO : Set up an idealised 2D experiment with an isolated storm to see the effect of background correction 
+# when the model is able to reproduce the phenomenon but at a different location
+#https://stackoverflow.com/questions/66580517/creating-a-gaussian-2d-array-with-mean-1-at-specificed-location
+def field_generator(X, Y):
+    """Generation of a Gaussian Kernel centered on point (X,Y)"""
+    N = 7   # kernel size
+    k1d = signal.gaussian(N, std=1).reshape(N, 1)
+    kernel = np.outer(k1d, k1d)
+#    plt.imshow(kernel)
+#    plt.show()
+
+    #A = np.zeros((16, 16))
+    A = np.zeros((Np, Np))
+    A[X, Y] = 1    # random
+#    plt.imshow(A)
+#    plt.show()
+
+    row, col = np.where(A == 1)
+    A[row[0]-(N//2):row[0]+(N//2)+1, col[0]-(N//2):col[0]+(N//2)+1] = kernel
+#    plt.imshow(A)
+#    plt.show()
+
+    return A
+
+def codistances(coords):
+    """
+    Solution pour le calcul des inter-distances trouvée sur : https://stackoverflow.com/questions/35296935/python-calculate-lots-of-distances-quickly
+    """
+    tree = cKDTree(coords)
+    dist = tree.sparse_distance_matrix(tree, 30, p=2, output_type='coo_matrix')
+    dist = csr_matrix(dist)
+    #TODO : utiliser une gaussienne plutot qu'une exponentielle décroissante
+    dist[dist.nonzero()] = -dist[dist.nonzero()]
+    np.exp(dist.data, out=dist.data )
+    return dist
+
+def illustration_modification_ebauche():
+    obs = field_generator(12, 12)
+    stdobs=diags(obs.flatten()/5+1)
+    ebauche = field_generator(4, 4)
+    fig,ax = plt.subplots()
+    im = ax.imshow(obs, cmap='viridis')
+    fig.colorbar(im, ax=ax)
+    fig.savefig(os.path.join(savedir, 'obs.png'))
+    fig,ax = plt.subplots()
+    im = ax.imshow(ebauche, cmap='viridis')
+    fig.colorbar(im, ax=ax)
+    fig.savefig(os.path.join(savedir, 'ebauche.png'))
+
+    #coords=[(lon,lat) for lat in range(16) for lon in range(16)]
+    coords=[(lon,lat) for lat in range(Np) for lon in range(Np)]
+    pond = codistances(coords)
+
+    super_ensemble = pond.copy()
+    super_ensemble[super_ensemble.nonzero()] = 1  # Position of pixels to inclue in the spread computation = L
+    # Computation of the likelyhood of each pixel of the super-ensemble
+    O = super_ensemble.dot(diags(obs.flatten()))
+    M = super_ensemble.dot(diags(ebauche.flatten()))
+    S = super_ensemble.dot(diags(1/stdobs.diagonal()))
+    A = (M-O).multiply(S)
+    likelyhood = -A.multiply(A)
+    np.exp(likelyhood.data, out=likelyhood.data)  # likelyhood = exp(-((O-M).S)**2)
+    import pdb
+    pdb.set_trace()
+
+    pond = pond.multiply(likelyhood)  # distance and likelyhood ponderation
+    #pond = likelyhood  # likelyhood only ponderation
+
+    weight = likelyhood.sum(axis=1).getA1()
+
+    #replacement_strategy = 'mean'
+    replacement_strategy = 'max_weight'
+
+    mean, std = get_parameters(ebauche, pond, weight=weight, super_ensemble=super_ensemble, replacement_strategy=replacement_strategy)
+
+    if replacement_strategy == 'max_weight':
+        # 1. take all new values (weighted average between the original value and the average of
+        # the local super-ensemble weighted by the average weight
+        # --> cela a tendance à lisser le champs en diminuant/augmenatant les valeurs extremes !!
+        new_ensemble = mean.reshape(16, 16)
+    elif replacement_strategy == 'only_zeros':
+        # 3. Change only values when the original value is 0 and the local weighted average is >0
+        mean[np.where(ebauche > 0)] = ebauche[np.where(ebauche > 0)]
+        new_ensemble = mean.reshape(16, 16)
+    elif replacement_strategy == 'mean':
+        # 4. Change values by the mean local average weighted by the observation likelyhood
+        new_ensemble = mean.reshape(16, 16)
+
+    fig,ax = plt.subplots()
+    im = plt.imshow(new_ensemble, cmap='viridis')
+    fig.colorbar(im, ax=ax)
+    fig.savefig(os.path.join(savedir, 'new_ebauche.png'))
+    import pdb
+    pdb.set_trace()
+
+def get_parameters(field, pond, weight=None, super_ensemble=None, replacement_strategy='keep'):
+
+    initial_field = field.flatten()
+    X = diags(field.flatten(), 0)
+
+    # 1. Calcul de la moyenne pondérée par la distance ET l'erreur statique
+    if weight is None:
+        weight = pond.sum(axis=1).getA1()  # The sum of the weights (axis=1 <==> sum over rows)
+
+    mean = pond.dot(X).sum(axis=1).getA1()  # getA1 transforms the 1*N matrix object into a 1D np.array
+    mean = mean / weight
+
+    if replacement_strategy == 'keep':  # Default behavior (for observation)
+        newfield = initial_field
+        # 2.1 Computation of the dispersion around the original value (--> increase Rdyn !)
+        sd = get_std(X, initial_field, pond, weight=weight, super_ensemble=super_ensemble)
+    elif replacement_strategy == 'toward_mean':
+        pixel_weight = pond.diagonal()  # = exp(-erreur_statique) pour l'obs et =likelyhood du pixel pour les membres de l'ensemble
+        sums = pond.sum(axis=1).A1
+        # To weight against the average weight in the neighborhood
+        nb_nonzero = (pond != 0).sum(0).getA1()  # Count non zero elements of each row
+        meanweight = sums / nb_nonzero
+        newfield = (initial_field * pixel_weight + mean * meanweight) / (pixel_weight + meanweight)
+        #newfield = (initial_field * pixel_weight + mean * (1-pixel_weight))  # Plus impactant à priori !
+        # 2.2 Computation of the dispersion around the local ensemble mean value
+        sd = get_std(X, mean, pond, weight=weight, super_ensemble=super_ensemble)
+    elif replacement_strategy == 'max_weight':  # To pull background members toward the observation
+        # Get maximum weight of each line of the pond matrix
+        idx = pond.argmax(axis=1).A1  # get the index of the maximum value of each line
+        newfield = initial_field[idx]
+        # 2.3 Computation of the dispersion around the new mean mean value
+        sd = get_std(X, newfield, pond, weight=weight, super_ensemble=super_ensemble)
+    elif replacement_strategy == 'mean':  # To replace background value by the average weighted by observation likelyhood
+        newfield = mean
+        sd = get_std(X, mean, pond, weight=weight, super_ensemble=super_ensemble)
+
+    return newfield, sd
+
+def get_std(data, mean, pond, weight=None, super_ensemble=None):
+
+    if weight is None:
+        weight = pond.sum(axis=1).getA1()  # The sum of the weights (axis=1 <==> sum over rows)
+    if super_ensemble is None:
+        super_ensemble = pond.copy()  # WARNING : make a copy or pond will change when super_ensemble changes
+        super_ensemble[super_ensemble.nonzero()] = 1  # Position of pixels to inclue in the spread computation
+
+    se_mean = diags(mean, 0).dot(super_ensemble)  # matrix with mean[i] at each non-zero element of line i of super_ensemble
+    X = super_ensemble.dot(data)-se_mean  # # M.diag(obs)-diag(e).M
+    sd = X.multiply(X).multiply(pond).sum(axis=1).getA1()
+    sd = sd / weight
+    sd = np.nan_to_num(sd)
+
+    return sd
 
 
 def violin(raw, pf, enkf, obs):
@@ -115,7 +271,8 @@ def plot(mu, std, N, obs, obs_std, vmin, vmax, distribution='norm'):
         ax0.plot(np.NaN, np.NaN, color='k', label='Norm', linewidth=0.5)  # To add a legend entry without plotting anything
     ax0.hist(ensemble,density=True,bins=100, color='k', alpha=0.5, label='Background')
     if obs-obs_std+1>0:
-        drawmask = [np.where(ensemble==ensemble[(ensemble>obs-obs_std)&(ensemble<obs-obs_std+1)][0])[0][0], np.where(ensemble==ensemble[(ensemble>obs+2*std)&(ensemble<obs+2*std+1)][0])[0][0]]
+        #drawmask = [np.where(ensemble==ensemble[(ensemble>obs-obs_std)&(ensemble<obs-obs_std+1)][0])[0][0], np.where(ensemble==ensemble[(ensemble>obs+2*std)&(ensemble<obs+2*std+1)][0])[0][0]]
+        drawmask = [np.where(ensemble==ensemble[(ensemble>mu-std)&(ensemble<mu-std+1)][0])[0][0]]
     else:
         drawmask = [np.where(ensemble==ensemble[(ensemble>=0)&(ensemble<=0.01)][0])[0][0], np.where(ensemble==ensemble[(ensemble>obs+std)&(ensemble<obs+std+0.1)][0])[0][0]]
 
@@ -131,7 +288,7 @@ def plot(mu, std, N, obs, obs_std, vmin, vmax, distribution='norm'):
     if distribution == 'gamma':
         ax0 = plot_distribution(ax0, obs, obs_std, color='red', distribution='gamma', linewidth=1)
     ax1.plot(obs, [3], color='red', marker='|', markersize=100)
-    ax1.plot([obs-std, obs+std], [1.5, 1.5], marker='|', markersize=10, color='red', linewidth=1, linestyle='--')
+    ax1.plot([obs-obs_std, obs+obs_std], [1.5, 1.5], marker='|', markersize=10, color='red', linewidth=1, linestyle='--')
 
     # EnKF analysis
     enkf = ensemble + std/(std+obs_std)*(obs-ensemble)
@@ -195,7 +352,8 @@ def plot(mu, std, N, obs, obs_std, vmin, vmax, distribution='norm'):
     ax0.spines['right'].set_visible(False)
     ax0.spines['bottom'].set_visible(False)
     ax0.set_xlim(left=vmin, right=vmax)
-    ax0.set_ylim(top=0.7)
+#    ax0.set_ylim(top=min(0.7, max(?))  TODO : définir l'échelle dynamiquement
+    ax0.set_ylim(top=0.15)
     ax0.legend(fontsize=10)
 
     ax1.get_yaxis().set_visible(False)
@@ -207,9 +365,11 @@ def plot(mu, std, N, obs, obs_std, vmin, vmax, distribution='norm'):
     ax1.set_ylim(bottom=0, top=3)
 
     plt.tight_layout()
-    fig.savefig(f"illustration_assimilation_{distribution}_{mu}_{std}_{obs}_{obs_std}.pdf", format='pdf')
+    fig.savefig(os.path.join(savedir, f"illustration_assimilation_{distribution}_{mu}_{std}_{obs}_{obs_std}.pdf"), format='pdf')
 
-    violin(ensemble, pf, enkf, obs)
+#    violin(ensemble, pf, enkf, obs)
+
+illustration_modification_ebauche()
 
 methods = {'EGP_distribution':EGP_distribution}  # To call function fro string (see EGP_distribution)
 
@@ -233,14 +393,14 @@ N = 1000000  # Ensemble size
 #pdb.set_trace()
 
 
-mu  = 30  # ensemble mean
+mu  = 50  # ensemble mean
 #mu  = 10  # ensemble mean
-std = 10  # ensemble dispersion / std
+std = 20  # ensemble dispersion / std
 #std = 5  # ensemble dispersion / std
-obs = 40
-obs_std =5
+obs = 15
+obs_std =10
 vmin = 0
-vmax = 20
 vmax = 60
+#vmax = 60
 plot(mu, std, N, obs, obs_std, vmin, vmax)
 #plot(mu, std, N, obs, obs_std, vmin, vmax, distribution='gamma')
