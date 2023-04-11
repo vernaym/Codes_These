@@ -336,7 +336,7 @@ xpid_label = dict(
         KD31          = 'Daily analysis with Ensemble Kalman Filter and no debiasing',  # Idem KD30 mais sans débiaisage
         #LDM9D3        = 'PF, mask9=estimated_ratio, debiaisage3=0.1_2',
         LDM9D3        = 'PF, d0=0.1, c0=2',
-        RS00          = 'Random Sampling
+        RS00          = 'Random Sampling',
     )
 
 

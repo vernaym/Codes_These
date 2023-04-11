@@ -937,7 +937,7 @@ class Assimilation(object):
 
         return prob_density
 
-    def plot_super_ensemble(self, point, ensemble, mu, std, pond, product, label=None, ax=None):
+    def plot_super_ensemble(self, point, ensemble, mu, std, pond, product, label=None, ax=None, reference=None):
 
         if ax is None:
             now = True
@@ -953,18 +953,21 @@ class Assimilation(object):
         ax.hist(ensemble, density=True, bins=np.arange(np.floor(np.nanmin(ensemble))-0.1, np.ceil(np.nanmax(ensemble)) + 0.1, 0.1), weights=weights/np.sum(weights), label='Neighborhood distribution', alpha=0.5)
         #ax.bar(ensemble, weights/np.sum(weights))
         #ax.plot(obs, obsweight, marker='+', color='orange', label='Initial Observation')
-        ax.bar(mu, 2.54, width=0.005, color='red')
+        ax.bar(mu, 2, width=0.005, color='k')
 
         # Plot the actual distribution used for the assimilation :
-        plot_distribution(ax, mu, std, distribution='norm', linewidth=1, label=f'{product} distribution', color='red')  # mu est la valeur du pixel
+        plot_distribution(ax, mu, std, distribution='norm', linewidth=1, label=f'{product} distribution', color='k')  # mu est la valeur du pixel
 #        plot_distribution(ax, obs, std, distribution='norm', linewidth=1, label='Observation distribution')  # mu est la valeur du pixel
 
         # To test a new method (the goal is that it gives the same distribution as the red one in the final version) :
-        mean = np.sum(weights*ensemble)/np.sum(weights)
-        ax.bar(mean, 2.54, width=0.005, color='k')
-        plot_distribution(ax, mean, std, distribution='norm', linewidth=1, color='k')  # mu est la valeur du pixel
+#        mean = np.sum(weights*ensemble)/np.sum(weights)
+#        ax.bar(mean, 2.54, width=0.005, color='k')
+#        plot_distribution(ax, mean, std, distribution='norm', linewidth=1, color='k')  # mu est la valeur du pixel
 
         ax.plot(obs, obsweight, marker='.', color='k', label=f'Initial {product}', linestyle='', markersize=15)
+
+        if reference is not None:
+            ax.bar(np.sqrt(reference), 2, width=0.1, color='red', label='Reference Observation')
 
 #        newobs = (obs*obsweight + mean * np.nanmean(weights[weights>0])) / (obsweight+np.nanmean(weights[weights>0]))
 #        #sd   = np.sum(weights*(ensemble-obs)**2)/np.sum(weights)
@@ -975,13 +978,16 @@ class Assimilation(object):
             # Set figure boundaries
             ax.set_ylim(bottom=0, top=1)
             #ax.set_xlim(left=4, right=np.nanmax(ensemble)+std)
-            ax.set_xlim(left=0, right=3)
+            #ax.set_xlim(left=0, right=3)
             ax.set_xlabel('R^1/2 (mm^1/2)')
             ax.set_ylabel('Weight')
             ax.legend()
-            if not os.path.exists(f'{self.date_str}/distributions'):
-                os.makedirs(f'{self.date_str}/distributions')
-            fig.savefig(f'{self.date_str}/distributions/DISTRIBUTION_{product}_{point}.pdf')
+#            if not os.path.exists(f'{self.date_str}/distributions'):
+#                os.makedirs(f'{self.date_str}/distributions')
+#            fig.savefig(f'{self.date_str}/distributions/DISTRIBUTION_{product}_{point}.pdf')
+            if not os.path.exists(f'distributions'):
+                os.makedirs(f'distributions')
+            fig.savefig(f'distributions/DISTRIBUTION_{product}.pdf')
             plt.close(fig)
 
     @speedtest
@@ -1240,7 +1246,7 @@ class Assimilation(object):
 
         return R, Rstat, Rdyn, ref_field
 
-    def observation_ECM_new(self, parameters, date):
+    def observation_ECM_new(self, parameters, date, plot=None):
 
         std = np.abs(parameters.sigma.data)  # !! WARNING sigma peut être <0 !!
         #Rstat = diags(std.flatten())
@@ -1263,15 +1269,23 @@ class Assimilation(object):
         R    = dia_matrix(diags(sd, 0) + Rstat)  # WARNING : the sum of 2 dia_matrix returns a csr_matrix...
 
         # Plot data
-        #point = 2059  #max obs 20220110
-        #point = 1988  #max std 20220110
-        point = 887 #max obs 20210825
-        point = 2065
-        #point = 78 # min obs 20211230
-        #point = np.where(obs==np.nanmin(obs))[0][0]
-        #point = np.where(obs==np.nanmax(obs))[0][0]
-        if self.plot:
-            self.plot_super_ensemble(point, obs, mean[point], sd[point], pond, 'Observation')
+        if plot is not None:
+            #point = 2059  #max obs 20220110
+            #point = 1988  #max std 20220110
+            #point = 887 #max obs 20210825
+            point = 2065
+            #point = 78 # min obs 20211230
+            #point = np.where(obs==np.nanmin(obs))[0][0]
+            #point = np.where(obs==np.nanmax(obs))[0][0]
+            num_poste = plot['num_poste']
+            date = plot['date']
+            nivometeo = read_nivometeo_obs()
+            if np.datetime64(date) in nivometeo.date:
+                ref = nivometeo.loc[{'num_poste':num_poste, 'date':np.datetime64(date)}].obs.data
+                if not np.isnan(ref):
+                    lat,lon = np.meshgrid(parameters.lat, parameters.lon)
+                    point = np.where((lat.flatten()==plot['lat']) & (lon.flatten()==plot['lon']))[0][0]
+                    self.plot_super_ensemble(point, obs, mean[point], sd[point], pond, f'Observation_{num_poste}_{date}', reference=ref)
 
         # !! WARNING : modification de l'obs !!
         # --> cela a tendance à lisser le champs en diminuant/augmenatant les valeurs extremes !!
@@ -1288,11 +1302,13 @@ class Assimilation(object):
 
     def get_parameters(self, field, pond, weight=None, super_ensemble=None, replacement_strategy='keep'):
 
+        field[np.isnan(field)] = 0.0
         initial_field = field.flatten()
         X = diags(field.flatten(), 0)
 
         # 1. Calcul de la moyenne pondérée par la distance ET l'erreur statique
         if weight is None:
+            pond.data[np.isnan(pond.data)] = 0.0
             weight = pond.sum(axis=1).getA1()  # The sum of the weights (axis=1 <==> sum over rows)
 
         mean = pond.dot(X).sum(axis=1).getA1()  # getA1 transforms the 1*N matrix object into a 1D np.array
@@ -1613,8 +1629,11 @@ class RandomSampling(Assimilation):
         obs = Y.reshape((len(parameters.lat), len(parameters.lon)))  # Get observation field
         for member in analysis.member.data:
             random = np.random.normal(loc=0.0, scale=1.0, size=1)[0]  # Draw random element from normal distribution
-            sd = R.diagonal().reshape((len(parameters.lat), len(parameters.lon)))  # Get standard deviation field
-            analysis.loc[{'member':member}] = np.square(obs+random*sd/5)  # Draw member
+            sd = Rdyn.diagonal().reshape((len(parameters.lat), len(parameters.lon)))  # Get standard deviation field
+            #ana = obs+random*sd/5
+            ana = obs+random*sd
+            ana[ana<0] = 0
+            analysis.loc[{'member':member}] = np.square(ana)
 
     @speedtest
     def ponctual_random_draw(self, date, idd, parameters, nmembers=16):
@@ -1625,33 +1644,44 @@ class RandomSampling(Assimilation):
             # Extract rectangle around evaluation point
             nearest_lat = nearest(parameters.lat, lat)
             nearest_lon = nearest(parameters.lon, lon)
-            try:
-                sel_lat = np.round(np.arange(nearest_lat-self.max_dist, nearest_lat+self.max_dist, 0.01), 2)
-                sel_lon = np.round(np.arange(nearest_lon-self.max_dist, nearest_lon+self.max_dist, 0.01), 2)
-                # Compute inter-distances
-                coords=[(lon,lat) for lat in sel_lat for lon in sel_lon]
-                self.pond = self.codistances(coords)
+#            try:
+            sel_lat = np.round(np.arange(nearest_lat-self.max_dist, nearest_lat+self.max_dist, 0.01), 2)
+            sel_lon = np.round(np.arange(nearest_lon-self.max_dist, nearest_lon+self.max_dist, 0.01), 2)
+            # Compute inter-distances
 
-                parameters_loc = parameters.sel({'lat':sel_lat, 'lon':sel_lon})
+            parameters_loc = parameters.sel({'lat':np.intersect1d(sel_lat, parameters.lat), 'lon':np.intersect1d(sel_lon, parameters.lon)})
+            coords=[(lon,lat) for lat in parameters_loc.lat for lon in parameters_loc.lon]
+            self.pond = self.codistances(coords)
+
+            if int(num_poste) == 74033400:
+                R, Rstat, Rdyn, updated_obs = self.observation_ECM_new(parameters_loc, date, plot=dict(lat=nearest_lat, lon=nearest_lon, date=date, num_poste=num_poste))
+            else:
                 R, Rstat, Rdyn, updated_obs = self.observation_ECM_new(parameters_loc, date)
-                Y = updated_obs.data  # Observation vector. WARNING : Use mu to take debiasing into account !
-                obs = Y.reshape((len(parameters_loc.lat), len(parameters_loc.lon)))  # Get observation field
+            Y = updated_obs.data  # Observation vector. WARNING : Use mu to take debiasing into account !
+            obs = Y.reshape((len(parameters_loc.lat), len(parameters_loc.lon)))  # Get observation field
 
-                analysis = xr.DataArray(
-                    name   = 'rr',
-                    dims   = ["member", "lat", "lon"],
-                    coords = dict(lon=parameters_loc.lon, lat=parameters_loc.lat, member=range(1, nmembers+1)),
-                )
+            analysis = xr.DataArray(
+                name   = 'rr',
+                dims   = ["member", "lat", "lon"],
+                coords = dict(lon=parameters_loc.lon, lat=parameters_loc.lat, member=range(1, nmembers+1)),
+            )
 
-                for member in analysis.member.data:
-                    random = np.random.normal(loc=0.0, scale=1.0, size=1)[0]  # Draw random element from normal distribution
-                    sd = R.diagonal().reshape((len(analysis.lat), len(analysis.lon)))  # Get standard deviation field
-                    analysis.loc[{'member':member}] = np.square(obs+random*sd/5)  # Draw member
+            for member in analysis.member.data:
+                random = np.random.normal(loc=0.0, scale=1.0, size=1)[0]  # Draw random element from normal distribution
+                sd = Rdyn.diagonal().reshape((len(analysis.lat), len(analysis.lon)))  # Get standard deviation field
 
-                    self.newlocalfield[member][idp,idd] = analysis.sel({'lat':nearest_lat, 'lon':nearest_lon, 'member':member}).data
+                # TODO : assurer que les RR sont >0
+                # ==> Draw from gama distribution
+                #ana = obs+random*sd/5
+                ana = obs+random*sd
+                ana[ana<0] = 0
+                analysis.loc[{'member':member}] = np.square(ana)
 
-            except KeyError:
-                print(f'Dropping station number {num_poste} (too close from the edge of the domain)')
+                self.newlocalfield[member][idp,idd] = analysis.sel({'lat':nearest_lat, 'lon':nearest_lon, 'member':member}).data
+
+#            except KeyError:
+#                print(f'Dropping station number {num_poste} (too close from the edge of the domain)')
+#                # TODO : enlever les postes concernés du fichier de sortie pour ne pas dégrader les scores artificiellement !
 
 
 class EnsembleKalmanFilter(Assimilation):
@@ -1726,7 +1756,7 @@ class EnsembleKalmanFilter(Assimilation):
                     os.makedirs(self.date_str)
 
             ensemble   = actual_ensemble.sel({'time':date}).compute()  # Load data into memory now
-            parameters = actual_parameters.sel({'time':date})
+            parameters = actual_parameters.sel({'time':date}).compute()
 
             ####################  TMP  #####################
             # Plot distributions before / after conversion
@@ -1765,61 +1795,58 @@ class EnsembleKalmanFilter(Assimilation):
             # Extract rectangle around evaluation point
             nearest_lat = nearest(parameters.lat, lat)
             nearest_lon = nearest(parameters.lon, lon)
-            try:
-                if covariance:
-                    sel_lat = np.round(np.arange(nearest_lat-self.max_dist, nearest_lat+self.max_dist, 0.01), 2)
-                    sel_lon = np.round(np.arange(nearest_lon-self.max_dist, nearest_lon+self.max_dist, 0.01), 2)
-                    # Compute inter-distances
-                    coords=[(lon,lat) for lat in sel_lat for lon in sel_lon]
-                    self.pond = self.codistances(coords)
-                else:  # Verrue !
-                    sel_lat   = np.round([nearest_lat], 2)
-                    sel_lon   = np.round([nearest_lon], 2)
-                    self.pond = scipy.sparse.eye(1)
+            #try:
+            if covariance:
+                sel_lat = np.round(np.arange(nearest_lat-self.max_dist, nearest_lat+self.max_dist, 0.01), 2)
+                sel_lon = np.round(np.arange(nearest_lon-self.max_dist, nearest_lon+self.max_dist, 0.01), 2)
+                ensemble_loc = parameters.sel({'lat':np.intersect1d(sel_lat, ensemble.lat), 'lon':np.intersect1d(sel_lon, ensemble.lon)})
+                parameters_loc = parameters.sel({'lat':np.intersect1d(sel_lat, parameters.lat), 'lon':np.intersect1d(sel_lon, parameters.lon)})
+                # Compute inter-distances
+                coords=[(lon,lat) for lat in parameters_loc.lat for lon in parameters_loc.lon]
+                self.pond = self.codistances(coords)
+            else:  # Verrue !
+                ensemble_loc = parameters.sel({'lat':np.round([nearest_lat], 2), 'lon':np.round([nearest_lon], 2)})
+                parameters_loc = parameters.sel({'lat':np.round([nearest_lat], 2), 'lon':np.round([nearest_lon], 2)})
+                self.pond = scipy.sparse.eye(1)
 
-                ensemble_loc = ensemble.sel({'lat':sel_lat, 'lon':sel_lon})
-                parameters_loc = parameters.sel({'lat':sel_lat, 'lon':sel_lon})
-
-                if self.localisation is None:
-                    R, Rstat, Rdyn, ref_field = self.observation_ECM(parameters_loc, date)
-                    B = self.background_error_covariance(ensemble_loc)  # Background error covariance matrix
-                    Y = parameters_loc.mu.data  # Observation vector. WARNING : Use mu to take debiasing into account !
-                else:
-                    R, Rstat, Rdyn, updated_obs = self.observation_ECM_new(parameters_loc, date)
-                    B, updated_ensemble = self.background_error_covariance_new(ensemble_loc)  # Background error covariance matrix
-                    ensemble_loc = updated_ensemble
-                    Y = updated_obs.obs.data  # Observation vector. WARNING : Use mu to take debiasing into account !
-                    parameters_loc = parameters_loc.update({'obs':updated_obs})
+            if self.localisation is None:
+                R, Rstat, Rdyn, ref_field = self.observation_ECM(parameters_loc, date)
+                B = self.background_error_covariance(ensemble_loc)  # Background error covariance matrix
+                Y = parameters_loc.mu.data  # Observation vector. WARNING : Use mu to take debiasing into account !
+            else:
+                R, Rstat, Rdyn, updated_obs = self.observation_ECM_new(parameters_loc, date)
+                B, updated_ensemble = self.background_error_covariance_new(ensemble_loc, updated_obs, R)  # Background error covariance matrix
+                ensemble_loc = updated_ensemble
+                Y = updated_obs.data  # Observation vector. WARNING : Use mu to take debiasing into account !
+                parameters_loc = parameters_loc.update({'obs':updated_obs})
 
 
-                # TODO Ajouter une étape de comparaison des distribution d'ébauche et d'obs (augmentation de l'erreur d'ébauche
-                # si distribution disjointes : on fait plus confiance à l'obs dans ce cas)
+            # TODO Ajouter une étape de comparaison des distribution d'ébauche et d'obs (augmentation de l'erreur d'ébauche
+            # si distribution disjointes : on fait plus confiance à l'obs dans ce cas)
 
-                K = B.dot(np.linalg.inv((B+R).toarray()))
+            K = B.dot(np.linalg.inv((B+R).toarray()))
 
-                Y = Y.flatten()
-                for member in ensemble_loc.member.data:
-                    raw = ensemble_loc.sel({'member':member}).rr
-                    X = raw.data.flatten()  # Ensemble member vector
-                    A = X + K.dot(Y-X)
+            Y = Y.flatten()
 
-                    # On peut maintenant extraire les vrais domaines (on a plus besoind e la marge sur les bords)
-                    print('WARNING : PONCTUAL ANALYSIS TO ADAPT ACCORDING TO GRIDDED ANALYSIS')
-                    import pdb
-                    pdb.set_trace()
-                    analysis = xr.DataArray(
-                        name   = 'rr',
-                        data   = np.square(A.reshape((len(raw.lat), len(raw.lon)))),  # Go back in the real precipitation space
-                        #data   = A.reshape((len(raw.lat), len(raw.lon))),
-                        #data   = A,  # Without spatial correlations
-                        dims   = ["lat", "lon"],
-                        coords = dict(lon=raw.lon, lat=raw.lat),
-                    )
+            analysis = xr.DataArray(
+                name   = 'rr',
+                dims   = ["member", "lat", "lon"],
+                coords = dict(lon=parameters_loc.lon, lat=parameters_loc.lat, member=ensemble_loc.member),
+            )
 
-                    self.newlocalfield[member][idp,idd] = analysis.sel({'lat':nearest_lat, 'lon':nearest_lon}).data
+            for member in ensemble_loc.member.data:
+                raw = ensemble_loc.sel({'member':member}).rr
+                X = raw.data.flatten()  # Ensemble member vector
+                A = X + K.dot(Y-X)
 
-            except KeyError:
-                print(f'Dropping station number {num_poste} (too close from the edge of the domain)')
+                # On peut maintenant extraire les vrais domaines (on a plus besoind e la marge sur les bords)
+                analysis.loc[{'member':member}] = np.square(A.reshape((len(raw.lat), len(raw.lon))))  # Draw member
+
+                self.newlocalfield[member][idp,idd] = analysis.sel({'lat':nearest_lat, 'lon':nearest_lon, 'member':member}).data
+
+#            except KeyError:
+#                print(f'Dropping station number {num_poste} (too close from the edge of the domain)')
+#                # TODO : enlever les postes concernés du fichier de sortie pour ne pas dégrader les scores artificiellement !
 
     @speedtest
     def gridded_analysis(self, date, idd, ensemble, parameters, domain):
