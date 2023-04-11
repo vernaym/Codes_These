@@ -1343,7 +1343,12 @@ class Assimilation(object):
             newfield = (initial_field * pixel_weight + mean * meanweight) / (pixel_weight + meanweight)
             #newfield = (initial_field * pixel_weight + mean * (1-pixel_weight))  # Plus impactant à priori !
             # 2.2 Computation of the dispersion around the local ensemble mean value
-            sd = self.get_std(X, mean, pond, weight=weight, super_ensemble=super_ensemble)
+            ######## TODO : TMP (to increase dynamic error)  ########
+            nopond = pond.copy()
+            nopond[nopond.nonzero()] = 1  # Compute dispersion without ponderartion to increase the error
+            weight = nopond.sum(axis=1).getA1()  # The sum of the weights (axis=1 <==> sum over rows)
+            ##########################################################
+            sd = self.get_std(X, mean, nopond, weight=weight, super_ensemble=super_ensemble)
         elif replacement_strategy == 'max_weight':  # To pull background members toward the observation
             # Get maximum weight of each line of the pond matrix
             idx = pond.argmax(axis=1).A1  # get the index of the maximum value of each line
@@ -1353,6 +1358,9 @@ class Assimilation(object):
         elif replacement_strategy == 'mean':  # To replace background value by the average weighted by observation likelyhood
             newfield = mean
             sd = self.get_std(X, mean, pond, weight=weight, super_ensemble=super_ensemble)
+
+        sd = sd + np.abs(initial_field-newfield)  # Add displacement to error (--> increase error)  !! WARNING : check for double penalty !!
+        #sd = sd + 0.263 * newfield  # Add error proportionnal to precipitation intensity
 
         return newfield, sd
 
@@ -1653,7 +1661,8 @@ class RandomSampling(Assimilation):
             coords=[(lon,lat) for lat in parameters_loc.lat for lon in parameters_loc.lon]
             self.pond = self.codistances(coords)
 
-            if int(num_poste) == 74033400:
+            #if int(num_poste) == 74033400:
+            if int(num_poste) == 38191400:
                 R, Rstat, Rdyn, updated_obs = self.observation_ECM_new(parameters_loc, date, plot=dict(lat=nearest_lat, lon=nearest_lon, date=date, num_poste=num_poste))
             else:
                 R, Rstat, Rdyn, updated_obs = self.observation_ECM_new(parameters_loc, date)
