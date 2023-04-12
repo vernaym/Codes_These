@@ -195,7 +195,7 @@ basic = dict(
     )
 
 algo = dict(
-        LD0         = 'XP00_assimilation_quotidienne_sans_masque_sans_localisation/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
+#        LD0         = 'XP00_assimilation_quotidienne_sans_masque_sans_localisation/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
         #LDM5D2L5    = 'XP18_assimilation_quotidienne_avec_masque5_et_debiaisage2_et_localisation5/Assimilation_locale_2021120106_2022050106_daily_alp_localisation5_mask5_debiasing2.nc',
         #KD0         = 'EnsembleKalmanFilter/XP00_Rstat/EnKF_2021120106_2022050106_daily_alp.nc',
         #KD1         = 'EnsembleKalmanFilter/XP01_Rstat_Rdyn/EnKF_2021120106_2022050106_daily_alp.nc',
@@ -239,6 +239,7 @@ algo = dict(
 #        KD29          = 'EnsembleKalmanFilter/XP29/EnKF_2021120106_2022050106_daily_alp.nc',
         KD30          = 'EnsembleKalmanFilter/XP30/EnKF_2021120106_2022050106_daily_alp.nc',
         RS00          = 'RandomSampling/XP00/Random_Sampling_2021120106_2022050106_daily_alp.nc',
+        RS01          = 'RandomSampling/XP00/Random_Sampling_2021120106_2022050106_daily_alp.nc',
     )
 
 
@@ -337,6 +338,7 @@ xpid_label = dict(
         #LDM9D3        = 'PF, mask9=estimated_ratio, debiaisage3=0.1_2',
         LDM9D3        = 'PF, d0=0.1, c0=2',
         RS00          = 'Random Sampling',
+        RS01          = 'Random Sampling without debiasing',
     )
 
 

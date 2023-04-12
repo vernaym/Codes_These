@@ -1662,7 +1662,8 @@ class RandomSampling(Assimilation):
             self.pond = self.codistances(coords)
 
             #if int(num_poste) == 74033400:
-            if int(num_poste) == 38191400:
+            #if int(num_poste) == 38191400:
+            if int(num_poste) == 5133400:
                 R, Rstat, Rdyn, updated_obs = self.observation_ECM_new(parameters_loc, date, plot=dict(lat=nearest_lat, lon=nearest_lon, date=date, num_poste=num_poste))
             else:
                 R, Rstat, Rdyn, updated_obs = self.observation_ECM_new(parameters_loc, date)
