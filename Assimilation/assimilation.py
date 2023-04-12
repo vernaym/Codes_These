@@ -1344,11 +1344,12 @@ class Assimilation(object):
             #newfield = (initial_field * pixel_weight + mean * (1-pixel_weight))  # Plus impactant à priori !
             # 2.2 Computation of the dispersion around the local ensemble mean value
             ######## TODO : TMP (to increase dynamic error)  ########
-            nopond = pond.copy()
-            nopond[nopond.nonzero()] = 1  # Compute dispersion without ponderartion to increase the error
-            weight = nopond.sum(axis=1).getA1()  # The sum of the weights (axis=1 <==> sum over rows)
+            #nopond = pond.copy()
+            #nopond[nopond.nonzero()] = 1  # Compute dispersion without ponderartion to increase the error
+            #weight = nopond.sum(axis=1).getA1()  # The sum of the weights (axis=1 <==> sum over rows)
             ##########################################################
-            sd = self.get_std(X, mean, nopond, weight=weight, super_ensemble=super_ensemble)
+            #sd = self.get_std(X, mean, nopond, weight=weight, super_ensemble=super_ensemble)
+            sd = self.get_std(X, newfield, pond, weight=weight, super_ensemble=super_ensemble)
         elif replacement_strategy == 'max_weight':  # To pull background members toward the observation
             # Get maximum weight of each line of the pond matrix
             idx = pond.argmax(axis=1).A1  # get the index of the maximum value of each line
@@ -1663,7 +1664,8 @@ class RandomSampling(Assimilation):
 
             #if int(num_poste) == 74033400:
             #if int(num_poste) == 38191400:
-            if int(num_poste) == 5133400:
+            #if int(num_poste) == 5133400:
+            if int(num_poste) == 38253400:
                 R, Rstat, Rdyn, updated_obs = self.observation_ECM_new(parameters_loc, date, plot=dict(lat=nearest_lat, lon=nearest_lon, date=date, num_poste=num_poste))
             else:
                 R, Rstat, Rdyn, updated_obs = self.observation_ECM_new(parameters_loc, date)
