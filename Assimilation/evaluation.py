@@ -241,6 +241,7 @@ algo = dict(
         RS00          = 'RandomSampling/XP00/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         RS01          = 'RandomSampling/XP01/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         RS02          = 'RandomSampling/XP02/Random_Sampling_2021120106_2022050106_daily_alp.nc',
+        RS03          = 'RandomSampling/XP03/Random_Sampling_2021120106_2022050106_daily_alp.nc',
     )
 
 
@@ -340,7 +341,8 @@ xpid_label = dict(
         LDM9D3        = 'PF, d0=0.1, c0=2',
         RS00          = 'Random Sampling',
         RS01          = 'Random Sampling without debiasing',
-        RS02          = 'Random Sampling with increased dispersion',
+        RS02          = 'Random Sampling with increased dynamic dispersion',
+        RS03          = 'Random Sampling with increased dynamic dispersion + static',
     )
 
 

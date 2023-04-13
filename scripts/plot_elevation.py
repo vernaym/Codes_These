@@ -12,6 +12,7 @@ import scipy
 from scipy import sparse
 from scipy.spatial import cKDTree
 from scipy.sparse import csr_matrix
+import shapefile
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -62,6 +63,8 @@ landmarks = {
         "Pic Blanc"   : dict(lon=6.131, lat=45.128, alt=3000, marker='^'),  # real alt = 3333
     }
 
+
+
 def goto(path):
     if not os.path.exists(path):
         os.makedirs(path)
@@ -87,6 +90,20 @@ def add_landmarks(ax):
     for landmark, infos in landmarks.items():
         ax.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='red', markersize=5)
         ax.annotate(landmark, (infos['lon']+0.003, infos['lat']+0.003), color='red', fontsize=12)
+
+def add_boundaries(ax):
+    shapefile_name = os.path.join("/home/vernaym/QGIS/FondDeCarte/", "world-administrative-boundaries.shp")
+    borders = shapefile.Reader(shapefile_name)
+    for shape in borders.shapeRecords():
+        x = [i[0] for i in shape.shape.points[:]]
+        y = [i[1] for i in shape.shape.points[:]]
+        plt.plot(x,y, color='k')
+
+    massifs = shapefile.Reader("/home/vernaym/safran/ctes/shapefiles/massifs_safran.shp")
+    for shape in massifs.shapeRecords():
+        x = [i[0] for i in shape.shape.points[:]]
+        y = [i[1] for i in shape.shape.points[:]]
+        ax.plot(x,y,color='k')
 
 def add_scores(ax):
     fic_score = os.path.join(datadir, 'scores_2021080106_2022080106_alp.csv')
@@ -177,9 +194,16 @@ filename = os.path.join(savedir, f'ReliefAlpes_correlation{d0}.pdf')
 fig,ax = plt.subplots(figsize=(14,16))
 ax.set_frame_on(False)
 #https://discourse.holoviz.org/t/cannot-remove-grid-for-hv-quadmesh/2211/8
-mnt.Band1.plot(ax=ax, cmap=plt.cm.terrain, subplot_kws={'frame_on':False}, linewidth=0)
+im = mnt.Band1.plot(ax=ax, cmap=plt.cm.terrain, subplot_kws={'frame_on':False}, linewidth=0, label='Elevation (m)', add_colorbar=False)
+add_boundaries(ax)
 ax.set_frame_on(False)
-plot_correlation(ax, mnt)
+#plot_correlation(ax, mnt)  # To add correlation area
+cb = fig.colorbar(im)
+cb.ax.tick_params(labelsize=20)
+cb.set_label('Elevation (m)', size=24)
+ax.set_xlabel(None)
+ax.set_ylabel(None)
+ax.tick_params(axis='both', which='major', labelsize=18)
 fig.savefig(filename, format='pdf')
 
 # Plot elevation difference

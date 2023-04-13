@@ -675,21 +675,20 @@ class Assimilation(object):
             corr = corr.sel({'lat':np.intersect1d(sel_lat, corr.lat.data), 'lon':np.intersect1d(sel_lon, corr.lon.data)})
 
             # Plot ANTILOPE precipitation field
-            #fig = plt.figure(figsize=figsize[domain]['singleplot'])
+#            fig = plt.figure(figsize=figsize[domain]['singleplot'])
             fig,ax = plt.subplots(figsize=figsize[domain]['singleplot'])
             #fig = plt.figure(figsize=(14,16))  Alps
 
             #field[var].plot(vmin=0, vmax=self.rrmax, cmap=plt.cm.YlGnBu, cbar_kwargs={'label': "24 hour precipitation (mm)", 'labelsize':18})  # quadmesh object
-#            if var == 'diff':
-#                im = field[var].plot(ax=ax, add_colorbar=False, cmap=plt.cm.coolwarm)  # quadmesh object
-#            else:
-#                im = field[var].plot(ax=ax, vmin=0, vmax=self.rrmax, add_colorbar=False, cmap=plt.cm.YlGnBu)  # quadmesh object
+            if var == 'diff':
+                im = field[var].plot(ax=ax, add_colorbar=False, cmap=plt.cm.coolwarm)  # quadmesh object
+            else:
+                im = field[var].plot(ax=ax, vmin=0, vmax=self.rrmax, add_colorbar=False, cmap=plt.cm.YlGnBu)  # quadmesh object
 
-            # TODO : reverse field
-            fig = px.imshow(field[var].data, color_continuous_scale='YlGnBu', origin='lower')  # https://plotly.com/python/2D-Histogram/
+            figure = px.imshow(field[var].data, color_continuous_scale='YlGnBu', origin='lower')  # https://plotly.com/python/2D-Histogram/
 #            fig.add_scattermapbox(lat=field.lat, lon=field.lon,marker_size=field['sigma'],marker_symbol='x',showlegend = False)  # https://stackoverflow.com/questions/68762104/plotly-adding-scatter-geo-points-and-traces-on-top-of-density-mapbox
             lat, lon = np.meshgrid(range(len(field.lat.data)), range(len(field.lon.data)))
-            fig.add_scatter(
+            figure.add_scatter(
                     x=lon.flatten(),
                     y=lat.flatten(),
                     mode = 'markers',
@@ -701,9 +700,7 @@ class Assimilation(object):
 #                    color_discrete_sequence=['grey']
                     )
 #                    ).update_traces(marker=dict(color='grey'))
-            fig.show()
-            import pdb
-            pdb.set_trace()
+#            fig.show()
 
             # Add correlation area
             #ax = plot_correlation(ax, field, corr, point=1200)
@@ -937,7 +934,7 @@ class Assimilation(object):
 
         return prob_density
 
-    def plot_super_ensemble(self, point, ensemble, mu, std, pond, product, label=None, ax=None, reference=None):
+    def plot_super_ensemble(self, point, ensemble, mu, std, pond, product, label=None, ax=None, reference=None, initial_obs=None):
 
         if ax is None:
             now = True
@@ -968,6 +965,9 @@ class Assimilation(object):
 
         if reference is not None:
             ax.bar(np.sqrt(reference), 2, width=0.1, color='red', label='Reference Observation')
+
+        if initial_obs is not None:
+            ax.bar(np.sqrt(initial_obs[point]), 2, width=0.1, color='blue', label='Initial Observation')
 
 #        newobs = (obs*obsweight + mean * np.nanmean(weights[weights>0])) / (obsweight+np.nanmean(weights[weights>0]))
 #        #sd   = np.sum(weights*(ensemble-obs)**2)/np.sum(weights)
@@ -1248,6 +1248,7 @@ class Assimilation(object):
 
     def observation_ECM_new(self, parameters, date, plot=None):
 
+        initial_obs = parameters.rr.data.flatten()
         std = np.abs(parameters.sigma.data)  # !! WARNING sigma peut être <0 !!
         #Rstat = diags(std.flatten())
         Rstat = np.sqrt(diags(std.flatten()))  # !! TODO : TMP !! revoir plutot la conversion ratio estimé --> erreur obs
@@ -1265,8 +1266,19 @@ class Assimilation(object):
         #mean, sd = self.get_parameters(obs, pond, replacement_strategy='keep')  # Keep original observation value to avoid double penalty
         # TODO : calculer l'erreur par rapport à la vraie moyenne pour éviter de suretimer l'erreur d'obs !
         mean, sd = self.get_parameters(obs, pond, replacement_strategy='toward_mean')  # Update obs
+
+        #############################   TMP  #########################
+#        X = diags(initial_obs, 0)
+#        pond.data[np.isnan(pond.data)] = 0.0
+#        weight = pond.sum(axis=1).getA1()  # The sum of the weights (axis=1 <==> sum over rows)
+#        sd = self.get_std(X, initial_obs, pond, weight=weight)
+#        sd = sd + np.abs(initial_obs-mean)  # Add displacement to error (--> increase error)  !! WARNING : check for double penalty !!
+#        #sd = sd + np.sqrt(0.263 * np.square(newfield))  # Add error proportionnal to precipitation intensity
+        #############################   TMP  #########################
+
         Rdyn = diags(sd, 0)
         R    = dia_matrix(diags(sd, 0) + Rstat)  # WARNING : the sum of 2 dia_matrix returns a csr_matrix...
+        R    = dia_matrix(diags(sd, 0) + Rstat.multiply(diags(mean)*0.263))  # WARNING : the sum of 2 dia_matrix returns a csr_matrix...
 
         # Plot data
         if plot is not None:
@@ -1285,7 +1297,8 @@ class Assimilation(object):
                 if not np.isnan(ref):
                     lat,lon = np.meshgrid(parameters.lat, parameters.lon)
                     point = np.where((lat.flatten()==plot['lat']) & (lon.flatten()==plot['lon']))[0][0]
-                    self.plot_super_ensemble(point, obs, mean[point], sd[point], pond, f'Observation_{num_poste}_{date}', reference=ref)
+                    #self.plot_super_ensemble(point, obs, mean[point], sd[point], pond, f'Observation_{num_poste}_{date}', reference=ref, initial_obs=initial_obs)
+                    self.plot_super_ensemble(point, obs, mean[point], R.diagonal()[point], pond, f'Observation_{num_poste}_{date}', reference=ref, initial_obs=initial_obs)
 
         # !! WARNING : modification de l'obs !!
         # --> cela a tendance à lisser le champs en diminuant/augmenatant les valeurs extremes !!
@@ -1348,6 +1361,8 @@ class Assimilation(object):
             #nopond[nopond.nonzero()] = 1  # Compute dispersion without ponderartion to increase the error
             #weight = nopond.sum(axis=1).getA1()  # The sum of the weights (axis=1 <==> sum over rows)
             ##########################################################
+            # TODO : calculer l'erreur sur l'observation itnitiale (avant même débiaisage) pour éviter une sous-estimation de
+            # l'erreur due au lissage du champ par les différentes méthodes de correction
             #sd = self.get_std(X, mean, nopond, weight=weight, super_ensemble=super_ensemble)
             sd = self.get_std(X, newfield, pond, weight=weight, super_ensemble=super_ensemble)
         elif replacement_strategy == 'max_weight':  # To pull background members toward the observation
@@ -1361,7 +1376,7 @@ class Assimilation(object):
             sd = self.get_std(X, mean, pond, weight=weight, super_ensemble=super_ensemble)
 
         sd = sd + np.abs(initial_field-newfield)  # Add displacement to error (--> increase error)  !! WARNING : check for double penalty !!
-        #sd = sd + 0.263 * newfield  # Add error proportionnal to precipitation intensity
+#        sd = sd + np.sqrt(0.263 * np.square(newfield))  # Add error proportionnal to precipitation intensity
 
         return newfield, sd
 
