@@ -20,7 +20,7 @@ from scipy.sparse import csc_matrix, csr_matrix, dia_matrix, diags
 
 savedir = '/home/vernaym/These/figures/illustration'
 
-Np = 3  # Domain size
+Np = 16  # Domain size
 
 # TODO : Set up an idealised 2D experiment with an isolated storm to see the effect of background correction 
 # when the model is able to reproduce the phenomenon but at a different location
@@ -28,6 +28,7 @@ Np = 3  # Domain size
 def field_generator(X, Y):
     """Generation of a Gaussian Kernel centered on point (X,Y)"""
     N = 7   # kernel size
+#    N = 1   # kernel size
     k1d = signal.gaussian(N, std=1).reshape(N, 1)
     kernel = np.outer(k1d, k1d)
 #    plt.imshow(kernel)
@@ -40,6 +41,7 @@ def field_generator(X, Y):
 #    plt.show()
 
     row, col = np.where(A == 1)
+    #A[max(row[0]-(N//2), 0):min(row[0]+(N//2)+1, 15), max(col[0]-(N//2),0):min(col[0]+(N//2)+1,15)] = kernel
     A[row[0]-(N//2):row[0]+(N//2)+1, col[0]-(N//2):col[0]+(N//2)+1] = kernel
 #    plt.imshow(A)
 #    plt.show()
@@ -61,7 +63,7 @@ def codistances(coords):
 def illustration_modification_ebauche():
     obs = field_generator(12, 12)
     stdobs=diags(obs.flatten()/5+1)
-    ebauche = field_generator(4, 4)
+    ebauche = field_generator(6, 6)
     fig,ax = plt.subplots()
     im = ax.imshow(obs, cmap='viridis')
     fig.colorbar(im, ax=ax)
@@ -81,34 +83,37 @@ def illustration_modification_ebauche():
     O = super_ensemble.dot(diags(obs.flatten()))
     M = super_ensemble.dot(diags(ebauche.flatten()))
     S = super_ensemble.dot(diags(1/stdobs.diagonal()))
-    A = (M-O).multiply(S)
+    A = (O-M).multiply(S)
+    A = (M.transpose()-O).multiply(S)
+    #A = (M-O.transpose()).multiply(S.transpose())
     likelyhood = -A.multiply(A)
     np.exp(likelyhood.data, out=likelyhood.data)  # likelyhood = exp(-((O-M).S)**2)
-    import pdb
-    pdb.set_trace()
 
-    pond = pond.multiply(likelyhood)  # distance and likelyhood ponderation
-    #pond = likelyhood  # likelyhood only ponderation
+#    pond = pond.multiply(likelyhood)  # distance and likelyhood ponderation
+    pond = likelyhood  # likelyhood only ponderation
 
-    weight = likelyhood.sum(axis=1).getA1()
+    #weight = likelyhood.sum(axis=1).getA1()
+    weight = pond.sum(axis=1).getA1()
 
     #replacement_strategy = 'mean'
     replacement_strategy = 'max_weight'
 
-    mean, std = get_parameters(ebauche, pond, weight=weight, super_ensemble=super_ensemble, replacement_strategy=replacement_strategy)
+    newfield = get_parameters(ebauche, pond, weight=weight, super_ensemble=super_ensemble, replacement_strategy=replacement_strategy)
 
-    if replacement_strategy == 'max_weight':
-        # 1. take all new values (weighted average between the original value and the average of
-        # the local super-ensemble weighted by the average weight
-        # --> cela a tendance à lisser le champs en diminuant/augmenatant les valeurs extremes !!
-        new_ensemble = mean.reshape(16, 16)
-    elif replacement_strategy == 'only_zeros':
-        # 3. Change only values when the original value is 0 and the local weighted average is >0
-        mean[np.where(ebauche > 0)] = ebauche[np.where(ebauche > 0)]
-        new_ensemble = mean.reshape(16, 16)
-    elif replacement_strategy == 'mean':
-        # 4. Change values by the mean local average weighted by the observation likelyhood
-        new_ensemble = mean.reshape(16, 16)
+
+    new_ensemble = newfield.reshape(Np, Np)
+#    if replacement_strategy == 'max_weight':
+#        # 1. take all new values (weighted average between the original value and the average of
+#        # the local super-ensemble weighted by the average weight
+#        # --> cela a tendance à lisser le champs en diminuant/augmenatant les valeurs extremes !!
+#        new_ensemble = newfield.reshape(Np, Np)
+#    elif replacement_strategy == 'only_zeros':
+#        # 3. Change only values when the original value is 0 and the local weighted average is >0
+#        mean[np.where(ebauche > 0)] = ebauche[np.where(ebauche > 0)]
+#        new_ensemble = mean.reshape(Np, Np)
+#    elif replacement_strategy == 'mean':
+#        # 4. Change values by the mean local average weighted by the observation likelyhood
+#        new_ensemble = mean.reshape(Np, Np)
 
     fig,ax = plt.subplots()
     im = plt.imshow(new_ensemble, cmap='viridis')
@@ -129,31 +134,14 @@ def get_parameters(field, pond, weight=None, super_ensemble=None, replacement_st
     mean = pond.dot(X).sum(axis=1).getA1()  # getA1 transforms the 1*N matrix object into a 1D np.array
     mean = mean / weight
 
-    if replacement_strategy == 'keep':  # Default behavior (for observation)
-        newfield = initial_field
-        # 2.1 Computation of the dispersion around the original value (--> increase Rdyn !)
-        sd = get_std(X, initial_field, pond, weight=weight, super_ensemble=super_ensemble)
-    elif replacement_strategy == 'toward_mean':
-        pixel_weight = pond.diagonal()  # = exp(-erreur_statique) pour l'obs et =likelyhood du pixel pour les membres de l'ensemble
-        sums = pond.sum(axis=1).A1
-        # To weight against the average weight in the neighborhood
-        nb_nonzero = (pond != 0).sum(0).getA1()  # Count non zero elements of each row
-        meanweight = sums / nb_nonzero
-        newfield = (initial_field * pixel_weight + mean * meanweight) / (pixel_weight + meanweight)
-        #newfield = (initial_field * pixel_weight + mean * (1-pixel_weight))  # Plus impactant à priori !
-        # 2.2 Computation of the dispersion around the local ensemble mean value
-        sd = get_std(X, mean, pond, weight=weight, super_ensemble=super_ensemble)
-    elif replacement_strategy == 'max_weight':  # To pull background members toward the observation
-        # Get maximum weight of each line of the pond matrix
-        idx = pond.argmax(axis=1).A1  # get the index of the maximum value of each line
-        newfield = initial_field[idx]
-        # 2.3 Computation of the dispersion around the new mean mean value
-        sd = get_std(X, newfield, pond, weight=weight, super_ensemble=super_ensemble)
-    elif replacement_strategy == 'mean':  # To replace background value by the average weighted by observation likelyhood
-        newfield = mean
-        sd = get_std(X, mean, pond, weight=weight, super_ensemble=super_ensemble)
+    # Get maximum weight of each line of the pond matrix
+    idx = pond.argmax(axis=0).A1  # get the index of the maximum value of each line
 
-    return newfield, sd
+#    TODO : on veut mapper initial_field[i] avec initial_field[idx] où idx est l'indice du maximim de likelyhood de la ligne i
+
+    newfield = initial_field[idx]
+
+    return newfield
 
 def get_std(data, mean, pond, weight=None, super_ensemble=None):
 
@@ -216,14 +204,16 @@ def EGP_distribution(x, P0=0, k=5, sigma=1, ksi=0.5, **kw):
 def plot_distribution(ax, mean, sd, label=None, color='k', distribution='norm', linewidth=0.5):
     x = np.linspace(0, 60, 10000)
     if distribution == 'norm':
-        ax.plot(x, norm.pdf(x, loc=mean, scale=sd), 'r-', lw=1, color=color, label=label, linewidth=linewidth)
+        ax.plot(x, norm.pdf(x, loc=mean, scale=sd), 'r-', color=color, label=label, linewidth=linewidth)
+        if color == 'red':  # Plot observation
+            ax.bar(mean, norm.pdf(mean, loc=mean, scale=sd), color=color, width=0.1)
     elif distribution == 'gamma':
         #k = mean**2/sd
         #theta = sd/mean
         #on veut que mu soit le mode de la distribution gamma (< à la moyenne)
         theta = (np.sqrt(mean**2+4*sd)-mean)/2
         k     = 4*sd/(np.sqrt(mean**2+4*sd)-mean)**2
-        ax.plot(x, gamma.pdf(x, k, scale=theta), 'r-', lw=1, color=color, label=label, linestyle='--', linewidth=0.5)
+        ax.plot(x, gamma.pdf(x, k, scale=theta), 'r-', color=color, label=label, linestyle='--', linewidth=0.5)
     elif distribution == 'EGP':
         pass
 
@@ -244,10 +234,11 @@ def resample(weights, Ne):
         rdm += step
     return selected_particles
 
-def plot(mu, std, N, obs, obs_std, vmin, vmax, distribution='norm'):
+def plot(mu, std, N, obs, obs_std, vmin, vmax, distribution='norm', pf=True, enkf=True):
 
     fig,(ax0,ax1) = plt.subplots(2,1, gridspec_kw={'height_ratios': [8, 1]})
-    # Draw ensemble
+
+    # 0. Draw ensemble
     #TODO : draw ensemble from different distributions to see the differences
     if distribution == 'norm':
         ensemble = np.random.normal(loc=mu, scale=std, size=N)
@@ -263,24 +254,27 @@ def plot(mu, std, N, obs, obs_std, vmin, vmax, distribution='norm'):
     ensemble[ensemble<0]=0
     ensemble = np.sort(ensemble)
 
+    # 1. Plot background
     #ax0.plot(ensemble, norm.pdf(ensemble, loc=mu, scale=std), label=f'Background (mean={mu}mm, std={std}mm)', color='k')
     if distribution == 'norm':
         ax0.plot(ensemble, norm.pdf(ensemble, loc=mu, scale=std), color='k')
     elif distribution == 'gamma':
         ax0.plot(ensemble, gamma.pdf(ensemble, k, scale=theta), color='k', linestyle='--', label='Gamma', linewidth=0.5)
         ax0.plot(np.NaN, np.NaN, color='k', label='Norm', linewidth=0.5)  # To add a legend entry without plotting anything
-    ax0.hist(ensemble,density=True,bins=100, color='k', alpha=0.5, label='Background')
-    if obs-obs_std+1>0:
-        #drawmask = [np.where(ensemble==ensemble[(ensemble>obs-obs_std)&(ensemble<obs-obs_std+1)][0])[0][0], np.where(ensemble==ensemble[(ensemble>obs+2*std)&(ensemble<obs+2*std+1)][0])[0][0]]
-        drawmask = [np.where(ensemble==ensemble[(ensemble>mu-std)&(ensemble<mu-std+1)][0])[0][0]]
+    ax0.hist(ensemble,density=True,bins=100, color='k', alpha=0.4, label='Background')
+
+    # Draw values to illustrate members displacements
+    if obs-obs_std+1>np.min(ensemble):
+        drawmask = [np.where(ensemble==ensemble[(ensemble>obs-obs_std)&(ensemble<obs-obs_std+1)][0])[0][0], np.where(ensemble==ensemble[(ensemble>obs+2*std)&(ensemble<obs+2*std+1)][0])[0][0]]
+        #drawmask = [np.where(ensemble==ensemble[(ensemble>mu-(std+obs_std))&(ensemble<mu-(std+obs_std)+1)][0])[0][0], np.where(ensemble==ensemble[(ensemble>mu+std)&(ensemble<mu+std+1)][0])[0][0]]
     else:
-        drawmask = [np.where(ensemble==ensemble[(ensemble>=0)&(ensemble<=0.01)][0])[0][0], np.where(ensemble==ensemble[(ensemble>obs+std)&(ensemble<obs+std+0.1)][0])[0][0]]
+        drawmask = [np.where(ensemble==np.min(ensemble))[0][0], np.where(ensemble==ensemble[(ensemble>mu+std)&(ensemble<mu+std+0.1)][0])[0][0]]
 
     drawbackground = ensemble[drawmask]
     #drawbackground = np.array([ensemble[(ensemble>10)&(ensemble<11)][0], ensemble[(ensemble>29)&(ensemble<30)][0]])
     #ax1.plot(drawbackground, [2]*len(drawbackground), linestyle='', marker='.', color='k', markersize=10)
 
-    # Draw observation
+    # 2. Draw observation
     #ax0,ax1 = plot_distribution(ax0, ax1, obs, obs_std, data=[obs], color='red', marker='.', vmin=vmin, vmax=vmax, label='Observation distribution')
     #ax0,ax1 = plot_distribution(ax0, ax1, obs, obs_std, data=[obs], color='red', marker='.', vmin=vmin, vmax=vmax, label='Observation distribution')
     #ax0 = plot_normal_distribution(ax0, obs, obs_std, f'Observation (Y={obs}mm, std={obs_std}mm)', color='red')
@@ -290,62 +284,68 @@ def plot(mu, std, N, obs, obs_std, vmin, vmax, distribution='norm'):
     ax1.plot(obs, [3], color='red', marker='|', markersize=100)
     ax1.plot([obs-obs_std, obs+obs_std], [1.5, 1.5], marker='|', markersize=10, color='red', linewidth=1, linestyle='--')
 
-    # EnKF analysis
-    enkf = ensemble + std/(std+obs_std)*(obs-ensemble)
-    enkf_mean = np.mean(enkf)
-    enkf_std = np.sqrt(1/N*np.sum((enkf-enkf_mean)**2))
-    color = next(ax0._get_lines.prop_cycler)['color']
-    ax0.hist(enkf,density=True,bins=100, alpha=0.5, label='EnKF', color=color)
-    ax0 = plot_distribution(ax0, enkf_mean, enkf_std, color=color, distribution='norm')
-    if distribution == 'gamma':
-        ax0 = plot_distribution(ax0, enkf_mean, enkf_std, color=color, distribution='gamma')
-    drawenkf = drawbackground + std/(std+obs_std)*(obs-drawbackground)
-    #ax1.plot(drawenkf, [2]*len(drawenkf), linestyle='', marker='.', color='blue', markersize=10)
-    ax1.scatter(drawenkf, [2]*len(drawenkf), s=50, facecolors=color, edgecolors=None)
+    # 3. EnKF analysis
+    if enkf:
+        enkf = ensemble + std/(std+obs_std)*(obs-ensemble)
+        enkf_mean = np.mean(enkf)
+        enkf_std = np.sqrt(1/N*np.sum((enkf-enkf_mean)**2))
+        #color = next(ax0._get_lines.prop_cycler)['color']
+        color = 'blue'
+        ax0.hist(enkf,density=True,bins=100, alpha=0.4, label='EnKF', color=color)
+        ax0 = plot_distribution(ax0, enkf_mean, enkf_std, color=color, distribution='norm')
+        if distribution == 'gamma':
+            ax0 = plot_distribution(ax0, enkf_mean, enkf_std, color=color, distribution='gamma')
+        drawenkf = drawbackground + std/(std+obs_std)*(obs-drawbackground)
+        #ax1.plot(drawenkf, [2]*len(drawenkf), linestyle='', marker='.', color='blue', markersize=10)
+        ax1.scatter(drawenkf, [2]*len(drawenkf), s=50, facecolors=color, edgecolors=None)
+        enkf = True
 
-    # PF analysis
-    if distribution == 'norm':
-        weights = norm.pdf(ensemble, loc=obs, scale=obs_std)
-    elif distribution == 'gamma':
-        theta = (np.sqrt(obs**2+4*obs_std)-obs)/2
-        k     = 4*obs_std/(np.sqrt(obs**2+4*obs_std)-obs)**2
-        weights = gamma.pdf(ensemble, k, scale=theta)
-    weights = weights / np.sum(weights)  # Normalisation
-    selection = resample(weights, N)
-    pf = ensemble[selection]
-    pf_mean = np.mean(pf)
-    pf_std  = np.sqrt(1/N*np.sum((pf-pf_mean)**2))
-    color = next(ax0._get_lines.prop_cycler)['color']
-    color = next(ax0._get_lines.prop_cycler)['color']  # call next twice to avoid orange color
-    ax0.hist(pf, density=True,bins=100, alpha=0.5, label='PF', color=color)
-    ax0 = plot_distribution(ax0, pf_mean, pf_std, color=color, distribution='norm')
-    if distribution == 'gamma':
-        ax0 = plot_distribution(ax0, pf_mean, pf_std, color=color, distribution='gamma')
-    #drawpf = pf[drawmask]  # To plot analysis for the full ensemble
-    # To plot PF analysis for a 2 members enemble :
-    if distribution == 'norm':
-        weights=norm.pdf(drawbackground, loc=obs, scale=obs_std)
-    elif distribution == 'gamma':
-        #k = pf_mean**2/pf_std
-        #theta = pf_std/pf_mean
-        #on veut que mu soit le mode de la distribution gamma (< à la moyenne)
-        theta = (np.sqrt(pf_mean**2+4*pf_std)-pf_mean)/2
-        k     = 4*pf_std/(np.sqrt(pf_mean**2+4*pf_std)-pf_mean)**2
-        weights=gamma.pdf(drawbackground, k, scale=theta)
-    weights = weights / np.sum(weights)  # Normalisation
-    selection = resample(weights, 2)
-    drawpf = drawbackground[selection]
-    ax1.scatter(drawpf,[1]*len(drawpf), s=50, facecolors=color, edgecolors=None)
-
-    # Draw background now to be visible
-    ax1.scatter(drawbackground, [2]*len(drawbackground), s=50, facecolors='none', edgecolors='k')
-    ax1.scatter(drawbackground, [1]*len(drawbackground), s=50, facecolors='none', edgecolors='k')
+    # 4. PF analysis
+    if pf:
+        if distribution == 'norm':
+            weights = norm.pdf(ensemble, loc=obs, scale=obs_std)
+        elif distribution == 'gamma':
+            theta = (np.sqrt(obs**2+4*obs_std)-obs)/2
+            k     = 4*obs_std/(np.sqrt(obs**2+4*obs_std)-obs)**2
+            weights = gamma.pdf(ensemble, k, scale=theta)
+        weights = weights / np.sum(weights)  # Normalisation
+        selection = resample(weights, N)
+        pf = ensemble[selection]
+        pf_mean = np.mean(pf)
+        pf_std  = np.sqrt(1/N*np.sum((pf-pf_mean)**2))
+#        color = next(ax0._get_lines.prop_cycler)['color']
+#        color = next(ax0._get_lines.prop_cycler)['color']  # call next twice to avoid orange color
+        color = 'green'
+        ax0.hist(pf, density=True,bins=100, alpha=0.4, label='PF', color=color)
+        ax0 = plot_distribution(ax0, pf_mean, pf_std, color=color, distribution='norm')
+        if distribution == 'gamma':
+            ax0 = plot_distribution(ax0, pf_mean, pf_std, color=color, distribution='gamma')
+        #drawpf = pf[drawmask]  # To plot analysis for the full ensemble
+        # To plot PF analysis for a 2 members enemble :
+        if distribution == 'norm':
+            weights=norm.pdf(drawbackground, loc=obs, scale=obs_std)
+        elif distribution == 'gamma':
+            #k = pf_mean**2/pf_std
+            #theta = pf_std/pf_mean
+            #on veut que mu soit le mode de la distribution gamma (< à la moyenne)
+            theta = (np.sqrt(pf_mean**2+4*pf_std)-pf_mean)/2
+            k     = 4*pf_std/(np.sqrt(pf_mean**2+4*pf_std)-pf_mean)**2
+            weights=gamma.pdf(drawbackground, k, scale=theta)
+        weights = weights / np.sum(weights)  # Normalisation
+        selection = resample(weights, 2)
+        drawpf = drawbackground[selection]
+        ax1.scatter(drawpf,[1]*len(drawpf), s=50, facecolors=color, edgecolors=None)
+        pf = True
 
     # Plot displacment arrows
     for i in range(len(drawbackground)):
         #ax1.arrow(drawbackground[i], 1, drawenkf[i]-drawbackground[i], 0, head_width=0.05, head_length=0.1, fc='k', ec='k', linewidth=0.5)
-        ax1.arrow(drawbackground[i], 2, drawenkf[i]-drawbackground[i], 0, head_width=0.5, head_length=1, linewidth=0.5, linestyle=':', length_includes_head=True, color='k')
-        ax1.arrow(drawbackground[i], 1, drawpf[i]-drawbackground[i], 0, head_width=0.5, head_length=1, linewidth=0.5, linestyle=':', length_includes_head=True, color='k')
+        if enkf:
+            ax1.scatter(drawbackground, [2]*len(drawbackground), s=50, facecolors='none', edgecolors='k')
+            ax1.arrow(drawbackground[i], 2, drawenkf[i]-drawbackground[i], 0, head_width=0.5, head_length=1, linewidth=0.5, linestyle=':', length_includes_head=True, color='k')
+        if pf:
+            ax1.scatter(drawbackground, [1]*len(drawbackground), s=50, facecolors='none', edgecolors='k')
+            ax1.arrow(drawbackground[i], 1, drawpf[i]-drawbackground[i], 0, head_width=0.5, head_length=1, linewidth=0.5, linestyle=':', length_includes_head=True, color='k')
 
     ax0.get_xaxis().set_visible(False)
     ax0.spines['top'].set_visible(False)
@@ -369,7 +369,7 @@ def plot(mu, std, N, obs, obs_std, vmin, vmax, distribution='norm'):
 
 #    violin(ensemble, pf, enkf, obs)
 
-illustration_modification_ebauche()
+#illustration_modification_ebauche()
 
 methods = {'EGP_distribution':EGP_distribution}  # To call function fro string (see EGP_distribution)
 
@@ -393,14 +393,15 @@ N = 1000000  # Ensemble size
 #pdb.set_trace()
 
 
-mu  = 50  # ensemble mean
+mu  = 20  # ensemble mean
 #mu  = 10  # ensemble mean
-std = 20  # ensemble dispersion / std
+std = 10  # ensemble dispersion / std
+#std = 8  # ensemble dispersion / std
 #std = 5  # ensemble dispersion / std
-obs = 15
-obs_std =10
+obs = 10
+obs_std = 5
 vmin = 0
-vmax = 60
-#vmax = 60
-plot(mu, std, N, obs, obs_std, vmin, vmax)
+vmax = 40
+plot(mu, std, N, obs, obs_std, vmin, vmax, pf=False, enkf=True)
+#plot(mu, std, N, obs, obs_std, vmin, vmax, distribution='gamma', pf=True, enkf=False)
 #plot(mu, std, N, obs, obs_std, vmin, vmax, distribution='gamma')
