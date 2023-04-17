@@ -1,0 +1,153 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+# Auteur: Matthieu Vernay
+# Date : 15/04/2023
+
+import os
+import numpy as np
+import xarray as xr
+import geopandas as gpd  # To install
+import plotly.express as px
+from plotly.offline import plot
+import pandas as pd
+import plotly.graph_objects as go
+import plotly.figure_factory as ff
+from pyproj import Proj, transform
+
+######   DOC UTILE PLOTLY  ######
+# https://zacks.one/python-plotly/
+# https://plotly.com/python/scatter-plots-on-maps/  --> precipitation map
+
+
+config = dict({'scrollZoom': True})  # plotly image configuration
+
+datadir = '/home/vernaym/These/DATA'
+
+domain = 'alp'
+
+domain_coords = dict(
+        GrandesRousses = dict(latmax=45.240, latmin=44.990, lonmin=6.010, lonmax = 6.490),
+        NorthernAlps   = dict(lonmin=6.0, lonmax=6.9, latmin=45.6, latmax=46.35),
+        CentralAlps    = dict(lonmin=5.6, lonmax=7.0, latmin=45.0, latmax=45.6),
+        SouthernAlps   = dict(lonmin=5.7, lonmax=7.0, latmin=44.2, latmax=45.0),
+        HauteSavoie    = dict(lonmin=6.45, lonmax=6.95, latmin=45.67, latmax=46.35),
+        MontBlanc      = dict(lonmin=6.45, lonmax=7.1, latmin=45.65, latmax=46.1),
+        Savoie         = dict(lonmin=6.06, lonmax=7.06, latmin=45.15, latmax=45.65),
+        Isere          = dict(lonmin=5.54, lonmax=6.19, latmin=44.89, latmax=45.16),
+        Brianconnais   = dict(lonmin=6.48, lonmax=6.95, latmin=44.67, latmax=44.95),
+        HautesAlpes    = dict(lonmin=5.90, lonmax=6.36, latmin=44.58, latmax=44.81),
+        AlpesSud       = dict(lonmin=6.56, lonmax=6.92, latmin=44.18, latmax=40.49),
+        alp            = dict(latmax=46.450, latmin=44.100, lonmin=5.400, lonmax=7.200),
+)
+coords = domain_coords[domain]
+
+
+def basemap():
+    """ 
+    Plot from shapfile
+    https://stackoverflow.com/questions/71780189/how-to-show-only-boundaries-no-fill-of-a-shapefile-in-python-plotly-express
+    """
+
+    fig = go.Figure(go.Scattermapbox())
+
+    filename =f'CUMUL_ANTILOPEH_alp_2021103000_2022060200.nc'
+    antilope = xr.open_dataset(os.path.join(datadir, filename))
+    # Add errors
+    error = xr.open_dataset(os.path.join(datadir, 'mask', 'Observation_error_0.2_2_alp_ref.nc'))
+    x,y = np.meshgrid(antilope.lon.data, antilope.lat.data)
+    massifs = "/home/vernaym/safran/ctes/shapefiles/massifs_safran.shp"
+    massifs = gpd.read_file(massifs)
+
+    fig = go.Figure(
+            data = px.scatter_mapbox(
+                lon=x.flatten(),
+                lat=y.flatten(),
+                color=antilope.rr_cumul.data.flatten(),
+                #size=[1]*len(antilope.rr_cumul.data.flatten()),
+                size=np.nan_to_num(antilope.rr_cumul.data.flatten()),
+                opacity=0.5,
+                color_continuous_scale='YlGnBu',
+                mapbox_style="stamen-terrain",
+            )
+        )
+
+    fig.update_layout(
+        coloraxis_showscale=False,
+        mapbox={
+            #"style":"stamen-terrain",
+            "layers": [
+                {
+                    "source": massifs["geometry"].__geo_interface__,
+                    "type": "line",
+                    "color": "black",
+                    #"below":"traces",
+                    #"opacity":0.5,
+                },
+            ],
+        },
+    )
+    fig.show()
+
+
+def interactive_layer_choice():
+    """
+    https://plotly.com/python/custom-buttons/  (+3D map)
+    """
+
+def plot_antilope(fig):
+    filename =f'CUMUL_ANTILOPEH_alp_2021103000_2022060200.nc'
+    antilope = xr.open_dataset(os.path.join(datadir, filename))
+    #fig.imshow(antilope.rr_cumul.data, color_continuous_scale='YlGnBu', origin='lower')  # https://plotly.com/python/2D-Histogram/
+    #fig = fig.add_contour(x=antilope.lon,y=antilope.lat, z=antilope.rr_cumul.data, colorscale='YlGnBu', opacity=0.5, visible=True)
+    #fig1 = go.Contour(x=antilope.lon,y=antilope.lat, z=antilope.rr_cumul, colorscale='YlGnBu')
+    #fig = fig.add_trace(go.Contour(x=antilope.lon,y=antilope.lat, z=antilope.rr_cumul, colorscale='YlGnBu'))
+    fig1=px.imshow(antilope.rr_cumul.data, color_continuous_scale='YlGnBu', origin='lower')
+    fig.add_traces(fig1.data).update_layout()
+    return fig
+
+fig = basemap()
+import pdb
+pdb.set_trace()
+
+filename =f'CUMUL_ANTILOPEH_alp_2021103000_2022060200.nc'
+antilope = xr.open_dataset(os.path.join(datadir, filename))
+figure = px.imshow(antilope.rr_cumul.data, color_continuous_scale='YlGnBu', origin='lower')  # https://plotly.com/python/2D-Histogram/
+
+# Add errors
+error = xr.open_dataset(os.path.join(datadir, 'mask', 'Observation_error_0.2_2_alp_ref.nc'))
+lat, lon = np.meshgrid(range(len(error.lat.data)), range(len(error.lon.data)))
+figure.add_scatter(
+        x=lon.flatten(),
+        y=lat.flatten(),
+        mode = 'markers',
+        marker = dict(
+            symbol='x-thin',
+            size=np.abs(np.transpose(np.nan_to_num(error.ratio.data)).flatten()),
+            color='red'
+        ),
+    )
+
+# Add layer switch
+fig.update_layout(
+    updatemenus=[
+        {
+            "buttons":
+            [
+                {
+                    "label": '{k}',
+                    "method": "update",
+                    "args":
+                    [
+                        {'x': [df[k]]},
+                        {'xaxis':{'title':k}},
+                        {"visible": k},
+                    ],
+                }
+                for k in cols
+            ]
+        }
+    ]
+).update_traces(visible=True, selector=0)
+
+figure.show(config=config)
+
