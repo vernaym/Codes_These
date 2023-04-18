@@ -58,12 +58,14 @@ def basemap():
 
     # normalisation de l'erreur entre low and high
     # TODO : revoir la formule de normalisation
-    low  = 0
-    high = 20
+    low  = 1
+    high = 15
     def nan_ptp(a):
         return np.ptp(a[np.isfinite(a)])
-    error = 1/error.ratio.data.flatten()
+    error = np.abs(error.ratio.data.flatten())
     error = low + (error - np.nanmin(error))/(nan_ptp(error)/high)
+    #error = 1/np.abs(error.ratio.data.flatten())
+    error = 5 + high/error
 
     x,y = np.meshgrid(antilope.lon.data, antilope.lat.data)
     massifs = "/home/vernaym/safran/ctes/shapefiles/massifs_safran.shp"
@@ -81,9 +83,8 @@ def basemap():
 #                    color=np.nan_to_num(error),
                     #size=[1]*len(antilope.rr_cumul.data.flatten()),
                     #size=np.nan_to_num(antilope.rr_cumul.data.flatten()),
-                    #size=10,
-#                    size=np.nan_to_num(error),
-                    size=15,
+#                    size=10,
+                    size=np.nan_to_num(error),
                     #opacity=0.5,
                     colorscale='YlGnBu',
                     #colorscale='deep',
