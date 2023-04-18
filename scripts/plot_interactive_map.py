@@ -18,6 +18,12 @@ from pyproj import Proj, transform
 # https://zacks.one/python-plotly/
 # https://plotly.com/python/scatter-plots-on-maps/  --> precipitation map
 
+# TODO : trouver un moyen de virer le blanc de la colorbar
+# TODO : ajouter un filtre par altitude
+# TODO : Ajouter SAFRAN
+
+
+token = open("/home/vernaym/.mapbox/token").read() # Token from mapbox account
 
 config = dict({'scrollZoom': True})  # plotly image configuration
 
@@ -59,13 +65,13 @@ def basemap():
     # normalisation de l'erreur entre low and high
     # TODO : revoir la formule de normalisation
     low  = 1
-    high = 15
+    high = 20
     def nan_ptp(a):
         return np.ptp(a[np.isfinite(a)])
     error = np.abs(error.ratio.data.flatten())
     error = low + (error - np.nanmin(error))/(nan_ptp(error)/high)
     #error = 1/np.abs(error.ratio.data.flatten())
-    error = 5 + high/error
+    error = 10 + high/error
 
     x,y = np.meshgrid(antilope.lon.data, antilope.lat.data)
     massifs = "/home/vernaym/safran/ctes/shapefiles/massifs_safran.shp"
@@ -73,34 +79,73 @@ def basemap():
 
     fig = go.Figure()
     fig.add_trace(go.Scattermapbox(
-                lon=x.flatten(),
-                lat=y.flatten(),
-                mode='markers',
-                text=antilope.rr_cumul.data.flatten(),
-                marker=dict(
-                #marker=go.scattermapbox.Marker(
-                    color=antilope.rr_cumul.data.flatten(),
-#                    color=np.nan_to_num(error),
-                    #size=[1]*len(antilope.rr_cumul.data.flatten()),
-                    #size=np.nan_to_num(antilope.rr_cumul.data.flatten()),
-#                    size=10,
-                    size=np.nan_to_num(error),
+                lon  = x.flatten(),
+                lat  = y.flatten(),
+                mode = 'markers',
+                name = 'ANTILOPE',
+                text = antilope.rr_cumul.data.flatten(),
+                marker = dict(
+                    color = antilope.rr_cumul.data.flatten(),
+                    size  = np.nan_to_num(error),
                     #opacity=0.5,
-                    colorscale='YlGnBu',
-                    #colorscale='deep',
-                    #colorbar=None,  # TODO : define the colobar
+                    colorscale = 'YlGnBu',
                     #symbol='square',  # Impossible to change if color is definied : https://stackoverflow.com/questions/59628536/option-symbol-in-scattermapbox-is-not-working
-                )
+                    cmin = 100,
+                    cmax = 1200,
+                    colorbar_title = "Precipitation(mm)",
+                    colorbar = dict(
+                        titleside = "right",
+                        #outlinecolor = "rgba(68, 68, 68, 0)",
+                        ticks = "outside",
+                        #showticksuffix = "last",
+                        #dtick = 0.1
+                    ),
+                ),
             )
         )
 
+    def add_ponctual_obs(color='black'):
+        fig.add_trace(go.Scattermapbox(
+                    lon  = scores.lons.round(3),
+                    lat  = scores.lats.round(3),
+                    text = scores.ratio.round(1).astype('string'),  # WARNING : working only with token mapbox :  https://plotly.com/python/mapbox-layers/
+                    mode = 'text',
+                    name = 'Ratio ANTILOPE/nivometeo',
+                    textfont = dict(size=16, family='Arial', color=color),
+                    textposition = 'middle center',
+                    hovertext=scores.num_poste,
+
+#                marker = dict(
+#                    size = 20,
+#                    color = 'black',
+#                ),
+                )
+            )
+
+    fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_alp.csv')
+    scores = pd.read_csv(fic_score, sep=';')
+    #scores_domain = scores.loc[(scores.lons>=lonmin) & (scores.lons<=lonmax) & (scores.lats<=latmax) & (scores.lats>=latmin)]
+    add_ponctual_obs(color='red')
+
+    fic_score = os.path.join(datadir, f'scores_2021103106_2022060206_alpes_postes_clim.csv')
+    scores = pd.read_csv(fic_score, sep=';')
+    add_ponctual_obs(color='black')
+
+    # TODO : Add other rain gauges
+    # TODO : Add SAFRAN ?
+
     fig.update_layout(
-        coloraxis_showscale=False,
-        mapbox={
-            "style":"stamen-terrain",
-            #"style":"open-street-map",  # https://plotly.com/python/reference/layout/mapbox/
-            #"style":"basic",  # https://plotly.com/python/reference/layout/mapbox/
-            "layers": [
+        #coloraxis_showscale=False,
+        title = 'Total ANTILOPE precipitation between 2021080106 and 2022070106 (mm) + mean ratio',
+        #margin = dict(l=0, t=0, r=1, b=0, pad=0),
+        mapbox = dict(
+            accesstoken = token,
+            style = "outdoors",
+#        mapbox = dict(
+#            style = "stamen-terrain",  # https://plotly.com/python/mapbox-layers/
+#            #style = "open-street-map",  # https://plotly.com/python/reference/layout/mapbox/
+#            #style = "basic",  # https://plotly.com/python/reference/layout/mapbox/
+            layers =  [
                 {
                     "source": massifs["geometry"].__geo_interface__,
                     "type": "line",
@@ -109,30 +154,15 @@ def basemap():
                     #"opacity":0.5,
                 },
             ],
-        },
+            center = go.layout.mapbox.Center(
+                lat=45.2,
+                lon=6.0,
+            ),
+            #pitch = 0,
+            zoom = 7,
+        ),
     )
     fig.show()
-
-    # Add layer switch
-#    fig.update_layout(
-#        updatemenus=[
-#            {
-#                "buttons":
-#                [
-#                    {
-#                        "label": '{k}',
-#                        "method": "update",
-#                        "args":
-#                        [
-#                            {'x': [df[k]]},
-#                            {'xaxis':{'title':k}},
-#                            {"visible": k},
-#                        ],
-#                    }
-#                    for k in cols
-#                ]
-#            }
-#    ).update_traces(visible=True, selector=0)
 
 
 def interactive_layer_choice():
@@ -140,22 +170,10 @@ def interactive_layer_choice():
     https://plotly.com/python/custom-buttons/  (+3D map)
     """
 
-def plot_antilope(fig):
-    filename =f'CUMUL_ANTILOPEH_alp_2021103000_2022060200.nc'
-    antilope = xr.open_dataset(os.path.join(datadir, filename))
-    #fig.imshow(antilope.rr_cumul.data, color_continuous_scale='YlGnBu', origin='lower')  # https://plotly.com/python/2D-Histogram/
-    #fig = fig.add_contour(x=antilope.lon,y=antilope.lat, z=antilope.rr_cumul.data, colorscale='YlGnBu', opacity=0.5, visible=True)
-    #fig1 = go.Contour(x=antilope.lon,y=antilope.lat, z=antilope.rr_cumul, colorscale='YlGnBu')
-    #fig = fig.add_trace(go.Contour(x=antilope.lon,y=antilope.lat, z=antilope.rr_cumul, colorscale='YlGnBu'))
-    fig1=px.imshow(antilope.rr_cumul.data, color_continuous_scale='YlGnBu', origin='lower')
-    fig.add_traces(fig1.data).update_layout()
-    return fig
 
-fig = basemap()
+basemap()
 import pdb
 pdb.set_trace()
-
-
 
 figure.show(config=config)
 
