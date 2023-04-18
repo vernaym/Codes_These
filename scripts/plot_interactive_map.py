@@ -54,27 +54,51 @@ def basemap():
     antilope = xr.open_dataset(os.path.join(datadir, filename))
     # Add errors
     error = xr.open_dataset(os.path.join(datadir, 'mask', 'Observation_error_0.2_2_alp_ref.nc'))
+    #error = 10*np.nan_to_num((1/np.abs(error.ratio))/np.max(1/np.abs(error.ratio))).flatten()
+
+    # normalisation de l'erreur entre low and high
+    # TODO : revoir la formule de normalisation
+    low  = 0
+    high = 20
+    def nan_ptp(a):
+        return np.ptp(a[np.isfinite(a)])
+    error = 1/error.ratio.data.flatten()
+    error = low + (error - np.nanmin(error))/(nan_ptp(error)/high)
+
     x,y = np.meshgrid(antilope.lon.data, antilope.lat.data)
     massifs = "/home/vernaym/safran/ctes/shapefiles/massifs_safran.shp"
     massifs = gpd.read_file(massifs)
 
-    fig = go.Figure(
-            data = px.scatter_mapbox(
+    fig = go.Figure()
+    fig.add_trace(go.Scattermapbox(
                 lon=x.flatten(),
                 lat=y.flatten(),
-                color=antilope.rr_cumul.data.flatten(),
-                #size=[1]*len(antilope.rr_cumul.data.flatten()),
-                size=np.nan_to_num(antilope.rr_cumul.data.flatten()),
-                opacity=0.5,
-                color_continuous_scale='YlGnBu',
-                mapbox_style="stamen-terrain",
+                mode='markers',
+                text=antilope.rr_cumul.data.flatten(),
+                marker=dict(
+                #marker=go.scattermapbox.Marker(
+                    color=antilope.rr_cumul.data.flatten(),
+#                    color=np.nan_to_num(error),
+                    #size=[1]*len(antilope.rr_cumul.data.flatten()),
+                    #size=np.nan_to_num(antilope.rr_cumul.data.flatten()),
+                    #size=10,
+#                    size=np.nan_to_num(error),
+                    size=15,
+                    #opacity=0.5,
+                    colorscale='YlGnBu',
+                    #colorscale='deep',
+                    #colorbar=None,  # TODO : define the colobar
+                    #symbol='square',  # Impossible to change if color is definied : https://stackoverflow.com/questions/59628536/option-symbol-in-scattermapbox-is-not-working
+                )
             )
         )
 
     fig.update_layout(
         coloraxis_showscale=False,
         mapbox={
-            #"style":"stamen-terrain",
+            "style":"stamen-terrain",
+            #"style":"open-street-map",  # https://plotly.com/python/reference/layout/mapbox/
+            #"style":"basic",  # https://plotly.com/python/reference/layout/mapbox/
             "layers": [
                 {
                     "source": massifs["geometry"].__geo_interface__,
@@ -87,6 +111,27 @@ def basemap():
         },
     )
     fig.show()
+
+    # Add layer switch
+#    fig.update_layout(
+#        updatemenus=[
+#            {
+#                "buttons":
+#                [
+#                    {
+#                        "label": '{k}',
+#                        "method": "update",
+#                        "args":
+#                        [
+#                            {'x': [df[k]]},
+#                            {'xaxis':{'title':k}},
+#                            {"visible": k},
+#                        ],
+#                    }
+#                    for k in cols
+#                ]
+#            }
+#    ).update_traces(visible=True, selector=0)
 
 
 def interactive_layer_choice():
@@ -109,45 +154,7 @@ fig = basemap()
 import pdb
 pdb.set_trace()
 
-filename =f'CUMUL_ANTILOPEH_alp_2021103000_2022060200.nc'
-antilope = xr.open_dataset(os.path.join(datadir, filename))
-figure = px.imshow(antilope.rr_cumul.data, color_continuous_scale='YlGnBu', origin='lower')  # https://plotly.com/python/2D-Histogram/
 
-# Add errors
-error = xr.open_dataset(os.path.join(datadir, 'mask', 'Observation_error_0.2_2_alp_ref.nc'))
-lat, lon = np.meshgrid(range(len(error.lat.data)), range(len(error.lon.data)))
-figure.add_scatter(
-        x=lon.flatten(),
-        y=lat.flatten(),
-        mode = 'markers',
-        marker = dict(
-            symbol='x-thin',
-            size=np.abs(np.transpose(np.nan_to_num(error.ratio.data)).flatten()),
-            color='red'
-        ),
-    )
-
-# Add layer switch
-fig.update_layout(
-    updatemenus=[
-        {
-            "buttons":
-            [
-                {
-                    "label": '{k}',
-                    "method": "update",
-                    "args":
-                    [
-                        {'x': [df[k]]},
-                        {'xaxis':{'title':k}},
-                        {"visible": k},
-                    ],
-                }
-                for k in cols
-            ]
-        }
-    ]
-).update_traces(visible=True, selector=0)
 
 figure.show(config=config)
 
