@@ -32,6 +32,10 @@ from scipy.spatial import cKDTree
 # TODO : trouver un moyen de virer le blanc de la colorbar
 # TODO : ajouter un filtre par altitude : https://plotly.com/python/v3/selection-events/?_gl=1*pup8cg*_ga*MTI0ODI4NTA5Ni4xNjgxODAwMDUx*_ga_6G7EE0JNSC*MTY4MTg4OTIwMy45LjEuMTY4MTg5MTk4OS4wLjAuMA
 # TODO : Une seule colorbar pour toutes les couches associées
+# TODO : Append various files every day with last-day data and let the user select the date to plot : use dash
+#   - https://dash.plotly.com/basic-callbacks
+#   - https://dash.plotly.com/advanced-callbacks
+
 
 
 def usage():
@@ -94,38 +98,46 @@ def plot(antilope=None, antilope_error=None, safran=None, nivometeo=None, auto=N
     # read_relief
     mnt = xr.open_dataset(os.path.join('/home/vernaym/QGIS/MNT', "DEM_ALPES_WGS84_250m_bilinear.nc"))
     # WARNING : update of xarray necessary !
-    data = antilope.interp(lat=mnt.lat.data, lon=mnt.lon.data)
-    data["elevation"] = mnt.Band1
+    #data = antilope.interp(lat=mnt.lat.data, lon=mnt.lon.data)
+    tmp = mnt.interp(lat=antilope.lat.data, lon=antilope.lon.data)
+    antilope["elevation"] = tmp.Band1
 
     #for elevation in [0, 600, 1200, 2000]:
-    x = dict()
-    y = dict()
-    z = dict()
-    for i,elevation in enumerate([0, 2000]):
-        # Make all data visible by default
+    #x = dict()
+    #y = dict()
+    #z = dict()
+    x,y  = np.meshgrid(antilope.lon.data, antilope.lat.data)
+    x = x.flatten()
+    y = y.flatten()
+    z    = antilope[var].data.flatten()  # Corrected obs
+    alti = antilope['elevation'].data.flatten()
+    for i,elevation in enumerate(range(0, 3000, 500)):
         if elevation == 0:
-            x[i],y[i] = np.meshgrid(antilope.lon.data, antilope.lat.data)
-            z[i]   = antilope[var].data.flatten(),  # Corrected obs
+            # Make all data visible by default
             visible = True
             name = 'ANTILOPE'
+            select = np.arange(len(z))
         else:
-            tmp = data.where(data.elevation>=elevation, drop=True)
-            x[i],y[i] = np.meshgrid(tmp.lon.data, tmp.lat.data)
-            z[i]   = tmp[var].data.flatten(),  # Corrected obs above elevation
+            tmp = antilope.where(antilope.elevation>=elevation, drop=True)
+            select  = np.where(alti>elevation)
             visible = False
-            name = f'ANTILOPE>{elevation:d}m'
+            visible ='legendonly'  # Does not work as intended : https://community.plotly.com/t/legendonly-doesnt-work-anymore-in-scattermapbox/72822
+            visible = True
+            name    = f'ANTILOPE>{elevation:d}m'
 
         fig.add_trace(go.Scattermapbox(
-                    lon  = x[i].flatten(),
-                    lat  = y[i].flatten(),
+                    lon  = x[select],
+                    lat  = y[select],
+                    #selectedpoints = select,  # TODO : use this footprint to set updatemenus buttons DOES NOT WORK
                     mode = 'markers',
                     name = name,
                     #text = antilope.rr.data.flatten(),  # Raw obs
-                    text = z[i],  # obs=corrected obs, rr=raw obs
+                    text = z[select],  # obs=corrected obs, rr=raw obs
                     visible = visible,
+                    showlegend = True,
                     marker = dict(
                         #color = antilope.rr.data.flatten(),
-                        color = z[i],
+                        color = z[select],
                         cmin  = 0,
                         cmax  = np.nanmax(antilope.rr.data.flatten()),
                         size  = np.nan_to_num(error),
@@ -150,43 +162,47 @@ def plot(antilope=None, antilope_error=None, safran=None, nivometeo=None, auto=N
                 )
             )
 
-    updatemenus = [{
-                'active':1,
-                'buttons': [{'method': 'update',
-                             'label': 'Elevation',
-                             'args': [
-                                      # 1. updates to the traces
-                                      {
-                                       'lon':x[0],
-                                       'lat':y[0],
-                                       'marker': {'color':antilope[var].data.flatten()},
-                                       #'name':['sin', 'sin - 1'],
-                                       'visible': True}, 
-                                      # 2. updates to the layout
-                                      #{'title':'Sine'},
-                                      # 3. which traces are affected 
-                                      [-1, -2],
-                                      ],
-                             'args2': [
-                                      # 1. updates to the traces
-                                      {
-                                       'lon':x[1],
-                                       'lat':y[1],
-                                       'marker': {'color':tmp[var].data.flatten()},
-                                       #'name':['sin', 'sin - 1'],
-                                       'visible': True}, 
-                                      # 2. updates to the layout
-                                      #{'title':'Sine'},
-                                      # 3. which traces are affected 
-                                      [-1, -2],
-                                      ],
-                              },
-                            ],
-#                'type':'buttons',
-                'type':'dropdown',
-                'direction': 'down',
-                'showactive': True,}
-            ]
+#    updatemenus = [{
+#                'active':1,
+#                'buttons': [{'method': 'update',
+#                             'label': 'All elevations',
+#                             'args': [
+#                                      # 1. updates to the traces
+#                                      {
+#                                       'lon':x,
+#                                       'lat':y[0],
+#                                       'marker': {'color':antilope[var].data.flatten()},
+#                                       #'name':['sin', 'sin - 1'],
+#                                       'visible': True}, 
+#                                      # 2. updates to the layout
+#                                      #{'title':'Sine'},
+#                                      # 3. which traces are affected 
+#                                      [-1, -2],
+#                                      ]
+#                             },
+#                             {
+#                             'method': 'update',
+#                             'label': '>2000m',
+#                             'args2': [
+#                                      # 1. updates to the traces
+#                                      {
+#                                       'lon':x[1],
+#                                       'lat':y[1],
+#                                       'marker': {'color':tmp[var].data.flatten()},
+#                                       #'name':['sin', 'sin - 1'],
+#                                       'visible': True}, 
+#                                      # 2. updates to the layout
+#                                      #{'title':'Sine'},
+#                                      # 3. which traces are affected 
+#                                      [-1, -2],
+#                                      ],
+#                              },
+#                            ],
+##                'type':'buttons',
+#                'type':'dropdown',
+#                'direction': 'down',
+#                'showactive': True,}
+#            ]
 
     # 2. Add ponctual rain gauges (red for nivometeo, black for other networks)
     def add_ponctual_obs(df, color='black', name='Unknown'):
@@ -291,7 +307,7 @@ def plot(antilope=None, antilope_error=None, safran=None, nivometeo=None, auto=N
             #pitch = 0,
             zoom = 7,
         ),
-        updatemenus = updatemenus,
+        #updatemenus = updatemenus,
     )
 
 #    fig.for_each_trace(lambda t: t.update(name = newnames[t.name],
