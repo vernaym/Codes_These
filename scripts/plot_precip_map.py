@@ -19,6 +19,7 @@ import plotly.graph_objects as go
 import plotly.figure_factory as ff
 from pyproj import Proj, transform
 
+import scipy
 from scipy.sparse import csr_matrix, diags
 from scipy.spatial.distance import cdist
 from scipy.spatial import cKDTree
@@ -256,8 +257,16 @@ def get_antilope():
     # Dynamic correction (localisation)
     error = xr.open_dataset(os.path.join(datadir, 'Observation_error.nc'))
     std = np.abs(error.ratio.data)
-    coords=[(lon,lat) for lat in error.lat.data for lon in error.lon.data]
-    pond = codistances(coords)
+
+    filename = os.path.join('/home/vernaym/These/DATA', f'codistance_max_dist_{max_dist}_{domain}.npz')
+    if not os.path.exists(filename):
+        # Compute inter-distances
+        coords=[(lon,lat) for lat in error.lat.data for lon in error.lon.data]
+        pond = codistances(coords)
+        scipy.sparse.save_npz(filename, pond, compressed=False)
+    else:
+        pond = scipy.sparse.load_npz(filename)
+
     pond = pond.dot(diags(np.exp(-std).flatten(), 0))
     obs = antilope.rr_debiaise.sel(({'lat':np.intersect1d(error.lat.data, antilope.lat.data), 'lon':np.intersect1d(error.lon.data, antilope.lon.data)})).data.flatten()
 
