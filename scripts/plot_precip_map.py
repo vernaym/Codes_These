@@ -19,6 +19,11 @@ import plotly.graph_objects as go
 import plotly.figure_factory as ff
 from pyproj import Proj, transform
 
+from scipy.sparse import csr_matrix, diags
+from scipy.spatial.distance import cdist
+from scipy.spatial import cKDTree
+
+
 ######   DOC UTILE PLOTLY  ######
 # https://zacks.one/python-plotly/
 # https://plotly.com/python/scatter-plots-on-maps/  --> precipitation map
@@ -41,12 +46,13 @@ except Exception as e:
 
 
 token = open("/home/vernaym/.mapbox/token").read() # Token from mapbox account
-
 config = dict({'scrollZoom': True})  # plotly image configuration
 
 datadir = '/home/vernaym/workdir/visualisation'
-
 domain = 'alp'
+
+ld = 0.05
+max_dist = ld*3
 
 domain_coords = dict(
         GrandesRousses = dict(latmax=45.240, latmin=44.990, lonmin=6.010, lonmax = 6.490),
@@ -65,7 +71,7 @@ domain_coords = dict(
 coords = domain_coords[domain]
 
 
-def plot(antilope=None, antilope_error=None, safran=None, nivometeo=None, auto=None):
+def plot(antilope=None, antilope_error=None, safran=None, nivometeo=None, auto=None, var='obs'):
     """ 
     Plot from shapfile
     https://stackoverflow.com/questions/71780189/how-to-show-only-boundaries-no-fill-of-a-shapefile-in-python-plotly-express
@@ -81,11 +87,14 @@ def plot(antilope=None, antilope_error=None, safran=None, nivometeo=None, auto=N
                 lat  = y.flatten(),
                 mode = 'markers',
                 name = 'ANTILOPE',
-                text = antilope.rr.data.flatten(),
+                #text = antilope.rr.data.flatten(),  # Raw obs
+                text = antilope[var].data.flatten(),  # obs=corrected obs, rr=raw obs
                 marker = dict(
-                    color = antilope.rr.data.flatten(),
+                    #color = antilope.rr.data.flatten(),
+                    color = antilope[var].data.flatten(),  # Corrected obs
                     cmin  = 0,
-                    cmax  = np.nanmax(antilope.rr.data.flatten()),
+                    #cmax  = np.nanmax(antilope.rr.data.flatten()),
+                    cmax  = np.nanmax(antilope[var].data.flatten()),
                     size  = np.nan_to_num(error),
                     #opacity=0.5,
                     colorscale = 'YlGnBu',
@@ -174,7 +183,8 @@ def plot(antilope=None, antilope_error=None, safran=None, nivometeo=None, auto=N
             colorscale = 'YlGnBu',
             name = 'SAFRAN',
             zmin = 0,
-            zmax = np.nanmax(antilope.rr.data.flatten()),
+            #zmax = np.nanmax(antilope.rr.data.flatten()),
+            zmax = np.nanmax(antilope[var].data.flatten()),
             visible = True,
             uid = 4,
             uirevision = True,
@@ -233,13 +243,67 @@ def get_antilope():
     # TODO : appliquer le pré-processing pour plotter ANTILOPE corrigé
     filename = os.path.join(datadir, f'ANTILOPE.nc')
     #if os.path.exists(filename):
-    try:
-        antilope = xr.open_dataset(os.path.join(datadir, filename))
-        # TODO : gérer le changement d'heure !
-        antilope = antilope.where((antilope.time>np.datetime64(datebegin)) & (antilope.time<=np.datetime64(dateend)), drop=True).sum('time')
-        return antilope
-    except:
-        return None
+    antilope = xr.open_dataset(os.path.join(datadir, filename))
+    # TODO : gérer le changement d'heure !
+    antilope = antilope.where((antilope.time>np.datetime64(datebegin)) & (antilope.time<=np.datetime64(dateend)), drop=True).sum('time')
+
+    # Static de-biasing :
+    mask = xr.open_dataset(os.path.join(datadir, f"Estimated_ratio.nc"))
+
+    antilope["ratio"]=mask.ratio  # Fill missing point with NaNs
+    antilope["rr_debiaise"] = (antilope.rr/antilope.ratio).fillna(antilope.rr)  # Fill NaN values with the original ANTILOPE value
+
+    # Dynamic correction (localisation)
+    error = xr.open_dataset(os.path.join(datadir, 'Observation_error.nc'))
+    std = np.abs(error.ratio.data)
+    coords=[(lon,lat) for lat in error.lat.data for lon in error.lon.data]
+    pond = codistances(coords)
+    pond = pond.dot(diags(np.exp(-std).flatten(), 0))
+    obs = antilope.rr_debiaise.sel(({'lat':np.intersect1d(error.lat.data, antilope.lat.data), 'lon':np.intersect1d(error.lon.data, antilope.lon.data)})).data.flatten()
+
+    new = update_obs(obs, pond, replacement_strategy='toward_mean')  # Update obs
+    antilope['obs'] = xr.DataArray(
+            data   = new.reshape((len(mask.lat), len(mask.lon))),
+            dims   = ["lat", "lon"],
+            coords = dict(lon=mask.lon, lat=mask.lat)
+        )
+    antilope['obs'] = antilope['obs'].fillna(antilope.rr)
+
+    return antilope
+
+def update_obs(field, pond, weight=None, super_ensemble=None, replacement_strategy='keep'):
+
+    field[np.isnan(field)] = 0.0
+    initial_field = field.flatten()
+    X = diags(field.flatten(), 0)
+
+    # 1. Calcul de la moyenne pondérée par la distance ET l'erreur statique
+    if weight is None:
+        pond.data[np.isnan(pond.data)] = 0.0
+        weight = pond.sum(axis=1).getA1()  # The sum of the weights (axis=1 <==> sum over rows)
+
+    mean = pond.dot(X).sum(axis=1).getA1()  # getA1 transforms the 1*N matrix object into a 1D np.array
+    mean = mean / weight
+    pixel_weight = pond.diagonal()  # = exp(-erreur_statique) pour l'obs et =likelyhood du pixel pour les membres de l'ensemble
+    sums = pond.sum(axis=1).A1
+    nb_nonzero = (pond != 0).sum(0).getA1()  # Count non zero elements of each row
+    meanweight = sums / nb_nonzero
+    newfield = (initial_field * pixel_weight + mean * meanweight) / (pixel_weight + meanweight)
+    #sd = self.get_std(X, newfield, pond, weight=weight, super_ensemble=super_ensemble)
+    return newfield
+
+
+def codistances(coords):
+    """
+    Solution pour le calcul des inter-distances trouvée sur : https://stackoverflow.com/questions/35296935/python-calculate-lots-of-distances-quickly
+    """
+    tree = cKDTree(coords)
+    dist = tree.sparse_distance_matrix(tree, max_distance=max_dist, p=2, output_type='coo_matrix')
+    dist = csr_matrix(dist)
+    #TODO : utiliser une gaussienne plutot qu'une exponentielle décroissante
+    dist[dist.nonzero()] = -dist[dist.nonzero()]/ld
+    np.exp(dist.data, out=dist.data )
+    return dist
 
 def get_antilope_error(full_array):
 
@@ -320,6 +384,7 @@ auto = get_obs_auto()
 # 4. read SAFRAN
 safran = get_safran()
 
-plot(antilope=antilope, antilope_error=error, nivometeo=nivometeo, auto=auto, safran=safran)
+plot(antilope=antilope, antilope_error=error, nivometeo=nivometeo, auto=auto, safran=safran, var='obs')
+#plot(antilope=antilope, antilope_error=error, nivometeo=nivometeo, auto=auto, safran=safran, var='rr')
 #plot(antilope=antilope, antilope_error=error, nivometeo=nivometeo)
 
