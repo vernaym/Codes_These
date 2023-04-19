@@ -11,6 +11,7 @@ import datetime
 import numpy as np
 import xarray as xr
 import geopandas as gpd  # To install
+import json
 import plotly.express as px
 from plotly.offline import plot
 import pandas as pd
@@ -82,6 +83,8 @@ def plot(antilope=None, antilope_error=None, safran=None, nivometeo=None, auto=N
                 text = antilope.rr.data.flatten(),
                 marker = dict(
                     color = antilope.rr.data.flatten(),
+                    cmin  = 0,
+                    cmax  = np.nanmax(antilope.rr.data.flatten()),
                     size  = np.nan_to_num(error),
                     #opacity=0.5,
                     colorscale = 'YlGnBu',
@@ -124,12 +127,58 @@ def plot(antilope=None, antilope_error=None, safran=None, nivometeo=None, auto=N
     if auto is not None:
         add_ponctual_obs(auto, color='black', name='Automatic stations')
 
-    # Plot background map with SAFRAN massifs
+    # TODO : plot SAFRAN
+
+    # Plot background map with SAFRAN massifs and fill them
+    # Method from : https://community.plotly.com/t/plot-a-shapefile-shp-in-a-choropleth-chart/27850
+    # 1. read massif shapefile
     massifs = "/home/vernaym/safran/ctes/shapefiles/massifs_safran.shp"
     massifs = gpd.read_file(massifs)
+
+    # 2. convert it to a plotly-readable GeoJSON file
+    massifs_json = os.path.join(datadir, "massifs_safran.json")
+    if not os.path.exists(massifs_json):
+        massifs.to_file(massifs_json, driver = "GeoJSON")
+    with open(massifs_json) as geofile:
+        j_file = json.load(geofile)
+        i = 0
+        for feature in j_file["features"]:
+            #feature ['id'] = str(i).zfill(2)
+            feature['id'] = massifs.code[i]
+            i += 1
+        #import pdb
+        #pdb.set_trace()
+        plotsafran = safran.where(safran.ZS==1500., drop=True)
+        #fillmassifs=px.choropleth_mapbox(
+        #fig.add_trace(px.choropleth_mapbox(
+        #fig.append_trace(px.choropleth_mapbox(
+        #fig2 = px.choropleth_mapbox(
+        fig.add_trace(go.Choroplethmapbox(
+        #fig.add_choroplethmapbox(
+            geojson = j_file,
+            locations = plotsafran.massif_number,
+            z = plotsafran.rr.data,  #TODO : add elevation choice
+            colorscale = 'YlGnBu',
+            name = 'SAFRAN',
+            zmin = 0,
+            zmax = np.nanmax(antilope.rr.data.flatten()),
+            #marker_opacity=0,
+            visible = True,
+            uid = 4,
+            uirevision = True,
+            showscale = False,  # Same scale as ANTILOPE data (à vérifier !)
+            #opacity=0.5,
+            #marker_line_width=0,
+            #z = safran.where(safran.ZS==1500., drop=True).rr.data,  # TODO : add elevation choice
+            #color = safran.where(safran.ZS==1500., drop=True).rr.data,  # TODO : add elevation choice
+        ))
+        #)
+        #fig2.show()
+    #fig.update_traces(fig2)
+
     fig.update_layout(
         #coloraxis_showscale=False,
-        title = 'Total ANTILOPE precipitation between 2021080106 and 2022070106 (mm) + mean ratio',
+        title = f'24h precipitation (mm) between {datebegin} and {dateend}',
         #margin = dict(l=0, t=0, r=1, b=0, pad=0),
         mapbox = dict(
             accesstoken = token,
@@ -155,12 +204,20 @@ def plot(antilope=None, antilope_error=None, safran=None, nivometeo=None, auto=N
             zoom = 7,
         ),
     )
+
+#    fig.for_each_trace(lambda t: t.update(name = newnames[t.name],
+#                                      legendgroup = newnames[t.name],
+#                                      hovertemplate = t.hovertemplate.replace(t.name, newnames[t.name])
+#                                     )
+# from : https://stackoverflow.com/questions/64371174/how-to-change-variable-label-names-for-the-legend-in-a-plotly-express-line-chart
+
     fig.show()
 
 
 def interactive_layer_choice():
     """
     https://plotly.com/python/custom-buttons/  (+3D map)
+    https://stackoverflow.com/questions/66414456/update-visibility-of-traces-with-fig-update-layout-plotly
     """
     pass
 
@@ -228,8 +285,12 @@ def get_safran():
     filename = os.path.join(datadir, f'SAFRAN.nc')
     try:
         safran = xr.open_dataset(os.path.join(datadir, filename))
-        import pdb
-        pdb.set_trace()
+        #safran = safran.where(safran.ZS==1500., drop=True)
+        safran['rr'] = (safran['Rainf']+safran['Snowf'])*3600.
+        dates = pd.date_range(datebegin+datetime.timedelta(hours=1), dateend, freq='1H')
+        safran = safran.loc[{'time':dates}]
+        #safran['rr'] = safran.where((safran.time>np.datetime64(datebegin)) & (safran.time<=np.datetime64(dateend)), drop=True)  # This adds time dimension to ZS variable
+        safran['rr'] = safran['rr'].sum('time')
         return safran
     except:
         return None
@@ -249,8 +310,8 @@ nivometeo = get_nivometeo()
 auto = get_obs_auto()
 
 # 4. read SAFRAN
-#safran = get_safran()
+safran = get_safran()
 
-plot(antilope=antilope, antilope_error=error, nivometeo=nivometeo, auto=auto)
+plot(antilope=antilope, antilope_error=error, nivometeo=nivometeo, auto=auto, safran=safran)
 #plot(antilope=antilope, antilope_error=error, nivometeo=nivometeo)
 
