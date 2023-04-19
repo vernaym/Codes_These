@@ -72,52 +72,121 @@ domain_coords = dict(
 coords = domain_coords[domain]
 
 
+def update_axes(xaxis, yaxis):
+    scatter = f.data[0]
+    scatter.x = df[xaxis]
+    scatter.y = df[yaxis]
+    with f.batch_update():
+        f.layout.xaxis.title = xaxis
+        f.layout.yaxis.title = yaxis
+        scatter.x = scatter.x + np.random.rand(N)/10 *(df[xaxis].max() - df[xaxis].min())
+        scatter.y = scatter.y + np.random.rand(N)/10 *(df[yaxis].max() - df[yaxis].min())
+
 def plot(antilope=None, antilope_error=None, safran=None, nivometeo=None, auto=None, var='obs'):
     """ 
     Plot from shapfile
     https://stackoverflow.com/questions/71780189/how-to-show-only-boundaries-no-fill-of-a-shapefile-in-python-plotly-express
     """
 
-    fig = go.Figure(go.Scattermapbox())
-
-    # 1. Plot ANTILOPE as dot scatterplot
-    x,y = np.meshgrid(antilope.lon.data, antilope.lat.data)
     fig = go.Figure()
-    fig.add_trace(go.Scattermapbox(
-                lon  = x.flatten(),
-                lat  = y.flatten(),
-                mode = 'markers',
-                name = 'ANTILOPE',
-                #text = antilope.rr.data.flatten(),  # Raw obs
-                text = antilope[var].data.flatten(),  # obs=corrected obs, rr=raw obs
-                marker = dict(
-                    #color = antilope.rr.data.flatten(),
-                    color = antilope[var].data.flatten(),  # Corrected obs
-                    cmin  = 0,
-                    #cmax  = np.nanmax(antilope.rr.data.flatten()),
-                    cmax  = np.nanmax(antilope[var].data.flatten()),
-                    size  = np.nan_to_num(error),
-                    #opacity=0.5,
-                    colorscale = 'YlGnBu',
-                    #symbol='square',  # Impossible to change if color is definied : https://stackoverflow.com/questions/59628536/option-symbol-in-scattermapbox-is-not-working
-                    #cmin = 100,
-                    #cmax = 1200,
-                    colorbar_title = "Precipitation(mm)",
-                    colorbar = dict(
-                        titleside = "right",
-                        ticks = "outside",
-                        # Move the colorbar away from the legend :
-                        yanchor="top",
-                        y=1,
-                        x=-0.1,
-                        #showticksuffix = "last",
-                        #dtick = 0.1
-        #coloraxis_colorbar = dict(yanchor="top", y=1, x=0),  # Move the colorbar away from the legend
-                    ),
-                ),
-            )
-        )
 
+    # 1. Plot ANTILOPE as multiple dot scatterplot (depending on the elevation)
+    # read_relief
+    mnt = xr.open_dataset(os.path.join('/home/vernaym/QGIS/MNT', "DEM_ALPES_WGS84_250m_bilinear.nc"))
+    # WARNING : update of xarray necessary !
+    data = antilope.interp(lat=mnt.lat.data, lon=mnt.lon.data)
+    data["elevation"] = mnt.Band1
+
+    #for elevation in [0, 600, 1200, 2000]:
+    x = dict()
+    y = dict()
+    z = dict()
+    for i,elevation in enumerate([0, 2000]):
+        # Make all data visible by default
+        if elevation == 0:
+            x[i],y[i] = np.meshgrid(antilope.lon.data, antilope.lat.data)
+            z[i]   = antilope[var].data.flatten(),  # Corrected obs
+            visible = True
+            name = 'ANTILOPE'
+        else:
+            tmp = data.where(data.elevation>=elevation, drop=True)
+            x[i],y[i] = np.meshgrid(tmp.lon.data, tmp.lat.data)
+            z[i]   = tmp[var].data.flatten(),  # Corrected obs above elevation
+            visible = False
+            name = f'ANTILOPE>{elevation:d}m'
+
+        fig.add_trace(go.Scattermapbox(
+                    lon  = x[i].flatten(),
+                    lat  = y[i].flatten(),
+                    mode = 'markers',
+                    name = name,
+                    #text = antilope.rr.data.flatten(),  # Raw obs
+                    text = z[i],  # obs=corrected obs, rr=raw obs
+                    visible = visible,
+                    marker = dict(
+                        #color = antilope.rr.data.flatten(),
+                        color = z[i],
+                        cmin  = 0,
+                        cmax  = np.nanmax(antilope.rr.data.flatten()),
+                        size  = np.nan_to_num(error),
+                        #opacity=0.5,
+                        colorscale = 'YlGnBu',
+                        #symbol='square',  # Impossible to change if color is definied : https://stackoverflow.com/questions/59628536/option-symbol-in-scattermapbox-is-not-working
+                        #cmin = 100,
+                        #cmax = 1200,
+                        colorbar_title = "Precipitation(mm)",
+                        colorbar = dict(
+                            titleside = "right",
+                            ticks = "outside",
+                            # Move the colorbar away from the legend :
+                            yanchor="top",
+                            y=1,
+                            x=-0.1,
+                            #showticksuffix = "last",
+                            #dtick = 0.1
+            #coloraxis_colorbar = dict(yanchor="top", y=1, x=0),  # Move the colorbar away from the legend
+                        ),
+                    ),
+                )
+            )
+
+    updatemenus = [{
+                'active':1,
+                'buttons': [{'method': 'update',
+                             'label': 'Elevation',
+                             'args': [
+                                      # 1. updates to the traces
+                                      {
+                                       'lon':x[0],
+                                       'lat':y[0],
+                                       'marker': {'color':antilope[var].data.flatten()},
+                                       #'name':['sin', 'sin - 1'],
+                                       'visible': True}, 
+                                      # 2. updates to the layout
+                                      #{'title':'Sine'},
+                                      # 3. which traces are affected 
+                                      [-1, -2],
+                                      ],
+                             'args2': [
+                                      # 1. updates to the traces
+                                      {
+                                       'lon':x[1],
+                                       'lat':y[1],
+                                       'marker': {'color':tmp[var].data.flatten()},
+                                       #'name':['sin', 'sin - 1'],
+                                       'visible': True}, 
+                                      # 2. updates to the layout
+                                      #{'title':'Sine'},
+                                      # 3. which traces are affected 
+                                      [-1, -2],
+                                      ],
+                              },
+                            ],
+#                'type':'buttons',
+                'type':'dropdown',
+                'direction': 'down',
+                'showactive': True,}
+            ]
 
     # 2. Add ponctual rain gauges (red for nivometeo, black for other networks)
     def add_ponctual_obs(df, color='black', name='Unknown'):
@@ -159,13 +228,13 @@ def plot(antilope=None, antilope_error=None, safran=None, nivometeo=None, auto=N
     if auto is not None:
         add_ponctual_obs(auto, color='black', name='Automatic stations')
 
-    # Plot background map with SAFRAN massifs and fill them
+    # 3. Plot background map with SAFRAN massifs and fill them
     # Method from : https://community.plotly.com/t/plot-a-shapefile-shp-in-a-choropleth-chart/27850
-    # 1. read massif shapefile
+    # a. read massif shapefile
     massifs = "/home/vernaym/safran/ctes/shapefiles/massifs_safran.shp"
     massifs = gpd.read_file(massifs)
 
-    # 2. convert it to a plotly-readable GeoJSON file
+    # b. convert it to a plotly-readable GeoJSON file
     massifs_json = os.path.join(datadir, "massifs_safran.json")
     if not os.path.exists(massifs_json):
         massifs.to_file(massifs_json, driver = "GeoJSON")
@@ -194,6 +263,7 @@ def plot(antilope=None, antilope_error=None, safran=None, nivometeo=None, auto=N
             #opacity=0.5,
         ))
 
+    # 4. Update figure layout
     fig.update_layout(
         #coloraxis_showscale=False,
         title = f'24h precipitation (mm) between {datebegin} and {dateend}',
@@ -221,7 +291,7 @@ def plot(antilope=None, antilope_error=None, safran=None, nivometeo=None, auto=N
             #pitch = 0,
             zoom = 7,
         ),
-        #coloraxis_colorbar = dict(yanchor="top", y=1, x=0),  # Move the colorbar away from the legend
+        updatemenus = updatemenus,
     )
 
 #    fig.for_each_trace(lambda t: t.update(name = newnames[t.name],
@@ -232,6 +302,29 @@ def plot(antilope=None, antilope_error=None, safran=None, nivometeo=None, auto=N
 
     fig.show()
 
+def update_menu():
+    """"
+    https://stackoverflow.com/questions/68894919/how-to-set-the-values-of-args-and-args2-in-plotlys-buttons-in-updatemenus
+    """
+
+    # Stragtegy to plot data by elevation band :
+
+    # 1. Split ANTILOPE data into elevation-based clusters
+    # 2. PLot each cluster independently and make them all visible by default
+    # 3. Use updatemenus tool to mask some clusters
+
+
+    lowelevation = [dict(type="circle",
+                            xref="x", yref="y",
+                            x0=min(x0), y0=min(y0),
+                            x1=max(x0), y1=max(y0),
+                            line=dict(color="DarkOrange"))]
+    #midelevation = ...
+    #highelevation = ...
+
+
+
+    return updatemenus
 
 def interactive_layer_choice():
     """
