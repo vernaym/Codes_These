@@ -24,8 +24,9 @@ from pyproj import Proj, transform
 # https://plotly.com/python/scatter-plots-on-maps/  --> precipitation map
 
 # TODO : trouver un moyen de virer le blanc de la colorbar
-# TODO : ajouter un filtre par altitude
-# TODO : Ajouter SAFRAN
+# TODO : ajouter un filtre par altitude : https://plotly.com/python/v3/selection-events/?_gl=1*pup8cg*_ga*MTI0ODI4NTA5Ni4xNjgxODAwMDUx*_ga_6G7EE0JNSC*MTY4MTg4OTIwMy45LjEuMTY4MTg5MTk4OS4wLjAuMA
+# TODO : Une seule colorbar pour toutes les couches associées
+
 
 def usage():
     print("USAGE plot_precip_map.py date")
@@ -94,10 +95,14 @@ def plot(antilope=None, antilope_error=None, safran=None, nivometeo=None, auto=N
                     colorbar_title = "Precipitation(mm)",
                     colorbar = dict(
                         titleside = "right",
-                        #outlinecolor = "rgba(68, 68, 68, 0)",
                         ticks = "outside",
+                        # Move the colorbar away from the legend :
+                        yanchor="top",
+                        y=1,
+                        x=-0.1,
                         #showticksuffix = "last",
                         #dtick = 0.1
+        #coloraxis_colorbar = dict(yanchor="top", y=1, x=0),  # Move the colorbar away from the legend
                     ),
                 ),
             )
@@ -127,8 +132,6 @@ def plot(antilope=None, antilope_error=None, safran=None, nivometeo=None, auto=N
     if auto is not None:
         add_ponctual_obs(auto, color='black', name='Automatic stations')
 
-    # TODO : plot SAFRAN
-
     # Plot background map with SAFRAN massifs and fill them
     # Method from : https://community.plotly.com/t/plot-a-shapefile-shp-in-a-choropleth-chart/27850
     # 1. read massif shapefile
@@ -143,18 +146,11 @@ def plot(antilope=None, antilope_error=None, safran=None, nivometeo=None, auto=N
         j_file = json.load(geofile)
         i = 0
         for feature in j_file["features"]:
-            #feature ['id'] = str(i).zfill(2)
             feature['id'] = massifs.code[i]
             i += 1
-        #import pdb
-        #pdb.set_trace()
         plotsafran = safran.where(safran.ZS==1500., drop=True)
-        #fillmassifs=px.choropleth_mapbox(
-        #fig.add_trace(px.choropleth_mapbox(
-        #fig.append_trace(px.choropleth_mapbox(
-        #fig2 = px.choropleth_mapbox(
+
         fig.add_trace(go.Choroplethmapbox(
-        #fig.add_choroplethmapbox(
             geojson = j_file,
             locations = plotsafran.massif_number,
             z = plotsafran.rr.data,  #TODO : add elevation choice
@@ -162,19 +158,13 @@ def plot(antilope=None, antilope_error=None, safran=None, nivometeo=None, auto=N
             name = 'SAFRAN',
             zmin = 0,
             zmax = np.nanmax(antilope.rr.data.flatten()),
-            #marker_opacity=0,
             visible = True,
             uid = 4,
             uirevision = True,
             showscale = False,  # Same scale as ANTILOPE data (à vérifier !)
+            showlegend = True,
             #opacity=0.5,
-            #marker_line_width=0,
-            #z = safran.where(safran.ZS==1500., drop=True).rr.data,  # TODO : add elevation choice
-            #color = safran.where(safran.ZS==1500., drop=True).rr.data,  # TODO : add elevation choice
         ))
-        #)
-        #fig2.show()
-    #fig.update_traces(fig2)
 
     fig.update_layout(
         #coloraxis_showscale=False,
@@ -203,6 +193,7 @@ def plot(antilope=None, antilope_error=None, safran=None, nivometeo=None, auto=N
             #pitch = 0,
             zoom = 7,
         ),
+        #coloraxis_colorbar = dict(yanchor="top", y=1, x=0),  # Move the colorbar away from the legend
     )
 
 #    fig.for_each_trace(lambda t: t.update(name = newnames[t.name],
