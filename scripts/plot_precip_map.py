@@ -112,6 +112,7 @@ def plot(antilope=None, antilope_error=None, safran=None, nivometeo=None, auto=N
     # 2. Add ponctual rain gauges (red for nivometeo, black for other networks)
     def add_ponctual_obs(df, color='black', name='Unknown'):
         fig.add_trace(go.Scattermapbox(
+                    #df,
                     lon  = df.lon.round(3),
                     lat  = df.lat.round(3),
                     text = df.rr.round(1).astype('string'),  # WARNING : working only with token mapbox :  https://plotly.com/python/mapbox-layers/
@@ -119,7 +120,23 @@ def plot(antilope=None, antilope_error=None, safran=None, nivometeo=None, auto=N
                     name = name,
                     textfont = dict(size=16, family='Arial', color=color),
                     textposition = 'middle center',
-                    hovertext=df.num_poste,
+                    hoverinfo = 'text',
+                    #hover_data=[df.num_poste, df.nom],
+                    #hovertext = [df.num_poste, df.nom],
+                    customdata = np.stack((df.num_poste, df.nom, df.alti, df.reseau_poste), axis=-1),
+                    #customdata = [df.num_poste, df.nom],
+                    #hovertemplate="<br>".join([
+                    #    f"Num poste: : %{customdata[0]}",
+                    #    f"Nom : %{customdata[1]}",
+                    #]),
+                    hovertemplate =
+                        '<b>Num poste</b>: %{customdata[0]:d}<br>'+
+                        '<b>Nom</b>: %{customdata[1]}<br>'+
+                        '<b>Altitude</b>: %{customdata[2]}m<br>'+
+                        '<b>Réseau</b>: %{customdata[3]}<br>'
+                    ,
+                    #hovertext=df.num_poste,
+                    #hovertext=[df.num_poste, df.nom],
                     # TODO : formater le texte flottant : "Nom (num_poste)"
                     #hovertemplate = '',
                 )
@@ -263,7 +280,7 @@ def get_obs_auto():
         #df = auto.set_index(['num_poste', 'lat', 'lon', 'alti', 'nom', 'reseau_poste', 'date']).sort_index()
         #df = df.assign(date=newdates).drop(columns=['date'])  # Replace date column
         auto = auto.set_index(['num_poste', 'lat', 'lon', 'alti', 'nom', 'reseau_poste', 'date']).sort_index()
-        auto=auto.groupby(['num_poste', 'lat', 'lon', 'alti', 'reseau_poste']).sum()
+        auto=auto.groupby(['num_poste', 'nom', 'lat', 'lon', 'alti', 'reseau_poste']).sum()
         auto = auto.reset_index()
 
         return auto
