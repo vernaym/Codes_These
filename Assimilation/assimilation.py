@@ -637,7 +637,7 @@ class Assimilation(object):
         #draw[np.where(x<0)] = 0  # x is already a precipitation field with >0 values
         return draw
 
-    def plot_obs(self, field, var='rr', domain=None):
+    def plot_obs(self, field, var='rr', domain=None, correlation_area=False, 3D=False):
 
         if var == 'rr':
             savename = f'{self.date_str}/OBS_{self.date_str}_{domain}.pdf'
@@ -654,7 +654,6 @@ class Assimilation(object):
 
         if not os.path.exists(savename) or var in ['obs', 'diff']:
 
-            mnt = xr.open_dataset('/home/vernaym/QGIS/MNT/DEM_ALPES_WGS84_250m_bilinear.nc')  # Pour tracer sur toutes les Alpes
             latmin = domain_coords[domain]['latmin']
             latmax = domain_coords[domain]['latmax']
             lonmin = domain_coords[domain]['lonmin']
@@ -663,16 +662,18 @@ class Assimilation(object):
             sel_lon = np.round(np.arange(lonmin, lonmax, 0.01), 2)
 
             # Add correlation area
-            point = 1200
-            corr = xr.DataArray(
-                    name   = 'correlation',
-                    data   = self.pond.getrow(point).toarray()[0].reshape((len(field.lat), len(field.lon))),
-                    dims   = ["lat", "lon"],
-                    coords = dict(lon=field.lon, lat=field.lat),
-                )
+            if correlation_area:
+                point = 1200
+                corr = xr.DataArray(
+                        name   = 'correlation',
+                        data   = self.pond.getrow(point).toarray()[0].reshape((len(field.lat), len(field.lon))),
+                        dims   = ["lat", "lon"],
+                        coords = dict(lon=field.lon, lat=field.lat),
+                    )
+
+                corr = corr.sel({'lat':np.intersect1d(sel_lat, corr.lat.data), 'lon':np.intersect1d(sel_lon, corr.lon.data)})
 
             field = field.sel({'lat':np.intersect1d(sel_lat, field.lat.data), 'lon':np.intersect1d(sel_lon, field.lon.data)})
-            corr = corr.sel({'lat':np.intersect1d(sel_lat, corr.lat.data), 'lon':np.intersect1d(sel_lon, corr.lon.data)})
 
             # Plot ANTILOPE precipitation field
 #            fig = plt.figure(figsize=figsize[domain]['singleplot'])
@@ -700,10 +701,11 @@ class Assimilation(object):
 #                    color_discrete_sequence=['grey']
                     )
 #                    ).update_traces(marker=dict(color='grey'))
-#            fig.show()
+#            figure.show()
 
-            # Add correlation area
-            #ax = plot_correlation(ax, field, corr, point=1200)
+            if correlation_area:
+                # Add correlation area
+                ax = plot_correlation(ax, field, corr, point=1200)
 
             # Add landmarks
             if domain == 'GrandesRousses':
@@ -731,15 +733,17 @@ class Assimilation(object):
             fig.savefig(savename, format='pdf')
 
         # Plot 3D ANTILOPE precipitation field
-#        tmp = mnt.interp(lon=self.radar.lon, lat=self.radar.lat, method='nearest')  # Pour interpoller le MNT sur la grille ANTILOPE
-#        # WARNING :  la commande suivante réduit sensibement le domaine, attention aux comparaisons entre figures (en particulier avec les CUMULS)
-#        #tmp = tmp.where((tmp.lon>=lonmin) & (tmp.lon<=lonmax) & (tmp.lat>=latmin) & (tmp.lat<=latmax), drop=True)
-#        X, Y = np.meshgrid(tmp['lon'].values, tmp['lat'].values)
-#        Z = np.nan_to_num(tmp['Band1'].values)
-#        # define pixel colors
-#        #colors = plt.cm.coolwarm(norm(np.nan_to_num(radar.transpose('lat', 'lon').rr.data)))
-#        colors = plt.cm.coolwarm(norm(np.nan_to_num(self.radar.rr.data)))
-#        plot3D(X, Y, Z, colors, self.date_str)
+        if 3D:
+            mnt = xr.open_dataset('/home/vernaym/QGIS/MNT/DEM_ALPES_WGS84_250m_bilinear.nc')  # Pour tracer sur toutes les Alpes
+            tmp = mnt.interp(lon=self.radar.lon, lat=self.radar.lat, method='nearest')  # Pour interpoller le MNT sur la grille ANTILOPE
+            # WARNING :  la commande suivante réduit sensibement le domaine, attention aux comparaisons entre figures (en particulier avec les CUMULS)
+            #tmp = tmp.where((tmp.lon>=lonmin) & (tmp.lon<=lonmax) & (tmp.lat>=latmin) & (tmp.lat<=latmax), drop=True)
+            X, Y = np.meshgrid(tmp['lon'].values, tmp['lat'].values)
+            Z = np.nan_to_num(tmp['Band1'].values)
+            # define pixel colors
+            #colors = plt.cm.coolwarm(norm(np.nan_to_num(radar.transpose('lat', 'lon').rr.data)))
+            colors = plt.cm.coolwarm(norm(np.nan_to_num(self.radar.rr.data)))
+            plot3D(X, Y, Z, colors, self.date_str)
 
     @speedtest
     def pdf_parameters(self):
@@ -1114,7 +1118,8 @@ class Assimilation(object):
                 #point = 1988  #max std 20220110
                 #point = 887 #max obs 20210825
                 #point = 78 # min obs 20211230
-                point = 2065 # max obs 20211230
+                #point = 2065 # max obs 20211230
+                point = 1200 # To match the illustrastion of the localization area
                 self.plot_super_ensemble(point, X, mean[point], std[mb][point], pond, f'Background ({mb})')
 
             # !! WARNING : modification des champs !!
@@ -1286,6 +1291,7 @@ class Assimilation(object):
             #point = 1988  #max std 20220110
             #point = 887 #max obs 20210825
             point = 2065
+            point = 1200 # To match the illustrastion of the localization area
             #point = 78 # min obs 20211230
             #point = np.where(obs==np.nanmin(obs))[0][0]
             #point = np.where(obs==np.nanmax(obs))[0][0]
