@@ -397,7 +397,8 @@ def plot(antilope=None, safran=None, nivometeo=None, auto=None, var='obs'):
 #                                     )
 # from : https://stackoverflow.com/questions/64371174/how-to-change-variable-label-names-for-the-legend-in-a-plotly-express-line-chart
 
-    fig.show()
+    #fig.show()
+    fig.write_json('test.json')
 
 def update_menu():
     """"
@@ -435,42 +436,48 @@ def get_antilope():
     filename = os.path.join(datadir, f'ANTILOPE.nc')
     #if os.path.exists(filename):
     antilope = xr.open_dataset(os.path.join(datadir, filename))
-    # TODO : gérer le changement d'heure !
-    antilope = antilope.where((antilope.time>np.datetime64(datebegin)) & (antilope.time<=np.datetime64(dateend)), drop=True).sum('time')
 
-    # Static de-biasing :
-    mask = xr.open_dataset(os.path.join(datadir, f"Estimated_ratio.nc"))
+    if 'analysis' in antilope.variables.keys():
+        # File already pre-processed
+        return antilope
 
-    antilope["ratio"]=mask.ratio  # Fill missing point with NaNs
-    antilope["rr_debiaise"] = (antilope.rr/antilope.ratio).fillna(antilope.rr)  # Fill NaN values with the original ANTILOPE value
-
-    # Dynamic correction (localisation)
-    error = xr.open_dataset(os.path.join(datadir, 'Observation_error.nc'))
-    std = np.abs(error.ratio.data)
-
-    filename = os.path.join('/home/vernaym/These/DATA', f'codistance_max_dist_{max_dist}_{domain}.npz')
-    if not os.path.exists(filename):
-        # Compute inter-distances
-        coords=[(lon,lat) for lat in error.lat.data for lon in error.lon.data]
-        pond = codistances(coords)
-        scipy.sparse.save_npz(filename, pond, compressed=False)
     else:
-        pond = scipy.sparse.load_npz(filename)
+        # TODO : gérer le changement d'heure !
+        antilope = antilope.where((antilope.time>np.datetime64(datebegin)) & (antilope.time<=np.datetime64(dateend)), drop=True).sum('time')
 
-    pond = pond.dot(diags(np.exp(-std).flatten(), 0))
-    obs = antilope.rr_debiaise.sel(({'lat':np.intersect1d(error.lat.data, antilope.lat.data), 'lon':np.intersect1d(error.lon.data, antilope.lon.data)})).data.flatten()
+        # Static de-biasing :
+        mask = xr.open_dataset(os.path.join(datadir, f"Estimated_ratio.nc"))
 
-    new = update_obs(obs, pond, replacement_strategy='toward_mean')  # Update obs
-    antilope['obs'] = xr.DataArray(
-            data   = new.reshape((len(mask.lat), len(mask.lon))),
-            dims   = ["lat", "lon"],
-            coords = dict(lon=mask.lon, lat=mask.lat)
-        )
-    antilope['obs'] = antilope['obs'].fillna(antilope.rr)
+        antilope["ratio"]=mask.ratio  # Fill missing point with NaNs
+        antilope["rr_debiaise"] = (antilope.rr/antilope.ratio).fillna(antilope.rr)  # Fill NaN values with the original ANTILOPE value
 
-    # TODO : ecrire le fichier pour ne pas refaire les calculs à chaque fois
+        # Dynamic correction (localisation)
+        error = xr.open_dataset(os.path.join(datadir, 'Observation_error.nc'))
+        std = np.abs(error.ratio.data)
 
-    return antilope
+        filename = os.path.join('/home/vernaym/These/DATA', f'codistance_max_dist_{max_dist}_{domain}.npz')
+        if not os.path.exists(filename):
+            # Compute inter-distances
+            coords=[(lon,lat) for lat in error.lat.data for lon in error.lon.data]
+            pond = codistances(coords)
+            scipy.sparse.save_npz(filename, pond, compressed=False)
+        else:
+            pond = scipy.sparse.load_npz(filename)
+
+        pond = pond.dot(diags(np.exp(-std).flatten(), 0))
+        obs = antilope.rr_debiaise.sel(({'lat':np.intersect1d(error.lat.data, antilope.lat.data), 'lon':np.intersect1d(error.lon.data, antilope.lon.data)})).data.flatten()
+
+        new = update_obs(obs, pond, replacement_strategy='toward_mean')  # Update obs
+        antilope['obs'] = xr.DataArray(
+                data   = new.reshape((len(mask.lat), len(mask.lon))),
+                dims   = ["lat", "lon"],
+                coords = dict(lon=mask.lon, lat=mask.lat)
+            )
+        antilope['obs'] = antilope['obs'].fillna(antilope.rr)
+
+        # TODO : ecrire le fichier pour ne pas refaire les calculs à chaque fois
+
+        return antilope
 
 def update_obs(field, pond, weight=None, super_ensemble=None, replacement_strategy='keep'):
 
@@ -584,6 +591,7 @@ auto = get_obs_auto()
 # 4. read SAFRAN
 safran = get_safran()
 
-plot(antilope=antilope, nivometeo=nivometeo, auto=auto, safran=safran, var='obs')
+plot(antilope=antilope, nivometeo=nivometeo, auto=auto, safran=safran, var='analysis')
+#plot(antilope=antilope, nivometeo=nivometeo, auto=auto, safran=safran, var='obs')
 #plot(antilope=antilope, nivometeo=nivometeo, auto=auto, safran=safran, var='rr')
 
