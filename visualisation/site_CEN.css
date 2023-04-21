@@ -1,0 +1,37 @@
+
+/* Couleur du fond */
+body {
+    background-color: #E0FFFF;
+}
+
+/* Mise en forme du titre pricipal */
+h1 {
+  text-align: center;
+  margin: 6px 6px 6px 6px;
+  border-style: solid;
+  border-width: medium;
+  border-color: #0000FF;
+  padding: 1px 2px;
+  border-radius: 20px;
+  display:inline;
+}
+
+/* Mise en forme des sous-titre */
+h3 {
+    text-decoration: underline;
+}
+
+/* Mise en forme de la table */
+table {
+  border-width : 2px;
+  border-radius: 5px;
+  border-color: #0000FF;
+}
+
+/* Mise en forme des entêtes de cellules */
+th, td {
+  text-align : center;
+  border-radius: 5px;
+  border-color: #0000FF;
+}
+

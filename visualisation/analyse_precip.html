@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<!-- Contient toutes les métadonnées et les inclusions des codes javascripts et css -->
+<head>
+  <meta charset="utf-8">
+  <title>Analyse precipitations</title>
+  <link rel="icon" type="image/png" href="favicon.png" />
+  <meta name="description" content="Analyse de précipitations en 24h">
+
+  <!-- Feuilles de styles -->
+  <link rel="stylesheet" href="site_CEN.css" type="text/css">
+
+  <!-- Code javascript -->
+  <script type="text/javascript" src="variables.js"></script>
+  <script type="text/javascript" src="fonctions.js"></script>
+</head>
+
+<!-- Contient tout le corps de la page -->
+<body onload="javascript:chargement()">
+
+<?php
+  require_once("traqueur.php");
+  track();
+?>
+
+<!-- Partie contenant les choix de sélection du graphique -->
+<div id="divSelection">
+
+ <!-- Table contenant les sélections -->
+ <table>
+    <!-- Sous tableau contenant le choix de l'expérience et des domaines/altitudes/massifs-->
+    <tr>
+    <td><table border="1">
+    <tr>  <!-- Entêtes -->
+      <th>Analyse de précipitations en 24h</th>
+      <th>Domaine : <select id="selectDomaine"></select></th>
+      <th>Journée analysée : <select id="selectDate"></select></th>
+    <!-- Bouton de validation --> <!-- Changement de réseau -->
+    <td rowspan="1" style="text-align:left;">
+      <input name="valid" type="button" value="Voir carte"/>
+    </td>
+    </tr>
+    </table>
+    </td></tr>
+ </table>
+
+</div>
+
+<!-- Partie contenant l'image -->
+<div id="zoneImage" style="display:none;">
+   <object id="map", src=""></object> 
+</div>
+
+</body>
+</html>
