@@ -53,96 +53,124 @@ except Exception as e:
     usage()
     raise e
 
-
-token = open("/home/vernaym/.mapbox/token").read() # Token from mapbox account
-config = dict({'scrollZoom': True})  # plotly image configuration
-
-datadir = '/home/vernaym/workdir/visualisation'
-#datadir = '/d0/intra-cen/ANTILOPE'
-domain = 'alp'
-
 ld = 0.05
 max_dist = ld*3
+datadir = '/home/vernaym/workdir/visualisation'
+#datadir = '/d0/intra-cen/ANTILOPE'
+token = open("/home/vernaym/.mapbox/token").read() # Token from mapbox account
 
-def plot(antilope=None, safran=None, nivometeo=None, auto=None, var='obs'):
-    """ 
-    Plot from shapfile
-    https://stackoverflow.com/questions/71780189/how-to-show-only-boundaries-no-fill-of-a-shapefile-in-python-plotly-express
-    """
+class PrecipitationAnalysis(object):
 
-    fig = go.Figure()
 
-# From : https://stackoverflow.com/questions/69699744/plotly-express-line-with-continuous-color-scale
-#    colorscale = []
-#    n_steps = 20  # Control the number of colors in the final colorscale
-#    rgb = px.colors.convert_colors_to_same_type('YlGnBu')[0]
-#    for i in range(len(rgb) - 1):
-#        for step in np.linspace(, 1, n_steps):
-#            colorscale.append(px.colors.find_intermediate_color(rgb[i], rgb[i + 1], step, colortype='rgb'))
+    def __init__(self, date, domain='alp', antilope=None, safran=None, nivometeo=None, auto=None, var='obs'):
+        self.antilope = antilope
+        self.var = var
+        self.safran = safran
+        self.nivometeo = nivometeo
+        self.auto = auto
+        self.date = date
+        self.datebegin = date.replace(hour=6)
+        self.dateend   = self.datebegin+datetime.timedelta(days=1)
+        self.domain = domain
+        self.massifs = None
 
-    # 1. Plot ANTILOPE as multiple dot scatterplot (depending on the elevation)
-    # read_relief
-    mnt = xr.open_dataset(os.path.join(datadir, "DEM_ALPES_WGS84_250m_bilinear.nc"))
-    # WARNING : update of xarray necessary !
-    #data = antilope.interp(lat=mnt.lat.data, lon=mnt.lon.data)
-    tmp = mnt.interp(lat=antilope.lat.data, lon=antilope.lon.data)
-    antilope["elevation"] = tmp.Band1
+        self.fig = go.Figure()  # Figure initialisation
 
-    #for elevation in [0, 600, 1200, 2000]:
-    #x = dict()
-    #y = dict()
-    #z = dict()
-    x,y  = np.meshgrid(antilope.lon.data, antilope.lat.data)
-    x = x.flatten()
-    y = y.flatten()
-    rr = antilope[var].data.flatten()  # Corrected obs
-    error = antilope['error'].data.flatten()
-    alti = antilope['elevation'].data.flatten()
-    df = pd.DataFrame(
-            data    = np.transpose([x, y, rr, error, alti]),
-            columns = ['lon', 'lat', 'rr', 'error', 'alti'],
-            index   = range(len(rr)),
-        )
-    select = dict()
-    #for i,elevation in enumerate(range(0, 3000, 500)):
-    # TODO : Avoid plot data multiple time (use button ?) --> ABSOLUTE PRIORITY !!
-    # Plotting the full 1-km ANTILOPE domain takes about 12M memory...
-    # https://plotly.com/python/v3/selection-events/
-    for i,elevation in enumerate([0]):
-        if elevation == 0:
-            # Make all data visible by default
-            visible = True
-            name = 'ANTILOPE'
-            select[i] = np.where(rr>0.1)
-        else:
-            tmp = antilope.where(antilope.elevation>=elevation, drop=True)
-            select[i]  = np.where((rr>0.1) & (alti>elevation))
-            visible ='legendonly'  # Does not work as intended : https://community.plotly.com/t/legendonly-doesnt-work-anymore-in-scattermapbox/72822
-            visible = True
-            name    = f'ANTILOPE>{elevation:d}m'
+    def plot(self):
+        """ 
+        Plot from shapfile
+        https://stackoverflow.com/questions/71780189/how-to-show-only-boundaries-no-fill-of-a-shapefile-in-python-plotly-express
+        """
 
-        fig.add_trace(go.Scattermapbox(
-                    lon  = x[select[i]],
-                    lat  = y[select[i]],
+        # 1. ANTILOPE
+        if self.antilope is not None:
+            self.plot_antilope()
+
+        # 2. Nivométéo observations
+        self.add_ponctual_obs(self.nivometeo, color='red', name='Nivometeo')
+
+        # 3. Automatic observations
+        self.add_ponctual_obs(self.auto, color='black', name='Automatic stations')
+
+        # 4. SAFRAN
+        if safran is not None:
+            self.plot_safran()
+
+        self.update_figure()
+
+        self.fig.show()
+        #fig.write_json('test.json')
+        self.fig.write_html(f"precipitation_{date.strftime('%Y%m%d')}.html")
+
+    def plot_antilope(self):
+        """
+        Plot ANTILOPE as multiple dot scatterplot (depending on the elevation)
+        """
+        # 1. read_relief (TODO : add to ANTILOPE pre-processing ?)
+        mnt = xr.open_dataset(os.path.join(datadir, "DEM_ALPES_WGS84_250m_bilinear.nc"))
+        # WARNING : update of xarray necessary !
+        #data = antilope.interp(lat=mnt.lat.data, lon=mnt.lon.data)
+        tmp = mnt.interp(lat=self.antilope.lat.data, lon=self.antilope.lon.data)
+        self.antilope["elevation"] = tmp.Band1
+
+        x,y  = np.meshgrid(self.antilope.lon.data, self.antilope.lat.data)
+        x = x.flatten()
+        y = y.flatten()
+        rr = self.antilope[self.var].data.flatten()  # Corrected obs
+        error = self.antilope['error'].data.flatten()
+        alti = self.antilope['elevation'].data.flatten()
+        df = pd.DataFrame(
+                data    = np.transpose([x, y, rr, error, alti]),
+                columns = ['lon', 'lat', 'rr', 'error', 'alti'],
+                index   = range(len(rr)),
+            )
+        select = dict()
+        for i,elevation in enumerate(range(0, 3500, 1000)):
+        # TODO : Avoid plot data multiple time (use button ?) --> ABSOLUTE PRIORITY !!
+        # Plotting the full 1-km ANTILOPE domain takes about 12M memory...
+        # https://plotly.com/python/v3/selection-events/
+            if elevation == 0:
+                # Make all data visible by default
+                visible = True
+                name = 'ANTILOPE'
+                select[i] = np.where((rr>0.1) & (~np.isnan(error)))
+                showscale = True
+            else:
+                select[i]  = np.where((rr>0.1) & (alti>elevation) & (~np.isnan(error)))
+                visible ='legendonly'  # Does not work as intended : https://community.plotly.com/t/legendonly-doesnt-work-anymore-in-scattermapbox/72822
+                visible = True
+                name    = f'ANTILOPE>{elevation:d}m'
+                showscale = False
+
+            self.fig.add_trace(self.add_antilope_scatter(df, name, select[i], uncertainty=True))
+            if i == 0:
+                # TODO : useless (same data ==> use a button !)
+                self.fig.add_trace(self.add_antilope_scatter(df, name, select[i], uncertainty=False))
+
+    def add_antilope_scatter(self, df, name, mask, showscale=False,  uncertainty=True, visible=True):
+        return go.Scattermapbox(
+                    lon  = df.lon.values[mask],
+                    lat  = df.lat.values[mask],
                     #selectedpoints = select,  # TODO : use this footprint to set updatemenus buttons DOES NOT WORK (because it refers to user selected points)
                     mode = 'markers',
                     name = name,
                     #text = antilope.rr.data.flatten(),  # Raw obs
-                    text = rr[select[i]],  # obs=corrected obs, rr=raw obs
+                    text = df.rr.values[mask],  # obs=corrected obs, rr=raw obs
                     visible = visible,
                     showlegend = True,
                     #selected = go.scattermapbox.Selected(marker={"size":50}),
-                    customdata = np.stack((alti[select[i]], rr[select[i]], error[select[i]]), axis=-1),
+                    customdata = np.stack((df.alti.values[mask], df.rr.values[mask], df.error.values[mask]), axis=-1),
                     hovertemplate =
                         '<b>Altitude</b>: %{customdata[0]:d}m<br>'+
                         '<b>Precipitation</b>: %{customdata[1]:f}<br>'+
                         '<b>Incertitude</b>: %{customdata[2]:f}<br>',
                     marker = dict(
                         #color = antilope.rr.data.flatten(),
-                        color = rr[select[i]],
+                        color = df.rr.values[mask],
                         cmin  = 0,
-                        cmax  = np.nanmax(antilope.rr.data.flatten()),
-                        size  = np.nan_to_num(error[select[i]], nan=5),  # TODO : revoir la conversion erreur --> taille + ajouter une fourchette dans le text flottan (genre "10mm d'incertitude")
+                        cmax  = np.nanmax(self.antilope.rr.data.flatten()),
+                        # TODO : revoir la conversion erreur --> taille + ajouter une fourchette dans le text flottan (genre "10mm d'incertitude")
+                        size  = np.nan_to_num(df.error.values[mask], nan=5) if uncertainty else 10,
                         #opacity=0.5,
                         #colorscale = 'YlGnBu',
                         colorscale = 'dense',
@@ -150,7 +178,7 @@ def plot(antilope=None, safran=None, nivometeo=None, auto=None, var='obs'):
                         #cmin = 100,
                         #cmax = 1200,
                         colorbar_title = "Precipitation(mm)",
-                        showscale = True if i == 0 else False,  # PLot only one colorscale
+                        showscale = showscale,  # Plot only one colorscale
                         colorbar = dict(
                             titleside = "right",
                             ticks = "outside",
@@ -164,177 +192,142 @@ def plot(antilope=None, safran=None, nivometeo=None, auto=None, var='obs'):
                         ),
                     ),
                 )
-            )
 
-        if i == 0:
-            fig.add_trace(go.Scattermapbox(
-                        lon  = x[select[i]],
-                        lat  = y[select[i]],
-                        #selectedpoints = select,  # TODO : use this footprint to set updatemenus buttons DOES NOT WORK
-                        mode = 'markers',
-                        name = 'ANTILOPE sans incertitude',
-                        #text = antilope.rr.data.flatten(),  # Raw obs
-                        text = rr[select[i]],  # obs=corrected obs, rr=raw obs
-                        visible = visible,
-                        showlegend = True,
-                        marker = dict(
-                            #color = antilope.rr.data.flatten(),
-                            color = rr[select[i]],
-                            cmin  = 0,
-                            cmax  = np.nanmax(antilope.rr.data.flatten()),
-                            size  = 10,  # TODO : revoir la taille minimale
-                            #opacity=0.5,
-                            #colorscale = 'YlGnBu',
-                            showscale = False,  # PLot only one colorscale
-                            colorscale = 'dense',
-                            #symbol='square',  # Impossible to change if color is definied : https://stackoverflow.com/questions/59628536/option-symbol-in-scattermapbox-is-not-working
-                            #cmin = 100,
-                            #cmax = 1200,
-                            colorbar_title = "Precipitation(mm)",
-                            colorbar = dict(
-                                titleside = "right",
-                                ticks = "outside",
-                                # Move the colorbar away from the legend :
-                                yanchor="top",
-                                y=1,
-                                x=-0.1,
-                                #showticksuffix = "last",
-                                #dtick = 0.1
-                #coloraxis_colorbar = dict(yanchor="top", y=1, x=0),  # Move the colorbar away from the legend
-                            ),
-                        ),
+    def add_button(self):
+        """
+        NOT IMPLEMENTED YET
+        Add button to activate / deactivate marker size depending on the uncertainty
+        DOEST NOT WORK : try with dash ?
+        https://stackoverflow.com/questions/68894919/how-to-set-the-values-of-args-and-args2-in-plotlys-buttons-in-updatemenus
+        """
+        updatemenus = [{
+                    'active':1,
+                    'buttons': [{'method': 'update',  # whether the button changes the plot, the layout or both
+                                 'label': 'Incertitude',  # what is written on the button / label
+                                 'args':[  # what happens when the button is clicked
+                                        # 1. updates to the traces
+                                        dict(marker = dict(
+                                            #color = antilope.rr.data.flatten(),
+                                            color = rr[select[0]],
+                                            cmin  = 0,
+                                            cmax  = np.nanmax(antilope.rr.data.flatten()),
+                                            size  = 20,  # TODO : revoir la taille minimale
+                                            colorscale = 'dense',
+                                            colorbar_title = "Precipitation(mm)",
+                                            colorbar = dict(
+                                                titleside = "right",
+                                                ticks = "outside",
+                                                yanchor="top",
+                                                y=1,
+                                                x=-0.1,
+                                            ),
+                                         ),
+                                         ),
+                                         # 2. updates to the layout
+                                         #{'title':'Sine'},
+                                         {},
+                                         # 3. which traces are affected 
+                                         [0],
+                                         #[trace for trace in range(-(i+1)*2, 0)],
+                                         ],
+                                 'args2':[  # what happens when it’s unclicked
+                                        # 1. updates to the traces
+                                        dict(marker = dict(
+                                            #color = antilope.rr.data.flatten(),
+                                            color = rr[select[0]],
+                                            cmin  = 0,
+                                            cmax  = np.nanmax(antilope.rr.data.flatten()),
+                                            size  = np.nan_to_num(error[select[i]], nan=5),  # TODO : revoir la taille minimale
+                                            colorscale = 'dense',
+                                            colorbar_title = "Precipitation(mm)",
+                                            colorbar = dict(
+                                                titleside = "right",
+                                                ticks = "outside",
+                                                yanchor="top",
+                                                y=1,
+                                                x=-0.1,
+                                            ),
+                                         ),
+                                         ),
+                                         #'name':['sin', 'sin - 1'],
+                                         #'visible': True}, 
+                                         # 2. updates to the layout
+                                         {},
+                                         #{'title':'Sine'},
+                                         # 3. which traces are affected 
+                                         [0],
+                                         #[trace for trace in range(-(i+1)*2, 0)],
+                                         ],
+                                  },
+                                ],
+                    'type':'buttons',
+#                'type':'dropdown',
+#                'direction': 'down',
+                    'showactive': True,}
+                ]
+
+    def add_ponctual_obs(self, df, color='black', name='Unknown'):
+        """
+        Add ponctual rain gauges (red for nivometeo, black for other networks)
+        """
+        if df is not None:
+            self.fig.add_trace(go.Scattermapbox(
+                        #df,
+                        lon  = df.lon.round(3),
+                        lat  = df.lat.round(3),
+                        text = df.rr.round(1).astype('string'),  # WARNING : working only with token mapbox :  https://plotly.com/python/mapbox-layers/
+                        mode = 'text',
+                        name = name,
+                        textfont = dict(size=16, family='Arial', color=color),
+                        textposition = 'middle center',
+                        hoverinfo = 'text',
+                        #hover_data=[df.num_poste, df.nom],
+                        #hovertext = [df.num_poste, df.nom],
+                        customdata = np.stack((df.num_poste, df.nom, df.alti, df.reseau_poste), axis=-1),
+                        #customdata = [df.num_poste, df.nom],
+                        #hovertemplate="<br>".join([
+                        #    f"Num poste: : %{customdata[0]}",
+                        #    f"Nom : %{customdata[1]}",
+                        #]),
+                        hovertemplate =
+                            '<b>Num poste</b>: %{customdata[0]:d}<br>'+
+                            '<b>Nom</b>: %{customdata[1]}<br>'+
+                            '<b>Altitude</b>: %{customdata[2]}m<br>'+
+                            '<b>Réseau</b>: %{customdata[3]}<br>',
+                        #hovertext=df.num_poste,
+                        #hovertext=[df.num_poste, df.nom],
+                        # TODO : formater le texte flottant : "Nom (num_poste)"
+                        #hovertemplate = '',
                     )
                 )
 
-    # Add button to activate / deactivate marker size depending on the uncertainty
-    # DOEST NOT WORK : try with dash ?
-    # https://stackoverflow.com/questions/68894919/how-to-set-the-values-of-args-and-args2-in-plotlys-buttons-in-updatemenus
-    updatemenus = [{
-                'active':1,
-                'buttons': [{'method': 'update',  # whether the button changes the plot, the layout or both
-                             'label': 'Incertitude',  # what is written on the button / label
-                             'args':[  # what happens when the button is clicked
-                                    # 1. updates to the traces
-                                    dict(marker = dict(
-                                        #color = antilope.rr.data.flatten(),
-                                        color = rr[select[0]],
-                                        cmin  = 0,
-                                        cmax  = np.nanmax(antilope.rr.data.flatten()),
-                                        size  = 20,  # TODO : revoir la taille minimale
-                                        colorscale = 'dense',
-                                        colorbar_title = "Precipitation(mm)",
-                                        colorbar = dict(
-                                            titleside = "right",
-                                            ticks = "outside",
-                                            yanchor="top",
-                                            y=1,
-                                            x=-0.1,
-                                        ),
-                                     ),
-                                     ),
-                                     # 2. updates to the layout
-                                     #{'title':'Sine'},
-                                     {},
-                                     # 3. which traces are affected 
-                                     [0],
-                                     #[trace for trace in range(-(i+1)*2, 0)],
-                                     ],
-                             'args2':[  # what happens when it’s unclicked
-                                    # 1. updates to the traces
-                                    dict(marker = dict(
-                                        #color = antilope.rr.data.flatten(),
-                                        color = rr[select[0]],
-                                        cmin  = 0,
-                                        cmax  = np.nanmax(antilope.rr.data.flatten()),
-                                        size  = np.nan_to_num(error[select[i]], nan=5),  # TODO : revoir la taille minimale
-                                        colorscale = 'dense',
-                                        colorbar_title = "Precipitation(mm)",
-                                        colorbar = dict(
-                                            titleside = "right",
-                                            ticks = "outside",
-                                            yanchor="top",
-                                            y=1,
-                                            x=-0.1,
-                                        ),
-                                     ),
-                                     ),
-                                     #'name':['sin', 'sin - 1'],
-                                     #'visible': True}, 
-                                     # 2. updates to the layout
-                                     {},
-                                     #{'title':'Sine'},
-                                     # 3. which traces are affected 
-                                     [0],
-                                     #[trace for trace in range(-(i+1)*2, 0)],
-                                     ],
-                              },
-                            ],
-                'type':'buttons',
-#                'type':'dropdown',
-#                'direction': 'down',
-                'showactive': True,}
-            ]
+    def read_safran_massifs(self, massifs_json):
+        # 1. read massif shapefile
+        massifs = "/home/vernaym/safran/ctes/shapefiles/massifs_safran.shp"
+        self.massifs = gpd.read_file(massifs)
 
-    # 2. Add ponctual rain gauges (red for nivometeo, black for other networks)
-    def add_ponctual_obs(df, color='black', name='Unknown'):
-        fig.add_trace(go.Scattermapbox(
-                    #df,
-                    lon  = df.lon.round(3),
-                    lat  = df.lat.round(3),
-                    text = df.rr.round(1).astype('string'),  # WARNING : working only with token mapbox :  https://plotly.com/python/mapbox-layers/
-                    mode = 'text',
-                    name = name,
-                    textfont = dict(size=16, family='Arial', color=color),
-                    textposition = 'middle center',
-                    hoverinfo = 'text',
-                    #hover_data=[df.num_poste, df.nom],
-                    #hovertext = [df.num_poste, df.nom],
-                    customdata = np.stack((df.num_poste, df.nom, df.alti, df.reseau_poste), axis=-1),
-                    #customdata = [df.num_poste, df.nom],
-                    #hovertemplate="<br>".join([
-                    #    f"Num poste: : %{customdata[0]}",
-                    #    f"Nom : %{customdata[1]}",
-                    #]),
-                    hovertemplate =
-                        '<b>Num poste</b>: %{customdata[0]:d}<br>'+
-                        '<b>Nom</b>: %{customdata[1]}<br>'+
-                        '<b>Altitude</b>: %{customdata[2]}m<br>'+
-                        '<b>Réseau</b>: %{customdata[3]}<br>',
-                    #hovertext=df.num_poste,
-                    #hovertext=[df.num_poste, df.nom],
-                    # TODO : formater le texte flottant : "Nom (num_poste)"
-                    #hovertemplate = '',
-                )
-            )
-    # Nivométéo observations
-    if nivometeo is not None:
-        add_ponctual_obs(nivometeo, color='red', name='Nivometeo')
+        if not os.path.exists(massifs_json):
+            # 1. convert it to a plotly-readable GeoJSON file
+            self.massifs.to_file(filename, driver = "GeoJSON")
 
-    # Automatic observations
-    if auto is not None:
-        add_ponctual_obs(auto, color='black', name='Automatic stations')
+    def plot_safran(self):
+        """
+        Plot background map with SAFRAN massifs and fill them
+        Method from : https://community.plotly.com/t/plot-a-shapefile-shp-in-a-choropleth-chart/27850
+        """
+        massifs_json = os.path.join(datadir, "massifs_safran.json")
+        self.read_safran_massifs(massifs_json)
 
-    # 3. Plot background map with SAFRAN massifs and fill them
-    # Method from : https://community.plotly.com/t/plot-a-shapefile-shp-in-a-choropleth-chart/27850
-    # a. read massif shapefile
-    massifs = "/home/vernaym/safran/ctes/shapefiles/massifs_safran.shp"
-    massifs = gpd.read_file(massifs)
-
-    # b. convert it to a plotly-readable GeoJSON file
-    massifs_json = os.path.join(datadir, "massifs_safran.json")
-    if not os.path.exists(massifs_json):
-        massifs.to_file(massifs_json, driver = "GeoJSON")
-
-    if safran is not None:
         with open(massifs_json) as geofile:
             j_file = json.load(geofile)
             i = 0
             for feature in j_file["features"]:
-                feature['id'] = massifs.code[i]
+                feature['id'] = self.massifs.code[i]
                 i += 1
-            plotsafran = safran.where(safran.ZS==1500., drop=True)
+            # TODO : add dynamic elevation choice
+            plotsafran = self.safran.where(safran.ZS==2100., drop=True)
 
-            fig.add_trace(go.Choroplethmapbox(
+            self.fig.add_trace(go.Choroplethmapbox(
                 geojson = j_file,
                 locations = plotsafran.massif_number,
                 z = plotsafran.rr.data,  #TODO : add elevation choice
@@ -343,7 +336,7 @@ def plot(antilope=None, safran=None, nivometeo=None, auto=None, var='obs'):
                 name = 'SAFRAN',
                 zmin = 0,
                 #zmax = np.nanmax(antilope.rr.data.flatten()),
-                zmax = np.nanmax(antilope[var].data.flatten()),
+                zmax = np.nanmax(self.antilope[self.var].data.flatten()),
                 visible = True,
                 uid = 4,
                 uirevision = True,
@@ -352,37 +345,41 @@ def plot(antilope=None, safran=None, nivometeo=None, auto=None, var='obs'):
                 #opacity=0.5,
             ))
 
-    # Update figure layout
-    fig.update_layout(
-        #coloraxis_showscale=False,
-        title = f'24h precipitation (mm) between {datebegin} and {dateend}',
-        margin = dict(l=1, t=40, r=1, b=0, pad=0),
-        #mapbox_bounds={"west": 2, "east": 11, "south": 42, "north": 48},
-        mapbox = dict(
-            accesstoken = token,
-            style = "outdoors",
-#        mapbox = dict(
+    def update_figure(self):
+        """
+        Update figure layout
+        """
+
+        self.fig.update_layout(
+            #coloraxis_showscale=False,
+            title = f'24h precipitation (mm) between {self.datebegin} and {self.dateend}',
+            margin = dict(l=1, t=40, r=1, b=0, pad=0),
+            #mapbox_bounds={"west": 2, "east": 11, "south": 42, "north": 48},
+            mapbox = dict(
+                accesstoken = token,
+                style = "outdoors",
+#        mapbox = dict
 #            style = "stamen-terrain",  # https://plotly.com/python/mapbox-layers/
 #            #style = "open-street-map",  # https://plotly.com/python/reference/layout/mapbox/
 #            #style = "basic",  # https://plotly.com/python/reference/layout/mapbox/
-            layers =  [
-                {
-                    "source": massifs["geometry"].__geo_interface__,
-                    "type": "line",
-                    "color": "black",
-                    #"below":"traces",
-                    #"opacity":0.5,
-                },
-            ],
-            center = go.layout.mapbox.Center(
-                lat=45.2,
-                lon=6.0,
+                layers =  [
+                    {
+                        "source": self.massifs["geometry"].__geo_interface__,
+                        "type": "line",
+                        "color": "black",
+                        #"below":"traces",
+                        #"opacity":0.5,
+                    },
+                ],
+                center = go.layout.mapbox.Center(  # TODO : à adapter selon le domain)
+                    lat=45.2,
+                    lon=6.0,
+                ),
+                #pitch = 0,
+                zoom = 7,
             ),
-            #pitch = 0,
-            zoom = 7,
-        ),
-        #updatemenus = updatemenus,
-    )
+            #updatemenus = self.updatemenus,  # To activate updatemenu
+        )
 
 #    fig.for_each_trace(lambda t: t.update(name = newnames[t.name],
 #                                      legendgroup = newnames[t.name],
@@ -390,40 +387,36 @@ def plot(antilope=None, safran=None, nivometeo=None, auto=None, var='obs'):
 #                                     )
 # from : https://stackoverflow.com/questions/64371174/how-to-change-variable-label-names-for-the-legend-in-a-plotly-express-line-chart
 
-    fig.show()
-    #fig.write_json('test.json')
-    fig.write_html(f"precipitation_{date.strftime('%Y%m%d')}.html")
+    def update_menu(self):
+        """"
+        NOT IMPLEMENTED YET
+        https://stackoverflow.com/questions/68894919/how-to-set-the-values-of-args-and-args2-in-plotlys-buttons-in-updatemenus
+        """
 
-def update_menu():
-    """"
-    https://stackoverflow.com/questions/68894919/how-to-set-the-values-of-args-and-args2-in-plotlys-buttons-in-updatemenus
-    """
+        # Stragtegy to plot data by elevation band :
 
-    # Stragtegy to plot data by elevation band :
-
-    # 1. Split ANTILOPE data into elevation-based clusters
-    # 2. PLot each cluster independently and make them all visible by default
-    # 3. Use updatemenus tool to mask some clusters
+        # 1. Split ANTILOPE data into elevation-based clusters
+        # 2. PLot each cluster independently and make them all visible by default
+        # 3. Use updatemenus tool to mask some clusters
 
 
-    lowelevation = [dict(type="circle",
-                            xref="x", yref="y",
-                            x0=min(x0), y0=min(y0),
-                            x1=max(x0), y1=max(y0),
-                            line=dict(color="DarkOrange"))]
-    #midelevation = ...
-    #highelevation = ...
+        lowelevation = [dict(type="circle",
+                                xref="x", yref="y",
+                                x0=min(x0), y0=min(y0),
+                                x1=max(x0), y1=max(y0),
+                                line=dict(color="DarkOrange"))]
+        #midelevation = ...
+        #highelevation = ...
 
+        return updatemenus
 
-
-    return updatemenus
-
-def interactive_layer_choice():
-    """
-    https://plotly.com/python/custom-buttons/  (+3D map)
-    https://stackoverflow.com/questions/66414456/update-visibility-of-traces-with-fig-update-layout-plotly
-    """
-    pass
+    def interactive_layer_choice(self):
+        """
+        NOT IMPLEMENTED YET
+        https://plotly.com/python/custom-buttons/  (+3D map)
+        https://stackoverflow.com/questions/66414456/update-visibility-of-traces-with-fig-update-layout-plotly
+        """
+        pass
 
 def get_antilope():
     # TODO : appliquer le pré-processing pour plotter ANTILOPE corrigé
@@ -449,7 +442,7 @@ def get_antilope():
         error = xr.open_dataset(os.path.join(datadir, 'Observation_error.nc'))
         std = np.abs(error.ratio.data)
 
-        filename = os.path.join('/home/vernaym/These/DATA', f'codistance_max_dist_{max_dist}_{domain}.npz')
+        filename = os.path.join('/home/vernaym/These/DATA', f'codistance_max_dist_{max_dist}_{self.domain}.npz')
         if not os.path.exists(filename):
             # Compute inter-distances
             coords=[(lon,lat) for lat in error.lat.data for lon in error.lon.data]
@@ -585,7 +578,9 @@ auto = get_obs_auto()
 # 4. read SAFRAN
 safran = get_safran()
 
-plot(antilope=antilope, nivometeo=nivometeo, auto=auto, safran=safran, var='analysis')
+myplot = PrecipitationAnalysis(date, 'alp', antilope=antilope, nivometeo=nivometeo, auto=auto, safran=safran, var='analysis')
+myplot.plot()
+#plot(antilope=antilope, nivometeo=nivometeo, auto=auto, safran=safran, var='analysis')
 #plot(antilope=antilope, nivometeo=nivometeo, auto=auto, safran=safran, var='obs')
 #plot(antilope=antilope, nivometeo=nivometeo, auto=auto, safran=safran, var='rr')
 
