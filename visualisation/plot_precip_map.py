@@ -60,23 +60,6 @@ domain = 'alp'
 ld = 0.05
 max_dist = ld*3
 
-domain_coords = dict(
-        GrandesRousses = dict(latmax=45.240, latmin=44.990, lonmin=6.010, lonmax = 6.490),
-        NorthernAlps   = dict(lonmin=6.0, lonmax=6.9, latmin=45.6, latmax=46.35),
-        CentralAlps    = dict(lonmin=5.6, lonmax=7.0, latmin=45.0, latmax=45.6),
-        SouthernAlps   = dict(lonmin=5.7, lonmax=7.0, latmin=44.2, latmax=45.0),
-        HauteSavoie    = dict(lonmin=6.45, lonmax=6.95, latmin=45.67, latmax=46.35),
-        MontBlanc      = dict(lonmin=6.45, lonmax=7.1, latmin=45.65, latmax=46.1),
-        Savoie         = dict(lonmin=6.06, lonmax=7.06, latmin=45.15, latmax=45.65),
-        Isere          = dict(lonmin=5.54, lonmax=6.19, latmin=44.89, latmax=45.16),
-        Brianconnais   = dict(lonmin=6.48, lonmax=6.95, latmin=44.67, latmax=44.95),
-        HautesAlpes    = dict(lonmin=5.90, lonmax=6.36, latmin=44.58, latmax=44.81),
-        AlpesSud       = dict(lonmin=6.56, lonmax=6.92, latmin=44.18, latmax=40.49),
-        alp            = dict(latmax=46.450, latmin=44.100, lonmin=5.400, lonmax=7.200),
-)
-coords = domain_coords[domain]
-
-
 def update_axes(xaxis, yaxis):
     scatter = f.data[0]
     scatter.x = df[xaxis]
@@ -123,6 +106,8 @@ def plot(antilope=None, safran=None, nivometeo=None, auto=None, var='obs'):
     alti = antilope['elevation'].data.flatten()
     select = dict()
     for i,elevation in enumerate(range(0, 3000, 500)):
+    # TODO : Avoid plot data multiple time (use button ?) --> ABSOLUTE PRIORITY !!
+    #for i,elevation in enumerate([0,2000]):
         if elevation == 0:
             # Make all data visible by default
             visible = True
@@ -145,7 +130,6 @@ def plot(antilope=None, safran=None, nivometeo=None, auto=None, var='obs'):
                     text = rr[select[i]],  # obs=corrected obs, rr=raw obs
                     visible = visible,
                     showlegend = True,
-                    showscale = True if i == 0 else False,  # PLot only one colorscale
                     customdata = np.stack((alti[select[i]], rr[select[i]], error[select[i]]), axis=-1),
                     hovertemplate =
                         '<b>Altitude</b>: %{customdata[0]:d}m<br>'+
@@ -164,6 +148,7 @@ def plot(antilope=None, safran=None, nivometeo=None, auto=None, var='obs'):
                         #cmin = 100,
                         #cmax = 1200,
                         colorbar_title = "Precipitation(mm)",
+                        showscale = True if i == 0 else False,  # PLot only one colorscale
                         colorbar = dict(
                             titleside = "right",
                             ticks = "outside",
@@ -365,11 +350,12 @@ def plot(antilope=None, safran=None, nivometeo=None, auto=None, var='obs'):
                 #opacity=0.5,
             ))
 
-    # 4. Update figure layout
+    # Update figure layout
     fig.update_layout(
         #coloraxis_showscale=False,
         title = f'24h precipitation (mm) between {datebegin} and {dateend}',
-        #margin = dict(l=0, t=0, r=1, b=0, pad=0),
+        margin = dict(l=1, t=40, r=1, b=0, pad=0),
+        #mapbox_bounds={"west": 2, "east": 11, "south": 42, "north": 48},
         mapbox = dict(
             accesstoken = token,
             style = "outdoors",
@@ -402,7 +388,7 @@ def plot(antilope=None, safran=None, nivometeo=None, auto=None, var='obs'):
 #                                     )
 # from : https://stackoverflow.com/questions/64371174/how-to-change-variable-label-names-for-the-legend-in-a-plotly-express-line-chart
 
-    #fig.show()
+    fig.show()
     #fig.write_json('test.json')
     fig.write_html(f"precipitation_{date.strftime('%Y%m%d')}.html")
 
