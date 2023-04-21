@@ -35,6 +35,10 @@ from scipy.spatial import cKDTree
 # TODO : Append various files every day with last-day data and let the user select the date to plot : use dash
 #   - https://dash.plotly.com/basic-callbacks
 #   - https://dash.plotly.com/advanced-callbacks
+#
+# TODO : Avoid plot data multiple time (use button/dash) --> ABSOLUTE PRIORITY !!
+# Plotting the full 1-km ANTILOPE domain takes about 12M memory...
+# https://plotly.com/python/v3/selection-events/
 
 
 
@@ -54,21 +58,11 @@ token = open("/home/vernaym/.mapbox/token").read() # Token from mapbox account
 config = dict({'scrollZoom': True})  # plotly image configuration
 
 datadir = '/home/vernaym/workdir/visualisation'
-datadir = '/d0/intra-cen/ANTILOPE'
+#datadir = '/d0/intra-cen/ANTILOPE'
 domain = 'alp'
 
 ld = 0.05
 max_dist = ld*3
-
-def update_axes(xaxis, yaxis):
-    scatter = f.data[0]
-    scatter.x = df[xaxis]
-    scatter.y = df[yaxis]
-    with f.batch_update():
-        f.layout.xaxis.title = xaxis
-        f.layout.yaxis.title = yaxis
-        scatter.x = scatter.x + np.random.rand(N)/10 *(df[xaxis].max() - df[xaxis].min())
-        scatter.y = scatter.y + np.random.rand(N)/10 *(df[yaxis].max() - df[yaxis].min())
 
 def plot(antilope=None, safran=None, nivometeo=None, auto=None, var='obs'):
     """ 
@@ -104,10 +98,17 @@ def plot(antilope=None, safran=None, nivometeo=None, auto=None, var='obs'):
     rr = antilope[var].data.flatten()  # Corrected obs
     error = antilope['error'].data.flatten()
     alti = antilope['elevation'].data.flatten()
+    df = pd.DataFrame(
+            data    = np.transpose([x, y, rr, error, alti]),
+            columns = ['lon', 'lat', 'rr', 'error', 'alti'],
+            index   = range(len(rr)),
+        )
     select = dict()
-    for i,elevation in enumerate(range(0, 3000, 500)):
+    #for i,elevation in enumerate(range(0, 3000, 500)):
     # TODO : Avoid plot data multiple time (use button ?) --> ABSOLUTE PRIORITY !!
-    #for i,elevation in enumerate([0,2000]):
+    # Plotting the full 1-km ANTILOPE domain takes about 12M memory...
+    # https://plotly.com/python/v3/selection-events/
+    for i,elevation in enumerate([0]):
         if elevation == 0:
             # Make all data visible by default
             visible = True
@@ -123,13 +124,14 @@ def plot(antilope=None, safran=None, nivometeo=None, auto=None, var='obs'):
         fig.add_trace(go.Scattermapbox(
                     lon  = x[select[i]],
                     lat  = y[select[i]],
-                    #selectedpoints = select,  # TODO : use this footprint to set updatemenus buttons DOES NOT WORK
+                    #selectedpoints = select,  # TODO : use this footprint to set updatemenus buttons DOES NOT WORK (because it refers to user selected points)
                     mode = 'markers',
                     name = name,
                     #text = antilope.rr.data.flatten(),  # Raw obs
                     text = rr[select[i]],  # obs=corrected obs, rr=raw obs
                     visible = visible,
                     showlegend = True,
+                    #selected = go.scattermapbox.Selected(marker={"size":50}),
                     customdata = np.stack((alti[select[i]], rr[select[i]], error[select[i]]), axis=-1),
                     hovertemplate =
                         '<b>Altitude</b>: %{customdata[0]:d}m<br>'+
