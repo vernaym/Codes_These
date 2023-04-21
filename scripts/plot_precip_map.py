@@ -29,7 +29,7 @@ from scipy.spatial import cKDTree
 # https://zacks.one/python-plotly/
 # https://plotly.com/python/scatter-plots-on-maps/  --> precipitation map
 
-# TODO : trouver un moyen de virer le blanc de la colorbar
+# TODO : réduire la taille du fichier html (éviter de plotter des points en double et réduire le domaine du fond de carte)
 # TODO : ajouter un filtre par altitude : https://plotly.com/python/v3/selection-events/?_gl=1*pup8cg*_ga*MTI0ODI4NTA5Ni4xNjgxODAwMDUx*_ga_6G7EE0JNSC*MTY4MTg4OTIwMy45LjEuMTY4MTg5MTk4OS4wLjAuMA
 # TODO : Une seule colorbar pour toutes les couches associées
 # TODO : Append various files every day with last-day data and let the user select the date to plot : use dash
@@ -54,6 +54,7 @@ token = open("/home/vernaym/.mapbox/token").read() # Token from mapbox account
 config = dict({'scrollZoom': True})  # plotly image configuration
 
 datadir = '/home/vernaym/workdir/visualisation'
+datadir = '/d0/intra-cen/ANTILOPE'
 domain = 'alp'
 
 ld = 0.05
@@ -104,7 +105,7 @@ def plot(antilope=None, safran=None, nivometeo=None, auto=None, var='obs'):
 
     # 1. Plot ANTILOPE as multiple dot scatterplot (depending on the elevation)
     # read_relief
-    mnt = xr.open_dataset(os.path.join('/home/vernaym/QGIS/MNT', "DEM_ALPES_WGS84_250m_bilinear.nc"))
+    mnt = xr.open_dataset(os.path.join(datadir, "DEM_ALPES_WGS84_250m_bilinear.nc"))
     # WARNING : update of xarray necessary !
     #data = antilope.interp(lat=mnt.lat.data, lon=mnt.lon.data)
     tmp = mnt.interp(lat=antilope.lat.data, lon=antilope.lon.data)
@@ -126,10 +127,10 @@ def plot(antilope=None, safran=None, nivometeo=None, auto=None, var='obs'):
             # Make all data visible by default
             visible = True
             name = 'ANTILOPE'
-            select[i] = np.where(rr>0)
+            select[i] = np.where(rr>0.1)
         else:
             tmp = antilope.where(antilope.elevation>=elevation, drop=True)
-            select[i]  = np.where((rr>0) & (alti>elevation))
+            select[i]  = np.where((rr>0.1) & (alti>elevation))
             visible ='legendonly'  # Does not work as intended : https://community.plotly.com/t/legendonly-doesnt-work-anymore-in-scattermapbox/72822
             visible = True
             name    = f'ANTILOPE>{elevation:d}m'
@@ -144,6 +145,7 @@ def plot(antilope=None, safran=None, nivometeo=None, auto=None, var='obs'):
                     text = rr[select[i]],  # obs=corrected obs, rr=raw obs
                     visible = visible,
                     showlegend = True,
+                    showscale = True if i == 0 else False,  # PLot only one colorscale
                     customdata = np.stack((alti[select[i]], rr[select[i]], error[select[i]]), axis=-1),
                     hovertemplate =
                         '<b>Altitude</b>: %{customdata[0]:d}m<br>'+
@@ -196,6 +198,7 @@ def plot(antilope=None, safran=None, nivometeo=None, auto=None, var='obs'):
                             size  = 10,  # TODO : revoir la taille minimale
                             #opacity=0.5,
                             #colorscale = 'YlGnBu',
+                            showscale = False,  # PLot only one colorscale
                             colorscale = 'dense',
                             #symbol='square',  # Impossible to change if color is definied : https://stackoverflow.com/questions/59628536/option-symbol-in-scattermapbox-is-not-working
                             #cmin = 100,
@@ -334,31 +337,33 @@ def plot(antilope=None, safran=None, nivometeo=None, auto=None, var='obs'):
     massifs_json = os.path.join(datadir, "massifs_safran.json")
     if not os.path.exists(massifs_json):
         massifs.to_file(massifs_json, driver = "GeoJSON")
-    with open(massifs_json) as geofile:
-        j_file = json.load(geofile)
-        i = 0
-        for feature in j_file["features"]:
-            feature['id'] = massifs.code[i]
-            i += 1
-        plotsafran = safran.where(safran.ZS==1500., drop=True)
 
-        fig.add_trace(go.Choroplethmapbox(
-            geojson = j_file,
-            locations = plotsafran.massif_number,
-            z = plotsafran.rr.data,  #TODO : add elevation choice
-            #colorscale = 'YlGnBu',
-            colorscale = 'dense',
-            name = 'SAFRAN',
-            zmin = 0,
-            #zmax = np.nanmax(antilope.rr.data.flatten()),
-            zmax = np.nanmax(antilope[var].data.flatten()),
-            visible = True,
-            uid = 4,
-            uirevision = True,
-            showscale = False,  # Same scale as ANTILOPE data (à vérifier !)
-            showlegend = True,
-            #opacity=0.5,
-        ))
+    if safran is not None:
+        with open(massifs_json) as geofile:
+            j_file = json.load(geofile)
+            i = 0
+            for feature in j_file["features"]:
+                feature['id'] = massifs.code[i]
+                i += 1
+            plotsafran = safran.where(safran.ZS==1500., drop=True)
+
+            fig.add_trace(go.Choroplethmapbox(
+                geojson = j_file,
+                locations = plotsafran.massif_number,
+                z = plotsafran.rr.data,  #TODO : add elevation choice
+                #colorscale = 'YlGnBu',
+                colorscale = 'dense',
+                name = 'SAFRAN',
+                zmin = 0,
+                #zmax = np.nanmax(antilope.rr.data.flatten()),
+                zmax = np.nanmax(antilope[var].data.flatten()),
+                visible = True,
+                uid = 4,
+                uirevision = True,
+                showscale = False,  # Same scale as ANTILOPE data (à vérifier !)
+                showlegend = True,
+                #opacity=0.5,
+            ))
 
     # 4. Update figure layout
     fig.update_layout(
@@ -398,7 +403,8 @@ def plot(antilope=None, safran=None, nivometeo=None, auto=None, var='obs'):
 # from : https://stackoverflow.com/questions/64371174/how-to-change-variable-label-names-for-the-legend-in-a-plotly-express-line-chart
 
     #fig.show()
-    fig.write_json('test.json')
+    #fig.write_json('test.json')
+    fig.write_html(f"precipitation_{date.strftime('%Y%m%d')}.html")
 
 def update_menu():
     """"
