@@ -42,14 +42,17 @@ except Exception as e:
 datebegin = date.replace(hour=6)
 dateend   = datebegin+datetime.timedelta(days=1)
 
-datadir = '/home/vernaym/workdir/visualisation'
+#datadir = '/home/vernaym/workdir/visualisation'
+datadir = '/d0/intra-cen/ANTILOPE'  # On sxcen
+
 domain = 'alp'
 ld = 0.05
 max_dist = ld*3
 
 def get_antilope():
     # TODO : appliquer le pré-processing pour plotter ANTILOPE corrigé
-    filename = os.path.join(datadir, f'ANTILOPEH_2023041306_2023041606_alp.nc')
+    #filename = os.path.join(datadir, f'ANTILOPEH_2023041306_2023041606_alp.nc')
+    filename = os.path.join(datadir, f'ANTILOPEH_{datebegin.strftime("%Y%m%d07")}_{dateend.strftime("%Y%m%d07")}_alp.nc')  # TODO : extract only up to 6h
     #if os.path.exists(filename):
     antilope = xr.open_dataset(os.path.join(datadir, filename))
     # TODO : gérer le changement d'heure !
@@ -152,52 +155,55 @@ def nivometeo_assimilation(antilope):
     #Read nivometeo observations
     nivometeo = get_nivometeo()
     y = nivometeo.rr.to_numpy()
+    if len(y)==0:
+        antilope = antilope.rename({'obs':'analysis'})
 
-    # Construction of the observation operator
-    # - Put nivometeo observations on the ANTILOPE grid
-    nivometeo.lat = nivometeo.lat.round(2)
-    nivometeo.lon = nivometeo.lon.round(2)
-    Hx = antilope.obs.sel(lat=nivometeo.lat.to_xarray(), lon=nivometeo.lon.to_xarray(), method = 'nearest').data
-
-    X,Y = np.meshgrid(error.lon.data, error.lat.data)
-    X = X.flatten()
-    Y = Y.flatten()
-    #coords = [elem for elem in zip(X,Y)]
-    #points = [elem for elem in zip(nivometeo.lon, nivometeo.lat)]
-    H = np.zeros((len(y), len(x)))  # n*k matrix
-    # Update H matrix with 1 where an observation is present
-    for i,idx in enumerate(nivometeo.index):
-        lon = nivometeo.loc[idx, 'lon']
-        lat = nivometeo.loc[idx, 'lat']
-        H[i, np.where((X==lon) & (Y==lat))[0]] = 1  # update H matrix
-    Ht = np.transpose(H)
-    H  = csr_matrix(H)
-    Ht = csr_matrix(Ht)
-
-
-    # Correlation matrix
-    filename = os.path.join('/home/vernaym/These/DATA', f'codistance_max_dist_{max_dist}_{domain}.npz')
-    if not os.path.exists(filename):
-        # Compute inter-distances
-        coords=[(lon,lat) for lat in error.lat.data for lon in error.lon.data]
-        codist = codistances(coords)
-        scipy.sparse.save_npz(filename, codist, compressed=False)
     else:
-        codist = scipy.sparse.load_npz(filename)
+        # Construction of the observation operator
+        # - Put nivometeo observations on the ANTILOPE grid
+        nivometeo.lat = nivometeo.lat.round(2)
+        nivometeo.lon = nivometeo.lon.round(2)
+        Hx = antilope.obs.sel(lat=nivometeo.lat.to_xarray(), lon=nivometeo.lon.to_xarray(), method = 'nearest').data
 
-    # Background (ANTILOPE) ECM
-    std = diags(error.ratio.data.flatten(), 0)
-    B = std.dot(codist.dot(std))
-    B = csr_matrix(B)
+        X,Y = np.meshgrid(error.lon.data, error.lat.data)
+        X = X.flatten()
+        Y = Y.flatten()
+        #coords = [elem for elem in zip(X,Y)]
+        #points = [elem for elem in zip(nivometeo.lon, nivometeo.lat)]
+        H = np.zeros((len(y), len(x)))  # n*k matrix
+        # Update H matrix with 1 where an observation is present
+        for i,idx in enumerate(nivometeo.index):
+            lon = nivometeo.loc[idx, 'lon']
+            lat = nivometeo.loc[idx, 'lat']
+            H[i, np.where((X==lon) & (Y==lat))[0]] = 1  # update H matrix
+        Ht = np.transpose(H)
+        H  = csr_matrix(H)
+        Ht = csr_matrix(Ht)
 
-    # Observation ECM
-    R = diags(0.1+y/100)  # Uniform and uncorrelated 1% + 0.1 mm error for nivometeo observations
 
-    # Analysis
-    HB = H.dot(B)
-    HBHt = HB.dot(Ht)
-    K = B.dot(Ht).dot(scipy.sparse.linalg.inv(csc_matrix(HBHt+R)))
-    A = x + K.dot(y-Hx)
+        # Correlation matrix
+        filename = os.path.join('/home/vernaym/These/DATA', f'codistance_max_dist_{max_dist}_{domain}.npz')
+        if not os.path.exists(filename):
+            # Compute inter-distances
+            coords=[(lon,lat) for lat in error.lat.data for lon in error.lon.data]
+            codist = codistances(coords)
+            scipy.sparse.save_npz(filename, codist, compressed=False)
+        else:
+            codist = scipy.sparse.load_npz(filename)
+
+        # Background (ANTILOPE) ECM
+        std = diags(error.ratio.data.flatten(), 0)
+        B = std.dot(codist.dot(std))
+        B = csr_matrix(B)
+
+        # Observation ECM
+        R = diags(0.1+y/100)  # Uniform and uncorrelated 1% + 0.1 mm error for nivometeo observations
+
+        # Analysis
+        HB = H.dot(B)
+        HBHt = HB.dot(Ht)
+        K = B.dot(Ht).dot(scipy.sparse.linalg.inv(csc_matrix(HBHt+R)))
+        A = x + K.dot(y-Hx)
 
 #   Solution to avoid the "B+R" matrix inversion :
 #   1. solve (B+R).Z=Y-X
@@ -209,17 +215,18 @@ def nivometeo_assimilation(antilope):
 #   2. compute anlaysis as A=X+BZ
 #    A = X+HB.dot(Z)
 
-    antilope['analysis'] = xr.DataArray(
-            data   = A.reshape((len(error.lat), len(error.lon))),
-            dims   = ["lat", "lon"],
-            coords = dict(lon=error.lon, lat=error.lat)
-        )
+        antilope['analysis'] = xr.DataArray(
+                data   = A.reshape((len(error.lat), len(error.lon))),
+                dims   = ["lat", "lon"],
+                coords = dict(lon=error.lon, lat=error.lat)
+            )
 
-    antilope['analysis'] = antilope.analysis.fillna(antilope.rr)  # Fill Nan values with previous ones
+        antilope['analysis'] = antilope.analysis.fillna(antilope.rr)  # Fill Nan values with previous ones
+
+
+        #TODO : Update Error covariance matrix
 
     filename = os.path.join(datadir, f'ANTILOPE.nc')
     antilope.to_netcdf(filename)
-
-    #TODO : Update Error covariance matrix
 
 get_antilope()
