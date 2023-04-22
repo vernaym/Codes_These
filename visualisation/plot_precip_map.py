@@ -40,23 +40,22 @@ from scipy.spatial import cKDTree
 # Plotting the full 1-km ANTILOPE domain takes about 12M memory...
 # https://plotly.com/python/v3/selection-events/
 
-
-
-def usage():
-    print("USAGE plot_precip_map.py date")
-    print("format de la date : YYYYMMDD (précipitations de YYYYMMD-1 6h à YYYYMMDD6H")
-    sys.exit(1)
-
-try:
-    date = datetime.datetime.strptime(sys.argv[1], '%Y%m%d')
-except Exception as e:
-    usage()
-    raise e
+#def usage():
+#    print("USAGE plot_precip_map.py date")
+#    print("format de la date : YYYYMMDD (précipitations de YYYYMMD-1 6h à YYYYMMDD6H")
+#    sys.exit(1)
+#
+#try:
+#    date = datetime.datetime.strptime(sys.argv[1], '%Y%m%d')
+#except Exception as e:
+#    usage()
+#    raise e
 
 ld = 0.05
 max_dist = ld*3
-datadir = '/home/vernaym/workdir/visualisation'
-#datadir = '/d0/intra-cen/ANTILOPE'
+#datadir = '/home/vernaym/workdir/visualisation'
+rootdir = '/d0/intra-cen/ANTILOPE'
+datadir = '.'
 token = open("/home/vernaym/.mapbox/token").read() # Token from mapbox account
 
 class PrecipitationAnalysis(object):
@@ -93,14 +92,14 @@ class PrecipitationAnalysis(object):
         self.add_ponctual_obs(self.auto, color='black', name='Automatic stations')
 
         # 4. SAFRAN
-        if safran is not None:
+        if self.safran is not None:
             self.plot_safran()
 
         self.update_figure()
 
-        self.fig.show()
+        #self.fig.show()
         #fig.write_json('test.json')
-        self.fig.write_html(f"precipitation_{date.strftime('%Y%m%d')}.html")
+        self.fig.write_html(os.path.join(rootdir, self.domain, f"precipitation_{self.date.strftime('%Y%m%d')}.html"))
 
     def plot_antilope(self):
         """
@@ -308,7 +307,7 @@ class PrecipitationAnalysis(object):
 
         if not os.path.exists(massifs_json):
             # 1. convert it to a plotly-readable GeoJSON file
-            self.massifs.to_file(filename, driver = "GeoJSON")
+            self.massifs.to_file(massifs_json, driver = "GeoJSON")
 
     def plot_safran(self):
         """
@@ -325,7 +324,7 @@ class PrecipitationAnalysis(object):
                 feature['id'] = self.massifs.code[i]
                 i += 1
             # TODO : add dynamic elevation choice
-            plotsafran = self.safran.where(safran.ZS==2100., drop=True)
+            plotsafran = self.safran.where(self.safran.ZS==2100., drop=True)
 
             self.fig.add_trace(go.Choroplethmapbox(
                 geojson = j_file,
@@ -418,168 +417,168 @@ class PrecipitationAnalysis(object):
         """
         pass
 
-def get_antilope():
-    # TODO : appliquer le pré-processing pour plotter ANTILOPE corrigé
-    filename = os.path.join(datadir, f'ANTILOPE.nc')
-    #if os.path.exists(filename):
-    antilope = xr.open_dataset(os.path.join(datadir, filename))
-
-    if 'analysis' in antilope.variables.keys():
-        # File already pre-processed
-        return antilope
-
-    else:
-        # TODO : gérer le changement d'heure !
-        antilope = antilope.where((antilope.time>np.datetime64(datebegin)) & (antilope.time<=np.datetime64(dateend)), drop=True).sum('time')
-
-        # Static de-biasing :
-        mask = xr.open_dataset(os.path.join(datadir, f"Estimated_ratio.nc"))
-
-        antilope["ratio"]=mask.ratio  # Fill missing point with NaNs
-        antilope["rr_debiaise"] = (antilope.rr/antilope.ratio).fillna(antilope.rr)  # Fill NaN values with the original ANTILOPE value
-
-        # Dynamic correction (localisation)
-        error = xr.open_dataset(os.path.join(datadir, 'Observation_error.nc'))
-        std = np.abs(error.ratio.data)
-
-        filename = os.path.join('/home/vernaym/These/DATA', f'codistance_max_dist_{max_dist}_{self.domain}.npz')
-        if not os.path.exists(filename):
-            # Compute inter-distances
-            coords=[(lon,lat) for lat in error.lat.data for lon in error.lon.data]
-            pond = codistances(coords)
-            scipy.sparse.save_npz(filename, pond, compressed=False)
-        else:
-            pond = scipy.sparse.load_npz(filename)
-
-        pond = pond.dot(diags(np.exp(-std).flatten(), 0))
-        obs = antilope.rr_debiaise.sel(({'lat':np.intersect1d(error.lat.data, antilope.lat.data), 'lon':np.intersect1d(error.lon.data, antilope.lon.data)})).data.flatten()
-
-        new = update_obs(obs, pond, replacement_strategy='toward_mean')  # Update obs
-        antilope['obs'] = xr.DataArray(
-                data   = new.reshape((len(mask.lat), len(mask.lon))),
-                dims   = ["lat", "lon"],
-                coords = dict(lon=mask.lon, lat=mask.lat)
-            )
-        antilope['obs'] = antilope['obs'].fillna(antilope.rr)
-
-        # TODO : ecrire le fichier pour ne pas refaire les calculs à chaque fois
-
-        return antilope
-
-def update_obs(field, pond, weight=None, super_ensemble=None, replacement_strategy='keep'):
-
-    field[np.isnan(field)] = 0.0
-    initial_field = field.flatten()
-    X = diags(field.flatten(), 0)
-
-    # 1. Calcul de la moyenne pondérée par la distance ET l'erreur statique
-    if weight is None:
-        pond.data[np.isnan(pond.data)] = 0.0
-        weight = pond.sum(axis=1).getA1()  # The sum of the weights (axis=1 <==> sum over rows)
-
-    mean = pond.dot(X).sum(axis=1).getA1()  # getA1 transforms the 1*N matrix object into a 1D np.array
-    mean = mean / weight
-    pixel_weight = pond.diagonal()  # = exp(-erreur_statique) pour l'obs et =likelyhood du pixel pour les membres de l'ensemble
-    sums = pond.sum(axis=1).A1
-    nb_nonzero = (pond != 0).sum(0).getA1()  # Count non zero elements of each row
-    meanweight = sums / nb_nonzero
-    newfield = (initial_field * pixel_weight + mean * meanweight) / (pixel_weight + meanweight)
-    #sd = self.get_std(X, newfield, pond, weight=weight, super_ensemble=super_ensemble)
-    return newfield
-
-
-def codistances(coords):
-    """
-    Solution pour le calcul des inter-distances trouvée sur : https://stackoverflow.com/questions/35296935/python-calculate-lots-of-distances-quickly
-    """
-    tree = cKDTree(coords)
-    dist = tree.sparse_distance_matrix(tree, max_distance=max_dist, p=2, output_type='coo_matrix')
-    dist = csr_matrix(dist)
-    #TODO : utiliser une gaussienne plutot qu'une exponentielle décroissante
-    dist[dist.nonzero()] = -dist[dist.nonzero()]/ld
-    np.exp(dist.data, out=dist.data )
-    return dist
-
-def add_antilope_error(antilope):
-
-    error = xr.open_dataset(os.path.join(datadir, 'Observation_error.nc'))
-    antilope['error'] = error.ratio  # Fill missing data between ANTILOPE field and the error field
-    # normalisation de l'erreur entre low and high
-    # TODO : revoir la méthode pour convertir l'erreur en une dimension de marker plotly
-    low  = 5
-    high = 30
-    def nan_ptp(a):
-        return np.ptp(a[np.isfinite(a)])
-    #antilope["error"] = np.abs(antilope.error.data.flatten())
-    antilope["error"].data = np.abs(antilope.error.data)
-    antilope["error"].data = low + (antilope["error"].data - np.nanmin(antilope["error"].data))/(nan_ptp(antilope["error"].data)/high)
-    antilope["error"].data = low + high/antilope["error"].data
-
-    return antilope
-
-def get_nivometeo():
-    try:
-        fic_score = os.path.join(datadir, 'nivometeo.data')
-        nivometeo = pd.read_csv(fic_score, sep=';', parse_dates=['date'],
-                dtype={'num_poste':int, 'nom':str, 'alti':int, 'lat':float, 'lon':float, 'massif':int, 'rr': float, 'reseau_poste': int}, na_values=['--'])
-        nivometeo = nivometeo.loc[nivometeo["date"]==np.datetime64(date)]
-        return nivometeo
-    except:
-        return None
-
-def get_obs_auto():
-    try:
-        fic_score = os.path.join(datadir, f'auto.data')
-        auto = pd.read_csv(fic_score, sep=';', parse_dates=['date'],
-                dtype={'num_poste':int, 'nom':str, 'lat':float, 'lon':float, 'alti':int, 'rr': float, 'reseau_poste': int}, na_values=['--'])
-        auto=auto.loc[(auto["date"]>np.datetime64(datebegin)) & (auto["date"]<=dateend)]
-        auto = auto[~np.isnan(auto['rr'])]
-
-        #df = auto.set_index(['num_poste', 'lat', 'lon', 'alti', 'nom', 'reseau_poste', 'date']).sort_index()
-        #df = df.assign(date=newdates).drop(columns=['date'])  # Replace date column
-        auto = auto.set_index(['num_poste', 'lat', 'lon', 'alti', 'nom', 'reseau_poste', 'date']).sort_index()
-        auto=auto.groupby(['num_poste', 'nom', 'lat', 'lon', 'alti', 'reseau_poste']).sum()
-        auto = auto.reset_index()
-
-        return auto
-    except:
-        raise
-        return None
-
-def get_safran():
-    # TODO : appliquer le pré-processing pour plotter ANTILOPE corrigé
-    filename = os.path.join(datadir, f'SAFRAN.nc')
-    try:
-        safran = xr.open_dataset(os.path.join(datadir, filename))
-        #safran = safran.where(safran.ZS==1500., drop=True)
-        safran['rr'] = (safran['Rainf']+safran['Snowf'])*3600.
-        dates = pd.date_range(datebegin+datetime.timedelta(hours=1), dateend, freq='1H')
-        safran = safran.loc[{'time':dates}]
-        #safran['rr'] = safran.where((safran.time>np.datetime64(datebegin)) & (safran.time<=np.datetime64(dateend)), drop=True)  # This adds time dimension to ZS variable
-        safran['rr'] = safran['rr'].sum('time')
-        return safran
-    except:
-        return None
-
-
-datebegin = date.replace(hour=6)
-dateend   = datebegin+datetime.timedelta(days=1)
-
-# 1. Read ANTILOPE data
-antilope = get_antilope()  # xarray.Dataset
-antilope = add_antilope_error(antilope)  # flatten array "read to use"
-
-# 2. Read nivometeo observations
-nivometeo = get_nivometeo()
-
-# 3. Read automatic observations
-auto = get_obs_auto()
-
-# 4. read SAFRAN
-safran = get_safran()
-
-myplot = PrecipitationAnalysis(date, 'alp', antilope=antilope, nivometeo=nivometeo, auto=auto, safran=safran, var='analysis')
-myplot.plot()
+#def get_antilope():
+#    # TODO : appliquer le pré-processing pour plotter ANTILOPE corrigé
+#    filename = os.path.join(datadir, f'ANTILOPE.nc')
+#    #if os.path.exists(filename):
+#    antilope = xr.open_dataset(os.path.join(datadir, filename))
+#
+#    if 'analysis' in antilope.variables.keys():
+#        # File already pre-processed
+#        return antilope
+#
+#    else:
+#        # TODO : gérer le changement d'heure !
+#        antilope = antilope.where((antilope.time>np.datetime64(datebegin)) & (antilope.time<=np.datetime64(dateend)), drop=True).sum('time')
+#
+#        # Static de-biasing :
+#        mask = xr.open_dataset(os.path.join(datadir, f"Estimated_ratio.nc"))
+#
+#        antilope["ratio"]=mask.ratio  # Fill missing point with NaNs
+#        antilope["rr_debiaise"] = (antilope.rr/antilope.ratio).fillna(antilope.rr)  # Fill NaN values with the original ANTILOPE value
+#
+#        # Dynamic correction (localisation)
+#        error = xr.open_dataset(os.path.join(datadir, 'Observation_error.nc'))
+#        std = np.abs(error.ratio.data)
+#
+#        filename = os.path.join('/home/vernaym/These/DATA', f'codistance_max_dist_{max_dist}_{self.domain}.npz')
+#        if not os.path.exists(filename):
+#            # Compute inter-distances
+#            coords=[(lon,lat) for lat in error.lat.data for lon in error.lon.data]
+#            pond = codistances(coords)
+#            #scipy.sparse.save_npz(filename, pond, compressed=False)
+#        else:
+#            pond = scipy.sparse.load_npz(filename)
+#
+#        pond = pond.dot(diags(np.exp(-std).flatten(), 0))
+#        obs = antilope.rr_debiaise.sel(({'lat':np.intersect1d(error.lat.data, antilope.lat.data), 'lon':np.intersect1d(error.lon.data, antilope.lon.data)})).data.flatten()
+#
+#        new = update_obs(obs, pond, replacement_strategy='toward_mean')  # Update obs
+#        antilope['obs'] = xr.DataArray(
+#                data   = new.reshape((len(mask.lat), len(mask.lon))),
+#                dims   = ["lat", "lon"],
+#                coords = dict(lon=mask.lon, lat=mask.lat)
+#            )
+#        antilope['obs'] = antilope['obs'].fillna(antilope.rr)
+#
+#        # TODO : ecrire le fichier pour ne pas refaire les calculs à chaque fois
+#
+#        return antilope
+#
+#def update_obs(field, pond, weight=None, super_ensemble=None, replacement_strategy='keep'):
+#
+#    field[np.isnan(field)] = 0.0
+#    initial_field = field.flatten()
+#    X = diags(field.flatten(), 0)
+#
+#    # 1. Calcul de la moyenne pondérée par la distance ET l'erreur statique
+#    if weight is None:
+#        pond.data[np.isnan(pond.data)] = 0.0
+#        weight = pond.sum(axis=1).getA1()  # The sum of the weights (axis=1 <==> sum over rows)
+#
+#    mean = pond.dot(X).sum(axis=1).getA1()  # getA1 transforms the 1*N matrix object into a 1D np.array
+#    mean = mean / weight
+#    pixel_weight = pond.diagonal()  # = exp(-erreur_statique) pour l'obs et =likelyhood du pixel pour les membres de l'ensemble
+#    sums = pond.sum(axis=1).A1
+#    nb_nonzero = (pond != 0).sum(0).getA1()  # Count non zero elements of each row
+#    meanweight = sums / nb_nonzero
+#    newfield = (initial_field * pixel_weight + mean * meanweight) / (pixel_weight + meanweight)
+#    #sd = self.get_std(X, newfield, pond, weight=weight, super_ensemble=super_ensemble)
+#    return newfield
+#
+#
+#def codistances(coords):
+#    """
+#    Solution pour le calcul des inter-distances trouvée sur : https://stackoverflow.com/questions/35296935/python-calculate-lots-of-distances-quickly
+#    """
+#    tree = cKDTree(coords)
+#    dist = tree.sparse_distance_matrix(tree, max_distance=max_dist, p=2, output_type='coo_matrix')
+#    dist = csr_matrix(dist)
+#    #TODO : utiliser une gaussienne plutot qu'une exponentielle décroissante
+#    dist[dist.nonzero()] = -dist[dist.nonzero()]/ld
+#    np.exp(dist.data, out=dist.data )
+#    return dist
+#
+#def add_antilope_error(antilope):
+#
+#    error = xr.open_dataset(os.path.join(datadir, 'Observation_error.nc'))
+#    antilope['error'] = error.ratio  # Fill missing data between ANTILOPE field and the error field
+#    # normalisation de l'erreur entre low and high
+#    # TODO : revoir la méthode pour convertir l'erreur en une dimension de marker plotly
+#    low  = 5
+#    high = 30
+#    def nan_ptp(a):
+#        return np.ptp(a[np.isfinite(a)])
+#    #antilope["error"] = np.abs(antilope.error.data.flatten())
+#    antilope["error"].data = np.abs(antilope.error.data)
+#    antilope["error"].data = low + (antilope["error"].data - np.nanmin(antilope["error"].data))/(nan_ptp(antilope["error"].data)/high)
+#    antilope["error"].data = low + high/antilope["error"].data
+#
+#    return antilope
+#
+#def get_nivometeo():
+#    try:
+#        fic_score = os.path.join(datadir, 'nivometeo.data')
+#        nivometeo = pd.read_csv(fic_score, sep=';', parse_dates=['date'],
+#                dtype={'num_poste':int, 'nom':str, 'alti':int, 'lat':float, 'lon':float, 'massif':int, 'rr': float, 'reseau_poste': int}, na_values=['--'])
+#        nivometeo = nivometeo.loc[nivometeo["date"]==np.datetime64(date)]
+#        return nivometeo
+#    except:
+#        return None
+#
+#def get_obs_auto():
+#    try:
+#        fic_score = os.path.join(datadir, f'auto.data')
+#        auto = pd.read_csv(fic_score, sep=';', parse_dates=['date'],
+#                dtype={'num_poste':int, 'nom':str, 'lat':float, 'lon':float, 'alti':int, 'rr': float, 'reseau_poste': int}, na_values=['--'])
+#        auto=auto.loc[(auto["date"]>np.datetime64(datebegin)) & (auto["date"]<=dateend)]
+#        auto = auto[~np.isnan(auto['rr'])]
+#
+#        #df = auto.set_index(['num_poste', 'lat', 'lon', 'alti', 'nom', 'reseau_poste', 'date']).sort_index()
+#        #df = df.assign(date=newdates).drop(columns=['date'])  # Replace date column
+#        auto = auto.set_index(['num_poste', 'lat', 'lon', 'alti', 'nom', 'reseau_poste', 'date']).sort_index()
+#        auto=auto.groupby(['num_poste', 'nom', 'lat', 'lon', 'alti', 'reseau_poste']).sum()
+#        auto = auto.reset_index()
+#
+#        return auto
+#    except:
+#        raise
+#        return None
+#
+#def get_safran():
+#    # TODO : appliquer le pré-processing pour plotter ANTILOPE corrigé
+#    filename = os.path.join(datadir, f'SAFRAN.nc')
+#    try:
+#        safran = xr.open_dataset(os.path.join(datadir, filename))
+#        #safran = safran.where(safran.ZS==1500., drop=True)
+#        safran['rr'] = (safran['Rainf']+safran['Snowf'])*3600.
+#        dates = pd.date_range(datebegin+datetime.timedelta(hours=1), dateend, freq='1H')
+#        safran = safran.loc[{'time':dates}]
+#        #safran['rr'] = safran.where((safran.time>np.datetime64(datebegin)) & (safran.time<=np.datetime64(dateend)), drop=True)  # This adds time dimension to ZS variable
+#        safran['rr'] = safran['rr'].sum('time')
+#        return safran
+#    except:
+#        return None
+#
+#
+#datebegin = date.replace(hour=6)
+#dateend   = datebegin+datetime.timedelta(days=1)
+#
+## 1. Read ANTILOPE data
+#antilope = get_antilope()  # xarray.Dataset
+#antilope = add_antilope_error(antilope)  # flatten array "read to use"
+#
+## 2. Read nivometeo observations
+#nivometeo = get_nivometeo()
+#
+## 3. Read automatic observations
+#auto = get_obs_auto()
+#
+## 4. read SAFRAN
+#safran = get_safran()
+#
+#myplot = PrecipitationAnalysis(date, 'alp', antilope=antilope, nivometeo=nivometeo, auto=auto, safran=safran, var='analysis')
+#myplot.plot()
 #plot(antilope=antilope, nivometeo=nivometeo, auto=auto, safran=safran, var='analysis')
 #plot(antilope=antilope, nivometeo=nivometeo, auto=auto, safran=safran, var='obs')
 #plot(antilope=antilope, nivometeo=nivometeo, auto=auto, safran=safran, var='rr')
