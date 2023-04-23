@@ -303,7 +303,7 @@ def add_radar_positions(ax):
         ladole      = dict(lat=46.42565, lon=6.10001, alt=1677, name='La Dole'),
     )
     def getImage(path):
-       return OffsetImage(plt.imread(path, format="png"), zoom=.1)
+       return OffsetImage(plt.imread(path, format="png"), zoom=0.03)
 
     symbole_radar = '/home/vernaym/These/figures/symbole_radar.png'
     for radar, infos in radars.items():
@@ -361,16 +361,18 @@ def plot_mean_ensemble(ensemble, product):
     add_radar_positions(ax)
     add_scores(ax)
     fig.savefig(f"{savedir}/Cumul_moyen_{product}.pdf", format='pdf')
+    cumul.to_netcdf(f"{datadir}/Cumul_moyen_{product}.nc")
 
-def plot_deterministe(antilope):
+def plot_deterministe(field, product):
 
-    fig, ax = plt.subplots(figsize=(12,6))
-    antilope.rr_cumul.plot(ax=ax, cbar_kwargs={"label":'Total precipitation between {0:s} and {1:s} (mm)'.format(args.datebegin.strftime('%Y%m%d'), args.dateend.strftime('%Y%m%d'))}, cmap=plt.cm.coolwarm)
+    #fig, ax = plt.subplots(figsize=(12,6))
+    fig, ax = plt.subplots(figsize=(14,16))
+    field.rr_cumul.plot(ax=ax, cbar_kwargs={"label":'Total precipitation between {0:s} and {1:s} (mm)'.format(args.datebegin.strftime('%Y%m%d'), args.dateend.strftime('%Y%m%d'))}, cmap=plt.cm.YlGnBu)
     add_landmarks(ax)
     add_radar_positions(ax)
     add_scores(ax)
     fig.tight_layout()
-    fig.savefig(os.path.join(savedir, 'CUMUL_ANTILOPE_{0:s}_{1:s}.pdf'.format(args.datebegin.strftime('%Y%m%d'), args.dateend.strftime('%Y%m%d'))))
+    fig.savefig(os.path.join(savedir, f'CUMUL_{product}_{args.datebegin.strftime("%Y%m%d")}_{args.dateend.strftime("%Y%m%d")}.pdf'))
 
 def compare_palettes(field, args):
     if args.domain == 'alp':
@@ -405,19 +407,20 @@ if __name__ == "__main__":
     #antilope = xr.open_dataset(os.path.join(datadir, 'CUMUL_ANTILOPEQ_GrandesRousses_{0:s}_{1:s}.nc'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))))
     #antilope = xr.open_dataset(os.path.join(datadir, 'CUMUL_ANTILOPEJP1Q_GrandesRousses_{0:s}_{1:s}.nc'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))))
     filename = os.path.join(datadir, 'CUMUL_ANTILOPEH_alp_{0:s}_{1:s}.nc'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H')))
-    try :
-        antilope = xr.open_dataset(filename)
-    except:
-        try :
-            filename = os.path.join(datadir, 'CUMUL_ANTILOPEQ_alp_{0:s}_{1:s}.nc'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H')))
-            antilope = xr.open_dataset(filename)
-        except:
-            raise
-
-    if args.domain == 'GrandesRousses':
-        antilope = antilope.where((antilope.lon>=lonmin) & (antilope.lon<=lonmax) & (antilope.lat<=latmax) & (antilope.lat>=latmin), drop=True)
-    vmax = np.max(antilope.rr_cumul)
-    vmin = np.min(antilope.rr_cumul)
+    antilope = xr.open_dataset(filename)
+#    try :
+#        antilope = xr.open_dataset(filename)
+#    except:
+#        try :
+#            filename = os.path.join(datadir, 'CUMUL_ANTILOPEQ_alp_{0:s}_{1:s}.nc'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H')))
+#            antilope = xr.open_dataset(filename)
+#        except:
+#            raise
+#
+#    if args.domain == 'GrandesRousses':
+#        antilope = antilope.where((antilope.lon>=lonmin) & (antilope.lon<=lonmax) & (antilope.lat<=latmax) & (antilope.lat>=latmin), drop=True)
+#    vmax = np.max(antilope.rr_cumul)
+#    vmin = np.min(antilope.rr_cumul)
 
 #    try:
 #        panthere = xr.open_dataset(os.path.join(datadir, 'PANTHERE_CUMUL_{0:s}_{1:s}.nc'.format(args.datebegin.strftime('%Y%m%d%H%M'), args.dateend.strftime('%Y%m%d%H%M'))))
@@ -468,20 +471,27 @@ if __name__ == "__main__":
 #
 #    else:
 
-    experiments = dict(
-            LD0      = 'Assimilation_locale_2021073106_2022070106_daily.nc',
-            LH0      = 'Assimilation_locale_2021073106_2022070106_hourly.nc',
-            LDM      = 'Assimilation_locale_2021073106_2022070106_daily_avec_masque.nc',
-            LHM      = 'Assimilation_locale_2021073106_2022070106_hourly_avec_masque.nc',
-        )
-    experiments = dict()
-    for xpid, filename in experiments.items():
-        ensemble = xr.open_dataset(os.path.join(datadir, filename))
-        ensemble = ensemble.where((ensemble.lon>=lonmin) & (ensemble.lon<=lonmax) & (ensemble.lat<=latmax) & (ensemble.lat>=latmin), drop=True)
-        plot_mean_ensemble(ensemble, xpid)
-        #plot_ensemble_mean(ensemble, xpid)
-    #plot_deterministe(antilope)
-    compare_palettes(antilope, args)
+#    experiments = dict(
+#            LD0      = 'Assimilation_locale_2021073106_2022070106_daily.nc',
+#            LH0      = 'Assimilation_locale_2021073106_2022070106_hourly.nc',
+#            LDM      = 'Assimilation_locale_2021073106_2022070106_daily_avec_masque.nc',
+#            LHM      = 'Assimilation_locale_2021073106_2022070106_hourly_avec_masque.nc',
+#        )
+#    experiments = dict()
+#    for xpid, filename in experiments.items():
+#        ensemble = xr.open_dataset(os.path.join(datadir, filename))
+#        ensemble = ensemble.where((ensemble.lon>=lonmin) & (ensemble.lon<=lonmax) & (ensemble.lat<=latmax) & (ensemble.lat>=latmin), drop=True)
+#        plot_mean_ensemble(ensemble, xpid)
+#        #plot_ensemble_mean(ensemble, xpid)
+#    #plot_deterministe(antilope)
+#    compare_palettes(antilope, args)
+
+#    arome    = xr.open_dataset(os.path.join(datadir, 'arome_{0:s}_{1:s}_GrandesRousses.nc'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))))
+#    arome = arome.sum('time').rename({'rr':'rr_cumul'})
+    aspearome  = xr.open_dataset(os.path.join(datadir, 'aspearome_001_2021102806_2022060206_alp_hourly.nc'))
+    aspearome = aspearome.sum('time').rename({'rr':'rr_cumul'})
+    aspearome = aspearome.interp(lon=antilope.lon, lat=antilope.lat).clip(0)
+    plot_deterministe(aspearome, 'ASPEAROME')
 
 
 

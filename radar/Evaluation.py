@@ -467,7 +467,7 @@ def plot_massif(mydf, massif=None, subdomain=None, error=0.2, threshold=None, **
     tmp['biais'] = tmp['rr_radar'] - tmp['rr_ref']
     mydf['diff'] = np.square(mydf[f'rr_{kw["product"]}'] - mydf['rr_ref'])
     tmp['nb_days'] = mydf.groupby(['num_poste']).date.count()
-    tmp = tmp[tmp['nb_days']>150]
+    tmp = tmp[tmp['nb_days']>100]
     tmp = tmp[tmp['rr_ref']>0]
     tmp['rmse']  = np.sqrt(mydf.groupby(['num_poste'])["diff"].mean())
     tmp['ratio'] = tmp['rr_radar'] / tmp['rr_ref']
@@ -764,9 +764,9 @@ def error_vs_RR(df, datebegin, dateend, threshold=None, **kw):
     df['error'] = np.sqrt(np.square(df[f'rr_{kw["product"]}'] - df['rr_ref']))
     fig = plt.figure()
     #sns.regplot(df[f'rr_{kw["product"]}'], df['error'])
-    plt.plot(df[f'rr_{kw["product"]}'], df['error'], linestyle='', marker='+')
+    plt.plot(df[f'rr_{kw["product"]}'].values, df['error'].values, linestyle='', marker='+')
     antilope0 = df[df[f'rr_{kw["product"]}']==0]
-    plt.plot(antilope0[f'rr_{kw["product"]}'], antilope0['error'], linestyle='', marker='+', color='red')
+    plt.plot(antilope0[f'rr_{kw["product"]}'].to_numpy(), antilope0['error'].to_numpy(), linestyle='', marker='+', color='red')
     a, b = np.polyfit(df[f'rr_{kw["product"]}'], df['error'], deg=1)
 
     rr = df[f'rr_{kw["product"]}'].values
@@ -815,7 +815,7 @@ def error_vs_RR(df, datebegin, dateend, threshold=None, **kw):
     seuil_max = 12
     #tmp = df[(df[f'rr_{kw["product"]}']>=seuil_min) & (df[f'rr_{kw["product"]}']<=seuil_max)]
     nivometeo0 = df[df[f'rr_ref']==0]
-    nivometeo0['date'] = pd.to_datetime(nivometeo['date'])
+    nivometeo0['date'] = pd.to_datetime(reference['date'])
     # Pour regarder quand les obs nivometeo sont réellement de 6h à 6h
     #nivometeo0 = nivometeo0[nivometeo0['date'].dt.month==4]
     #outname = '_'.join([outname, 'april'])
@@ -869,7 +869,7 @@ def error_vs_RR(df, datebegin, dateend, threshold=None, **kw):
     seuil_max = 12
     #tmp = df[(df[f'rr_{kw["product"]}']>=seuil_min) & (df[f'rr_{kw["product"]}']<=seuil_max)]
     nivometeo0 = df[df[f'rr_ref']>0]
-    nivometeo0['date'] = pd.to_datetime(nivometeo['date'])
+    nivometeo0['date'] = pd.to_datetime(reference['date'])
     # Pour regarder quand les obs nivometeo sont réellement de 6h à 6h
     #nivometeo0 = nivometeo0[nivometeo0['date'].dt.month==4]
     #outname = '_'.join([outname, 'april'])
@@ -899,7 +899,7 @@ def read_obs_clim():
     clim = pd.read_csv(os.path.join(datadir, "obs_quotidienne_clim_RR.data"), sep=';', parse_dates=['date'], header=0,
             names = ['num_poste', 'lat', 'lon', 'elevation', 'nom', 'reseau_poste', 'date', 'rr_ref'],
             usecols=['num_poste', 'lat', 'lon', 'elevation', 'nom', 'date', 'rr_ref'],
-            dtype={'num_poste':int, 'nom':str, 'rr_ref':int, 'lat':float, 'lon':float, 'rr_ref':float},
+            dtype={'num_poste':int, 'nom':str, 'rr_ref':int, 'lat':float, 'lon':float, 'rr_ref':float, 'elevation':int},
             )
 
     elevations    = clim.groupby(['num_poste']).elevation.mean()
@@ -909,6 +909,23 @@ def read_obs_clim():
     plot_obs(lats.to_numpy(), lons.to_numpy(), elevations.to_numpy(), num_poste.to_numpy(), args.datebegin.strftime('%Y%m%d'), args.dateend.strftime('%Y%m%d'))
 
     return clim
+
+def read_obs_auto():
+
+    #auto = pd.read_csv(os.path.join(datadir, "obs_quotidienne_auto_RR.data"), sep=';', parse_dates=['date'], header=0,
+    auto = pd.read_csv("obs_quotidienne_auto_RR.data", sep=';', parse_dates=['date'], header=0,
+            names = ['num_poste', 'lat', 'lon', 'elevation', 'nom', 'reseau_poste', 'date', 'rr_ref'],
+            usecols=['num_poste', 'lat', 'lon', 'elevation', 'nom', 'date', 'rr_ref'],
+            dtype={'num_poste':int, 'nom':str, 'rr_ref':int, 'lat':float, 'lon':float, 'rr_ref':float, 'elevation':int},
+            )
+
+    elevations    = auto.groupby(['num_poste']).elevation.mean()
+    lats          = auto.groupby(['num_poste']).lat.mean()
+    lons          = auto.groupby(['num_poste']).lon.mean()
+    num_poste     = auto.groupby(['num_poste']).num_poste.mean()
+    plot_obs(lats.to_numpy(), lons.to_numpy(), elevations.to_numpy(), num_poste.to_numpy(), args.datebegin.strftime('%Y%m%d'), args.dateend.strftime('%Y%m%d'))
+
+    return auto
 
 def read_nivometeo():
 
@@ -945,8 +962,9 @@ if __name__ == "__main__":
     else:
         RADAR_data = 'PANTHERE_{0:s}_{1:s}.csv'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))
 
-    #nivometeo = read_nivometeo()
-    nivometeo = read_obs_clim()
+    #reference = read_nivometeo()
+    #reference = read_obs_clim()
+    reference = read_obs_auto()
 
     # I.2 Produit radar
     #------------------
@@ -963,7 +981,7 @@ if __name__ == "__main__":
     # II- Merge des DF et mise en forme des données
     ###############################################
     # TODO : merge DF
-    df = pd.merge(antilope, nivometeo, on=["date", "num_poste"])
+    df = pd.merge(antilope, reference, on=["date", "num_poste"])
     df = df.rename(columns={'nom':'name'})
     if args.lpn:
         #lpn = pd.read_csv('LPN_nivometeo.csv', sep=';', parse_dates=['H_NIVO.DAT'], dtype={'H.num_poste':int, 'H_NIVO.ALTI_LPNX':int}, index_col=['H_NIVO.DAT'])
@@ -984,7 +1002,8 @@ if __name__ == "__main__":
         nb_obs_min = 10
 
     # Selection de la période
-    df = df.loc[df["date"]>=datetime.date(args.datebegin)].loc[df["date"]<=datetime.date(args.dateend)]
+    #df = df.loc[df["date"]>=datetime.date(args.datebegin)].loc[df["date"]<=datetime.date(args.dateend)]
+    df = df.loc[df["date"]>=np.datetime64(args.datebegin)].loc[df["date"]<=np.datetime64(args.dateend)]
     # Retrait des données non exploitables
     df = df.loc[~df['rr_ref'].isna()].loc[~df[f'rr_{args.product}'].isna()]  # Remove lines with missing value
     if 'massif_number' in df.columns:
@@ -1062,8 +1081,8 @@ if __name__ == "__main__":
         # 5. Maps
         #for domain in ['alpes', 'pyrenees', 'corse']:
         #for domain in ['alpes', 'pyrenees']:
-#        for domain in ['alpes']:
-        for domain in ['pyrenees']:
+        for domain in ['alpes']:
+#        for domain in ['pyrenees']:
             plot_full_domain(domain, lats.to_numpy(), lons.to_numpy(), df_stat, suffix=suffix, product=args.product)
             plot_massif(df, suffix=suffix, product=args.product, domain=domain, threshold=args.threshold)
             #plot_massif(df.loc[df['massif_number'].isin(map_massifs[domain])], suffix=suffix, product=args.product, domain=domain, threshold=args.threshold)

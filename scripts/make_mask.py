@@ -85,7 +85,8 @@ max_dist = 0.5
 if domain == 'pyr':
     fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_{domain}.csv')
 else:
-    fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_alp.csv')
+    #fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_alp.csv')
+    fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_alpes_obs_auto.csv')
 
 
 landmarks = {
@@ -758,7 +759,7 @@ def ratio_estimation(field, moving_window=25):
     # PLots
     #######
     scores = scores.loc[(scores.lats>=latmin) & (scores.lats<=latmax) & (scores.lons>=lonmin) & (scores.lons<=lonmax)]
-    scores = scores.loc[used_scores]
+    #scores = scores.loc[used_scores]  # TODO : voir pourquoi ca ne marche plus après update de la version de pandas
     if domain == 'alp':
         plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}_{c0}', vmin=0.3, vmax=1.7, cmap=plt.cm.coolwarm, scores=scores)
         #plot_and_save(observation_error, f'Observation_error_{d0}_{c0}_{domain}', vmin=-12, vmax=12, cmap=plt.cm.coolwarm, scores=scores)
