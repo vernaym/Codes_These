@@ -467,7 +467,7 @@ def plot_massif(mydf, massif=None, subdomain=None, error=0.2, threshold=None, **
     tmp['biais'] = tmp['rr_radar'] - tmp['rr_ref']
     mydf['diff'] = np.square(mydf[f'rr_{kw["product"]}'] - mydf['rr_ref'])
     tmp['nb_days'] = mydf.groupby(['num_poste']).date.count()
-    tmp = tmp[tmp['nb_days']>100]
+    tmp = tmp[tmp['nb_days']>50]
     tmp = tmp[tmp['rr_ref']>0]
     tmp['rmse']  = np.sqrt(mydf.groupby(['num_poste'])["diff"].mean())
     tmp['ratio'] = tmp['rr_radar'] / tmp['rr_ref']
