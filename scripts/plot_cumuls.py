@@ -374,6 +374,7 @@ def plot_deterministe(field, product):
     fig.tight_layout()
     fig.savefig(os.path.join(savedir, f'CUMUL_{product}_{args.datebegin.strftime("%Y%m%d")}_{args.dateend.strftime("%Y%m%d")}.pdf'))
 
+
 def compare_palettes(field, args):
     if args.domain == 'alp':
         #fig,ax = plt.subplots(nrows=2, ncols=2, figsize=(16,16))
@@ -486,12 +487,16 @@ if __name__ == "__main__":
 #    #plot_deterministe(antilope)
 #    compare_palettes(antilope, args)
 
-#    arome    = xr.open_dataset(os.path.join(datadir, 'arome_{0:s}_{1:s}_GrandesRousses.nc'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))))
-#    arome = arome.sum('time').rename({'rr':'rr_cumul'})
-    aspearome  = xr.open_dataset(os.path.join(datadir, 'aspearome_001_2021102806_2022060206_alp_hourly.nc'))
-    aspearome = aspearome.sum('time').rename({'rr':'rr_cumul'})
-    aspearome = aspearome.interp(lon=antilope.lon, lat=antilope.lat).clip(0)
-    plot_deterministe(aspearome, 'ASPEAROME')
+    arome    = xr.open_dataset(os.path.join(datadir, 'arome_{0:s}_{1:s}_alp.nc'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))))
+    arome = arome.sum('time').rename({'rr':'rr_cumul'})
+    plot_deterministe(arome, 'AROME')
+
+#    for member in range(1,17):
+#        aspearome  = xr.open_dataset(os.path.join(datadir, f'aspearome_{member:03d}_2021102806_2022060206_alp_hourly.nc'))
+#        aspearome = aspearome.sum('time').rename({'rr':'rr_cumul'})
+#        aspearome = aspearome.interp(lon=antilope.lon, lat=antilope.lat).clip(0)
+#        aspearome.to_netcdf(f"{datadir}/CUMUL_ASPEAROME{member:03d}.nc")
+#        plot_deterministe(aspearome, f'ASPEAROME{member:03d}')
 
 
 

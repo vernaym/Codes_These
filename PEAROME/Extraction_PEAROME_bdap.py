@@ -43,6 +43,7 @@ import footprints
 parameter  = 'PRECIP'
 parameter = dict(
         pearome   = ['PRECIP'],
+        parome    = ['PRECIP'],
         aspearome = ['PRECIP'],
         stats     = ['RR24_Q50'],
         #stats     = ['RR24_MIN', 'RR24_MAX', 'RR24_Q50'],
@@ -57,7 +58,7 @@ pearome_desc = {member:'PG1PEAROM{0:03d}'.format(member) for member in range(1,1
 coords = dict(
     #alp = ['47000', '43000', '4500', '8500'],
     #alp = ['46450', '44100', '5400', '7200'],  # extaction ANTILOPE
-    alp = ['46800', '43700', '5000', '7600'],  # To take into account localisation
+    alp = ['46800', '42000', '4500', '8000'],  # To take into account localisation
     pyr = ['43500', '42000', '-2000', '3500'],
     cor = ['43000', '41000', '8000', '11500'],
     GrandesRousses = ['45250', '44750', '6000', '6500']
@@ -72,13 +73,14 @@ dl = dict(
 
 paramID = dict(
     aarome    = 228228,
-    parome    = 228228,
+    parome    = 85029,
     pearome   = 0,
     aspearome = 0,
     stats     = 0,
 )
 indicatorOfParameter = dict(
         pearome   = 61,
+        parome    = 61,
         aspearome = 61,
         stats     = 13,
 )
@@ -395,9 +397,13 @@ class PrecipitationExtractor(object):
             if self.member is not None:  # Extraction de la pearome depuis la BDAP
                 self.origin = 'bdap'
                 goto(os.path.join(workdir, 'mb{0:03d}'.format(self.member)))
-            else:  # Extraction d'AROME depuis hendrix
-                self.origin = 'hendrix'
+            #elif date<datetime(2022, 10, 1):
+            else:
+                self.origin = 'bdap'
                 goto(workdir)
+            #else:  # Extraction d'AROME depuis hendrix
+            #    self.origin = 'hendrix'
+            #    goto(workdir)
             os.environ["DMT_DATE_PIVOT"] = date.strftime('%Y%m%d%H%M%S')
             print(os.environ["DMT_DATE_PIVOT"])
             self.get_data(date)
@@ -496,7 +502,8 @@ if __name__ == "__main__":
             echeance = 24
             # AROME data are extracted from hendrix : 24h forecasts lead times provide the previous 24h precipitation accumulation
             extract_period = date_range(args.datebegin, args.dateend, dt=24)
-            timecoord = extract_period[:-1]
+            #timecoord = extract_period[:-1]
+            timecoord = extract_period
             precip = PrecipitationExtractor(args, echeance, domain, timecoord)
             precip.extract(extract_period)
 
