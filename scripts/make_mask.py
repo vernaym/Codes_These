@@ -307,7 +307,7 @@ def add_massifs():
 def add_cities(latmin, latmax, lonmin, lonmax):
     cities = pd.read_csv(os.path.join('/home/vernaym/safran/monitoring/', 'cities.csv'), sep=',')
     tmp = cities[(cities.population>25000) & (cities.lat>=latmin) & (cities.lat<=latmax) & (cities.lng>=lonmin) & (cities.lng<=lonmax)]
-    plt.plot(tmp.lng, tmp.lat, marker='.', linestyle='')
+    plt.plot(tmp.lng.to_numpy(), tmp.lat.to_numpy(), marker='.', linestyle='')
     for idx in tmp.index:
         plt.text(tmp.lng[idx], tmp.lat[idx], tmp.city[idx], alpha=0.5)
 
@@ -333,7 +333,8 @@ def plot(antilope, datebegin, dateend, categories=True, biascorrection=False):
     lonmax = np.max(antilope.lon.data)
 
     if biascorrection:
-        filename = os.path.join('/home/vernaym/These/DATA/mask', 'Estimated_ratio.nc')
+        #filename = os.path.join('/home/vernaym/These/DATA/mask', 'Estimated_ratio.nc')
+        filename = os.path.join('/home/vernaym/workdir/ASSIMILATION/mask/alp', 'Estimated_ratio_alp_0.2_2.nc')  # Mask test
         ratio = xr.open_dataset(filename)
         #ratio.lat.data = ratio.lat.data+0.005  # TODO : comprendre et resoudre le probleme de decallage des coordonnees
         ratio = ratio.where((ratio.lon>=lonmin) & (ratio.lon<=lonmax) & (ratio.lat<=latmax) & (ratio.lat>latmin-0.01), drop=True)  # # >=44.1 ne fonctionne pas pour ANTILOPEQ (np.where(antilope.lat==44.1) renvoie une liste vide...)
@@ -559,7 +560,7 @@ def KalmanFilter(field, moving_window=40):
     plot_and_save(A, 'TMP', cmap=plt.cm.YlGnBu)
 
 
-def ratio_estimation(field, moving_window=25):
+def ratio_estimation(field, model=None, moving_window=25):
     """
     Two steps :
     1. filter accumulation field to produce a map of deviation to the
@@ -638,6 +639,9 @@ def ratio_estimation(field, moving_window=25):
             dist = np.sqrt((lats-scores.loc[poste,'lats'])**2+(lons-scores.loc[poste, 'lons'])**2)  # Euclidian horizontal distance
             idx, idy = np.where(dist==np.min(dist))
             ref_cumul = field.rr_cumul.data[idx[0],idy[0]]
+            if model is not None:
+                model_cumul = model.rr_cumul.data[idx[0],idy[0]]  # Cumul du modele au point d'évaluation
+                ratio_modele = model.rr_cumul.data/model_cumul  # Ratio entre chaque point du domain et le point d'évaluation
             if poste == 74056416:
                 rcc = ref_cumul.copy()
                 rr0 = ratio.copy()
@@ -666,11 +670,15 @@ def ratio_estimation(field, moving_window=25):
 
 #            w = np.exp(-(dist/d0)**2)*np.exp(-np.abs(cumul_dist)/(ref_cumul/(ratio*c0))**2)
 #            w = np.exp(-(dist/d0)**2)*np.exp(-np.abs(cumul_dist)/(ref_cumul/(ratio*c0)))
-            w = np.exp(-(dist/d0))*np.exp(-np.abs(cumul_dist)/(ref_cumul/(ratio*c0)))
+            #w = np.exp(-(dist/d0))*np.exp(-np.abs(cumul_dist)/(ref_cumul/(ratio*c0)))
+            w = np.exp(-(dist/d0))
             weights.append(w)
             # To take into account the increasing difference of cumuls with the distance
 #            ratios.append(field.rr_cumul.data/(ref_cumul/ratio+(field.rr_cumul.data-ref_cumul/ratio)*np.exp(-(dist/d0))))
-            ratios.append(ratio*cumul_ratio)
+            if model is None:
+                ratios.append(ratio*cumul_ratio)
+            else:
+                ratios.append(ratio*cumul_ratio/ratio_modele)
 
 #            guess = ratio*cumul_ratio
             #print(poste)
@@ -761,7 +769,8 @@ def ratio_estimation(field, moving_window=25):
     scores = scores.loc[(scores.lats>=latmin) & (scores.lats<=latmax) & (scores.lons>=lonmin) & (scores.lons<=lonmax)]
     #scores = scores.loc[used_scores]  # TODO : voir pourquoi ca ne marche plus après update de la version de pandas
     if domain == 'alp':
-        plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}_{c0}', vmin=0.3, vmax=1.7, cmap=plt.cm.coolwarm, scores=scores)
+        plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}_{c0}', vmin=0.2, vmax=1.8, cmap=plt.cm.coolwarm, scores=scores)
+        #plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}_{c0}_free_scale', vmin=0, vmax=2, cmap=plt.cm.coolwarm, scores=scores)
         #plot_and_save(observation_error, f'Observation_error_{d0}_{c0}_{domain}', vmin=-12, vmax=12, cmap=plt.cm.coolwarm, scores=scores)
         plot_and_save(np.abs(observation_error), f'Observation_error_{d0}_{c0}_{domain}', vmin=0, vmax=12, cmap=plt.cm.viridis, scores=scores)
     elif domain == 'GrandesRousses':
@@ -856,12 +865,17 @@ if __name__ == "__main__":
 #    antilope.lat.data = antilope.lat.data+0.005  # TODO : comprendre et resoudre le probleme de decallage des coordonnees
     antilope = antilope.where((antilope.lon>=lonmin) & (antilope.lon<=lonmax) & (antilope.lat<=latmax) & (antilope.lat>latmin-0.01), drop=True)  # >=44.1 ne fonctionne pas pour ANTILOPEQ (np.where(antilope.lat==44.1) renvoie une liste vide...)
 
+    #model = xr.open_dataset(os.path.join(datadir, 'CUMUL_ASPEAROME001.nc'))
+    model = xr.open_dataset(os.path.join(datadir, 'CUMUL_AROME.nc'))
+    model = model.where((model.lon>=lonmin) & (model.lon<=lonmax) & (model.lat<=latmax) & (model.lat>latmin-0.01), drop=True)
+
 #    plot(antilope, datebegin, dateend, categories=True, biascorrection=True)
 #    plot(antilope, datebegin, dateend, categories=False, biascorrection=True)
-#    plot(antilope, datebegin, dateend, categories=True)
+    plot(antilope, datebegin, dateend, categories=True)
 #    plot(antilope, datebegin, dateend, categories=False)
 
-    ratio_estimation(antilope)
+#    ratio_estimation(antilope, model=model)
+#    ratio_estimation(antilope)
 #    KalmanFilter(antilope)
 #    animation_mask(antilope)
 
