@@ -37,14 +37,14 @@ except Exception as e:
 datebegin = date.replace(hour=6)
 dateend   = datebegin + Period(hours=24)
 
-#datadir = '/home/vernaym/workdir/visualisation'
-datadir = '/home/vernaym/extraction_obs'  # On sxcen
+datadir = '/home/vernaym/workdir/visualisation'
 
 domain = 'alp'
 
 def get_antilope():
 
-    filename = f'ANTILOPE_{date.ymd}.nc'
+    filename = os.path.join(datadir, f'ANTILOPE_{date.ymd}.nc')
+
     if not os.path.exists(filename):
         toolbox.input(
             #role           = 'Observations',
@@ -101,7 +101,7 @@ def get_obs_auto():
 
 def get_safran():
 
-    filename = f'SAFRAN.nc'  #TODO : donner un nom plus explicite
+    filename = os.path.join(datadir, f'SAFRAN.nc')
 
     toolbox.input(
         role           = 'Ana_massifs',
@@ -137,7 +137,8 @@ def get_safran():
 antilope = get_antilope()
 
 # 2. Récupération de l'analyse SAFRAN oper de 9h
-safran = get_safran()
+#safran = get_safran()
+safran = None
 
 # 3. Read nivometeo observations
 nivometeo = get_nivometeo()
@@ -147,7 +148,7 @@ auto = get_obs_auto()
 
 myplot = PrecipitationAnalysis(date, 'alp', antilope=antilope, nivometeo=nivometeo, auto=auto, safran=safran, var='analysis')
 myplot.plot()
-myplot.save()
+myplot.show()
 
 # TODO : enregistrer le html au bon endroit sur sxcen
 

@@ -94,10 +94,15 @@ class PrecipitationAnalysis(object):
         # 4. SAFRAN
         if self.safran is not None:
             self.plot_safran()
+        else:
+            self.read_safran_massifs()
 
         self.update_figure()
 
-        #self.fig.show()
+    def show(self):
+        self.fig.show()
+
+    def save(self):
         #fig.write_json('test.json')
         self.fig.write_html(os.path.join(rootdir, self.domain, f"precipitation_{self.date.strftime('%Y%m%d')}.html"))
 
@@ -134,7 +139,7 @@ class PrecipitationAnalysis(object):
                 index   = range(len(rr)),
             )
         select = dict()
-        for i,elevation in enumerate(range(0, 3500, 1000)):
+        for i,elevation in enumerate(range(0, 2500, 1000)):
         # TODO : Avoid plot data multiple time (use button ?) --> ABSOLUTE PRIORITY !!
         # Plotting the full 1-km ANTILOPE domain takes about 12M memory...
         # https://plotly.com/python/v3/selection-events/
@@ -310,8 +315,9 @@ class PrecipitationAnalysis(object):
                     )
                 )
 
-    def read_safran_massifs(self, massifs_json):
+    def read_safran_massifs(self):
         # 1. read massif shapefile
+        massifs_json = os.path.join(datadir, "massifs_safran.json")
         massifs = "/home/vernaym/safran/ctes/shapefiles/massifs_safran.shp"
         self.massifs = gpd.read_file(massifs)
 
@@ -325,7 +331,7 @@ class PrecipitationAnalysis(object):
         Method from : https://community.plotly.com/t/plot-a-shapefile-shp-in-a-choropleth-chart/27850
         """
         massifs_json = os.path.join(datadir, "massifs_safran.json")
-        self.read_safran_massifs(massifs_json)
+        self.read_safran_massifs()
 
         with open(massifs_json) as geofile:
             j_file = json.load(geofile)
