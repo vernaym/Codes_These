@@ -117,6 +117,16 @@ class PrecipitationAnalysis(object):
         y = y.flatten()
         rr = self.antilope[self.var].data.flatten()  # Corrected obs
         error = self.antilope['error'].data.flatten()
+        #    # normalisation de l'erreur entre low and high
+        # TODO : revoir la méthode pour convertir l'erreur en une dimension de marker plotly
+        low  = 5
+        high = 30
+        def nan_ptp(a):
+            return np.ptp(a[np.isfinite(a)])
+        error = np.abs(error)
+        error = low + (error - np.nanmin(error))/(nan_ptp(error)/high)
+        error = low + high/error
+
         alti = self.antilope['elevation'].data.flatten()
         df = pd.DataFrame(
                 data    = np.transpose([x, y, rr, error, alti]),
@@ -141,10 +151,10 @@ class PrecipitationAnalysis(object):
                 name    = f'ANTILOPE>{elevation:d}m'
                 showscale = False
 
-            self.fig.add_trace(self.add_antilope_scatter(df, name, select[i], uncertainty=True))
-            if i == 0:
+            self.fig.add_trace(self.add_antilope_scatter(df, name, select[i], showscale=showscale, uncertainty=True))
+            #if i == 0:
                 # TODO : useless (same data ==> use a button !)
-                self.fig.add_trace(self.add_antilope_scatter(df, name, select[i], uncertainty=False))
+            #    self.fig = self.fig.add_trace(self.add_antilope_scatter(df, name, select[i], uncertainty=False))
 
     def add_antilope_scatter(self, df, name, mask, showscale=False,  uncertainty=True, visible=True):
         return go.Scattermapbox(
@@ -368,7 +378,7 @@ class PrecipitationAnalysis(object):
                         "color": "black",
                         #"below":"traces",
                         #"opacity":0.5,
-                    },
+                    } if self.massifs is not None else {},
                 ],
                 center = go.layout.mapbox.Center(  # TODO : à adapter selon le domain)
                     lat=45.2,

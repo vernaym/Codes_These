@@ -138,11 +138,14 @@ class AntilopePreprocessing(object):
 
     def get_nivometeo(self):
         fic_score = os.path.join(datadir, f'obs_nivometeo_daily_RR_{self.datebegin.ymd}_{self.dateend.ymd}.csv')
-        nivometeo = pd.read_csv(fic_score, sep=';', parse_dates=['date'],
-                dtype={'num_poste':int, 'nom':str, 'alti':int, 'lat':float, 'lon':float, 'massif':int, 'rr': float, 'reseau_poste': int}, na_values=['--'])
-        if len(nivometeo)>0:
-            nivometeo = nivometeo.loc[nivometeo['date']==np.datetime64(date)]
-            return nivometeo
+        if os.path.exists(fic_score):
+            nivometeo = pd.read_csv(fic_score, sep=';', parse_dates=['date'],
+                    dtype={'num_poste':int, 'nom':str, 'alti':int, 'lat':float, 'lon':float, 'massif':int, 'rr': float, 'reseau_poste': int}, na_values=['--'])
+            if len(nivometeo)>0:
+                nivometeo = nivometeo.loc[nivometeo['date']==np.datetime64(date)]
+                return nivometeo
+            else:
+                return None
         else:
             return None
 
