@@ -36,17 +36,44 @@ import statistics
 datadir = '/home/vernaym/These/DATA'
 savedir = '/home/vernaym/These/figures'
 
-# Domaine des Grandes Rousses
 extract_dom = dict(
-    latmax = 45.240,
-    latmin = 44.990,
-    lonmin = 6.010,
-    lonmax = 6.490,
-)
-latmin = extract_dom['latmin']
-lonmin = extract_dom['lonmin']
-latmax = extract_dom['latmax']
-lonmax = extract_dom['lonmax']
+        GrandesRousses = dict(
+            latmax = 45.240,
+            latmin = 44.990,
+            lonmin = 6.010,
+            lonmax = 6.490,
+        ),
+        Savoie = dict(
+            latmax = 45.6,
+            latmin = 45.0,
+            lonmin = 6.2,
+            lonmax = 7.2,
+        ),
+        HautesAlpes = dict(
+            latmax = 45.2,
+            latmin = 44.25,
+            lonmin = 6.2,
+            lonmax = 7.1,
+        ),
+        MontBlanc = dict(
+            latmax = 46.25,
+            latmin = 45.5,
+            lonmin = 6.5,
+            lonmax = 7.1,
+        ),
+        alp = dict(
+            latmax = 46.45,
+            latmin = 44.1,
+            lonmin = 5.4,
+            lonmax = 7.2,
+        ),
+        pyr = dict(
+            latmax = 43.5,
+            latmin = 42.0,
+            lonmin = -2.0,
+            lonmax = 3.5,
+        ),
+    )
 
 blacklist = [5063407, 5063410, 38191408]  # La Meije, LA GRAVE, Huez 2350
 
@@ -63,7 +90,7 @@ def parse_command_line():
     parser = argparse.ArgumentParser(description=description)
     parser.add_argument('-b', '--datebegin', help='Begining date of extraction, format YYYYMMDDHH or YYMMDDHH', required=True)
     parser.add_argument('-e', '--dateend', help = 'Final date of extraction (default=datebegin)')
-    parser.add_argument('-d', '--domain', help='Domain of the file', choices=['alp', 'pyr', 'cor', 'GrandesRousses'], default='GrandesRousses')
+    parser.add_argument('-d', '--domain', help='Domain of the file', choices=['alp', 'pyr', 'cor', 'GrandesRousses'], default='alp')
     parser.add_argument('-w', '--workdir', help='Runing directory (default for guppy)', default='/home/mrns/vernaym/workdir/extraction_antilope')
     parser.add_argument('-m', '--massif', help='PLot for a specific massif', default=None, type=int)
     parser.add_argument('-t', '--threshold', default=None, help='Threshold of precipitation (mm) to apply in the data to consider', type=int)
@@ -402,6 +429,12 @@ def compare_palettes(field, args):
 
 if __name__ == "__main__":
     args = parse_command_line()
+
+    latmin = extract_dom[args.domain]['latmin']
+    lonmin = extract_dom[args.domain]['lonmin']
+    latmax = extract_dom[args.domain]['latmax']
+    lonmax = extract_dom[args.domain]['lonmax']
+
     extract_period = date_range(args.datebegin, args.dateend)
     mnt = xr.open_dataset(os.path.join(datadir, "MNT_GrandesRousses.nc"))
     mnt_proj = proj_mnt(mnt)
@@ -487,8 +520,11 @@ if __name__ == "__main__":
 #    #plot_deterministe(antilope)
 #    compare_palettes(antilope, args)
 
-    arome    = xr.open_dataset(os.path.join(datadir, 'arome_{0:s}_{1:s}_alp.nc'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))))
+    #arome    = xr.open_dataset(os.path.join(datadir, 'arome_{0:s}_{1:s}_alp.nc'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))))
+    arome    = xr.open_dataset(os.path.join(datadir, 'parome_2021073106_2023042306_alp.nc'))  # WARNING : changer la légende de la figure pour avoir la bonne période de cumul
     arome = arome.sum('time').rename({'rr':'rr_cumul'})
+    arome = arome.where((arome.lon>=lonmin) & (arome.lon<=lonmax) & (arome.lat<=latmax) & (arome.lat>latmin-0.01), drop=True)
+    arome.to_netcdf(f"{datadir}/CUMUL_AROME.nc")
     plot_deterministe(arome, 'AROME')
 
 #    for member in range(1,17):

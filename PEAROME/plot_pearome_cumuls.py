@@ -175,7 +175,7 @@ def plot_mean_pearome_3D():
 
 if __name__ == "__main__":
 
-    plot_mean_pearome_3D()
-#    plot_arome()
+#    plot_mean_pearome_3D()
+    plot_arome()
 #    plot_pearome('stats')
 #    plot_pearome('aspearome')
