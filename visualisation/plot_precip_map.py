@@ -168,8 +168,8 @@ class PrecipitationAnalysis(object):
                     #selectedpoints = select,  # TODO : use this footprint to set updatemenus buttons DOES NOT WORK (because it refers to user selected points)
                     mode = 'markers',
                     name = name,
-                    #text = antilope.rr.data.flatten(),  # Raw obs
-                    text = df.rr.values[mask],  # obs=corrected obs, rr=raw obs
+                    #text = antilope.rr.data.flatten(),  # obs=corrected obs, rr=raw obs
+                    text = df.rr.values[mask],
                     visible = visible,
                     showlegend = True,
                     #selected = go.scattermapbox.Selected(marker={"size":50}),
@@ -182,7 +182,8 @@ class PrecipitationAnalysis(object):
                         #color = antilope.rr.data.flatten(),
                         color = df.rr.values[mask],
                         cmin  = 0,
-                        cmax  = np.nanmax(self.antilope.rr.data.flatten()),
+                        #cmax  = np.nanmax(self.antilope.rr.data.flatten()),
+                        cmax  = np.nanmax(self.antilope.analysis.data.flatten()),
                         # TODO : revoir la conversion erreur --> taille + ajouter une fourchette dans le text flottan (genre "10mm d'incertitude")
                         size  = np.nan_to_num(df.error.values[mask], nan=5) if uncertainty else 10,
                         #opacity=0.5,
