@@ -634,7 +634,7 @@ class Evaluation(object):
             # solution : shift time serie by 7h, compute 24h accumulations and
             # shift back !
             antilope['time'] = antilope.time-np.timedelta64(7, 'h')
-            antilope = antilope.resample(time='D').sum(dim='time')  # !!! VERY SLOW !!!
+            antilope = antilope.resample(time='1D').sum(dim='time')  # !!! VERY SLOW !!! WARNING : does not work with pandas>=2.0.0
             antilope['time'] = antilope.time+np.timedelta64(30, 'h')
 
         return antilope
@@ -744,6 +744,7 @@ class Evaluation(object):
         self.data = self.data.loc[{'date':dates}]
 
         mask = xr.open_dataset(os.path.join(datadir, 'mask', f"Estimated_ratio.nc"))
+        #mask = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask/alp", "Estimated_ratio_alp_0.2_2.nc"))  # To test a new estimation
         ratio = mask.ratio
         def debiaise(ds):
             return ds / ratio
