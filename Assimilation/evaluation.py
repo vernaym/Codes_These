@@ -743,8 +743,8 @@ class Evaluation(object):
         antilope = antilope.loc[{'time':dates}]
         self.data = self.data.loc[{'date':dates}]
 
-        mask = xr.open_dataset(os.path.join(datadir, 'mask', f"Estimated_ratio.nc"))
-        #mask = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask/alp", "Estimated_ratio_alp_0.2_2.nc"))  # To test a new estimation
+        #mask = xr.open_dataset(os.path.join(datadir, 'mask', f"Estimated_ratio.nc"))
+        mask = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask/alp", "Estimated_ratio.nc"))  # To test a new estimation
         ratio = mask.ratio
         def debiaise(ds):
             return ds / ratio
