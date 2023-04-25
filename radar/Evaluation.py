@@ -41,7 +41,9 @@ nb_obs_min = 60
 
 coords = dict(
     #alp = ['46875', '43125', '4500', '8500'],
-    alpes = dict(latmin=43.8, latmax=46.45, lonmin=5.4, lonmax=7.8),
+    #alpes = dict(latmin=43.8, latmax=46.45, lonmin=5.4, lonmax=7.8),
+    #alp = ['46900', '43000', '4500', '8000'],
+    alpes = dict(latmin=43.0, latmax=46.9, lonmin=4.5, lonmax=8.),
     pyrenees = dict(latmin=42.0, latmax=43.5, lonmin=-2.0, lonmax=3.5),
     #cor = ['43000', '41000', '8000', '10500'],
 )
@@ -467,8 +469,8 @@ def plot_massif(mydf, massif=None, subdomain=None, error=0.2, threshold=None, **
     tmp['biais'] = tmp['rr_radar'] - tmp['rr_ref']
     mydf['diff'] = np.square(mydf[f'rr_{kw["product"]}'] - mydf['rr_ref'])
     tmp['nb_days'] = mydf.groupby(['num_poste']).date.count()
-    tmp = tmp[tmp['nb_days']>50]
-    tmp = tmp[tmp['rr_ref']>0]
+    tmp = tmp[tmp['nb_days']>100]
+    #tmp = tmp[tmp['rr_ref']>0]
     tmp['rmse']  = np.sqrt(mydf.groupby(['num_poste'])["diff"].mean())
     tmp['ratio'] = tmp['rr_radar'] / tmp['rr_ref']
     tmp.replace([np.inf, -np.inf], np.nan, inplace=True)
@@ -949,9 +951,23 @@ if __name__ == "__main__":
     args = parse_command_line()
 
     extract_period = date_range(args.datebegin, args.dateend)
+
+    #reference = read_nivometeo()
+    #reference = read_obs_clim()
+    reference = read_obs_auto()
+    reference.lon = np.round(reference.lon, 2)
+    reference.lat = np.round(reference.lat, 2)
+    ref_lon = reference.groupby('num_poste').lon.mean().to_xarray()
+    ref_lat = reference.groupby('num_poste').lat.mean().to_xarray()
+
+
+    #TODO : Extraire les valeurs ANTILOPE sur les points de reference
+
+
     if args.product == 'antilope':
         # TODO : read ANNTILOPEH and extract data from 7h UTC to 7h UTC before march 20th and from 8h UTC to 8h UTC after
-        RADAR_data = 'ANTILOPEQ_{0:s}_{1:s}.csv'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))
+        #RADAR_data = 'ANTILOPEQ_{0:s}_{1:s}.csv'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))
+        RADAR_data = 'ANTILOPEH_2021103000_2022060200_alp.nc'
         #RADAR_data = 'ANTILOPEQ_2021103100_2022060200_alp_postes_clim.csv'
     elif args.product == 'antilopejp1':
         RADAR_data = 'ANTILOPEJP1Q_{0:s}_{1:s}.csv'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))
@@ -962,9 +978,6 @@ if __name__ == "__main__":
     else:
         RADAR_data = 'PANTHERE_{0:s}_{1:s}.csv'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))
 
-    #reference = read_nivometeo()
-    #reference = read_obs_clim()
-    reference = read_obs_auto()
 
     # I.2 Produit radar
     #------------------
@@ -975,13 +988,25 @@ if __name__ == "__main__":
         antilope = xrdata.to_dataframe().reset_index().rename(columns={'time':'date'})
         # TODO : Extraire les valeurs de la PEAROME correspondant aux point d'obs nivometeo
     else:
-        antilope = pd.read_csv(RADAR_data, sep=';', parse_dates=['date'], dtype={f'rr_{args.product}': float, 'num_poste': int}, na_values=['--'])
+        #antilope = pd.read_csv(RADAR_data, sep=';', parse_dates=['date'], dtype={f'rr_{args.product}': float, 'num_poste': int}, na_values=['--'])
+        antilope = xr.open_dataset(os.path.join(datadir, RADAR_data))
+        # Calcul des cumuls sur 24h
+        antilope['time'] = antilope.time-np.timedelta64(7, 'h')
+        #antilope['time'] = antilope.time-np.timedelta64(8, 'h')  # Pour les obs nivometeo
+        antilope = antilope.resample(time='1D').sum(dim='time')  # !!! VERY SLOW !!! WARNING : does not work with pandas>=2.0.0
+        antilope['time'] = antilope.time+np.timedelta64(30, 'h')
+        # Extraction des valeurs sur les points de reference
+        antilope = antilope.sel(lat=ref_lat, lon=ref_lon, method = 'nearest')
+        # conversion en DF
+        antilope = antilope.to_dataframe()
+        antilope = antilope.reset_index()
+        antilope = antilope.rename(columns={'time':'date', 'rr':f'rr_{args.product}'})
     #antilope['date'] = antilope['date'].dt.date
 
     # II- Merge des DF et mise en forme des données
     ###############################################
     # TODO : merge DF
-    df = pd.merge(antilope, reference, on=["date", "num_poste"])
+    df = pd.merge(antilope, reference, on=["date", "num_poste", "lat", "lon"])
     df = df.rename(columns={'nom':'name'})
     if args.lpn:
         #lpn = pd.read_csv('LPN_nivometeo.csv', sep=';', parse_dates=['H_NIVO.DAT'], dtype={'H.num_poste':int, 'H_NIVO.ALTI_LPNX':int}, index_col=['H_NIVO.DAT'])
