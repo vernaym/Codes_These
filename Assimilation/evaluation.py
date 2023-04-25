@@ -11,6 +11,7 @@ import numpy as np
 import xarray as xr
 import pandas as pd
 from scipy.stats import rankdata
+import CRPS.CRPS as pscore
 
 import argparse
 
@@ -424,6 +425,17 @@ class Evaluation(object):
 
         return brier
 
+    def CRPS(self, simu, obs, *args):
+
+        crps = list()
+        for i in range(len(obs)):
+            if len(np.shape(simu)) == 1:
+                crps.append(pscore([simu[i]], obs[i]).compute()[0])
+            else:
+                crps.append(pscore(simu[i], obs[i]).compute()[0])
+
+        return np.nanmean(np.array(crps))
+
     def ROC(self, simu, obs, product, ax, threshold=10):
         """ 
         Here "probability" is the forecasted probability above which the
@@ -744,12 +756,14 @@ class Evaluation(object):
         self.data = self.data.loc[{'date':dates}]
 
         #mask = xr.open_dataset(os.path.join(datadir, 'mask', f"Estimated_ratio.nc"))
-        mask = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask/alp", "Estimated_ratio.nc"))  # To test a new estimation
+        mask  = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask/alp", "Estimated_ratio.nc"))  # To test a new estimation
+        #error = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask/alp", "Observation_error.nc"))  # To test a new estimation
         ratio = mask.ratio
         def debiaise(ds):
             return ds / ratio
         #antiloped = antilope.groupby('date').apply(debiaise)
         antiloped = antilope.apply(debiaise)
+        #TODO : générer un ensemble (3 membres ?) en utilisant l'incertitude
 
         raw = self.read_raw_ensemble()
         raw = raw.loc[{'time':dates}]
@@ -762,7 +776,7 @@ class Evaluation(object):
             simus[xpid] = self.read_simu(os.path.join(workdir, filename)).loc[{'time':dates}]
 
 #        scores_list = ['reliability', 'resolution', 'uncertainty', 'rmse', 'bias', 'brier']
-        scores_list = ['rmse', 'bias'] + [f'brier_{threshold}' for threshold in self.thresholds]
+        scores_list = ['rmse', 'bias'] + [f'brier_{threshold}' for threshold in self.thresholds] + ['CRPS']
         scores = dict()
         #dates = dates[:10]
         liste_postes = np.array([])
@@ -939,6 +953,7 @@ class Evaluation(object):
             for product in products:
                 x = self.scores.loc[{'score':score}][product].data
                 add_num_poste(ax, pos, x)
+                print(score, product)
                 labels.append(self.add_label(ax.violinplot(x[~np.isnan(x)], showmeans=True, positions=[pos]), xpid_label[product]))
                 if score == 'bias':
                     ax.axhline(color='k')
