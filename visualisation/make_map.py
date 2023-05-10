@@ -37,8 +37,8 @@ except Exception as e:
 datebegin = date.replace(hour=6)
 dateend   = datebegin + Period(hours=24)
 
-#datadir = '/home/vernaym/workdir/visualisation'
-datadir = '/home/vernaym/extraction_obs'  # On sxcen
+datadir = '/home/vernaym/workdir/visualisation'
+#datadir = '/home/vernaym/extraction_obs'  # On sxcen
 
 domain = 'alp'
 
@@ -137,7 +137,8 @@ def get_safran():
 antilope = get_antilope()
 
 # 2. Récupération de l'analyse SAFRAN oper de 9h
-safran = get_safran()
+#safran = get_safran()
+safran = None
 
 # 3. Read nivometeo observations
 nivometeo = get_nivometeo()

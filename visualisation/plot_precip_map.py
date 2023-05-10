@@ -54,7 +54,8 @@ from scipy.spatial import cKDTree
 ld = 0.05
 max_dist = ld*3
 #datadir = '/home/vernaym/workdir/visualisation'
-rootdir = '/d0/intra-cen/ANTILOPE'
+rootdir = '/d0/intra-cen/ANTILOPE'  # On sxcen
+rootdir = '.'  # TODO : TMP !
 datadir = '.'
 token = open("/home/vernaym/.mapbox/token").read() # Token from mapbox account
 
