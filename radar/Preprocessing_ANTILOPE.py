@@ -75,14 +75,15 @@ class AntilopePreprocessing(object):
 
             # 1. Static de-biasing :
             #mask = xr.open_dataset(os.path.join(workdir, f"Estimated_ratio.nc"))  # TODO : datadir à définir
-            mask = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask/alp", f"Estimated_ratio_alp_0.2_2.nc"))  # !!!!! TODO : TMP !!!!!
+            mask = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask/alp", f"Estimated_ratio.nc"))  # !!!!! TODO : TMP !!!!!
 
             antilope["ratio"] = mask.ratio  # Fill missing point with NaNs
             antilope["rr_debiaise"] = (antilope.rr/antilope.ratio).fillna(antilope.rr)  # Fill NaN values with the original ANTILOPE value
 
             # 2. Dynamic correction (localisation)
             #antilope['error'] = xr.open_dataset(os.path.join(datadir, 'Observation_error.nc'))
-            error = xr.open_dataarray(os.path.join(workdir, 'Observation_error.nc'))
+            #error = xr.open_dataarray(os.path.join(workdir, 'Observation_error.nc'))
+            error = xr.open_dataarray(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask/alp", 'Observation_error.nc'))
             std = error.data
             antilope['error'] = np.abs(error)
             codist = os.path.join(workdir, f'codistance_max_dist_{max_dist:.2f}_{domain}.npz')
