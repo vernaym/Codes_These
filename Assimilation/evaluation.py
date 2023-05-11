@@ -765,8 +765,8 @@ class Evaluation(object):
         def debiaise(ds):
             return ds / ratio
         def to_ensemble(ds):
-            ds1 = ds + (0. + 0.263 * ds) * error
-            ds2 = ds - (0. + 0.263 * ds) * error
+            ds1 = ds + (0. + 0.1 * ds) * error
+            ds2 = ds - (0. + 0.1 * ds) * error
 #            ds1 = ds * (1 + 0.263) + error
 #            ds2 = ds * (1 - 0.263) - error
 #            ds1 = ds + error
@@ -1093,10 +1093,10 @@ class Evaluation(object):
         if antilope is not None:
             #antpe, = plt.plot(time, antilope, marker='+', linestyle='', color='red')
             #antpe = plt.errorbar(positions, antilope, yerr=error+0.263*antilope, fmt="+", color='red', alpha=1)
-            antpe = plt.errorbar(positions, antilope, yerr=0.263*antilope*error, fmt="+", color='red', alpha=1)
+            antpe = plt.errorbar(positions, antilope, yerr=0.1*antilope*error, fmt="+", color='red', alpha=1)
             self.labels.append((antpe, 'Antilope'))
             #antped = plt.errorbar(positions, antilope/ratio, yerr=error+0.263*antilope/ratio, fmt="+", color='blue', alpha=0.5)
-            antped = plt.errorbar(positions, antilope/ratio, yerr=0.263*error*antilope/ratio, fmt="+", color='blue', alpha=0.5)
+            antped = plt.errorbar(positions, antilope/ratio, yerr=0.1*error*antilope/ratio, fmt="+", color='blue', alpha=0.5)
             self.labels.append((antped, 'Antilope debiaisé'))
         if simu2 is not None:
             #add_label(plt.violinplot(np.transpose(simu2), positions=positions), 'Daily assimilation', color='skyblue')
