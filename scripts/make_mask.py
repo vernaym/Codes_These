@@ -768,13 +768,14 @@ def ratio_estimation(field, model=None, moving_window=25):
     neg = np.where(observation_error.data<0)
     #observation_error.data[neg] = 21.391*observation_error.data[neg]  # r=0.5 ==> err=-10.7  # 2018/2019
     observation_error.data[neg] = 20.137*observation_error.data[neg]  # r=0.5 ==> err=-10  # 2021/2022
-#    observation_error.data[neg] = 4*observation_error.data[neg]  # r=0.5 ==> err=-2
+    #observation_error.data[neg] = 4*observation_error.data[neg]  # r=0.5 ==> err=-2
     pos= np.where(observation_error.data>=0)
     #observation_error.data[pos] = 15.148*observation_error.data[pos]  # r=1.5 ==> err=7.574  " 2018/2019
     observation_error.data[pos] = 16.787*observation_error.data[pos]  # r=1.5 ==> err=8.574  " 2021/2022
-#    observation_error.data[pos] = 2*observation_error.data[pos]  # r=1.5 ==> err = 1
+    #observation_error.data[pos] = 2*observation_error.data[pos]  # r=1.5 ==> err = 1
     #observation_error = 1+np.abs(smoothratio-1)
-    observation_error = observation_error.rename('Observation error (mm)')
+    #observation_error = observation_error.rename('Observation error (mm)')
+    observation_error = observation_error.rename('error')
 
     #observation_error = np.abs(ratio_field-1)
     #observation_error = np.abs(ratio_field**2-1)*50
