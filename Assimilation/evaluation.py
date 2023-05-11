@@ -266,8 +266,9 @@ if not os.path.exists(savedir):
     os.makedirs(savedir)
 
 xpid_label = dict(
-        antilope      = 'ANTILOPE',
-        antiloped     = 'ANTILOPE DEBIAISE',
+        antilope      = 'ANTILOPE Raw',
+        antiloper     = 'ANTILOPE + error',
+        antiloped     = 'ANTILOPE + error + debiaisage',
         raw           = 'Raw PEAROME ensemble',
         GD0           = 'Global daily analysis',
         LD0           = 'Daily analysis with PF',
@@ -346,13 +347,20 @@ xpid_label = dict(
         RS03          = 'Random Sampling with increased dynamic dispersion + static',
     )
 
+def nearest(array, value):
+    """ Find element of "array" the closer to 'value' """
+    # Security to ensure that the station is within the simulated domain.
+    if np.abs(array - value).data.min() < 0.1:
+        return float(array[np.abs(array - value).argmin()].data)
+    else:
+        print(f'ERROR : no corresponding pixel found for value {value}')
 
 class Evaluation(object):
 
     def __init__(self, threshold):
         #self.data = xr.Dataset()
 #        self.ensemble = ensemble  # DataArray(lat,lon,time,member)
-        self.Ne = 16  # TODO : à definir dynamiquement
+        #self.Ne = 16  # TODO : à definir dynamiquement
         self.scores = None
         self.threshold = threshold  # threshold to use as event detection in the Brier Score
         self.lpn = None
@@ -408,7 +416,7 @@ class Evaluation(object):
         """  BSS = 1 - BS / BSref  """
         return 1 - self.brier_score(simu, obs, threshold) / self.brier_score(ref, obs, threshold)
 
-    def brier(self, simu, obs, threshold=10, *args):
+    def brier(self, simu, obs, Ne=16, threshold=10, *args):
 
         # TODO : verifier le calcul du score de brier
         simu = simu[~np.isnan(obs)]
@@ -417,7 +425,7 @@ class Evaluation(object):
         if np.shape(simu) == np.shape(obs):  # "Simulation" déterministe
             psimu = np.where(simu>=threshold, 1, 0)
         else:  # Simulation d'ensemble
-            psimu  = np.count_nonzero(simu>=threshold, axis=1) / self.Ne
+            psimu  = np.count_nonzero(simu>=threshold, axis=1) / Ne
             #psimu  = (np.count_nonzero(simu>=self.threshold, axis=1)+ 2/3) / (self.Ne+4/3)  # Tukey's plotting position
         fobs   = np.where(obs>=threshold, 1, 0)
         brier = np.nanmean((psimu-fobs)**2)
@@ -436,7 +444,7 @@ class Evaluation(object):
 
         return np.nanmean(np.array(crps))
 
-    def ROC(self, simu, obs, product, ax, threshold=10):
+    def ROC(self, simu, obs, product, ax, Ne=16, threshold=10):
         """ 
         Here "probability" is the forecasted probability above which the
         event is considered well forecasted by the ensemble.
@@ -466,7 +474,7 @@ class Evaluation(object):
             succes_rate.append(a/(a+c) if a>0 else 0)
             false_alarm.append(b/(b+d) if b>0 else 0)
         else:
-            for seuil in range(1, self.Ne+1):
+            for seuil in range(1, Ne+1):
                 # Pour un dépassement de seuil :
                 a = len(np.where((obs>threshold) & (np.count_nonzero(simu>threshold, axis=1)>=seuil))[0])
                 b = len(np.where((obs<=threshold) & (np.count_nonzero(simu>threshold, axis=1)>=seuil))[0])
@@ -530,16 +538,16 @@ class Evaluation(object):
         #ax.hist(ranks, bins=range(np.shape(ensemble)[0]))
         ax.hist(ranks, bins=np.linspace(0.5, combined.shape[0]+0.5, combined.shape[0]+1))
 
-    def reliability_diagram(self, simu, obs, product, ax):
+    def reliability_diagram(self, simu, obs, product, ax, Ne=16):
         ndays = len(obs)
         simu = simu[~np.isnan(obs)]
         obs = obs[~np.isnan(obs)]
-        proba, catsize, freq_occ, global_freq_occ = self.probability_classes(simu, obs)
+        proba, catsize, freq_occ, global_freq_occ = self.probability_classes(simu, obs, Ne=Ne)
         # TODO : taille du marker proportionelle au nombre de prevision dans une categorie
         ax.plot(proba, freq_occ, marker=None, linestyle='-', label=f'{product}')
         ax.scatter(proba, freq_occ, catsize)
 
-    def probability_classes(self, simu, obs, nb_cat=17):
+    def probability_classes(self, simu, obs, Ne=16, nb_cat=17):
 
         # TODO : la décomposition du score de Brier devrait donner le même résultat
         # que le calcul direct (BS=BSfiab-BSres+BSunc), mais ce n'est pas le cas...
@@ -550,7 +558,7 @@ class Evaluation(object):
         for Nm in range(nb_cat):
             Ni = np.count_nonzero(np.count_nonzero(simu>=self.threshold, axis=1)==Nm)
             if Ni > 0:
-                proba.append(Nm/self.Ne)
+                proba.append(Nm/Ne)
                 catsize.append(Ni)
                 # TODO : problème avec les dimensions de "simu" lorsque simu est un ensemble...
                 freq_occ.append(np.count_nonzero(obs[np.count_nonzero(simu>=self.threshold, axis=1)==Nm]>=self.threshold)/Ni)
@@ -712,14 +720,6 @@ class Evaluation(object):
 #            self.scores = xr.open_dataset(os.path.join(datadir, 'scores.nc'))
 #            return
 
-        def nearest(array, value):
-            """ Find element of "array" the closer to 'value' """
-            # Security to ensure that the station is within the simulated domain.
-            if np.abs(array - value).data.min() < 0.1:
-                return float(array[np.abs(array - value).argmin()].data)
-            else:
-                print(f'ERROR : no corresponding pixel found for value {value}')
-
         # To Extract specific values where evaluation data (obs nivometeo) is available
         pos = 1
 
@@ -756,21 +756,44 @@ class Evaluation(object):
         self.data = self.data.loc[{'date':dates}]
 
         #mask = xr.open_dataset(os.path.join(datadir, 'mask', f"Estimated_ratio.nc"))
-        mask  = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask/alp", "Estimated_ratio.nc"))  # To test a new estimation
-        #error = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask/alp", "Observation_error.nc"))  # To test a new estimation
-        ratio = mask.ratio
+        self.ratio  = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask/alp", "Estimated_ratio.nc"))  # To test a new estimation
+        self.obs_error = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask/alp", "Observation_error.nc"))  # To test a new estimation
+        self.obs_error = self.obs_error.rename({'Observation error (mm)':'error'})
+        ratio = self.ratio.ratio
+        #error = self.obs_error['Observation error (mm)']
+        error = self.obs_error.error
         def debiaise(ds):
             return ds / ratio
+        def to_ensemble(ds):
+            ds1 = ds + (0. + 0.263 * ds) * error
+            ds2 = ds - (0. + 0.263 * ds) * error
+#            ds1 = ds * (1 + 0.263) + error
+#            ds2 = ds * (1 - 0.263) - error
+#            ds1 = ds + error
+#            ds2 = ds - error
+            return xr.concat([ds, ds1, ds2], 'member')
+
         #antiloped = antilope.groupby('date').apply(debiaise)
         antiloped = antilope.apply(debiaise)
-        #TODO : générer un ensemble (3 membres ?) en utilisant l'incertitude
+        #antiloped = antilope.apply(to_ensemble)
+        # Génération d'un ensemble de 3 membres prenant en compte l'erreur d'observation
+        antiloped = antiloped.expand_dims('member')
+        antiloped = antiloped.apply(to_ensemble)
+        antiloped = antiloped.clip(0)
+        antiloped = antiloped.transpose('lat', 'lon', 'time', 'member')
+
+        antiloper = antilope.expand_dims('member')
+        antiloper = antiloper.apply(to_ensemble)
+        antiloper = antiloper.clip(0)
+        antiloper = antiloper.transpose('lat', 'lon', 'time', 'member')
 
         raw = self.read_raw_ensemble()
         raw = raw.loc[{'time':dates}]
         raw = raw.compute()
         self.data['member'] = np.arange(1,17)
+        self.data['pseudo_member'] = np.arange(1,4)
 
-        data = dict(antilope=list(), antiloped=list(), raw=list())
+        data = dict(antilope=list(), antiloper=list(), antiloped=list(), raw=list())
         simus = dict()
         for xpid,filename in experiments.items():
             simus[xpid] = self.read_simu(os.path.join(workdir, filename)).loc[{'time':dates}]
@@ -796,7 +819,9 @@ class Evaluation(object):
 #                import pdb
 #                pdb.set_trace()
 #                toto = ratio.sel({'lat':nearest(ratio.lat, lat), 'lon':nearest(ratio.lon, lon)})
-            alti = tmp.alti.data.max()
+            alti = tmp.alti.data.max()  # Altitude du poste
+            lat = tmp.lat.data.max()  # Latitude du poste
+            lon = tmp.lon.data.max()  # Longitude du poste
             t2 = time.time()
             print(f'Reading obs informations took {(t2-t1)*1000.}ms')
             if len(obs[~np.isnan(obs)]) >= 100:  # Filter stations with too few observations
@@ -804,6 +829,7 @@ class Evaluation(object):
                 #obs = obs[:10]
                 data['antilope'].append(antilope.sel({'lat':nearest(antilope.lat, lat), 'lon':nearest(antilope.lon, lon)}).rr.data)
                 data['antiloped'].append(antiloped.sel({'lat':nearest(antiloped.lat, lat), 'lon':nearest(antiloped.lon, lon)}).rr.data)
+                data['antiloper'].append(antiloper.sel({'lat':nearest(antiloper.lat, lat), 'lon':nearest(antiloper.lon, lon)}).rr.data)
                 t3 = time.time()
                 print(f'Reading antilope informations took {(t3-t2)*1000.}ms')
                 data['raw'].append(raw.sel({'lat':nearest(raw.lat, lat), 'lon':nearest(raw.lon, lon)}).rr.data)
@@ -818,15 +844,17 @@ class Evaluation(object):
                         data[xpid].append(simus[xpid].sel({'num_poste':num_poste}).rr.data)
 #                    t5 = time.time()
 #                    print(f'Reading simulation {xpid} took {(t5-t4)*1000.}ms')
+                self.temporal_plot(dates, obs, num_poste, lat, lon, alti, antilope=data['antilope'][-1])
+                #self.temporal_plot(dates, obs, num_poste, lat, lon, alti, raw=data['raw'][-1], antilope=data['antilope'][-1])
                 #self.temporal_plot(dates, data['LH0'][-1], obs, num_poste, raw=data['raw'][-1], antilope=data['antilope'][-1], simu2=data['LD0'][-1])
                 #self.temporal_plot(dates, data['LDML'][-1], obs, num_poste, raw=data['raw'][-1], antilope=data['antilope'][-1], simu2=data['LDM'][-1])
                 #self.temporal_plot(dates, data['LDMLD'][-1], obs, num_poste, alti, raw=data['raw'][-1], antilope=data['antilope'][-1])
                 #if num_poste == 73194401:
-                if num_poste == 5001400:
-                    self.temporal_plot(dates, 'LDM5D2', data['LDM5D2'][-1], obs, num_poste, alti, raw=data['raw'][-1], antilope=data['antilope'][-1])
+#                if num_poste == 5001400:
+#                    self.temporal_plot(dates, 'LDM5D2', data['LDM5D2'][-1], obs, num_poste, alti, raw=data['raw'][-1], antilope=data['antilope'][-1])
                 t6 = time.time()
                 #print(f'Temporal plot took {(t6-t5)*1000.}ms')
-                idx=10
+                #idx=10
                 #self.plot_assimilation(data['raw'][-1][:idx], data['LD0'][-1][:idx], data['antilope'][-1][:idx], 'LD0', num_poste, np.datetime_as_string(dates.data[:idx], unit='D'))
 
 #                if num_poste == 74134400:
@@ -840,7 +868,12 @@ class Evaluation(object):
                     for score_name, score in scores[product].items():
                         if score_name.startswith('brier'):
                             threshold = float(score_name.split('_')[-1])
-                            score.append(getattr(self, 'brier')(data[product][-1][~np.isnan(obs)], obs[~np.isnan(obs)], threshold=threshold))
+                            if product == 'antilope':
+                                score.append(getattr(self, 'brier')(data[product][-1][~np.isnan(obs)], obs[~np.isnan(obs)], Ne=1, threshold=threshold))
+                            elif product in ['antiloped', 'antiloper']:
+                                score.append(getattr(self, 'brier')(data[product][-1][~np.isnan(obs)], obs[~np.isnan(obs)], Ne=3, threshold=threshold))
+                            else:
+                                score.append(getattr(self, 'brier')(data[product][-1][~np.isnan(obs)], obs[~np.isnan(obs)], threshold=threshold))
                         else:
                             score.append(getattr(self, score_name)(data[product][-1][~np.isnan(obs)], obs[~np.isnan(obs)]))
                     t7 = time.time()
@@ -856,7 +889,8 @@ class Evaluation(object):
         # TODO : optimiser le calcul des scores !
 
         self.data['antilope'] = (('num_poste', 'date'), data['antilope'])
-        self.data['antiloped'] = (('num_poste', 'date'), data['antiloped'])
+        self.data['antiloper'] = (('num_poste', 'date', 'pseudo_member'), data['antiloper'])
+        self.data['antiloped'] = (('num_poste', 'date', 'pseudo_member'), data['antiloped'])
         self.data['raw'] = (('num_poste', 'date', 'member'), data['raw'])
         for xpid in experiments.keys():
             self.data[xpid] = (('num_poste', 'date', 'member'), data[xpid])
@@ -884,7 +918,8 @@ class Evaluation(object):
                 # TODO : vérifier les données (virer les dates où obs=nan,...)
                 self.ROC(self.data[product].data.reshape(-1, 16), self.data.obs.data.flatten(), product, ax, threshold=threshold)
             self.ROC(self.data['antilope'].data.flatten(), self.data.obs.data.flatten(), 'antilope', ax, threshold=threshold)
-            self.ROC(self.data['antiloped'].data.flatten(), self.data.obs.data.flatten(), 'antiloped', ax, threshold=threshold)
+            self.ROC(self.data['antiloper'].data.reshape(-1, 3), self.data.obs.data.flatten(), 'antiloper', ax, Ne=3, threshold=threshold)
+            self.ROC(self.data['antiloped'].data.reshape(-1, 3), self.data.obs.data.flatten(), 'antiloped', ax, Ne=3, threshold=threshold)
             ax.set_xlim([0, 0.5])
             ax.set_ylim([0.5, 1])
             ax.set_xlabel('False alarm rate')
@@ -1019,31 +1054,27 @@ class Evaluation(object):
 
         return (mpatches.Patch(color=color), label)
 
-    def read_observation_error(self, xpid):
+    def read_observation_error(self):
+        self.obs_error = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask/alp", "Observation_error.nc"))  # To test a new estimation
 
-        filename_map = dict(
-            LD0       = 'XP00_assimilation_quotidienne_sans_masque_sans_localisation/observation_error_2021120106_2022050106_daily_alp.nc',
-            LDD2      = 'XP20_assimilation_quotidienne_avec_debiaisage2/observation_error_2021120106_2022050106_daily_alp.nc',
-            LDM5D2    = 'XP15_assimilation_quotidienne_avec_masque5_et_debiaisage2/observation_error_2021120106_2022050106_daily_alp.nc',
-            LHM5D2    = 'XP16_assimilation_horaire_avec_masque5_et_debiaisage2/observation_error_2021120106_2022050106_hourly_alp.nc',
-            LDM5      = 'XP17_assimilation_quotidienne_avec_masque5/observation_error_2021120106_2022050106_hourly_alp.nc',
-            LDM5D2L5  = 'XP18_assimilation_quotidienne_avec_masque5_et_debiaisage2_et_localisation5/observation_error_2021120106_2022050106_daily_alp.nc',  # WARNING : erreur_obs * 10
-            LHM5D2L5  = 'XP19_assimilation_horaire_avec_masque5_debiaisage2_localisation5/observation_error_2021120106_2022050106_hourly_alp.nc',
-        )
-        filename = os.path.join(workdir, filename_map[xpid])
-        self.obs_error = xr.open_dataset(filename)
+    def read_ratio(self):
+        self.ratio = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask/alp", "Estimated_ratio.nc"))  # To test a new estimation
 
-
-    def temporal_plot(self, time, xpid, simu, obs, num_poste, alti, raw=None, antilope=None, simu2=None):
+    def temporal_plot(self, time, obs, num_poste, lat, lon, alti, raw=None, antilope=None, xpid=None, simu=None, simu2=None):
         # TODO : add flexibility in the number and oreder of simulations (use dict !)
 
         if self.lpn is None:
             self.lpn = self.read_lpn()
 
         if self.obs_error is None:
-            self.read_observation_error(xpid)
+            self.read_observation_error()
+        #error = self.obs_error.loc[{'num_poste':num_poste, 'time':time}].erreur_obs.data
+        error = self.obs_error.sel({'lat':nearest(self.obs_error.lat, lat), 'lon':nearest(self.obs_error.lon, lon)}).error.data
 
-        error = self.obs_error.loc[{'num_poste':num_poste, 'time':time}].erreur_obs.data
+        if self.ratio is None:
+            self.read_ratio()
+        ratio = self.ratio.ratio.sel({'lat':nearest(self.ratio.lat, lat), 'lon':nearest(self.ratio.lon, lon)}).data
+
         lpn = self.lpn.loc[self.lpn['num_poste']==num_poste]
         diff_alti_lpn = lpn.LPNX - alti
 
@@ -1052,7 +1083,8 @@ class Evaluation(object):
         ref, = plt.plot(time, obs, marker='.', linestyle='', color='k')
         self.labels.append((ref, 'Nivometeo reference'))
         positions = mpl.dates.date2num(time)
-        self.add_label(plt.violinplot(np.transpose(simu), positions=positions), xpid_label[xpid])
+        if simu is not None:
+            self.add_label(plt.violinplot(np.transpose(simu), positions=positions), xpid_label[xpid])
         if raw is not None:
             #add_label(plt.violinplot(np.transpose(raw), positions=positions), 'Raw ensemble', color='sandybrown')
             #add_label(plt.violinplot(np.transpose(raw), positions=positions), 'Raw ensemble')
@@ -1060,8 +1092,12 @@ class Evaluation(object):
         #add_label(plt.violinplot(np.transpose(simu), positions=positions), 'Hourly assimilation', color='limegreen')
         if antilope is not None:
             #antpe, = plt.plot(time, antilope, marker='+', linestyle='', color='red')
-            antpe = plt.errorbar(positions, antilope, yerr=error, fmt="+", color='red')
+            #antpe = plt.errorbar(positions, antilope, yerr=error+0.263*antilope, fmt="+", color='red', alpha=1)
+            antpe = plt.errorbar(positions, antilope, yerr=0.263*antilope*error, fmt="+", color='red', alpha=1)
             self.labels.append((antpe, 'Antilope'))
+            #antped = plt.errorbar(positions, antilope/ratio, yerr=error+0.263*antilope/ratio, fmt="+", color='blue', alpha=0.5)
+            antped = plt.errorbar(positions, antilope/ratio, yerr=0.263*error*antilope/ratio, fmt="+", color='blue', alpha=0.5)
+            self.labels.append((antped, 'Antilope debiaisé'))
         if simu2 is not None:
             #add_label(plt.violinplot(np.transpose(simu2), positions=positions), 'Daily assimilation', color='skyblue')
             self.add_label(plt.violinplot(np.transpose(simu2), positions=positions), 'Daily assimilation')
@@ -1069,14 +1105,15 @@ class Evaluation(object):
         ax.set_ylabel('24 hour precipitation (mm)')
         ax.legend(*zip(*self.labels), fontsize=14)
         ax.axhline(y=0, linewidth=1, color='k')
-        rrmax = int(np.ceil(max([np.nanmax(obs), np.nanmax(simu), np.nanmax(raw), np.nanmax(antilope)])))+10
+        #rrmax = int(np.ceil(max([np.nanmax(obs), np.nanmax(simu), np.nanmax(raw), np.nanmax(antilope)])))+10
+        rrmax = int(np.ceil(max([np.nanmax(obs), np.nanmax(antilope)])))+10
         for rr in range(10, rrmax, 10):
             ax.axhline(y=rr, linewidth=0.1, color='k', linestyle='dotted')
         ax.set_ylim(-rrmax, rrmax)
 
         # make a plot with different y-axis using second axis object
         ax2=ax.twinx()
-        ax2.plot(lpn.date, diff_alti_lpn, color="blue", marker="*", linestyle='')
+        ax2.plot(lpn.date, diff_alti_lpn, color="k", marker="*", linestyle='')
         ax2.set_ylabel("Difference between LPN max and station elevation (m)", color="blue", fontsize=14)
 
         fig.savefig(f'{savedir}/{num_poste}_{xpid}.pdf', formatout='pdf',  bbox_inches='tight')
