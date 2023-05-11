@@ -23,6 +23,10 @@ import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 import matplotlib.animation as animation
+import seaborn as sns
+import cmocean
+import palettable
+
 
 #plt.rcParams["figure.figsize"] = [7.50, 3.50]
 plt.rcParams["figure.autolayout"] = True
@@ -66,14 +70,18 @@ onlypostes = [73306403]
 #            38253400, 73173400, 38548400, 73227400]  # Random draw of stations to use for evaluation
 
 #draw=random.sample(range(1, 64), 32)
-blacklist = [38253400,  4019404, 73318400, 73004400, 74063405, 38006400,
-            38186400, 73040400, 74056416, 38527400,  6120400,  5064403,
-            73322401,  5001400, 38020400, 73034400, 73232400, 38548400,
-             5133400, 73257400,  5098402,  5079400, 73307400,  4073400,
-             4006400, 73227400, 74134400, 74136400, 73054401, 73024400,
-             5114402,  5085403]
+#blacklist = [38253400,  4019404, 73318400, 73004400, 74063405, 38006400,
+#            38186400, 73040400, 74056416, 38527400,  6120400,  5064403,
+#            73322401,  5001400, 38020400, 73034400, 73232400, 38548400,
+#             5133400, 73257400,  5098402,  5079400, 73307400,  4073400,
+#             4006400, 73227400, 74134400, 74136400, 73054401, 73024400,
+#             5114402,  5085403]
 
-d0 = 0.2
+blacklist = [1373001, 1189001]
+
+d0 = 0.2  # Portée horizontale
+#h0 = 2000  # Portée altitudinale
+h0 = None
 c0 = 2
 max_dist = 0.5
 
@@ -240,7 +248,7 @@ def add_scores(scores, ax, mycmap=None, vmin=None, vmax=None):
     scores_domain["marker"] = scores_domain.apply(set_marker, axis=1)  # axis=1 makes sure that function is applied to each row
     for marker, info in scores_domain.groupby('marker'):
         #onlypostes = set(info.index) - set(blacklist)
-        onlypostes = info.index
+        onlypostes = [poste for poste in info.index if poste not in blacklist]
         info = info[info.index.isin(onlypostes)]
         if mycmap is None:
             #sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=450, edgecolors='black', linewidth=3, alpha=1)
@@ -334,7 +342,7 @@ def plot(antilope, datebegin, dateend, categories=True, biascorrection=False):
 
     if biascorrection:
         #filename = os.path.join('/home/vernaym/These/DATA/mask', 'Estimated_ratio.nc')
-        filename = os.path.join('/home/vernaym/workdir/ASSIMILATION/mask/alp', 'Estimated_ratio_alp_0.2_2.nc')  # Mask test
+        filename = os.path.join('/home/vernaym/workdir/ASSIMILATION/mask/alp', 'Estimated_ratio.nc')  # Mask test
         ratio = xr.open_dataset(filename)
         #ratio.lat.data = ratio.lat.data+0.005  # TODO : comprendre et resoudre le probleme de decallage des coordonnees
         ratio = ratio.where((ratio.lon>=lonmin) & (ratio.lon<=lonmax) & (ratio.lat<=latmax) & (ratio.lat>latmin-0.01), drop=True)  # # >=44.1 ne fonctionne pas pour ANTILOPEQ (np.where(antilope.lat==44.1) renvoie une liste vide...)
@@ -588,6 +596,10 @@ def ratio_estimation(field, model=None, moving_window=25):
 #        lons = [np.round(lon,2) for lon in np.arange(lonmin,lonmax,0.01)]
 #        field = field.sel({'lat':lats, 'lon':lons})
 
+    mnt = xr.open_dataset(os.path.join("/home/vernaym/QGIS/MNT", "DEM_ALPES_WGS84_250m_bilinear.nc"))
+    mnt = mnt.interp(lat=field.lat, lon=field.lon)
+    #mnt = mnt.where((mnt['lat']>=latmin) & (mnt['lat']<=latmax) & (mnt['lon']>=lonmin) & (mnt['lon']<=lonmax), drop=True)
+
     rawdata = field.rr_cumul.data/334  # 334 is the number of days over wich the field cumul is made : we want a mean daily (24h) error
     tmp = uniform_filter(rawdata, size=moving_window)
     smoothed = to_xarray(tmp, field)
@@ -624,7 +636,7 @@ def ratio_estimation(field, model=None, moving_window=25):
 
     # TODO : trouver un moyen de rendre l'estimation indépendante de l'ordre de traitement
     #onlypostes = set(scores.index) - set(blacklist)
-    onlypostes = scores.index
+    onlypostes = [poste for poste in scores.index if poste not in blacklist]
     rr = list()
     ww = list()
     weights = list()
@@ -639,6 +651,8 @@ def ratio_estimation(field, model=None, moving_window=25):
             dist = np.sqrt((lats-scores.loc[poste,'lats'])**2+(lons-scores.loc[poste, 'lons'])**2)  # Euclidian horizontal distance
             idx, idy = np.where(dist==np.min(dist))
             ref_cumul = field.rr_cumul.data[idx[0],idy[0]]
+            ref_elevation = mnt.Band1.data[idx[0],idy[0]]  # TODO : utiliser plutot l'altitude réelle du poste ?
+            elevation_dist = mnt.Band1.data - ref_elevation
             if model is not None:
                 model_cumul = model.rr_cumul.data[idx[0],idy[0]]  # Cumul du modele au point d'évaluation
                 ratio_modele = model.rr_cumul.data/model_cumul  # Ratio entre chaque point du domain et le point d'évaluation
@@ -671,7 +685,12 @@ def ratio_estimation(field, model=None, moving_window=25):
 #            w = np.exp(-(dist/d0)**2)*np.exp(-np.abs(cumul_dist)/(ref_cumul/(ratio*c0))**2)
 #            w = np.exp(-(dist/d0)**2)*np.exp(-np.abs(cumul_dist)/(ref_cumul/(ratio*c0)))
             #w = np.exp(-(dist/d0))*np.exp(-np.abs(cumul_dist)/(ref_cumul/(ratio*c0)))
-            w = np.exp(-(dist/d0))
+            if h0 is not None:
+                w = np.exp(-(dist/d0))*np.exp(-(np.abs(elevation_dist)/h0))
+            else:
+                w = np.exp(-(dist/d0))
+                #w = np.exp(-(dist**2/d0))
+
             weights.append(w)
             # To take into account the increasing difference of cumuls with the distance
 #            ratios.append(field.rr_cumul.data/(ref_cumul/ratio+(field.rr_cumul.data-ref_cumul/ratio)*np.exp(-(dist/d0))))
@@ -768,15 +787,28 @@ def ratio_estimation(field, model=None, moving_window=25):
     #######
     scores = scores.loc[(scores.lats>=latmin) & (scores.lats<=latmax) & (scores.lons>=lonmin) & (scores.lons<=lonmax)]
     #scores = scores.loc[used_scores]  # TODO : voir pourquoi ca ne marche plus après update de la version de pandas
+    rationame = f'Estimated_ratio_{domain}_{d0}_{h0}' if h0 is not None else f'Estimated_ratio_{domain}_{d0}'
+    errorname = f'Observation_error_{d0}_{h0}_{domain}' if h0 is not None else f'Observation_error_{d0}_{domain}'
     if domain == 'alp':
-        plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}_{c0}', vmin=0.2, vmax=1.8, cmap=plt.cm.coolwarm, scores=scores)
-        #plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}_{c0}_free_scale', vmin=0, vmax=2, cmap=plt.cm.coolwarm, scores=scores)
-        #plot_and_save(observation_error, f'Observation_error_{d0}_{c0}_{domain}', vmin=-12, vmax=12, cmap=plt.cm.coolwarm, scores=scores)
-        plot_and_save(np.abs(observation_error), f'Observation_error_{d0}_{c0}_{domain}', vmin=0, vmax=12, cmap=plt.cm.viridis, scores=scores)
+        #plot_and_save(ratio_field, rationame, vmin=0.2, vmax=1.8, cmap=plt.cm.coolwarm, scores=scores)
+        # From https://qiita.com/tsukada_cs/items/d282f27f4024d00d7022 :
+        #plot_and_save(ratio_field, rationame, vmin=0.2, vmax=1.8, cmap=palettable.cmocean.diverging.Balance_10.mpl_colormap, scores=scores)
+        #plot_and_save(ratio_field, rationame, vmin=0.2, vmax=1.8, cmap=palettable.scientific.diverging.Vik_20.mpl_colormap, scores=scores)
+        #plot_and_save(ratio_field, rationame, vmin=0.2, vmax=1.8, cmap=palettable.lightbartlein.diverging.BlueDarkRed18_5.mpl_colormap, scores=scores)
+        #plot_and_save(ratio_field, rationame, vmin=0.2, vmax=1.8, cmap=palettable.colorbrewer.diverging.RdBu_11_r.mpl_colormap, scores=scores)
+        plot_and_save(ratio_field, rationame, vmin=0.2, vmax=1.8, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, scores=scores)  # Albane's choice !
+        #plot_and_save(ratio_field, rationame, vmin=0.2, vmax=1.8, cmap=sns.color_palette("vlag", as_cmap=True), scores=scores)
+        #plot_and_save(ratio_field, rationame, vmin=0.2, vmax=1.8, cmap=cmocean.cm.balance, scores=scores)
+        #plot_and_save(ratio_field, rationame, vmin=0.2, vmax=1.8, cmap=plt.cm.seismic, scores=scores)
+        #plot_and_save(ratio_field, rationame, vmin=0.2, vmax=1.8, cmap=plt.cm.bwr, scores=scores)
+        #plot_and_save(ratio_field, rationame, vmin=0.2, vmax=1.8, cmap=plt.cm.RdBu_r, scores=scores)
+        #plot_and_save(ratio_field, rationame + '_free_scale', vmin=0, vmax=2, cmap=plt.cm.coolwarm, scores=scores)
+        #plot_and_save(observation_error, errorname, vmin=-12, vmax=12, cmap=plt.cm.coolwarm, scores=scores)
+        plot_and_save(np.abs(observation_error), errorname, vmin=0, vmax=12, cmap=plt.cm.viridis, scores=scores)
     elif domain == 'GrandesRousses':
-        plot_and_save(ratio_field, f'Estimated_ratio_{domain}_{d0}_{c0}', vmin=0.6, vmax=1.4, cmap=plt.cm.coolwarm, scores=scores)
-        #plot_and_save(observation_error, f'Observation_error_{d0}_{c0}_{domain}', vmin=-6, vmax=6, cmap=plt.cm.coolwarm, scores=scores)
-        plot_and_save(np.abs(observation_error), f'Observation_error_{d0}_{c0}_{domain}', vmin=0, vmax=8, cmap=plt.cm.viridis, scores=scores)
+        plot_and_save(ratio_field, rationame, vmin=0.6, vmax=1.4, cmap=plt.cm.coolwarm, scores=scores)
+        #plot_and_save(observation_error, errorname, vmin=-6, vmax=6, cmap=plt.cm.coolwarm, scores=scores)
+        plot_and_save(np.abs(observation_error), erroname, vmin=0, vmax=8, cmap=plt.cm.viridis, scores=scores)
 
 def animation_mask(field):
 
@@ -867,14 +899,15 @@ if __name__ == "__main__":
 
     #model = xr.open_dataset(os.path.join(datadir, 'CUMUL_ASPEAROME001.nc'))
     model = xr.open_dataset(os.path.join(datadir, 'CUMUL_AROME.nc'))
+    # TODO : prendre un cumul sur la même période que ANTILOPE pour éviter de fausser la méthode avec des situations spécifiques
     model = model.where((model.lon>=lonmin) & (model.lon<=lonmax) & (model.lat<=latmax) & (model.lat>latmin-0.01), drop=True)
 
 #    plot(antilope, datebegin, dateend, categories=True, biascorrection=True)
 #    plot(antilope, datebegin, dateend, categories=False, biascorrection=True)
-    plot(antilope, datebegin, dateend, categories=True)
+#    plot(antilope, datebegin, dateend, categories=True)
 #    plot(antilope, datebegin, dateend, categories=False)
 
-#    ratio_estimation(antilope, model=model)
+    ratio_estimation(antilope, model=model)
 #    ratio_estimation(antilope)
 #    KalmanFilter(antilope)
 #    animation_mask(antilope)
