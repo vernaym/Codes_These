@@ -758,15 +758,15 @@ class Evaluation(object):
         #mask = xr.open_dataset(os.path.join(datadir, 'mask', f"Estimated_ratio.nc"))
         self.ratio  = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask/alp", "Estimated_ratio.nc"))  # To test a new estimation
         self.obs_error = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask/alp", "Observation_error.nc"))  # To test a new estimation
-        self.obs_error = self.obs_error.rename({'Observation error (mm)':'error'})
+        #self.obs_error = self.obs_error.rename({'Observation error (mm)':'error'})
         ratio = self.ratio.ratio
         #error = self.obs_error['Observation error (mm)']
         error = self.obs_error.error
         def debiaise(ds):
             return ds / ratio
         def to_ensemble(ds):
-            ds1 = ds + (0. + 0.1 * ds) * error
-            ds2 = ds - (0. + 0.1 * ds) * error
+            ds1 = ds + ds * error
+            ds2 = ds - ds * error
 #            ds1 = ds * (1 + 0.263) + error
 #            ds2 = ds * (1 - 0.263) - error
 #            ds1 = ds + error
@@ -1093,10 +1093,10 @@ class Evaluation(object):
         if antilope is not None:
             #antpe, = plt.plot(time, antilope, marker='+', linestyle='', color='red')
             #antpe = plt.errorbar(positions, antilope, yerr=error+0.263*antilope, fmt="+", color='red', alpha=1)
-            antpe = plt.errorbar(positions, antilope, yerr=0.1*antilope*error, fmt="+", color='red', alpha=1)
+            antpe = plt.errorbar(positions, antilope, yerr=antilope*error, fmt="+", color='red', alpha=1)
             self.labels.append((antpe, 'Antilope'))
             #antped = plt.errorbar(positions, antilope/ratio, yerr=error+0.263*antilope/ratio, fmt="+", color='blue', alpha=0.5)
-            antped = plt.errorbar(positions, antilope/ratio, yerr=0.1*error*antilope/ratio, fmt="+", color='blue', alpha=0.5)
+            antped = plt.errorbar(positions, antilope/ratio, yerr=error*antilope/ratio, fmt="+", color='blue', alpha=0.5)
             self.labels.append((antped, 'Antilope debiaisé'))
         if simu2 is not None:
             #add_label(plt.violinplot(np.transpose(simu2), positions=positions), 'Daily assimilation', color='skyblue')
