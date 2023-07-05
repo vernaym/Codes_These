@@ -16,6 +16,7 @@ import shapefile
 
 import matplotlib
 import matplotlib.pyplot as plt
+from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 
 #plt.rcParams["figure.figsize"] = [7.50, 3.50]
 #plt.rcParams["axes.grid"] = False
@@ -127,6 +128,12 @@ def add_scores(ax):
 #        for idx, label in enumerate(labels):
 #            txt = ax.text(info['lons'].data[idx], info['lats'].data[idx], label)
 
+def add_postes_nivometeo(ax):
+    fic_score = os.path.join('/home/vernaym/These/DATA', 'postes_nivometeo.csv')
+    scores = pd.read_csv(fic_score, sep=';')
+
+    sc = ax.scatter(scores['poste_nivo.lon_dg'], scores['poste_nivo.lat_dg'], marker='o', s=150, color='black', edgecolors='black')
+
 def add_radar_positions(ax):
     radars = dict(
         moucherotte = dict(lat=45.14776, lon=5.63933, alt=1920,name='Moucherotte'),
@@ -187,15 +194,22 @@ def to_xarray(array, field, varname=''):
 
 mnt = xr.open_dataset(os.path.join(datadir, "DEM_ALPES_WGS84_250m_bilinear.nc"))
 mnt=mnt.where((mnt['lat']>=latmin) & (mnt['lat']<=latmax) & (mnt['lon']>=lonmin) & (mnt['lon']<=lonmax), drop=True)
-filename = os.path.join(savedir, f'ReliefAlpes_correlation{d0}.pdf')
+#filename = os.path.join(savedir, f'ReliefAlpes_correlation{d0}.pdf')
+filename = os.path.join(savedir, f'ReliefAlpes_with_nivometeo.pdf')
 
 # Plot elevation
 #if not os.path.exists(filename):
 fig,ax = plt.subplots(figsize=(14,16))
 ax.set_frame_on(False)
 #https://discourse.holoviz.org/t/cannot-remove-grid-for-hv-quadmesh/2211/8
-im = mnt.Band1.plot(ax=ax, cmap=plt.cm.terrain, subplot_kws={'frame_on':False}, linewidth=0, label='Elevation (m)', add_colorbar=False)
+#im = mnt.Band1.plot(ax=ax, cmap=plt.cm.terrain, subplot_kws={'frame_on':False}, linewidth=0, label='Elevation (m)', add_colorbar=False)
+im = mnt.Band1.plot(ax=ax, cmap=plt.cm.terrain, linewidth=0, label='Elevation (m)', add_colorbar=False)
+
+# Add optional features
 add_boundaries(ax)
+add_postes_nivometeo(ax)
+#add_radar_positions(ax)
+
 ax.set_frame_on(False)
 #plot_correlation(ax, mnt)  # To add correlation area
 cb = fig.colorbar(im)
