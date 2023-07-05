@@ -637,7 +637,7 @@ class Assimilation(object):
         #draw[np.where(x<0)] = 0  # x is already a precipitation field with >0 values
         return draw
 
-    def plot_obs(self, field, var='rr', domain=None, correlation_area=False, 3D=False):
+    def plot_obs(self, field, var='rr', domain=None, correlation_area=False, plot3D=False):
 
         if var == 'rr':
             savename = f'{self.date_str}/OBS_{self.date_str}_{domain}.pdf'
@@ -733,7 +733,7 @@ class Assimilation(object):
             fig.savefig(savename, format='pdf')
 
         # Plot 3D ANTILOPE precipitation field
-        if 3D:
+        if plot3D:
             mnt = xr.open_dataset('/home/vernaym/QGIS/MNT/DEM_ALPES_WGS84_250m_bilinear.nc')  # Pour tracer sur toutes les Alpes
             tmp = mnt.interp(lon=self.radar.lon, lat=self.radar.lat, method='nearest')  # Pour interpoller le MNT sur la grille ANTILOPE
             # WARNING :  la commande suivante réduit sensibement le domaine, attention aux comparaisons entre figures (en particulier avec les CUMULS)
@@ -804,7 +804,8 @@ class Assimilation(object):
             elif self.mask in [9]:
                 mask = xr.open_dataset(os.path.join(f"Observation_error.nc"))
                 #parameters['sigma'] =  mask.rr  # Pas de valeur absolue pour le calcul des covariances !
-                parameters['sigma'] =  mask.ratio  # Pas de valeur absolue pour le calcul des covariances !
+                #parameters['sigma'] =  mask.ratio  # Pas de valeur absolue pour le calcul des covariances !
+                parameters['sigma'] =  mask.error
                 #parameters['sigma'] =  (0.261 + 0.263 * parameters['rr'])*np.abs(mask.rr)  # PF
 
 
@@ -1844,7 +1845,8 @@ class EnsembleKalmanFilter(Assimilation):
 
             if self.localisation is None:
                 R, Rstat, Rdyn, ref_field = self.observation_ECM(parameters_loc, date)
-                B = self.background_error_covariance(ensemble_loc)  # Background error covariance matrix
+                #B = self.background_error_covariance(ensemble_loc)  # Background error covariance matrix
+                B, updated_ensemble = self.background_error_covariance_new(ensemble_loc, updated_obs, R)  # Background error covariance matrix
                 Y = parameters_loc.mu.data  # Observation vector. WARNING : Use mu to take debiasing into account !
             else:
                 R, Rstat, Rdyn, updated_obs = self.observation_ECM_new(parameters_loc, date)
@@ -1885,7 +1887,8 @@ class EnsembleKalmanFilter(Assimilation):
     def gridded_analysis(self, date, idd, ensemble, parameters, domain):
 
         if self.localisation is None:
-            B = self.background_error_covariance(ensemble)  # Background error covariance matrix
+            #B = self.background_error_covariance(ensemble)  # Background error covariance matrix
+            B, updated_ensemble = self.background_error_covariance_new(ensemble, updated_obs, R)  # Background error covariance matrix
             R, Rstat, Rdyn, ref_field = self.observation_ECM(parameters, date)
             Y = parameters.mu.data  # Observation vector. WARNING : Use mu to take debiasing into account !
         else:
@@ -2108,7 +2111,10 @@ class ParticleFilter(Assimilation):
             # Select particle indicies in wich rdm falls
             #selected_particles.append(np.searchsorted(cumulated_weights, rdm)+1)
             #selected_particles.append(np.apply_along_axis(lambda a: a.searchsorted(rdm), axis=0, arr=cumulated_weights)+1)
+            t1 = time.time()
             selected_particles.append(int(np.apply_along_axis(lambda a: a.searchsorted(rdm), axis=0, arr=cumulated_weights)))  # add index value (int)
+            t2 = time.time()
+            #print(f'resampling took {(t2-t1)*1000.}ms')
             # Go 1 step forward and start again
             rdm += step
         return selected_particles
@@ -2289,7 +2295,8 @@ class ParticleFilter(Assimilation):
 
         assimilation_points = zip(self.nivometeo.num_poste.data, np.max(self.nivometeo.lat, axis=1).data, np.max(self.nivometeo.lon, axis=1).data)
         for idp, (num_poste, lat, lon) in enumerate(assimilation_points):
-            #print(num_poste)
+            print(num_poste)
+            t1 = time.time()
             lat = nearest(self.radar.lat, lat)  # Latitude of the corresponding antilope pixel
             lon = nearest(self.radar.lon, lon)  # Longitude of the corresponding antilope pixel
             idy = np.where(self.radar.lat.data==lat)[0][0]  # index of the corresponding antilope pixel latitude
@@ -2303,11 +2310,8 @@ class ParticleFilter(Assimilation):
                 localisation_lat = lat
                 localisation_lon = lon
             raw_localized = localized_period.sel({'lat':localisation_lat, 'lon':localisation_lon})
-            if self.frequency == 'hourly':
-                t1 = time.time()
-                raw_localized.compute()  # Load data now
-                t2 = time.time()
-                #print(f'reading "raw_localized" took {(t2-t1)*1000.}ms')
+            #if self.frequency == 'hourly':
+            raw_localized.compute()  # Load data now
 #            obs = obs_date.sel({'lat':lat, 'lon':lon})
             if self.localisation is not None:
                 raw = raw_localized.sel({'time':date, 'lat':lat, 'lon':lon}).rr.data
@@ -2324,7 +2328,12 @@ class ParticleFilter(Assimilation):
             if (np.min(raw_localized) > obs) or (np.max(raw_localized) < obs):
                 self.nb_out_loc[idp] += 1
 
+            t2 = time.time()
+            #print(f'reading data took {(t2-t1)*1000.}ms')
             new, inflation, sigma = self.assimilation(date, raw, raw_localized, parameters, lat, lon, idx, idy, num_poste=num_poste)
+
+            t3 = time.time()
+            #print(f'assimilation took {(t3-t2)*1000.}ms')
 
             self.erreur_obs[idp,idd] = sigma
 
@@ -2340,8 +2349,8 @@ class ParticleFilter(Assimilation):
 
         nb_new_member = 0
         sigma = float(parameters.sigma.data)/2.
-        obs = parameters.rr.data
-        mu = parameters.mu.data
+        obs = parameters.rr.data.compute()
+        mu = parameters.mu.data.compute()
 
         inflation = 0
         # TODO : avec la loi gamma, si mu>0 et max(raw/raw_localized)=0 ==> ne pas entrer dans la boucle (inutile, ce cas spécifique est traité à part)
@@ -2355,6 +2364,7 @@ class ParticleFilter(Assimilation):
             inflation += 1
             sigma = 2*sigma  # TODO : facteur d'inflation à redéfinir
 
+            t1 = time.time()
             # 2.b Weighting
             #-------------
             #weights = self.weighting(raw_localized, parameters.mu.data, sigma, plot_distribution=True)
@@ -2362,11 +2372,15 @@ class ParticleFilter(Assimilation):
             weights = self.weighting(raw_localized, mu, sigma, obs)
             weights = weights / np.sum(weights)
 
+            t2 = time.time()
+            #print(f'weighting took {(t2-t1)*1000.}ms')
             # 3. Resampling
             #--------------
             # ECC is the order of members indicies (from 0 to 15 !) sorted by increasing precipitation
             selection_locale = self.resample(weights, self.Ne)  # Idicies of selected particles from the "super-ensemble"
             nb_new_member = len(np.unique(selection_locale))
+            t3 = time.time()
+            #print(f'resampling took {(t3-t2)*1000.}ms')
 
         if inflation == 9:
             # Generally occurs with gamma likelyhood when obs > 0 and all members == 0
@@ -2381,6 +2395,9 @@ class ParticleFilter(Assimilation):
             new[:] = np.nan
             for idx, value in enumerate(tmp):
                 new[ecc[idx]] = value
+
+            t4 = time.time()
+            #print(f'ECC took {(t4-t3)*1000.}ms')
 
         # TODO : virer la ligne suivante qui court-circuite l'ECC
         #new = raw_localized[selection_locale]
