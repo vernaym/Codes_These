@@ -1833,20 +1833,19 @@ class EnsembleKalmanFilter(Assimilation):
             if covariance:
                 sel_lat = np.round(np.arange(nearest_lat-self.max_dist, nearest_lat+self.max_dist, 0.01), 2)
                 sel_lon = np.round(np.arange(nearest_lon-self.max_dist, nearest_lon+self.max_dist, 0.01), 2)
-                ensemble_loc = parameters.sel({'lat':np.intersect1d(sel_lat, ensemble.lat), 'lon':np.intersect1d(sel_lon, ensemble.lon)})
+                ensemble_loc = ensemble.sel({'lat':np.intersect1d(sel_lat, ensemble.lat), 'lon':np.intersect1d(sel_lon, ensemble.lon)})
                 parameters_loc = parameters.sel({'lat':np.intersect1d(sel_lat, parameters.lat), 'lon':np.intersect1d(sel_lon, parameters.lon)})
                 # Compute inter-distances
                 coords=[(lon,lat) for lat in parameters_loc.lat for lon in parameters_loc.lon]
                 self.pond = self.codistances(coords)
             else:  # Verrue !
-                ensemble_loc = parameters.sel({'lat':np.round([nearest_lat], 2), 'lon':np.round([nearest_lon], 2)})
+                ensemble_loc = ensemble.sel({'lat':np.round([nearest_lat], 2), 'lon':np.round([nearest_lon], 2)})
                 parameters_loc = parameters.sel({'lat':np.round([nearest_lat], 2), 'lon':np.round([nearest_lon], 2)})
                 self.pond = scipy.sparse.eye(1)
 
             if self.localisation is None:
                 R, Rstat, Rdyn, ref_field = self.observation_ECM(parameters_loc, date)
-                #B = self.background_error_covariance(ensemble_loc)  # Background error covariance matrix
-                B, updated_ensemble = self.background_error_covariance_new(ensemble_loc, updated_obs, R)  # Background error covariance matrix
+                B = self.background_error_covariance(ensemble_loc)  # Background error covariance matrix
                 Y = parameters_loc.mu.data  # Observation vector. WARNING : Use mu to take debiasing into account !
             else:
                 R, Rstat, Rdyn, updated_obs = self.observation_ECM_new(parameters_loc, date)
