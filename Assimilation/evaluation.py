@@ -238,11 +238,14 @@ algo = dict(
         #KD26         = 'EnsembleKalmanFilter/XP26/EnKF_2021120106_2022050106_daily_alp.nc',
 #        KD27         = 'EnsembleKalmanFilter/XP27/EnKF_2021120106_2022050106_daily_alp.nc',
 #        KD29          = 'EnsembleKalmanFilter/XP29/EnKF_2021120106_2022050106_daily_alp.nc',
-        KD30          = 'EnsembleKalmanFilter/XP30/EnKF_2021120106_2022050106_daily_alp.nc',
-        RS00          = 'RandomSampling/XP00/Random_Sampling_2021120106_2022050106_daily_alp.nc',
-        RS01          = 'RandomSampling/XP01/Random_Sampling_2021120106_2022050106_daily_alp.nc',
-        RS02          = 'RandomSampling/XP02/Random_Sampling_2021120106_2022050106_daily_alp.nc',
-        RS03          = 'RandomSampling/XP03/Random_Sampling_2021120106_2022050106_daily_alp.nc',
+#        KD30          = 'EnsembleKalmanFilter/XP30/EnKF_2021120106_2022050106_daily_alp.nc',
+#        RS00          = 'RandomSampling/XP00/Random_Sampling_2021120106_2022050106_daily_alp.nc',
+#        RS01          = 'RandomSampling/XP01/Random_Sampling_2021120106_2022050106_daily_alp.nc',
+#        RS02          = 'RandomSampling/XP02/Random_Sampling_2021120106_2022050106_daily_alp.nc',
+#        RS03          = 'RandomSampling/XP03/Random_Sampling_2021120106_2022050106_daily_alp.nc',
+        PF29          = 'XP29_mask_relief_AROME/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
+        KD33          = 'EnsembleKalmanFilter/XP33/EnKF_2021120106_2022050106_daily_alp.nc',
+        RS04          = 'RandomSampling/XP04/Random_Sampling_2021120106_2022050106_daily_alp.nc'
     )
 
 
@@ -339,12 +342,15 @@ xpid_label = dict(
         KD29          = 'EnKF, debiaisage=0.2_2, Rstat from eval, Bstat',
         KD30          = 'Daily analysis with Ensemble Kalman Filter and debiaising',
         KD31          = 'Daily analysis with Ensemble Kalman Filter and no debiasing',  # Idem KD30 mais sans débiaisage
+        KD33          = 'Ensemble Kalman Filter analysis',
+        PF29          = 'Particle Filter analysis',
         #LDM9D3        = 'PF, mask9=estimated_ratio, debiaisage3=0.1_2',
         LDM9D3        = 'PF, d0=0.1, c0=2',
         RS00          = 'Random Sampling',
         RS01          = 'Random Sampling without debiasing',
         RS02          = 'Random Sampling with increased dynamic dispersion',
         RS03          = 'Random Sampling with increased dynamic dispersion + static',
+        RS04          = 'Random draw within the observation PDF',
     )
 
 def nearest(array, value):
@@ -793,7 +799,8 @@ class Evaluation(object):
         self.data['member'] = np.arange(1,17)
         self.data['pseudo_member'] = np.arange(1,4)
 
-        data = dict(antilope=list(), antiloper=list(), antiloped=list(), raw=list())
+        #data = dict(antilope=list(), antiloper=list(), antiloped=list(), raw=list())
+        data = dict(antilope=list(), raw=list())
         simus = dict()
         for xpid,filename in experiments.items():
             simus[xpid] = self.read_simu(os.path.join(workdir, filename)).loc[{'time':dates}]
@@ -828,8 +835,10 @@ class Evaluation(object):
                 liste_postes = np.append(liste_postes, num_poste)
                 #obs = obs[:10]
                 data['antilope'].append(antilope.sel({'lat':nearest(antilope.lat, lat), 'lon':nearest(antilope.lon, lon)}).rr.data)
-                data['antiloped'].append(antiloped.sel({'lat':nearest(antiloped.lat, lat), 'lon':nearest(antiloped.lon, lon)}).rr.data)
-                data['antiloper'].append(antiloper.sel({'lat':nearest(antiloper.lat, lat), 'lon':nearest(antiloper.lon, lon)}).rr.data)
+                if 'antiloped' in data.keys():
+                    data['antiloped'].append(antiloped.sel({'lat':nearest(antiloped.lat, lat), 'lon':nearest(antiloped.lon, lon)}).rr.data)
+                if 'antiloper' in data.keys():
+                    data['antiloper'].append(antiloper.sel({'lat':nearest(antiloper.lat, lat), 'lon':nearest(antiloper.lon, lon)}).rr.data)
                 t3 = time.time()
                 print(f'Reading antilope informations took {(t3-t2)*1000.}ms')
                 data['raw'].append(raw.sel({'lat':nearest(raw.lat, lat), 'lon':nearest(raw.lon, lon)}).rr.data)
@@ -889,8 +898,10 @@ class Evaluation(object):
         # TODO : optimiser le calcul des scores !
 
         self.data['antilope'] = (('num_poste', 'date'), data['antilope'])
-        self.data['antiloper'] = (('num_poste', 'date', 'pseudo_member'), data['antiloper'])
-        self.data['antiloped'] = (('num_poste', 'date', 'pseudo_member'), data['antiloped'])
+        if 'antiloper' in data.keys():
+            self.data['antiloper'] = (('num_poste', 'date', 'pseudo_member'), data['antiloper'])
+        if 'antiloped' in data.keys():
+            self.data['antiloped'] = (('num_poste', 'date', 'pseudo_member'), data['antiloped'])
         self.data['raw'] = (('num_poste', 'date', 'member'), data['raw'])
         for xpid in experiments.keys():
             self.data[xpid] = (('num_poste', 'date', 'member'), data[xpid])
@@ -918,8 +929,10 @@ class Evaluation(object):
                 # TODO : vérifier les données (virer les dates où obs=nan,...)
                 self.ROC(self.data[product].data.reshape(-1, 16), self.data.obs.data.flatten(), product, ax, threshold=threshold)
             self.ROC(self.data['antilope'].data.flatten(), self.data.obs.data.flatten(), 'antilope', ax, threshold=threshold)
-            self.ROC(self.data['antiloper'].data.reshape(-1, 3), self.data.obs.data.flatten(), 'antiloper', ax, Ne=3, threshold=threshold)
-            self.ROC(self.data['antiloped'].data.reshape(-1, 3), self.data.obs.data.flatten(), 'antiloped', ax, Ne=3, threshold=threshold)
+            if 'antiloper' in data.keys():
+                self.ROC(self.data['antiloper'].data.reshape(-1, 3), self.data.obs.data.flatten(), 'antiloper', ax, Ne=3, threshold=threshold)
+            if 'antiloped' in data.keys():
+                self.ROC(self.data['antiloped'].data.reshape(-1, 3), self.data.obs.data.flatten(), 'antiloped', ax, Ne=3, threshold=threshold)
             ax.set_xlim([0, 0.5])
             ax.set_ylim([0.5, 1])
             ax.set_xlabel('False alarm rate')
