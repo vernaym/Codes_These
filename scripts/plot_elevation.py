@@ -13,6 +13,7 @@ from scipy import sparse
 from scipy.spatial import cKDTree
 from scipy.sparse import csr_matrix
 import shapefile
+from metpy.interpolate import cross_section
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -191,9 +192,40 @@ def to_xarray(array, field, varname=''):
     )
     return output
 
+def plot_vertical_cross_section(mnt):
+    """
+    Using MetPy : https://unidata.github.io/MetPy/latest/examples/cross_section.html
+    """
+    z = mnt.elevation
+    #start = (45.14776, 5.63933)  # Radar Moucherotte
+    start = (45.14776, 5.635)  # Radar Moucherotte
+    #end   = (45.13761, 6.21261)
+    end   = (45.12142, 6.21189)  # Passe par le Pic Blanc : 45 km
+    end   = (45.11872, 6.27540)  # Passe par le Pic Blanc : 50 km
+    mnt = mnt.metpy.parse_cf(varname='elevation').squeeze()
+    cross = cross_section(mnt, start, end)
+    x = np.linspace(0, 50, len(cross.data))  # TODO : compute lenght
+    y = cross.data + 250
+    fig, ax = plt.subplots()
+    ax.fill_between(x, y, color='k')
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    plt.xticks(fontsize=20)
+    plt.yticks(fontsize=20)
+    ax.set_xlabel('Distance to the radar (km)', fontsize=26)
+    ax.set_ylabel('Elevation (m)', fontsize=26)
+    plt.show()
+
+
+
+
 
 mnt = xr.open_dataset(os.path.join(datadir, "DEM_ALPES_WGS84_250m_bilinear.nc"))
 mnt=mnt.where((mnt['lat']>=latmin) & (mnt['lat']<=latmax) & (mnt['lon']>=lonmin) & (mnt['lon']<=lonmax), drop=True)
+mnt = mnt.rename({'Band1':'elevation'})
+
+plot_vertical_cross_section(mnt)
+
 #filename = os.path.join(savedir, f'ReliefAlpes_correlation{d0}.pdf')
 filename = os.path.join(savedir, f'ReliefAlpes_with_nivometeo.pdf')
 
@@ -202,8 +234,8 @@ filename = os.path.join(savedir, f'ReliefAlpes_with_nivometeo.pdf')
 fig,ax = plt.subplots(figsize=(14,16))
 ax.set_frame_on(False)
 #https://discourse.holoviz.org/t/cannot-remove-grid-for-hv-quadmesh/2211/8
-#im = mnt.Band1.plot(ax=ax, cmap=plt.cm.terrain, subplot_kws={'frame_on':False}, linewidth=0, label='Elevation (m)', add_colorbar=False)
-im = mnt.Band1.plot(ax=ax, cmap=plt.cm.terrain, linewidth=0, label='Elevation (m)', add_colorbar=False)
+#im = mnt.elevation.plot(ax=ax, cmap=plt.cm.terrain, subplot_kws={'frame_on':False}, linewidth=0, label='Elevation (m)', add_colorbar=False)
+im = mnt.elevation.plot(ax=ax, cmap=plt.cm.terrain, linewidth=0, label='Elevation (m)', add_colorbar=False)
 
 # Add optional features
 add_boundaries(ax)
