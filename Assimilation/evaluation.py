@@ -243,9 +243,11 @@ algo = dict(
 #        RS01          = 'RandomSampling/XP01/Random_Sampling_2021120106_2022050106_daily_alp.nc',
 #        RS02          = 'RandomSampling/XP02/Random_Sampling_2021120106_2022050106_daily_alp.nc',
 #        RS03          = 'RandomSampling/XP03/Random_Sampling_2021120106_2022050106_daily_alp.nc',
+        # IUGG experiments :
         PF29          = 'XP29_mask_relief_AROME/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
         KD33          = 'EnsembleKalmanFilter/XP33/EnKF_2021120106_2022050106_daily_alp.nc',
         RS04          = 'RandomSampling/XP04/Random_Sampling_2021120106_2022050106_daily_alp.nc'
+        ####################
     )
 
 
@@ -269,10 +271,10 @@ if not os.path.exists(savedir):
     os.makedirs(savedir)
 
 xpid_label = dict(
-        antilope      = 'ANTILOPE Raw',
+        antilope      = 'ANTILOPE',
         antiloper     = 'ANTILOPE + error',
         antiloped     = 'ANTILOPE + error + debiaisage',
-        raw           = 'Raw PEAROME ensemble',
+        raw           = 'Raw PE-AROME ensemble',
         GD0           = 'Global daily analysis',
         LD0           = 'Daily analysis with PF',
         LD0G          = 'Daily analysis with gamma likelyhood and no option',
@@ -350,7 +352,7 @@ xpid_label = dict(
         RS01          = 'Random Sampling without debiasing',
         RS02          = 'Random Sampling with increased dynamic dispersion',
         RS03          = 'Random Sampling with increased dynamic dispersion + static',
-        RS04          = 'Random draw within the observation PDF',
+        RS04          = 'Random Sampling',
     )
 
 def nearest(array, value):
@@ -919,7 +921,7 @@ class Evaluation(object):
         ax1.set_ylim([0, 1])
         ax1.set_xlabel('Forecast Probability')
         ax1.set_ylabel('Observed Frequency')
-        ax1.legend(fontsize=14)
+        ax1.legend(fontsize=20)
         fig1.savefig(f'{savedir}/reliability_diagram_{self.threshold}.pdf', format='pdf')
 
         for threshold in [0, 1, 10, 20]:
@@ -937,7 +939,7 @@ class Evaluation(object):
             ax.set_ylim([0.5, 1])
             ax.set_xlabel('False alarm rate')
             ax.set_ylabel('Sucess rate')
-            ax.legend(fontsize=14)
+            ax.legend(fontsize=20)
             fig.savefig(f'{savedir}/ROC_threshold_{threshold}mm.pdf', format='pdf')
         t9 = time.time()
         print(f'Ploting ROC curves took {(t9-t8)*1000.}ms')
@@ -994,7 +996,10 @@ class Evaluation(object):
                 for idx, poste in enumerate(self.scores.num_poste.data):
                     if not np.isnan(liste_score[idx]):
                         if not np.isnan(liste_score[idx]):
-                            axis.text(pos, liste_score[idx], str(int(poste)), fontsize=6)
+                            # Plot station numbers :
+                            #axis.text(pos, liste_score[idx], str(int(poste)), fontsize=6)
+                            # Plot only horizontal lines :
+                            axis.plot(pos, liste_score[idx], linestyle='', marker='_', markersize='20', color='k')
                     else:
                         print(f'{score} of product {product} not available for poste {str(int(poste))}')
 
@@ -1045,8 +1050,8 @@ class Evaluation(object):
             for threshold in self.thresholds:
                 brier = np.append(brier, np.mean(self.scores.loc[{'score':f'brier_{threshold}'}][product].data))
             ax.plot(self.thresholds, brier, label=xpid_label[product], linewidth=3)
-        ax.legend(fontsize=22)
-        ax.set_ylabel('Brier Score', fontsize=24)
+        ax.legend(fontsize=40)
+        ax.set_ylabel('Brier Score', fontsize=28)
         ax.set_xlabel('Threshold (mm)', fontsize=24)
         #ax.set_xticklabels(self.thresholds, fontsize=18)
         ax.xaxis.set_tick_params(labelsize=22)
@@ -1116,7 +1121,7 @@ class Evaluation(object):
             self.add_label(plt.violinplot(np.transpose(simu2), positions=positions), 'Daily assimilation')
         ax.set_xlabel('Date')
         ax.set_ylabel('24 hour precipitation (mm)')
-        ax.legend(*zip(*self.labels), fontsize=14)
+        ax.legend(*zip(*self.labels), fontsize=32)
         ax.axhline(y=0, linewidth=1, color='k')
         #rrmax = int(np.ceil(max([np.nanmax(obs), np.nanmax(simu), np.nanmax(raw), np.nanmax(antilope)])))+10
         rrmax = int(np.ceil(max([np.nanmax(obs), np.nanmax(antilope)])))+10
