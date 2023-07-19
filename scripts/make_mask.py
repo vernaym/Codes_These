@@ -31,7 +31,7 @@ import palettable
 #plt.rcParams["figure.figsize"] = [7.50, 3.50]
 plt.rcParams["figure.autolayout"] = True
 
-from pykrige.uk import UniversalKriging
+#from pykrige.uk import UniversalKriging
 
 ##############################################################################################
 ##############################################################################################
@@ -426,7 +426,8 @@ def plot_and_save(field, name, cmap=plt.cm.Greys, vmin=None, vmax=None, scores=N
     else:
         fig, ax = plt.subplots()
     ax = plot_field(fig, ax, field, cmap=cmap, vmin=vmin, vmax=vmax, scores=scores)
-    fig.savefig(os.path.join(savedir, f'{name}.pdf'), format='pdf', layout='tight')
+    #fig.savefig(os.path.join(savedir, f'{name}.pdf'), format='pdf', layout='tight')
+    fig.savefig(os.path.join(savedir, f'{name}.pdf'), format='pdf')
     field.to_netcdf(os.path.join(savedir, f'{name}.nc'))
 
 
@@ -775,6 +776,7 @@ def ratio_estimation(field, model=None, moving_window=25):
     #observation_error.data[pos] = 2*observation_error.data[pos]  # r=1.5 ==> err = 1
     #observation_error = 1+np.abs(smoothratio-1)
     #observation_error = observation_error.rename('Observation error (mm)')
+    # TODO : trouver la formulation optimale de l'erreur d'observation
     observation_error = observation_error.rename('error')
 
     #observation_error = np.abs(ratio_field-1)
@@ -805,7 +807,8 @@ def ratio_estimation(field, model=None, moving_window=25):
         #plot_and_save(ratio_field, rationame, vmin=0.2, vmax=1.8, cmap=plt.cm.RdBu_r, scores=scores)
         #plot_and_save(ratio_field, rationame + '_free_scale', vmin=0, vmax=2, cmap=plt.cm.coolwarm, scores=scores)
         #plot_and_save(observation_error, errorname, vmin=-12, vmax=12, cmap=plt.cm.coolwarm, scores=scores)
-        plot_and_save(np.abs(observation_error), errorname, vmin=0, vmax=12, cmap=plt.cm.viridis, scores=scores)
+        #plot_and_save(np.abs(observation_error), errorname, vmin=0, vmax=12, cmap=plt.cm.viridis, scores=scores)
+        plot_and_save(np.abs(observation_error), errorname, vmin=0, vmax=15, cmap=plt.cm.Reds, scores=scores)
     elif domain == 'GrandesRousses':
         plot_and_save(ratio_field, rationame, vmin=0.6, vmax=1.4, cmap=plt.cm.coolwarm, scores=scores)
         #plot_and_save(observation_error, errorname, vmin=-6, vmax=6, cmap=plt.cm.coolwarm, scores=scores)
