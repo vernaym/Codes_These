@@ -244,10 +244,13 @@ algo = dict(
 #        RS02          = 'RandomSampling/XP02/Random_Sampling_2021120106_2022050106_daily_alp.nc',
 #        RS03          = 'RandomSampling/XP03/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         # IUGG experiments :
-        PF29          = 'XP29_mask_relief_AROME/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
-        KD33          = 'EnsembleKalmanFilter/XP33/EnKF_2021120106_2022050106_daily_alp.nc',
-        RS04          = 'RandomSampling/XP04/Random_Sampling_2021120106_2022050106_daily_alp.nc'
+#        PF29          = 'XP29_mask_relief_AROME/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
+#        KD33          = 'EnsembleKalmanFilter/XP33/EnKF_2021120106_2022050106_daily_alp.nc',
+#        RS04          = 'RandomSampling/XP04/Random_Sampling_2021120106_2022050106_daily_alp.nc'
         ####################
+        PF30          = 'XP30/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
+        KD34          = 'EnsembleKalmanFilter/XP34/EnKF_2021120106_2022050106_daily_alp.nc',
+        RS05          = 'RandomSampling/XP05/Random_Sampling_2021120106_2022050106_daily_alp.nc'
     )
 
 
@@ -345,7 +348,9 @@ xpid_label = dict(
         KD30          = 'Daily analysis with Ensemble Kalman Filter and debiaising',
         KD31          = 'Daily analysis with Ensemble Kalman Filter and no debiasing',  # Idem KD30 mais sans débiaisage
         KD33          = 'Ensemble Kalman Filter analysis',
+        KD34          = 'Ensemble Kalman Filter analysis',
         PF29          = 'Particle Filter analysis',
+        PF30          = 'Particle Filter analysis',
         #LDM9D3        = 'PF, mask9=estimated_ratio, debiaisage3=0.1_2',
         LDM9D3        = 'PF, d0=0.1, c0=2',
         RS00          = 'Random Sampling',
@@ -353,6 +358,7 @@ xpid_label = dict(
         RS02          = 'Random Sampling with increased dynamic dispersion',
         RS03          = 'Random Sampling with increased dynamic dispersion + static',
         RS04          = 'Random Sampling',
+        RS05          = 'Random Sampling',
     )
 
 def nearest(array, value):
@@ -1034,10 +1040,13 @@ class Evaluation(object):
             ax.legend(*zip(*labels), fontsize=18)
 
             if score.startswith('brier'):
-                fig.savefig(f'{savedir}/{score}.pdf', formatout='pdf',  bbox_inches='tight')
-                fig2.savefig(f'{savedir}/brier_skill_score_{threshold}.pdf', formatout='pdf',  bbox_inches='tight')
+                #fig.savefig(f'{savedir}/{score}.pdf', formatout='pdf',  bbox_inches='tight')
+                fig.savefig(f'{savedir}/{score}.pdf', format='pdf',  bbox_inches='tight')
+                #fig2.savefig(f'{savedir}/brier_skill_score_{threshold}.pdf', formatout='pdf',  bbox_inches='tight')
+                fig2.savefig(f'{savedir}/brier_skill_score_{threshold}.pdf', format='pdf',  bbox_inches='tight')
             else:
-                fig.savefig(f'{savedir}/{score}.pdf', formatout='pdf',  bbox_inches='tight')
+                #fig.savefig(f'{savedir}/{score}.pdf', formatout='pdf',  bbox_inches='tight')
+                fig.savefig(f'{savedir}/{score}.pdf', format='pdf',  bbox_inches='tight')
             plt.close('all')
 
         self.plot_brier_evolution()
@@ -1134,7 +1143,8 @@ class Evaluation(object):
         ax2.plot(lpn.date, diff_alti_lpn, color="k", marker="*", linestyle='')
         ax2.set_ylabel("Difference between LPN max and station elevation (m)", color="blue", fontsize=14)
 
-        fig.savefig(f'{savedir}/{num_poste}_{xpid}.pdf', formatout='pdf',  bbox_inches='tight')
+        #fig.savefig(f'{savedir}/{num_poste}_{xpid}.pdf', formatout='pdf',  bbox_inches='tight')
+        fig.savefig(f'{savedir}/{num_poste}_{xpid}.pdf', format='pdf',  bbox_inches='tight')
         plt.close()
         #plt.show()
 
@@ -1151,7 +1161,8 @@ class Evaluation(object):
         plt.plot(obs, marker='_', markersize=30, markeredgewidth=3, color='red')
         if ref is not None:
             plt.plot(ref, marker='_', markersize=30, markeredgewidth=3, color='dark')
-        fig.savefig(f'{savedir}/assim_{xpid}_{num_poste}_{date}.pdf', formatout='pdf',  bbox_inches='tight')
+        #fig.savefig(f'{savedir}/assim_{xpid}_{num_poste}_{date}.pdf', formatout='pdf',  bbox_inches='tight')
+        fig.savefig(f'{savedir}/assim_{xpid}_{num_poste}_{date}.pdf', format='pdf',  bbox_inches='tight')
 
         #sns.violinplot(data=data, y='24 hour precipitation (mm)', split=True, hue='Simulation')
 
