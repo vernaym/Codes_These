@@ -79,7 +79,7 @@ onlypostes = [73306403]
 
 blacklist = [1373001, 1189001]
 
-d0 = 0.2  # Portée horizontale
+d0 = 0.3  # Portée horizontale
 #h0 = 2000  # Portée altitudinale
 h0 = None
 c0 = 2
