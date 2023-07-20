@@ -199,12 +199,17 @@ def plot_vertical_cross_section(mnt):
     z = mnt.elevation
     #start = (45.14776, 5.63933)  # Radar Moucherotte
     start = (45.14776, 5.635)  # Radar Moucherotte
+    start = (46.42572, 6.10032)  # Radar La Dole
+    start = (46.02947300021354, 7.1429769396152825)  # Orsières (Suisse)
     #end   = (45.13761, 6.21261)
-    end   = (45.12142, 6.21189)  # Passe par le Pic Blanc : 45 km
+    #end   = (45.12142, 6.21189)  # Passe par le Pic Blanc : 45 km
     end   = (45.11872, 6.27540)  # Passe par le Pic Blanc : 50 km
+    end   = (45.750494, 6.9680)  # From La Dole : passe par le Mont Blanc (100 km)
+    end   = (45.70184, 6.676548)  # Depuis Orsières : traverse le Mont-Blanc  (50 km)
     mnt = mnt.metpy.parse_cf(varname='elevation').squeeze()
     cross = cross_section(mnt, start, end)
-    x = np.linspace(0, 50, len(cross.data))  # TODO : compute lenght
+    x = np.linspace(0, 50, len(cross.data))
+    #x = np.linspace(0, 100, len(cross.data))
     y = cross.data + 250
     fig, ax = plt.subplots()
     ax.fill_between(x, y, color='k')
