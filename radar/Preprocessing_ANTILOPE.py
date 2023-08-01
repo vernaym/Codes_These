@@ -73,17 +73,21 @@ class AntilopePreprocessing(object):
             if 'time' in antilope.coords:
                 antilope = antilope.where((antilope.time>np.datetime64(self.datebegin)) & (antilope.time<=np.datetime64(self.dateend)), drop=True).sum('time')  # Security ?
 
+            # TODO : séparer les méthodes plus clairement pour pouvoir les appliquer indépendament les unes des autres
+            # TODO : commencer par la correction dynamique puis appliquer le débiaisage (facteur à modifier pour prendre en compte le biais moyen après correction ?)
+
             # 1. Static de-biasing :
-            #mask = xr.open_dataset(os.path.join(workdir, f"Estimated_ratio.nc"))  # TODO : datadir à définir
-            mask = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask/alp", f"Estimated_ratio.nc"))  # !!!!! TODO : TMP !!!!!
+            antilope = self.debiasing(antilope)
+            mask = xr.open_dataset(os.path.join(workdir, f"Estimated_ratio.nc"))
+            #mask = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask/alp", f"Estimated_ratio.nc"))  # !!!!! TODO : TMP !!!!!
 
             antilope["ratio"] = mask.ratio  # Fill missing point with NaNs
             antilope["rr_debiaise"] = (antilope.rr/antilope.ratio).fillna(antilope.rr)  # Fill NaN values with the original ANTILOPE value
 
             # 2. Dynamic correction (localisation)
             #antilope['error'] = xr.open_dataset(os.path.join(datadir, 'Observation_error.nc'))
-            #error = xr.open_dataarray(os.path.join(workdir, 'Observation_error.nc'))
-            error = xr.open_dataarray(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask/alp", 'Observation_error.nc'))
+            error = xr.open_dataarray(os.path.join(workdir, 'Observation_error.nc'))
+            #error = xr.open_dataarray(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask/alp", 'Observation_error.nc'))
             std = error.data
             antilope['error'] = np.abs(error)
             codist = os.path.join(workdir, f'codistance_max_dist_{max_dist:.2f}_{domain}.npz')
@@ -97,18 +101,20 @@ class AntilopePreprocessing(object):
             pond = pond.dot(diags(np.exp(-std).flatten(), 0))
             obs = antilope.rr_debiaise.sel(({'lat':np.intersect1d(error.lat.data, antilope.lat.data), 'lon':np.intersect1d(error.lon.data, antilope.lon.data)})).data.flatten()
 
-#            new = self.dynamic_correction(obs, pond, replacement_strategy='toward_mean')  # Update obs
-#            antilope['obs'] = xr.DataArray(
-#                    data   = new.reshape((len(mask.lat), len(mask.lon))),
-#                    dims   = ["lat", "lon"],
-#                    coords = dict(lon=mask.lon, lat=mask.lat)
-#                )
-#            antilope['obs'] = antilope['obs'].fillna(antilope.rr)
+            new = self.dynamic_correction(obs, pond, replacement_strategy='toward_mean')  # Update obs
+            antilope['obs'] = xr.DataArray(
+                    data   = new.reshape((len(mask.lat), len(mask.lon))),
+                    dims   = ["lat", "lon"],
+                    coords = dict(lon=mask.lon, lat=mask.lat)
+                )
+            antilope['obs'] = antilope['obs'].fillna(antilope.rr)
 
-            antilope = antilope.rename({'rr_debiaise':'analysis'})
+#            antilope = antilope.rename({'rr_debiaise':'analysis'})
 
             # 3. Nivometeo Assimilation
-            #antilope = self.nivometeo_assimilation(antilope, pond)
+            antilope = self.nivometeo_assimilation(antilope, pond)
+
+
             #antilope.to_netcdf(self.filename)  # WARNING : overwrite the initial file !!  TMP !
 
 
