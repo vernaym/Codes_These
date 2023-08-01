@@ -79,7 +79,7 @@ onlypostes = [73306403]
 
 blacklist = [1373001, 1189001]
 
-d0 = 0.3  # Portée horizontale
+d0 = 0.2  # Portée horizontale
 #h0 = 2000  # Portée altitudinale
 h0 = None
 c0 = 2
@@ -762,17 +762,21 @@ def ratio_estimation(field, model=None, moving_window=25):
 
     #observation_error = (np.abs(ratio_field-1)*5 + 5*np.abs(diff))**2
     #observation_error = ratio_field-1  # r=06 ==> err = -1.4
-    # To take into account spatial correlation we must keep the sign of the observtaion error
+
+    # OLD : To take into account spatial correlation we must keep the sign of the observtaion error
     # The following values are based on the rmse vs ratio linear regression of the ANTILOPE evaluation
     # (figure rmse_vs_ratio_scatterplot_yyyymmdd_YYYYmmddhh_10.pdf)
+    # The error is constructed to be >=1mm/24h to account for representativity errors. TODO : justifier la valeur de l'erreur constante
+    # It ensures that the observation error is always >1 mm/24h and it is thus possible to define
+    # the observation confidence as the inverse of the observation error.
     observation_error = ratio_field - 1
     neg = np.where(observation_error.data<0)
-    #observation_error.data[neg] = 21.391*observation_error.data[neg]  # r=0.5 ==> err=-10.7  # 2018/2019
-    observation_error.data[neg] = 20.137*observation_error.data[neg]  # r=0.5 ==> err=-10  # 2021/2022
-    #observation_error.data[neg] = 4*observation_error.data[neg]  # r=0.5 ==> err=-2
     pos= np.where(observation_error.data>=0)
+    #observation_error.data[neg] = 21.391*observation_error.data[neg]  # r=0.5 ==> err=-10.7  # 2018/2019
+    observation_error.data[neg] = 1+20.137*observation_error.data[neg]  # r=0.5 ==> err=-10  # 2021/2022
+    #observation_error.data[neg] = 4*observation_error.data[neg]  # r=0.5 ==> err=-2
     #observation_error.data[pos] = 15.148*observation_error.data[pos]  # r=1.5 ==> err=7.574  " 2018/2019
-    observation_error.data[pos] = 16.787*observation_error.data[pos]  # r=1.5 ==> err=8.574  " 2021/2022
+    observation_error.data[pos] = 1+16.787*observation_error.data[pos]  # r=1.5 ==> err=8.574  " 2021/2022
     #observation_error.data[pos] = 2*observation_error.data[pos]  # r=1.5 ==> err = 1
     #observation_error = 1+np.abs(smoothratio-1)
     #observation_error = observation_error.rename('Observation error (mm)')
@@ -810,11 +814,11 @@ def ratio_estimation(field, model=None, moving_window=25):
         #plot_and_save(np.abs(observation_error), errorname, vmin=0, vmax=12, cmap=plt.cm.viridis, scores=scores)
         #plot_and_save(np.abs(observation_error), errorname, vmin=0, vmax=15, cmap=plt.cm.Reds, scores=scores)
         #plot_and_save(np.abs(observation_error), errorname, vmin=0, vmax=15, cmap=plt.cm.Greys, scores=scores)
-        plot_and_save(np.abs(observation_error), errorname, vmin=0, vmax=16, cmap=plt.cm.YlOrBr, scores=scores)
+        plot_and_save(np.abs(observation_error), errorname, vmin=1, vmax=16, cmap=plt.cm.YlOrBr, scores=scores)
     elif domain == 'GrandesRousses':
         plot_and_save(ratio_field, rationame, vmin=0.6, vmax=1.4, cmap=plt.cm.coolwarm, scores=scores)
         #plot_and_save(observation_error, errorname, vmin=-6, vmax=6, cmap=plt.cm.coolwarm, scores=scores)
-        plot_and_save(np.abs(observation_error), erroname, vmin=0, vmax=8, cmap=plt.cm.viridis, scores=scores)
+        plot_and_save(np.abs(observation_error), erroname, vmin=1, vmax=8, cmap=plt.cm.viridis, scores=scores)
 
 def animation_mask(field):
 
