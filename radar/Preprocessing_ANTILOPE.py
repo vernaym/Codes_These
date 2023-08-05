@@ -48,6 +48,48 @@ domain = 'alp'
 ld = 0.05
 max_dist = ld*3
 
+
+def dynamic_correction(field, pond, weight=None, super_ensemble=None):
+    """
+    * field : 2D (n*k) array containing the field to modify
+    * pond  : (nk*nk) sparse ponderation matrix (each line gives the correlation between the corresponding pixel
+              and every other pixel of the domain)
+    """
+
+    field[np.isnan(field)] = 0.0
+    initial_field = field.flatten()
+    X = diags(field.flatten(), 0)
+
+    # 1. Calcul de la moyenne pondérée par la distance ET l'erreur statique
+    if weight is None:
+        pond.data[np.isnan(pond.data)] = 0.0
+        weight = pond.sum(axis=1).getA1()  # The sum of the weights (axis=1 <==> sum over rows)
+
+    mean = pond.dot(X).sum(axis=1).getA1()  # getA1 transforms the 1*N matrix object into a 1D np.array
+    mean = mean / weight
+    pixel_weight = pond.diagonal()  # = exp(-erreur_statique) pour l'obs et =likelyhood du pixel pour les membres de l'ensemble
+    sums = pond.sum(axis=1).A1
+    nb_nonzero = (pond != 0).sum(0).getA1()  # Count non zero elements of each row
+    meanweight = sums / nb_nonzero
+    newfield = (initial_field * pixel_weight + mean * meanweight) / (pixel_weight + meanweight)
+    #sd = get_std(X, newfield, pond, weight=weight, super_ensemble=super_ensemble)
+
+    return newfield
+
+def codistances(coords):
+    """
+    Solution pour le calcul des inter-distances trouvée sur : https://stackoverflow.com/questions/35296935/python-calculate-lots-of-distances-quickly
+    """
+    tree = cKDTree(coords)
+    dist = tree.sparse_distance_matrix(tree, max_distance=max_dist, p=2, output_type='coo_matrix')
+    dist = csr_matrix(dist)
+    #TODO : utiliser une gaussienne plutot qu'une exponentielle décroissante
+    dist[dist.nonzero()] = -dist[dist.nonzero()]/ld
+    np.exp(dist.data, out=dist.data )
+
+    return dist
+
+
 class AntilopePreprocessing(object):
 
     def __init__(self, date, domain, filename):
@@ -94,14 +136,14 @@ class AntilopePreprocessing(object):
             if not os.path.exists(codist):
                 # Compute inter-distances
                 coords=[(lon,lat) for lat in error.lat.data for lon in error.lon.data]
-                pond = self.codistances(coords)
+                pond = codistances(coords)
                 scipy.sparse.save_npz(codist, pond, compressed=False)  # TODO comprendre pourquoi ca ne marche pas pour éviter de recalculer les codistances à chaque fois
             else:
                 pond = scipy.sparse.load_npz(codist)
             pond = pond.dot(diags(np.exp(-std).flatten(), 0))
             obs = antilope.rr_debiaise.sel(({'lat':np.intersect1d(error.lat.data, antilope.lat.data), 'lon':np.intersect1d(error.lon.data, antilope.lon.data)})).data.flatten()
 
-            new = self.dynamic_correction(obs, pond, replacement_strategy='toward_mean')  # Update obs
+            new = dynamic_correction(obs, pond)  # Update obs
             antilope['obs'] = xr.DataArray(
                     data   = new.reshape((len(mask.lat), len(mask.lon))),
                     dims   = ["lat", "lon"],
@@ -119,39 +161,6 @@ class AntilopePreprocessing(object):
 
 
         return antilope
-
-    def dynamic_correction(self, field, pond, weight=None, super_ensemble=None, replacement_strategy='keep'):
-
-        field[np.isnan(field)] = 0.0
-        initial_field = field.flatten()
-        X = diags(field.flatten(), 0)
-
-        # 1. Calcul de la moyenne pondérée par la distance ET l'erreur statique
-        if weight is None:
-            pond.data[np.isnan(pond.data)] = 0.0
-            weight = pond.sum(axis=1).getA1()  # The sum of the weights (axis=1 <==> sum over rows)
-
-        mean = pond.dot(X).sum(axis=1).getA1()  # getA1 transforms the 1*N matrix object into a 1D np.array
-        mean = mean / weight
-        pixel_weight = pond.diagonal()  # = exp(-erreur_statique) pour l'obs et =likelyhood du pixel pour les membres de l'ensemble
-        sums = pond.sum(axis=1).A1
-        nb_nonzero = (pond != 0).sum(0).getA1()  # Count non zero elements of each row
-        meanweight = sums / nb_nonzero
-        newfield = (initial_field * pixel_weight + mean * meanweight) / (pixel_weight + meanweight)
-        #sd = self.get_std(X, newfield, pond, weight=weight, super_ensemble=super_ensemble)
-        return newfield
-
-    def codistances(self, coords):
-        """
-        Solution pour le calcul des inter-distances trouvée sur : https://stackoverflow.com/questions/35296935/python-calculate-lots-of-distances-quickly
-        """
-        tree = cKDTree(coords)
-        dist = tree.sparse_distance_matrix(tree, max_distance=max_dist, p=2, output_type='coo_matrix')
-        dist = csr_matrix(dist)
-        #TODO : utiliser une gaussienne plutot qu'une exponentielle décroissante
-        dist[dist.nonzero()] = -dist[dist.nonzero()]/ld
-        np.exp(dist.data, out=dist.data )
-        return dist
 
     def get_nivometeo(self):
         fic_score = os.path.join(datadir, f'obs_nivometeo_daily_RR_{self.datebegin.ymd}_{self.dateend.ymd}.csv')
