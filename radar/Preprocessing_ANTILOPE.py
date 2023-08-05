@@ -67,23 +67,28 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None):
 
     mean = pond.dot(X).sum(axis=1).getA1()  # getA1 transforms the 1*N matrix object into a 1D np.array
     mean = mean / weight
-    pixel_weight = pond.diagonal()  # = exp(-erreur_statique) pour l'obs et =likelyhood du pixel pour les membres de l'ensemble
+    pixel_weight = pond.diagonal()  # = "exp(-erreur_statique)" pour l'obs et "likelyhood" du pixel pour les membres de l'ensemble
     sums = pond.sum(axis=1).A1
     nb_nonzero = (pond != 0).sum(0).getA1()  # Count non zero elements of each row
     meanweight = sums / nb_nonzero
-    newfield = (initial_field * pixel_weight + mean * meanweight) / (pixel_weight + meanweight)
+    # pixel_weight is in ]0, 1]
+    #newfield = (initial_field * pixel_weight + mean * meanweight) / (pixel_weight + meanweight)
+    # Values of pixels with low errors must be preserved : pixel_weight=1 ==> newfield=initial_field
+    newfield = initial_field * pixel_weight + mean * (1 - pixel_weight)
     #sd = get_std(X, newfield, pond, weight=weight, super_ensemble=super_ensemble)
 
     return newfield
 
-def codistances(coords):
+def codistances(coords, ld=0.05):
     """
     Solution pour le calcul des inter-distances trouvée sur : https://stackoverflow.com/questions/35296935/python-calculate-lots-of-distances-quickly
     """
+
+    max_dist = ld*3
     tree = cKDTree(coords)
     dist = tree.sparse_distance_matrix(tree, max_distance=max_dist, p=2, output_type='coo_matrix')
     dist = csr_matrix(dist)
-    #TODO : utiliser une gaussienne plutot qu'une exponentielle décroissante
+    #TODO : utiliser une gaussienne plutot qu'une exponentielle décroissante ?
     dist[dist.nonzero()] = -dist[dist.nonzero()]/ld
     np.exp(dist.data, out=dist.data )
 
@@ -140,7 +145,7 @@ class AntilopePreprocessing(object):
                 scipy.sparse.save_npz(codist, pond, compressed=False)  # TODO comprendre pourquoi ca ne marche pas pour éviter de recalculer les codistances à chaque fois
             else:
                 pond = scipy.sparse.load_npz(codist)
-            pond = pond.dot(diags(np.exp(-std).flatten(), 0))
+            pond = pond.dot(diags(np.exp(-(std-1)).flatten(), 0))  # std is in [1, inf[
             obs = antilope.rr_debiaise.sel(({'lat':np.intersect1d(error.lat.data, antilope.lat.data), 'lon':np.intersect1d(error.lon.data, antilope.lon.data)})).data.flatten()
 
             new = dynamic_correction(obs, pond)  # Update obs
