@@ -42,8 +42,10 @@ def random_field():
     # TODO  draw random values
     field = np.random.randint(0, 20, size=(Np, Np))
     field = uniform_filter(field, size=5)
+    #field = np.zeros((Np,Np))
 
     # Add gaussian structure centered in the top left corner of the domain
+    #k1d = signal.gaussian(2*Np, std=15).reshape(2*Np, 1)
     k1d = signal.gaussian(2*Np, std=10).reshape(2*Np, 1)
     kernel = np.outer(k1d, k1d)
     #A = np.zeros((Np, Np))
@@ -51,8 +53,12 @@ def random_field():
     A = kernel[Np:, Np:]
 
     field = field + np.flip(A, axis=0)*15
+    #field = field + np.flip(A, axis=0)*20
+    #perturb = np.random.randint(0, 20, size=(Np, Np))/10.-1  # perturbations between -1 and 1
+    #perturb = uniform_filter(perturb, size=5)
+    #field = field * (1+perturb)
 
-    return field
+    return np.flip(field, axis=0)
 
 def perturbed_field(field, ratio):
     perturb = np.random.randint(0, 100, size=(Np, Np))/10. - 5  # generation of perturbations between -5 and 5
@@ -60,16 +66,19 @@ def perturbed_field(field, ratio):
     #perturb[perturb==0] = 1
     #perturb = np.random.randint(1, 100, size=(Np, Np))/10.
     perturb = uniform_filter(perturb, size=10)
+    perturb = np.flip(perturb, axis=0)
 
-    plot_field(np.flip(perturb, axis=0), 'perturb.pdf', label='Ratio', cmap='RdBu_r', vmin=-1, vmax=1, add_circle=False)
+    plot_field(perturb, 'perturb.pdf', label='Ratio', cmap='RdBu_r', vmin=-1, vmax=1, add_circle=False)
 
     new_ratio = ratio + np.abs(1-ratio)*perturb
     new_ratio[new_ratio<0] = -new_ratio[new_ratio<0]
     new_ratio[new_ratio==0] = ratio[new_ratio==0]
 
-    plot_field(np.flip(new_ratio, axis=0), 'new_ratio.pdf', label='ratio', cmap='RdBu_r', vmin=0, vmax=2, add_circle=False)
+    plot_field(new_ratio, 'new_ratio.pdf', label='ratio', cmap='RdBu_r', vmin=0, vmax=2, add_circle=False)
 
-    return field*new_ratio
+    perturbed_field =field*new_ratio
+    perturbed_field[perturbed_field<3] = 0
+    return perturbed_field
 
 
 def simple_error_field():
@@ -121,14 +130,15 @@ datadir = f'/home/vernaym/workdir/ASSIMILATION/mask/MontBlanc'
 
 field = random_field()
 #TODO : Ajouter une strucure spatiale pour voir si elle est conservée ou gommée par la méthode
-plot_field(np.flip(field, axis=0), f'real_field.pdf', vmin=0, vmax=30, add_circle=False)
+plot_field(field, f'real_field.pdf', vmin=0, vmax=30, add_circle=False)
 #field = diagonal_field()
 #field = gaussian_field()
 #ratio, error = simple_error_field()
-ratio = xr.open_dataarray(os.path.join(datadir, 'Estimated_ratio_MontBlanc.nc')).data
-error = xr.open_dataarray(os.path.join(datadir, 'Observation_error_MontBlanc.nc')).data
+ratio = np.flip(xr.open_dataarray(os.path.join(datadir, 'Estimated_ratio_MontBlanc.nc')).data, axis=0)
+plot_field(ratio, f'ratio.pdf', vmin=0.2, vmax=1.8, add_circle=False)
+error = np.flip(xr.open_dataarray(os.path.join(datadir, 'Observation_error_MontBlanc.nc')).data, axis=0)
 field = perturbed_field(field, ratio)
-plot_field(np.flip(field, axis=0), f'fake_antilope_field.pdf', vmin=0, vmax=30, add_circle=False)
+plot_field(field, f'fake_antilope_field.pdf', vmin=0, vmax=30, add_circle=False)
 
 # Compute spatial correlations
 coords = [(lon/100., lat/100.) for lat in range(Np) for lon in range(Np)]
@@ -149,17 +159,21 @@ db = field/ratio
 dyn = Preprocessing_ANTILOPE.dynamic_correction(field, pond)
 dyn = dyn.reshape((Np, Np))
 
-# Dynamic correction + debiasing
+# De-biasing + Dynamic correction
 dd = Preprocessing_ANTILOPE.dynamic_correction(field/ratio, pond)
 dd = dd.reshape((Np, Np))
+
+#Dynamic correction + de-biasing
+qq = dyn/ratio
 
 #plt.imshow(new)
 #plt.show()
 savedir = '/home/vernaym/These/figures/illustration'
 
-plot_field(np.flip(dyn, axis=0), f'dynamic_correction_ld{ld}.pdf', vmin=0, vmax=30)
-plot_field(np.flip(db, axis=0), f'debiasing_ld{ld}.pdf', vmin=0, vmax=30)
-plot_field(np.flip(dd, axis=0), f'debiasing+dynamic_correction_ld{ld}.pdf', vmin=0, vmax=30)
+plot_field(dyn, f'dynamic_correction_ld{ld}.pdf', vmin=0, vmax=30)
+plot_field(db, f'debiasing_ld{ld}.pdf', vmin=0, vmax=30)
+plot_field(dd, f'debiasing+dynamic_correction_ld{ld}.pdf', vmin=0, vmax=30)
+plot_field(qq, f'dynamic_correction_ld{ld}+debiasing.pdf', vmin=0, vmax=30)
 
 
 
