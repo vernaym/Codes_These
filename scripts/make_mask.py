@@ -36,7 +36,10 @@ plt.rcParams["figure.autolayout"] = True
 ##############################################################################################
 ##############################################################################################
 
-domain = sys.argv[1]
+if len(sys.argv) > 1:
+    domain = sys.argv[1]
+else:
+    domain = 'alp'
 
 datadir = '/home/vernaym/These/DATA'
 #savedir = '/home/vernaym/workdir/ASSIMILATION/mask'
@@ -145,10 +148,11 @@ extract_dom = dict(
         ),
     )
 
-latmin = extract_dom[domain]['latmin']
-lonmin = extract_dom[domain]['lonmin']
-latmax = extract_dom[domain]['latmax']
-lonmax = extract_dom[domain]['lonmax']
+if domain is not None:
+    latmin = extract_dom[domain]['latmin']
+    lonmin = extract_dom[domain]['lonmin']
+    latmax = extract_dom[domain]['latmax']
+    lonmax = extract_dom[domain]['lonmax']
 
 def get_date(a_string):
     try:
@@ -428,8 +432,7 @@ def plot_and_save(field, name, cmap=plt.cm.Greys, vmin=None, vmax=None, scores=N
     ax = plot_field(fig, ax, field, cmap=cmap, vmin=vmin, vmax=vmax, scores=scores)
     #fig.savefig(os.path.join(savedir, f'{name}.pdf'), format='pdf', layout='tight')
     fig.savefig(os.path.join(savedir, f'{name}.pdf'), format='pdf')
-    field.to_netcdf(os.path.join(savedir, f'{name}.nc'))
-
+    field.to_netcdf(os.path.join(savedir, f'{name}.nc'))  # WARNING : does not work if nctoolkit is installed
 
 def plot_field(fig, ax, field, cmap=plt.cm.Greys, vmin=None, vmax=None, scores=None, colorbar=True):
 
@@ -773,7 +776,7 @@ def ratio_estimation(field, model=None, moving_window=25):
     neg = np.where(observation_error.data<0)
     pos= np.where(observation_error.data>=0)
     #observation_error.data[neg] = 21.391*observation_error.data[neg]  # r=0.5 ==> err=-10.7  # 2018/2019
-    observation_error.data[neg] = 1+20.137*observation_error.data[neg]  # r=0.5 ==> err=-10  # 2021/2022
+    observation_error.data[neg] = 20.137*observation_error.data[neg]-1  # <0
     #observation_error.data[neg] = 4*observation_error.data[neg]  # r=0.5 ==> err=-2
     #observation_error.data[pos] = 15.148*observation_error.data[pos]  # r=1.5 ==> err=7.574  " 2018/2019
     observation_error.data[pos] = 1+16.787*observation_error.data[pos]  # r=1.5 ==> err=8.574  " 2021/2022
