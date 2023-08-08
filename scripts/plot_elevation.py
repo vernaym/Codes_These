@@ -192,22 +192,27 @@ def to_xarray(array, field, varname=''):
     )
     return output
 
-def plot_vertical_cross_section(mnt):
+def extract_cross_section(field, varname='elevation'):
     """
     Using MetPy : https://unidata.github.io/MetPy/latest/examples/cross_section.html
     """
-    z = mnt.elevation
+    # Definition of the cross section coordinates :
     #start = (45.14776, 5.63933)  # Radar Moucherotte
     start = (45.14776, 5.635)  # Radar Moucherotte
-    start = (46.42572, 6.10032)  # Radar La Dole
-    start = (46.02947300021354, 7.1429769396152825)  # Orsières (Suisse)
+    #start = (46.42572, 6.10032)  # Radar La Dole
+    #start = (46.02947300021354, 7.1429769396152825)  # Orsières (Suisse)
     #end   = (45.13761, 6.21261)
     #end   = (45.12142, 6.21189)  # Passe par le Pic Blanc : 45 km
     end   = (45.11872, 6.27540)  # Passe par le Pic Blanc : 50 km
-    end   = (45.750494, 6.9680)  # From La Dole : passe par le Mont Blanc (100 km)
-    end   = (45.70184, 6.676548)  # Depuis Orsières : traverse le Mont-Blanc  (50 km)
-    mnt = mnt.metpy.parse_cf(varname='elevation').squeeze()
-    cross = cross_section(mnt, start, end)
+    #end   = (45.750494, 6.9680)  # From La Dole : passe par le Mont Blanc (100 km)
+    #end   = (45.70184, 6.676548)  # Depuis Orsières : traverse le Mont-Blanc  (50 km)
+
+    field = field.metpy.parse_cf(varname=varname).squeeze()
+    cross = cross_section(field, start, end)
+
+    return cross
+
+def plot_vertical_cross_section(cross):
     x = np.linspace(0, 50, len(cross.data))
     #x = np.linspace(0, 100, len(cross.data))
     y = cross.data + 250
@@ -215,21 +220,38 @@ def plot_vertical_cross_section(mnt):
     ax.fill_between(x, y, color='k')
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
-    plt.xticks(fontsize=20)
-    plt.yticks(fontsize=20)
+    ax.tick_params(axis='both', which='major', labelsize=20)
     ax.set_xlabel('Distance to the radar (km)', fontsize=26)
     ax.set_ylabel('Elevation (m)', fontsize=26)
-    plt.show()
-
-
-
+    #plt.show()
+    fig.savefig(os.path.join(savedir, 'Vertical_cross_section.pdf'), format='pdf')
+    plt.close()
 
 
 mnt = xr.open_dataset(os.path.join(datadir, "DEM_ALPES_WGS84_250m_bilinear.nc"))
 mnt=mnt.where((mnt['lat']>=latmin) & (mnt['lat']<=latmax) & (mnt['lon']>=lonmin) & (mnt['lon']<=lonmax), drop=True)
 mnt = mnt.rename({'Band1':'elevation'})
 
-plot_vertical_cross_section(mnt)
+cross = extract_cross_section(mnt)
+plot_vertical_cross_section(cross)
+
+ratio = xr.open_dataset(os.path.join('/home/vernaym/workdir/ASSIMILATION/mask/alp', 'Estimated_ratio.nc'))
+cross = extract_cross_section(ratio, varname='ratio')
+plt.imshow(np.atleast_2d(cross), cmap=plt.get_cmap('RdBu_r'), extent=(0, 50, 0, 1))
+
+error = xr.open_dataset(os.path.join('/home/vernaym/workdir/ASSIMILATION/mask/alp', 'Observation_error.nc'))
+cross = extract_cross_section(error, varname='error')
+#plt.imshow(np.atleast_2d(cross), cmap=plt.get_cmap('Reds'), extent=(0, 50, 0, 1))
+plt.imshow(np.atleast_2d(cross), cmap=plt.get_cmap('YlOrBr'), extent=(0, 50, 0, 1))
+
+import pdb
+pdb.set_trace()
+
+cumul = xr.open_dataset('/home/vernaym/These/DATA/./CUMUL_ANTILOPEH_alp_2021103000_2022060200.nc')
+cross = extract_cross_section(cumul, varname='rr_cumul')
+plt.imshow(np.atleast_2d(cross), cmap=plt.get_cmap('YlGnBu'), extent=(0, 50, 0, 1))
+
+
 
 #filename = os.path.join(savedir, f'ReliefAlpes_correlation{d0}.pdf')
 filename = os.path.join(savedir, f'ReliefAlpes_with_nivometeo.pdf')
