@@ -73,8 +73,9 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None):
     meanweight = sums / nb_nonzero
     # pixel_weight is in ]0, 1]
     #newfield = (initial_field * pixel_weight + mean * meanweight) / (pixel_weight + meanweight)
-    # Values of pixels with low errors must be preserved : pixel_weight=1 ==> newfield=initial_field
-    newfield = initial_field * pixel_weight + mean * (1 - pixel_weight)
+    newfield = (initial_field * pixel_weight + mean * meanweight/pixel_weight) / (pixel_weight + meanweight/pixel_weight)
+    # Do not try to preserve values of pixels with low errors on average : the dynamic correction must account
+    # for temporary failures as well as uncertainties due to the error estimation method
     #sd = get_std(X, newfield, pond, weight=weight, super_ensemble=super_ensemble)
 
     return newfield
@@ -84,13 +85,17 @@ def codistances(coords, ld=0.05):
     Solution pour le calcul des inter-distances trouvée sur : https://stackoverflow.com/questions/35296935/python-calculate-lots-of-distances-quickly
     """
 
-    max_dist = ld*3
+    #max_dist = ld*3  # exp(-2)=0.14, exp(-3)=0.05 ==> facteur 3 pour ignorer les pixels avec un poid < 5%
+    max_dist = ld*2  # exp(-2^2)=0.018 ==> facteur 2 pour ignorer les pixels avec un poid < 2%
+    #max_dist = ld
     tree = cKDTree(coords)
     dist = tree.sparse_distance_matrix(tree, max_distance=max_dist, p=2, output_type='coo_matrix')
     dist = csr_matrix(dist)
     #TODO : utiliser une gaussienne plutot qu'une exponentielle décroissante ?
-    dist[dist.nonzero()] = -dist[dist.nonzero()]/ld
-    np.exp(dist.data, out=dist.data )
+    dist[dist.nonzero()] = dist[dist.nonzero()]/ld
+    #dist[dist.nonzero()] = 1/dist[dist.nonzero()]
+    #np.exp(-dist.data, out=dist.data )
+    np.exp(-dist.data**2/2, out=dist.data )
 
     return dist
 
