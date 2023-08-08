@@ -26,7 +26,7 @@ savedir = '/home/vernaym/These/figures/illustration'
 
 #Np = 15  # Domain size
 Np = 31  # Domain size
-ld = 0.15  # Correlation length
+ld = 0.07  # Correlation length
 
 def diagonal_field():
     """Generation of an idealised precipitation field"""
@@ -61,20 +61,22 @@ def random_field():
     return np.flip(field, axis=0)
 
 def perturbed_field(field, ratio):
-    perturb = np.random.randint(0, 100, size=(Np, Np))/10. - 5  # generation of perturbations between -5 and 5
+    #perturb = np.random.randint(0, 100, size=(Np, Np))/10. - 5  # generation of perturbations between -5 and 5
+    perturb = np.random.randint(0, 200, size=(Np, Np))/10. - 10  # generation of perturbations between -5 and 5
     #perturb[perturb<0] = -perturb[perturb<0]
     #perturb[perturb==0] = 1
     #perturb = np.random.randint(1, 100, size=(Np, Np))/10.
-    perturb = uniform_filter(perturb, size=10)
+    perturb = uniform_filter(perturb, size=5)
     perturb = np.flip(perturb, axis=0)
 
-    plot_field(perturb, 'perturb.pdf', label='Ratio', cmap='RdBu_r', vmin=-1, vmax=1, add_circle=False)
+    plot_field(perturb, 'perturb.pdf', label='Ratio', cmap='RdBu_r', vmin=-2, vmax=2, add_circle=False)
 
     new_ratio = ratio + np.abs(1-ratio)*perturb
     new_ratio[new_ratio<0] = -new_ratio[new_ratio<0]
-    new_ratio[new_ratio==0] = ratio[new_ratio==0]
+    new_ratio[new_ratio==0] = 0.1
+    new_ratio = uniform_filter(new_ratio, size=3)
 
-    plot_field(new_ratio, 'new_ratio.pdf', label='ratio', cmap='RdBu_r', vmin=0, vmax=2, add_circle=False)
+    plot_field(new_ratio, 'new_ratio.pdf', label='ratio', cmap='RdBu_r', vmin=0.2, vmax=1.8, add_circle=False)
 
     perturbed_field =field*new_ratio
     perturbed_field[perturbed_field<3] = 0
@@ -117,8 +119,10 @@ def plot_field(field, filename, label='Precipitation (mm)', cmap='YlGnBu', vmin=
 
     if add_circle:
         #circle = plt.Circle((Np//2, Np//2), ld*100*3, color='k', fill=False, linewidth=2)  # max distance
-        circle = plt.Circle((Np//2, Np//2), ld*100, color='k', fill=False, linewidth=2)  # Correlation length
+        circle = plt.Circle((Np//2, Np//2), ld*100*2, color='k', fill=False, linewidth=2)  # max distance
+        #circle = plt.Circle((Np//2, Np//2), ld*100, color='k', fill=False, linewidth=2)  # Correlation length
         ax.add_artist(circle)
+    ax.scatter(Np//2, Np//2)
 
     ax.set_xticks([])
     ax.set_yticks([])
@@ -144,13 +148,14 @@ plot_field(field, f'fake_antilope_field.pdf', vmin=0, vmax=30, add_circle=False)
 coords = [(lon/100., lat/100.) for lat in range(Np) for lon in range(Np)]
 codist = Preprocessing_ANTILOPE.codistances(coords, ld=ld)
 #cd     = codist.toarray()
+plot_field(codist.getrow(Np**2//2).toarray()[0].reshape((Np,Np)), "codist.pdf", label='Codistances', vmin=0, vmax=1, cmap='Greens', add_circle=True)  # Weights for central pixel correction
 
 # Add error ponderation
 # TODO : choisir la bonne formulation
 #pond = codist.dot(diags(np.exp(-(error-1)).flatten(), 0))  # error is in [1, inf[
 pond = codist.dot(diags((1/error).flatten(), 0))  # error is in [1, inf[
-plot_field(np.flip(pond.diagonal().reshape((Np,Np)), axis=0), "pond.pdf", vmin=0, vmax=1, cmap='Greens')  # exp(-(error-1))
-plot_field(np.flip(pond.getrow(Np//2).toarray()[0].reshape((Np,Np)), axis=0), "weights_MontBlanc.pdf", vmin=0, vmax=1, cmap='Greens', add_circle=True)  # Weights for central pixel correction
+plot_field(pond.diagonal().reshape((Np,Np)), "pond.pdf", label='Confidence', vmin=0, vmax=1, cmap='Greens')  # exp(-(error-1))
+plot_field(pond.getrow(Np**2//2).toarray()[0].reshape((Np,Np)), "weights_MontBlanc.pdf", label='Weights for Mont-Blanc correction', vmin=0, vmax=1, cmap='Greens', add_circle=True)  # Weights for central pixel correction
 
 # De-biasing only
 db = field/ratio
