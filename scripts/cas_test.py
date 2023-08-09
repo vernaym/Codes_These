@@ -23,6 +23,7 @@ from scipy.ndimage import uniform_filter
 from These.radar import Preprocessing_ANTILOPE
 
 savedir = '/home/vernaym/These/figures/illustration'
+datadir = f'/home/vernaym/workdir/ASSIMILATION/mask/MontBlanc'
 
 #Np = 15  # Domain size
 Np = 31  # Domain size
@@ -138,54 +139,54 @@ def plot_field(field, filename, label='Precipitation (mm)', cmap='YlGnBu', vmin=
     fig.savefig(os.path.join(savedir, filename), format='pdf')
 
 
-datadir = f'/home/vernaym/workdir/ASSIMILATION/mask/MontBlanc'
+if __name__ == "__main__":
 
 #field = random_field()
-field = isolated_storm()
-plot_field(field, f'real_field.pdf', vmin=0, vmax=30, add_circle=False)
+    field = isolated_storm()
+    plot_field(field, f'real_field.pdf', vmin=0, vmax=30, add_circle=False)
 
-ratio = np.flip(xr.open_dataarray(os.path.join(datadir, 'Estimated_ratio_MontBlanc.nc')).data, axis=0)
-plot_field(ratio, f'ratio.pdf', vmin=0.2, vmax=1.8, add_circle=False)
-error = np.flip(xr.open_dataarray(os.path.join(datadir, 'Observation_error_MontBlanc.nc')).data, axis=0)
+    ratio = np.flip(xr.open_dataarray(os.path.join(datadir, 'Estimated_ratio_MontBlanc.nc')).data, axis=0)
+    plot_field(ratio, f'ratio.pdf', vmin=0.2, vmax=1.8, add_circle=False)
+    error = np.flip(xr.open_dataarray(os.path.join(datadir, 'Observation_error_MontBlanc.nc')).data, axis=0)
 
 #field = perturbed_field(field, ratio)
-plot_field(field, f'fake_antilope_field.pdf', vmin=0, vmax=30, add_circle=False)
+    plot_field(field, f'fake_antilope_field.pdf', vmin=0, vmax=30, add_circle=False)
 
 # Compute spatial correlations
-coords = [(lon/100., lat/100.) for lat in range(Np) for lon in range(Np)]
-codist = Preprocessing_ANTILOPE.codistances(coords, ld=ld)
+    coords = [(lon/100., lat/100.) for lat in range(Np) for lon in range(Np)]
+    codist = Preprocessing_ANTILOPE.codistances(coords, ld=ld)
 #cd     = codist.toarray()
-plot_field(codist.getrow(Np**2//2).toarray()[0].reshape((Np,Np)), "codist.pdf", label='Codistances', vmin=0, vmax=1, cmap='Greens', add_circle=True)  # Weights for central pixel correction
+    plot_field(codist.getrow(Np**2//2).toarray()[0].reshape((Np,Np)), "codist.pdf", label='Codistances', vmin=0, vmax=1, cmap='Greens', add_circle=True)  # Weights for central pixel correction
 
 # Add error ponderation
 # TODO : choisir la bonne formulation
 #pond = codist.dot(diags(np.exp(-(error-1)).flatten(), 0))  # error is in [1, inf[
-pond = codist.dot(diags((1/error).flatten(), 0))  # error is in [1, inf[
-plot_field(pond.diagonal().reshape((Np,Np)), "pond.pdf", label='Confidence', vmin=0, vmax=1, cmap='Greens')  # exp(-(error-1))
-plot_field(pond.getrow(Np**2//2).toarray()[0].reshape((Np,Np)), "weights_MontBlanc.pdf", label='Weights for Mont-Blanc correction', vmin=0, vmax=1, cmap='Greens', add_circle=True)  # Weights for central pixel correction
+    pond = codist.dot(diags((1/error).flatten(), 0))  # error is in [1, inf[
+    plot_field(pond.diagonal().reshape((Np,Np)), "pond.pdf", label='Confidence', vmin=0, vmax=1, cmap='Greens')  # exp(-(error-1))
+    plot_field(pond.getrow(Np**2//2).toarray()[0].reshape((Np,Np)), "weights_MontBlanc.pdf", label='Weights for Mont-Blanc correction', vmin=0, vmax=1, cmap='Greens', add_circle=True)  # Weights for central pixel correction
 
 # De-biasing only
-db = field/ratio
+    db = field/ratio
 
 # Dynamic correction only
-dyn = Preprocessing_ANTILOPE.dynamic_correction(field, pond)
-dyn = dyn.reshape((Np, Np))
+    dyn = Preprocessing_ANTILOPE.dynamic_correction(field, pond)
+    dyn = dyn.reshape((Np, Np))
 
 # De-biasing + Dynamic correction
-dd = Preprocessing_ANTILOPE.dynamic_correction(field/ratio, pond)
-dd = dd.reshape((Np, Np))
+    dd = Preprocessing_ANTILOPE.dynamic_correction(field/ratio, pond)
+    dd = dd.reshape((Np, Np))
 
 #Dynamic correction + de-biasing
-qq = dyn/ratio
+    qq = dyn/ratio
 
 #plt.imshow(new)
 #plt.show()
-savedir = '/home/vernaym/These/figures/illustration'
+    savedir = '/home/vernaym/These/figures/illustration'
 
-plot_field(dyn, f'dynamic_correction_ld{ld}.pdf', vmin=0, vmax=30)
-plot_field(db, f'debiasing_ld{ld}.pdf', vmin=0, vmax=30)
-plot_field(dd, f'debiasing+dynamic_correction_ld{ld}.pdf', vmin=0, vmax=30)
-plot_field(qq, f'dynamic_correction_ld{ld}+debiasing.pdf', vmin=0, vmax=30)
+    plot_field(dyn, f'dynamic_correction_ld{ld}.pdf', vmin=0, vmax=30)
+    plot_field(db, f'debiasing_ld{ld}.pdf', vmin=0, vmax=30)
+    plot_field(dd, f'debiasing+dynamic_correction_ld{ld}.pdf', vmin=0, vmax=30)
+    plot_field(qq, f'dynamic_correction_ld{ld}+debiasing.pdf', vmin=0, vmax=30)
 
 
 

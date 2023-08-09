@@ -20,6 +20,11 @@ import plotly.graph_objects as go
 import plotly.figure_factory as ff
 from pyproj import Proj, transform
 
+import matplotlib
+import matplotlib.pyplot as plt
+
+import These.scripts.cas_test as ct
+
 import scipy
 from scipy.sparse import csr_matrix, csc_matrix, diags
 from scipy.spatial.distance import cdist
@@ -72,13 +77,40 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None):
     nb_nonzero = (pond != 0).sum(0).getA1()  # Count non zero elements of each row
     meanweight = sums / nb_nonzero
     # pixel_weight is in ]0, 1]
-    #newfield = (initial_field * pixel_weight + mean * meanweight) / (pixel_weight + meanweight)
-    newfield = (initial_field * pixel_weight + mean * meanweight/pixel_weight) / (pixel_weight + meanweight/pixel_weight)
     # Do not try to preserve values of pixels with low errors on average : the dynamic correction must account
     # for temporary failures as well as uncertainties due to the error estimation method
-    #sd = get_std(X, newfield, pond, weight=weight, super_ensemble=super_ensemble)
+    #newfield = (initial_field * pixel_weight + mean * meanweight) / (pixel_weight + meanweight)
+    newfield = (initial_field * pixel_weight + mean * meanweight/pixel_weight) / (pixel_weight + meanweight/pixel_weight)
+
+    # Plot correction coefficient
+    correction_coefficient = (meanweight/pixel_weight * 1 / (pixel_weight + meanweight/pixel_weight)).reshape(np.shape(field))
+    filename = 'Correction_weight.pdf'
+    ct.plot_field(correction_coefficient, filename, label='Correction coefficient', cmap=plt.cm.viridis, vmin=0, vmax=1, add_circle=True)
+
+    # Plot original value coefficient
+    original_value_coefficient = (pixel_weight / (pixel_weight + meanweight/pixel_weight)).reshape(np.shape(field))
+    filename = 'Original_value_weight.pdf'
+    ct.plot_field(original_value_coefficient, filename, label='Original value coefficient', cmap=plt.cm.viridis, vmin=0, vmax=1, add_circle=True)
+
+    sd = get_std(X, newfield, pond, weight=weight, super_ensemble=super_ensemble)
 
     return newfield
+
+def get_std(data, mean, pond, weight=None, super_ensemble=None):
+
+    if weight is None:
+        weight = pond.sum(axis=1).getA1()  # The sum of the weights (axis=1 <==> sum over rows)
+    if super_ensemble is None:
+        super_ensemble = pond.copy()  # WARNING : make a copy or pond will change when super_ensemble changes
+        super_ensemble[super_ensemble.nonzero()] = 1  # Position of pixels to inclue in the spread computation
+
+    se_mean = diags(mean, 0).dot(super_ensemble)  # matrix with mean[i] at each non-zero element of line i of super_ensemble
+    X = super_ensemble.dot(data)-se_mean  # # M.diag(obs)-diag(e).M
+    sd = X.multiply(X).multiply(pond).sum(axis=1).getA1()
+    sd = sd / weight
+    sd = np.nan_to_num(sd)
+
+    return sd
 
 def codistances(coords, ld=0.05):
     """
