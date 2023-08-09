@@ -60,9 +60,17 @@ def random_field():
 
     return np.flip(field, axis=0)
 
+def isolated_storm():
+
+    # Add gaussian structure centered over the Mont-Blanc
+    k1d = signal.gaussian(Np, std=2).reshape(Np, 1)
+    field = np.outer(k1d, k1d) * 30
+
+    return np.flip(field, axis=0)
+
 def perturbed_field(field, ratio):
     #perturb = np.random.randint(0, 100, size=(Np, Np))/10. - 5  # generation of perturbations between -5 and 5
-    perturb = np.random.randint(0, 200, size=(Np, Np))/10. - 10  # generation of perturbations between -5 and 5
+    perturb = np.random.randint(0, 200, size=(Np, Np))/10. - 10  # generation of perturbations between -10 and 10
     #perturb[perturb<0] = -perturb[perturb<0]
     #perturb[perturb==0] = 1
     #perturb = np.random.randint(1, 100, size=(Np, Np))/10.
@@ -122,7 +130,7 @@ def plot_field(field, filename, label='Precipitation (mm)', cmap='YlGnBu', vmin=
         circle = plt.Circle((Np//2, Np//2), ld*100*2, color='k', fill=False, linewidth=2)  # max distance
         #circle = plt.Circle((Np//2, Np//2), ld*100, color='k', fill=False, linewidth=2)  # Correlation length
         ax.add_artist(circle)
-    ax.scatter(Np//2, Np//2)
+    #ax.scatter(Np//2, Np//2)  # Add dot over the Mont-Blanc
 
     ax.set_xticks([])
     ax.set_yticks([])
@@ -132,16 +140,15 @@ def plot_field(field, filename, label='Precipitation (mm)', cmap='YlGnBu', vmin=
 
 datadir = f'/home/vernaym/workdir/ASSIMILATION/mask/MontBlanc'
 
-field = random_field()
-#TODO : Ajouter une strucure spatiale pour voir si elle est conservée ou gommée par la méthode
+#field = random_field()
+field = isolated_storm()
 plot_field(field, f'real_field.pdf', vmin=0, vmax=30, add_circle=False)
-#field = diagonal_field()
-#field = gaussian_field()
-#ratio, error = simple_error_field()
+
 ratio = np.flip(xr.open_dataarray(os.path.join(datadir, 'Estimated_ratio_MontBlanc.nc')).data, axis=0)
 plot_field(ratio, f'ratio.pdf', vmin=0.2, vmax=1.8, add_circle=False)
 error = np.flip(xr.open_dataarray(os.path.join(datadir, 'Observation_error_MontBlanc.nc')).data, axis=0)
-field = perturbed_field(field, ratio)
+
+#field = perturbed_field(field, ratio)
 plot_field(field, f'fake_antilope_field.pdf', vmin=0, vmax=30, add_circle=False)
 
 # Compute spatial correlations
