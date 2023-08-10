@@ -54,11 +54,14 @@ ld = 0.05
 max_dist = ld*3
 
 
-def dynamic_correction(field, pond, weight=None, super_ensemble=None):
+def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False):
     """
-    * field : 2D (n*k) array containing the field to modify
-    * pond  : (nk*nk) sparse ponderation matrix (each line gives the correlation between the corresponding pixel
-              and every other pixel of the domain)
+    * field          : 2D (n*k) array containing the field to modify
+    * pond           : (nk*nk) sparse ponderation matrix (each line gives the correlation between the corresponding pixel
+                        and every other pixel of the domain). It is defined using the confidenc of each pixel and the
+                       distance between the pixels
+    * weight         : nk vector of the sum of the weights in the neighborhood of each pixel
+    * super_ensemble : nk*nk mask matrix ("M") defining neighbor pixels to include in the computation
     """
 
     field[np.isnan(field)] = 0.0
@@ -66,6 +69,10 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None):
     X = diags(field.flatten(), 0)
 
     # 1. Calcul de la moyenne pondérée par la distance ET l'erreur statique
+
+    if super_ensemble is None:
+        super_ensemble = pond.copy()  # WARNING : make a copy or pond will change when super_ensemble changes
+        super_ensemble[super_ensemble.nonzero()] = 1  # Position of pixels to inclue in the spread computation
     if weight is None:
         pond.data[np.isnan(pond.data)] = 0.0
         weight = pond.sum(axis=1).getA1()  # The sum of the weights (axis=1 <==> sum over rows)
@@ -83,36 +90,48 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None):
     newfield = (initial_field * pixel_weight + mean * meanweight/pixel_weight) / (pixel_weight + meanweight/pixel_weight)
 
     # Plot correction coefficient
-    correction_coefficient = (meanweight/pixel_weight * 1 / (pixel_weight + meanweight/pixel_weight)).reshape(np.shape(field))
-    filename = 'Correction_weight.pdf'
-    ct.plot_field(correction_coefficient, filename, label='Correction coefficient', cmap=plt.cm.viridis, vmin=0, vmax=1, add_circle=True)
+    if plot:
+        correction_coefficient = (meanweight/pixel_weight * 1 / (pixel_weight + meanweight/pixel_weight)).reshape(np.shape(field))
+        filename = 'Correction_weight.pdf'
+        ct.plot_field(correction_coefficient, filename, label='Correction coefficient', cmap=plt.cm.viridis, vmin=0, vmax=1, add_circle=True)
 
-    # Plot original value coefficient
-    original_value_coefficient = (pixel_weight / (pixel_weight + meanweight/pixel_weight)).reshape(np.shape(field))
-    filename = 'Original_value_weight.pdf'
-    ct.plot_field(original_value_coefficient, filename, label='Original value coefficient', cmap=plt.cm.viridis, vmin=0, vmax=1, add_circle=True)
+        # Plot original value coefficient
+        original_value_coefficient = (pixel_weight / (pixel_weight + meanweight/pixel_weight)).reshape(np.shape(field))
+        filename = 'Original_value_weight.pdf'
+        ct.plot_field(original_value_coefficient, filename, label='Original value coefficient', cmap=plt.cm.viridis, vmin=0, vmax=1, add_circle=True)
 
-    sd = get_std(X, newfield, pond, weight=weight, super_ensemble=super_ensemble)
+    #sd = get_std(X, newfield, pond, weight=weight, super_ensemble=super_ensemble)  # Dispersion of the super ensemble
+    #sd = get_std(X, initial_field, pond, weight=weight, super_ensemble=super_ensemble)  # Dispersion of the super ensemble
+    sd = get_std(X, mean, pond, weight=weight, super_ensemble=super_ensemble)  # Dispersion of the super ensemble
+    #sd = sd + np.abs(initial_field-newfield)  # Dispersion + obs displacment to the dynamic error
+    #sd = np.abs(initial_field-newfield)  # Obs displacment  --> Apparition of spatial structures
 
-    return newfield
+    return newfield, mean, sd
 
 def get_std(data, mean, pond, weight=None, super_ensemble=None):
+    """
+    INPUT
+    -----
+    * mean is the Nk*Nk matrix
+    * pond is the Nk*Nk ponderation matrix (defined by the confidence of each pixel and the distance between the pixels)
+    * weight is the Nk vector of the sum of the weights in the neighborhood of each pixel
+    * super_ensemble is the mask Nk*Nk matrix ("M") defining neighbor pixels to include in the computation
 
-    if weight is None:
-        weight = pond.sum(axis=1).getA1()  # The sum of the weights (axis=1 <==> sum over rows)
-    if super_ensemble is None:
-        super_ensemble = pond.copy()  # WARNING : make a copy or pond will change when super_ensemble changes
-        super_ensemble[super_ensemble.nonzero()] = 1  # Position of pixels to inclue in the spread computation
+    OUTPUT
+    ------
+    * sd  : nk vector of the dispersion of the neighborhood of each pixel of the domain (in mm)
+
+    """
 
     se_mean = diags(mean, 0).dot(super_ensemble)  # matrix with mean[i] at each non-zero element of line i of super_ensemble
-    X = super_ensemble.dot(data)-se_mean  # # M.diag(obs)-diag(e).M
-    sd = X.multiply(X).multiply(pond).sum(axis=1).getA1()
-    sd = sd / weight
-    sd = np.nan_to_num(sd)
+    X = super_ensemble.dot(data)-se_mean  # M.diag(obs)-diag(mean).M  --> difference between each neighbor value and the neighborhood mean
+    sd = X.multiply(X).multiply(pond).sum(axis=1).getA1()  # Ponderation of the squared difference by the confidence (pond) + sum over all neighbor values
+    sd = sd / weight  # Normalisation with the total weight in the neighborhood
+    sd = np.nan_to_num(sd)  # replace nan values by 0
 
     return sd
 
-def codistances(coords, ld=0.05):
+def codistances(coords, ld=0.07):
     """
     Solution pour le calcul des inter-distances trouvée sur : https://stackoverflow.com/questions/35296935/python-calculate-lots-of-distances-quickly
     """
