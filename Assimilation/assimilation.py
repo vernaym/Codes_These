@@ -1215,7 +1215,9 @@ class Assimilation(object):
         for mb in members:
             member = ensemble.sel(member=mb).data
             D = D + (member-M)**2
+        # TODO : reprendre la bonne définition de la dispesion
         D = np.sqrt(D / (N-1))
+        #D = D / (N-1)
 
         return D
 
@@ -1262,8 +1264,8 @@ class Assimilation(object):
 
         initial_obs = parameters.rr.data.flatten()
         std = np.abs(parameters.sigma.data)  # !! WARNING sigma peut être <0 !!
-        #Rstat = diags(std.flatten())
-        Rstat = np.sqrt(diags(std.flatten()))  # !! TODO : TMP !! revoir plutot la conversion ratio estimé --> erreur obs
+        Rstat = diags(std.flatten())
+        #Rstat = np.sqrt(diags(std.flatten()))  # !! TODO : TMP !! revoir plutot la conversion ratio estimé --> erreur obs
 
         # TODO : revoir la pondération pour assurer que une erreur statique importante a un poids moins élevé qu'un point très loin avec une faible erreur statique
         pond = self.pond.dot(diags(np.exp(-std).flatten(), 0))  # Pondération par la distance et l'erreur statique !! ATTENTION A L'ORDRE !!
@@ -1290,7 +1292,8 @@ class Assimilation(object):
 #        #sd = sd + np.sqrt(0.263 * np.square(newfield))  # Add error proportionnal to precipitation intensity
         #############################   TMP  #########################
 
-        Rdyn = np.sqrt(diags(sd, 0))
+        Rdyn = diags(sd, 0)
+        #Rdyn = np.sqrt(diags(sd, 0))
         #R    = dia_matrix(diags(sd, 0) + Rstat)  # WARNING : the sum of 2 dia_matrix returns a csr_matrix...
         # TODO : Add a constant error to ensure an error >0 even if mean==0 and sd==0 or consider that in this case there is probably no precipitation ?
         #R    = dia_matrix(diags(sd, 0) + Rstat.multiply(diags(mean)*0.263))  # WARNING : the sum of 2 dia_matrix returns a csr_matrix...
@@ -1298,8 +1301,15 @@ class Assimilation(object):
         #R    = np.sqrt(dia_matrix(Rdyn + Rstat.multiply(diags(newfield)*0.263)))  # TODO : test this formulation
         #R    = np.sqrt(dia_matrix(Rdyn + Rstat.multiply(diags(newfield))))  # TODO : test this formulation
         #R    = dia_matrix(Rdyn + Rstat.multiply(diags(newfield)*0.263) + 0.05*Rstat)  # TODO : test this formulation
-        # Use only the dynamic erro to avoid excessively large errors
-        R = dia_matrix(Rdyn)
+        #R    = dia_matrix(Rdyn + Rstat*0.263)  # TODO : test this formulation
+
+        # Use only the dynamic error to avoid excessively large errors and the apparition of fixed spatial patterns
+        #R = dia_matrix(Rdyn)
+        R = dia_matrix(np.sqrt(Rdyn))
+        # TODO : change the magnitude of the static error to add it back to account for large uncertainties over mountain ridges !!!!
+        #R = dia_matrix(np.sqrt(Rdyn+0.05*Rstat))
+        #R = dia_matrix(np.sqrt(Rdyn+0.05*Rstat))
+
 
         # Plot data
         if plot is not None:
@@ -1678,6 +1688,26 @@ class RandomSampling(Assimilation):
         outname = f"ANTILOPEQ_{args.datebegin.strftime('%Y%m%d%H')}_{args.dateend.strftime('%Y%m%d%H')}_{args.domain}_corrected"
         out.to_netcdf(os.path.join('/home/vernaym/These/DATA', f"{outname}.nc"))
 
+    def random_draw(self, obs, sd):
+        gauss = np.random.normal(loc=0.0, scale=1.0, size=1)[0]  # Draw random element from normal distribution
+        exp = np.random.default_rng().exponential(scale=5)  # TODO : set scale parameter using the density of pixels at 0mm in the vicinity ?
+
+        # Ensure that RR are >=0
+        # ==> Draw from gama distribution ? ==> Not a good idea since the conversion to square root precipitation aims at
+        # normalising the distribution
+        #ana = obs+gauss*sd/5
+        sd = np.sqrt(sd)
+        # TODO : comprendre pourquoi la conversion R^1/2 --> R disperse autant l'ensemble
+        #ana = np.square(obs)+gauss*sd  # Gaussian perturbation around >0 obs
+        ana = obs+gauss*sd  # Gaussian perturbation around >0 obs
+        ana[ana<0] = exp*sd[ana<0]  # Avoid "mass accumulation" in 0. !! WARNING : the analysis distribution is not Normal anymore !!
+        ana[obs==0] = obs[obs==0]+exp*sd[obs==0]  # Exponential perturbation arround 0. TODO : arround 0, use the density
+        # of pixels at 0mm in the vicinity instead of sd ?
+        #ana[ana<0] = 0
+
+        #return ana
+        return np.square(ana)
+
     @speedtest
     def gridded_random_draw(self, date, idd, parameters, domain, nmembers=16):
 
@@ -1705,7 +1735,7 @@ class RandomSampling(Assimilation):
             obs = Y[point][0]
             plt.bar(np.square(obs), 1, width=0.03, color='red')
             std = std[point][0]
-            ax = plot_distribution(ax, np.square(obs), np.square(std), label='New observation distribution', color='red')
+            ax = plot_distribution(ax, np.square(obs), np.square(std), label=f'New observation distribution (std={np.square(std)})', color='red')
 
         if self.plot:
             fig1,ax1 = plt.subplots(nrows=4, ncols=4, figsize=figsize[domain]['ensembleplot'])
@@ -1723,11 +1753,8 @@ class RandomSampling(Assimilation):
         sd = R.diagonal().reshape((len(parameters.lat), len(parameters.lon)))  # Get standard deviation field
 
         for member in analysis.member.data:
-            random = np.random.normal(loc=0.0, scale=1.0, size=1)[0]  # Draw random element from normal distribution
-            #ana = obs+random*sd/5
-            ana = obs+random*sd
-            ana[ana<0] = 0
-            analysis.loc[{'member':member}] = np.square(ana)
+            ana = self.random_draw(obs, sd)
+            analysis.loc[{'member':member}] = ana
 
             if self.plot:
                 im1 = plot_field(analysis.loc[{'member':member}], ax1[i,j], self.rrmin, self.rrmax, self.domain)
@@ -1741,8 +1768,10 @@ class RandomSampling(Assimilation):
             # Plot analysis distribution
             ens = analysis.isel(lat=point[0], lon=point[1]).data.flatten()
             mu = np.mean(ens)
-            std = np.sum((ens-mu)**2)/16
-            ax = plot_distribution(ax, np.square(mu), np.square(std), ensemble=ens, label='Analysis', color='blue', linewidth=1)
+            #std = np.sqrt(np.sum((ens-mu)**2)/16)
+            std = np.sqrt(np.mean((ens-mu)**2))
+            ax = plot_distribution(ax, mu, std, ensemble=ens, label='Analysis', color='blue', linewidth=1)
+            ax = plot_distribution(ax, mu, sd[point], label='Analysis theoretical PDF', color='k', linewidth=1)
             ax.legend()
             ax.set_xlim(left=0, right=30)
             ax.set_ylim(top=1)
@@ -1754,9 +1783,9 @@ class RandomSampling(Assimilation):
 
             #ECM_max = np.square(np.nanmax(R))
             ECM_max = np.max(np.square(R))
-            self.plot_matrix(np.square(R), parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_ECM_{domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.viridis)
-            self.plot_matrix(np.square(Rdyn), parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_dyn_ECM_{domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.viridis)
-            self.plot_matrix(np.square(Rstat), parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_stat_ECM_{domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.viridis)
+            self.plot_matrix(np.square(R), parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_ECM_{domain}.pdf', vmin=1, vmax=ECM_max, cmap=plt.cm.viridis)
+            self.plot_matrix(np.square(Rdyn), parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_dyn_ECM_{domain}.pdf', vmin=1, vmax=ECM_max, cmap=plt.cm.viridis)
+            self.plot_matrix(np.square(Rstat), parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_stat_ECM_{domain}.pdf', vmin=1, vmax=ECM_max, cmap=plt.cm.viridis)
 
             parameters.mu.data = np.square(parameters.mu.data)
             parameters.rr.data = np.square(parameters.rr.data)
@@ -1773,7 +1802,7 @@ class RandomSampling(Assimilation):
             self.plot_array(mean, parameters.rr, 'Mean precipitation (mm)', f'{self.date_str}/Analysis_mean_{self.domain}.pdf', cmap=plt.cm.YlGnBu, vmin=self.rrmin, vmax=self.rrmax)
             # TODO : comprendre pourquoi la dispersion est plus importante sur les bords du domaine (distance de coorélation moins impactante ?
             disp = self.ensemble_dispersion(analysis)
-            self.plot_array(disp, parameters.rr, 'Dispersion (mm)', f'{self.date_str}/Analysis_dispersion_{self.domain}.pdf', vmin=0, cmap=plt.cm.YlGnBu)
+            self.plot_array(disp, parameters.rr, 'Dispersion (mm)', f'{self.date_str}/Analysis_dispersion_{self.domain}.pdf', vmin=0, vmax=np.max(disp), cmap=plt.cm.YlGnBu)
 
             finalize_fig(fig1, im1, label='24-hour precipitation (mm)', outname=f'{self.date_str}/ANALYSIS_{self.date_str}_{self.domain}.pdf')
 
@@ -1827,20 +1856,8 @@ class RandomSampling(Assimilation):
 
             # Fill other members with random draw arround the corrected observation
             for member in analysis.member.data:
-                gauss = np.random.normal(loc=0.0, scale=1.0, size=1)[0]  # Draw random element from normal distribution
-                exp = np.random.default_rng().exponential(scale=5)  # TODO : set scale parameter using the density of pixels
-                # at 0mm in the vicinity ?
-
-                # TODO : assurer que les RR sont >=0
-                # ==> Draw from gama distribution ? ==> Not a good idea since the conversion to square root precipitation aims at 
-                # normalising the distribution
-                #ana = obs+gauss*sd/5
-                ana = obs+gauss*sd  # Gaussian perturbation around >0 obs
-                ana[obs==0] = obs[obs==0]+exp*sd[obs==0]  # Exponential perturbation arround 0. TODO : arround 0, use the density
-                # of pixels at 0mm in the vicinity instead of sd ?
-                #ana[ana<0] = 0
-                ana[ana<0] = -ana[ana<0]  # Avoid "mass accumulation" in 0. !! WARNING : the analysis distribution is not Normal anymore !!
-                analysis.loc[{'member':member}] = np.square(ana)
+                ana = self.random_draw(obs, sd)
+                analysis.loc[{'member':member}] = ana
 
                 self.newlocalfield[member][idp,idd] = analysis.sel({'lat':nearest_lat, 'lon':nearest_lon, 'member':member}).data
 
