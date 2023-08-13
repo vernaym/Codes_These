@@ -101,10 +101,14 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
         ct.plot_field(original_value_coefficient, filename, label='Original value coefficient', cmap=plt.cm.viridis, vmin=0, vmax=1, add_circle=True)
 
     #sd = get_std(X, newfield, pond, weight=weight, super_ensemble=super_ensemble)  # Dispersion of the super ensemble
-    #sd = get_std(X, initial_field, pond, weight=weight, super_ensemble=super_ensemble)  # Dispersion of the super ensemble
-    sd = get_std(X, mean, pond, weight=weight, super_ensemble=super_ensemble)  # Dispersion of the super ensemble
+    # TODO : Objevtive evaluation of formulas 1 and 2
+    sd = get_std(X, initial_field, pond, weight=weight, super_ensemble=super_ensemble)  # 1. Dispersion of the super ensemble around the initial field --> More dispersion on high error pixels (--> spatial structures)
+    #sd = get_std(X, mean, pond, weight=weight, super_ensemble=super_ensemble)  # 2. Dispersion of the super ensemble around the mean --> Smoother fields
     #sd = sd + np.abs(initial_field-newfield)  # Dispersion + obs displacment to the dynamic error
     #sd = np.abs(initial_field-newfield)  # Obs displacment  --> Apparition of spatial structures
+
+    #sd = sd + 1  # Add 1 to ensure that the error is >1 (mm or mm^(1/2)). --> Dispersion too large
+    sd = sd
 
     return newfield, mean, sd
 
@@ -127,6 +131,7 @@ def get_std(data, mean, pond, weight=None, super_ensemble=None):
     X = super_ensemble.dot(data)-se_mean  # M.diag(obs)-diag(mean).M  --> difference between each neighbor value and the neighborhood mean
     sd = X.multiply(X).multiply(pond).sum(axis=1).getA1()  # Ponderation of the squared difference by the confidence (pond) + sum over all neighbor values
     sd = sd / weight  # Normalisation with the total weight in the neighborhood
+    sd = np.sqrt(sd)
     sd = np.nan_to_num(sd)  # replace nan values by 0
 
     return sd

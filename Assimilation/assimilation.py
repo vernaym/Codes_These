@@ -1304,11 +1304,10 @@ class Assimilation(object):
         #R    = dia_matrix(Rdyn + Rstat*0.263)  # TODO : test this formulation
 
         # Use only the dynamic error to avoid excessively large errors and the apparition of fixed spatial patterns
-        #R = dia_matrix(Rdyn)
-        R = dia_matrix(np.sqrt(Rdyn))
+        R = dia_matrix(Rdyn)  # Déjà homogène à des mm^1/2 par construction !
         # TODO : change the magnitude of the static error to add it back to account for large uncertainties over mountain ridges !!!!
         #R = dia_matrix(np.sqrt(Rdyn+0.05*Rstat))
-        #R = dia_matrix(np.sqrt(Rdyn+0.05*Rstat))
+        #R = dia_matrix(Rdyn+0.05*np.sqrt(Rstat))  # Rdyn déjà homogène. --> Apparition de structures spatiales
 
 
         # Plot data
@@ -1696,7 +1695,7 @@ class RandomSampling(Assimilation):
         # ==> Draw from gama distribution ? ==> Not a good idea since the conversion to square root precipitation aims at
         # normalising the distribution
         #ana = obs+gauss*sd/5
-        sd = np.sqrt(sd)
+        sd = np.sqrt(sd)  # sigma --> sigma² dans la formulation de la loi normale
         # TODO : comprendre pourquoi la conversion R^1/2 --> R disperse autant l'ensemble
         #ana = np.square(obs)+gauss*sd  # Gaussian perturbation around >0 obs
         ana = obs+gauss*sd  # Gaussian perturbation around >0 obs
@@ -1727,6 +1726,7 @@ class RandomSampling(Assimilation):
         if self.plot:
             #point = np.where(Y==np.nanmax(Y))  # max observation (plot only)
             std = R.diagonal().reshape((len(parameters.lat), len(parameters.lon)))
+            # TODO : plot distributions for reference points and add reference
             point = np.where(std==np.nanmax(std))  # max error (plot only)
             # plot distributions
             fig, ax = plt.subplots()
@@ -1735,7 +1735,8 @@ class RandomSampling(Assimilation):
             obs = Y[point][0]
             plt.bar(np.square(obs), 1, width=0.03, color='red')
             std = std[point][0]
-            ax = plot_distribution(ax, np.square(obs), np.square(std), label=f'New observation distribution (std={np.square(std)})', color='red')
+            #ax = plot_distribution(ax, np.square(obs), np.square(std), label=f'New observation distribution (std={np.square(std)})', color='red')
+            ax = plot_distribution(ax, np.square(obs), std, label=f'New observation distribution (std={np.round(std, 2)})', color='red')  # sigma --> sigma² dans loi normale
 
         if self.plot:
             fig1,ax1 = plt.subplots(nrows=4, ncols=4, figsize=figsize[domain]['ensembleplot'])
@@ -1746,17 +1747,31 @@ class RandomSampling(Assimilation):
         analysis = xr.DataArray(
             name   = 'rr',
             dims   = ["member", "lat", "lon"],
-            coords = dict(lon=parameters.lon, lat=parameters.lat, member=range(1, nmembers+1)),
+            coords = dict(lon=parameters.lon, lat=parameters.lat, member=range(0, nmembers+1)),
         )
         obs = Y.reshape((len(parameters.lat), len(parameters.lon)))  # Get observation field
+
+        # Fill first member with corrected observation
+        analysis.loc[{'member':0}] = obs
+
         #sd = Rdyn.diagonal().reshape((len(parameters.lat), len(parameters.lon)))  # Get standard deviation field
         sd = R.diagonal().reshape((len(parameters.lat), len(parameters.lon)))  # Get standard deviation field
+
+        error = xr.DataArray(
+            name   = 'error',
+            data   = np.square(sd),
+            dims   = ["lat", "lon"],
+            coords = dict(lon=parameters.lon, lat=parameters.lat),
+        )
+        if self.plot:
+            self.plot_array(error, parameters.rr, 'Error (mm)', f'{self.date_str}/ERROR_{self.domain}.pdf', vmin=0, vmax=np.max(error), cmap=plt.cm.Reds)
 
         for member in analysis.member.data:
             ana = self.random_draw(obs, sd)
             analysis.loc[{'member':member}] = ana
 
-            if self.plot:
+            if self.plot and member>0:
+                # TODO : Add reference values
                 im1 = plot_field(analysis.loc[{'member':member}], ax1[i,j], self.rrmin, self.rrmax, self.domain)
                 ax1[i,j].set_title(None)
                 j = j + 1
@@ -1771,6 +1786,7 @@ class RandomSampling(Assimilation):
             #std = np.sqrt(np.sum((ens-mu)**2)/16)
             std = np.sqrt(np.mean((ens-mu)**2))
             ax = plot_distribution(ax, mu, std, ensemble=ens, label='Analysis', color='blue', linewidth=1)
+            #ax = plot_distribution(ax, mu, np.square(sd[point]), label='Analysis theoretical PDF', color='k', linewidth=1)
             ax = plot_distribution(ax, mu, sd[point], label='Analysis theoretical PDF', color='k', linewidth=1)
             ax.legend()
             ax.set_xlim(left=0, right=30)
@@ -1782,10 +1798,10 @@ class RandomSampling(Assimilation):
             plt.close(fig)
 
             #ECM_max = np.square(np.nanmax(R))
-            ECM_max = np.max(np.square(R))
-            self.plot_matrix(np.square(R), parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_ECM_{domain}.pdf', vmin=1, vmax=ECM_max, cmap=plt.cm.viridis)
-            self.plot_matrix(np.square(Rdyn), parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_dyn_ECM_{domain}.pdf', vmin=1, vmax=ECM_max, cmap=plt.cm.viridis)
-            self.plot_matrix(np.square(Rstat), parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_stat_ECM_{domain}.pdf', vmin=1, vmax=ECM_max, cmap=plt.cm.viridis)
+            ECM_max = np.nanmax(np.square(R.toarray()))
+            self.plot_matrix(np.square(R), parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_ECM_{domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.viridis)
+            self.plot_matrix(np.square(Rdyn), parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_dyn_ECM_{domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.viridis)
+            self.plot_matrix(np.square(Rstat), parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_stat_ECM_{domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.viridis)
 
             parameters.mu.data = np.square(parameters.mu.data)
             parameters.rr.data = np.square(parameters.rr.data)
@@ -1800,9 +1816,9 @@ class RandomSampling(Assimilation):
 
             mean = self.ensemble_mean(analysis)
             self.plot_array(mean, parameters.rr, 'Mean precipitation (mm)', f'{self.date_str}/Analysis_mean_{self.domain}.pdf', cmap=plt.cm.YlGnBu, vmin=self.rrmin, vmax=self.rrmax)
-            # TODO : comprendre pourquoi la dispersion est plus importante sur les bords du domaine (distance de coorélation moins impactante ?
+
             disp = self.ensemble_dispersion(analysis)
-            self.plot_array(disp, parameters.rr, 'Dispersion (mm)', f'{self.date_str}/Analysis_dispersion_{self.domain}.pdf', vmin=0, vmax=np.max(disp), cmap=plt.cm.YlGnBu)
+            self.plot_array(disp, parameters.rr, 'Dispersion (mm)', f'{self.date_str}/Analysis_dispersion_{self.domain}.pdf', vmin=0, vmax=np.nanmax(disp), cmap=plt.cm.YlGnBu)
 
             finalize_fig(fig1, im1, label='24-hour precipitation (mm)', outname=f'{self.date_str}/ANALYSIS_{self.date_str}_{self.domain}.pdf')
 
