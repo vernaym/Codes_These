@@ -119,12 +119,19 @@ def gaussian_field():
 
     return A
 
-def plot_field(field, filename, label='Precipitation (mm)', cmap='YlGnBu', vmin=0, vmax=1, add_circle=True):
+def plot_field(field, filename, label='Precipitation (mm)', cmap='YlGnBu', vmin=None, vmax=None, add_circle=True):
+
+    if vmin is None:
+        vmin = np.nanmin(field)
+    if vmax is None:
+        vmax = np.nanmax(field)
+
     fig,ax = plt.subplots()
     fd = ax.imshow(field, cmap=cmap, vmin=vmin, vmax=vmax)
     cbar = fig.colorbar(fd)
     cbar.ax.tick_params(labelsize=16)
     cbar.set_label(label=label, fontsize=18)
+
 
     if add_circle:
         #circle = plt.Circle((Np//2, Np//2), ld*100*3, color='k', fill=False, linewidth=2)  # max distance
@@ -141,15 +148,15 @@ def plot_field(field, filename, label='Precipitation (mm)', cmap='YlGnBu', vmin=
 
 if __name__ == "__main__":
 
-#field = random_field()
-    field = isolated_storm()
+    field = random_field()
+    #field = isolated_storm()
     plot_field(field, f'real_field.pdf', vmin=0, vmax=30, add_circle=False)
 
     ratio = np.flip(xr.open_dataarray(os.path.join(datadir, 'Estimated_ratio_MontBlanc.nc')).data, axis=0)
     plot_field(ratio, f'ratio.pdf', vmin=0.2, vmax=1.8, add_circle=False)
     error = np.flip(xr.open_dataarray(os.path.join(datadir, 'Observation_error_MontBlanc.nc')).data, axis=0)
 
-#field = perturbed_field(field, ratio)
+    field = perturbed_field(field, ratio)
     plot_field(field, f'fake_antilope_field.pdf', vmin=0, vmax=30, add_circle=False)
 
 # Compute spatial correlations
@@ -169,12 +176,14 @@ if __name__ == "__main__":
     db = field/ratio
 
 # Dynamic correction only
-    dyn = Preprocessing_ANTILOPE.dynamic_correction(field, pond)
+    dyn, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(field, pond)
     dyn = dyn.reshape((Np, Np))
+    plot_field(np.sqrt(sd.reshape((Np,Np))), f'dynamic_error_without_debiasing.pdf', label='Error (mm)', cmap=plt.cm.Reds)
 
 # De-biasing + Dynamic correction
-    dd = Preprocessing_ANTILOPE.dynamic_correction(field/ratio, pond)
+    dd, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(field/ratio, pond)
     dd = dd.reshape((Np, Np))
+    plot_field(np.sqrt(sd.reshape((Np,Np))), f'dynamic_error_with_debiasing.pdf', label='Error (mm)', cmap=plt.cm.Reds)
 
 #Dynamic correction + de-biasing
     qq = dyn/ratio
