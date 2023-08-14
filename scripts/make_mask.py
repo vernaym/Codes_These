@@ -17,6 +17,8 @@ import scipy
 from scipy.sparse import csr_matrix, diags
 from scipy.spatial import cKDTree
 
+from sklearn.linear_model import LinearRegression, RANSACRegressor
+
 import shapefile
 
 import matplotlib
@@ -82,7 +84,7 @@ onlypostes = [73306403]
 
 blacklist = [1373001, 1189001]
 
-d0 = 0.2  # Portée horizontale
+d0 = 0.15  # Portée horizontale
 #h0 = 2000  # Portée altitudinale
 h0 = None
 c0 = 2
@@ -432,7 +434,7 @@ def plot_and_save(field, name, cmap=plt.cm.Greys, vmin=None, vmax=None, scores=N
     ax = plot_field(fig, ax, field, cmap=cmap, vmin=vmin, vmax=vmax, scores=scores)
     #fig.savefig(os.path.join(savedir, f'{name}.pdf'), format='pdf', layout='tight')
     fig.savefig(os.path.join(savedir, f'{name}.pdf'), format='pdf')
-    field.to_netcdf(os.path.join(savedir, f'{name}.nc'))  # WARNING : does not work if nctoolkit is installed
+    field.to_netcdf(os.path.join(savedir, f'{name}.nc').encode('utf-8'))
 
 def plot_field(fig, ax, field, cmap=plt.cm.Greys, vmin=None, vmax=None, scores=None, colorbar=True):
 
@@ -659,7 +661,8 @@ def ratio_estimation(field, model=None, moving_window=25):
             elevation_dist = mnt.Band1.data - ref_elevation
             if model is not None:
                 model_cumul = model.rr_cumul.data[idx[0],idy[0]]  # Cumul du modele au point d'évaluation
-                ratio_modele = model.rr_cumul.data/model_cumul  # Ratio entre chaque point du domain et le point d'évaluation
+                ratio_modele = model.rr_cumul.data/model_cumul  # Ratio entre chaque point du modele et le point d'évaluation 
+                #grad_modele = (model.rr_cumul.data-model_cumul)/(365*elevation_dist)  # gradient vertical modèle moyen (WARNING : adapter la formule à la durée du cumul)
             if poste == 74056416:
                 rcc = ref_cumul.copy()
                 rr0 = ratio.copy()
@@ -692,8 +695,9 @@ def ratio_estimation(field, model=None, moving_window=25):
             if h0 is not None:
                 w = np.exp(-(dist/d0))*np.exp(-(np.abs(elevation_dist)/h0))
             else:
-                w = np.exp(-(dist/d0))
+                #w = np.exp(-(dist/d0))
                 #w = np.exp(-(dist**2/d0))
+                w = np.exp(-(dist/d0)**2)
 
             weights.append(w)
             # To take into account the increasing difference of cumuls with the distance
@@ -701,7 +705,8 @@ def ratio_estimation(field, model=None, moving_window=25):
             if model is None:
                 ratios.append(ratio*cumul_ratio)
             else:
-                ratios.append(ratio*cumul_ratio/ratio_modele)
+                ratios.append(ratio*cumul_ratio/ratio_modele)  # v2=r1*a2/a1*m1/m2
+                #ratios.append(field.rr_cumul.data/(ref_cumul/ratio+grad_modele))  # r2 = a2/(a1/r1+gradv)
 
 #            guess = ratio*cumul_ratio
             #print(poste)
@@ -822,6 +827,45 @@ def ratio_estimation(field, model=None, moving_window=25):
         plot_and_save(ratio_field, rationame, vmin=0.6, vmax=1.4, cmap=plt.cm.coolwarm, scores=scores)
         #plot_and_save(observation_error, errorname, vmin=-6, vmax=6, cmap=plt.cm.coolwarm, scores=scores)
         plot_and_save(np.abs(observation_error), erroname, vmin=1, vmax=8, cmap=plt.cm.viridis, scores=scores)
+
+    plt.close('all')
+
+    plot_ratio_estime_vs_ratio_reel(ratio_field)
+
+def plot_ratio_estime_vs_ratio_reel(ratio):
+    scores = pd.read_csv(os.path.join(datadir, f'scores_2021110106_2022043006_alp.csv'), sep=';')
+    scores = scores.set_index('num_poste')
+    scores = scores.sort_values('lats')
+    estimation = ratio.sel(lat=xr.DataArray(scores.lats.values, dims='poste'), lon=xr.DataArray(scores.lons.values, dims='poste'), method='nearest')
+    # Regression linéaire
+    x = scores.ratio.values.reshape((-1,1))
+    y = estimation.data
+    reg = LinearRegression().fit(x, y)
+    z = reg.predict(x)
+    r2 = reg.score(x, y)
+
+    fig,ax = plt.subplots()
+    #ax.scatter(scores.ratio.values, estimation.data, label=f'R²={r2:.4}', marker='+', color='blue')
+    ax.scatter(scores.ratio.values, estimation.data, marker='+', color='blue')
+    #ax.plot(x, z, color='blue', linewidth=2, label=f'Slope={reg.coef_[0]:.3f}, Intercept={reg.intercept_:.3f}, R²={r2:.4}')
+    ax.plot(x, z, color='blue', linewidth=1, label=f'R²={r2:.4}')
+    lims = [
+        np.min([ax.get_xlim(), ax.get_ylim()]),  # min of both axes
+        np.max([ax.get_xlim(), ax.get_ylim()]),  # max of both axes
+    ]
+
+# Plot bissectrice and adjuste axes limits
+    ax.plot(lims, lims, 'k-', alpha=0.75, zorder=0)
+    ax.plot(lims, [1, 1], color='k', linestyle='--', linewidth=0.5)
+    ax.plot([1, 1], lims, color='k', linestyle='--', linewidth=0.5)
+    ax.set_aspect('equal')
+    ax.set_xlim(lims)
+    ax.set_ylim(lims)
+    ax.set_ylabel('Estimated ratio')
+    ax.set_xlabel('Real ratio')
+    ax.legend(fontsize=18)
+    plt.tight_layout()
+    fig.savefig(os.path.join(savedir, f'Estimated_ratio_vs_real_ratio_{domain}_{d0}.pdf'))
 
 def animation_mask(field):
 

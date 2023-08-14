@@ -78,7 +78,7 @@ lims = [
     np.max([ax.get_xlim(), ax.get_ylim()]),  # max of both axes
 ]
 
-# now plot both limits against eachother
+# Plot bissectrice and adjuste axes limits
 ax.plot(lims, lims, 'k-', alpha=0.75, zorder=0)
 ax.set_aspect('equal')
 ax.set_xlim(lims)
