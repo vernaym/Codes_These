@@ -19,6 +19,7 @@ from scipy.sparse import diags
 from scipy.stats import norm, gamma
 import math
 import xarray as xr
+from pykrige.uk import UniversalKriging
 import glob
 import shapefile
 from shapely.geometry import Point, Polygon
@@ -1746,6 +1747,20 @@ class RandomSampling(Assimilation):
 
         # Extract reference points and corresponding values
         nivometeo = self.nivometeo.sel({'date':date}).dropna(dim='num_poste').drop('date')
+        # Kriging of reference values to get a reference field
+        y    = nivometeo.lat
+        x    = nivometeo.lon
+        rr   = nivometeo.obs
+        kriging = UniversalKriging(x.data, y.data, rr.data, variogram_model='exponential')
+        rr_ref, ss = kriging.execute('grid', parameters.lon.data, parameters.lat.data)
+        reference_field = xr.DataArray(
+            name   = 'reference',
+            data   = rr_ref,
+            dims   = ["lat", "lon"],
+            coords = dict(lon=parameters.lon, lat=parameters.lat),
+        )
+
+        # Get data over evaluation points and compute errors
         evaluation_points = analysis.sel(member=0, lat=xr.DataArray(nivometeo.lat.data, dims="poste"), lon=xr.DataArray(nivometeo.lon.data, dims="poste"), method='nearest')
         bias = evaluation_points - nivometeo.obs.data
 
@@ -1761,8 +1776,10 @@ class RandomSampling(Assimilation):
         )
 
         if self.plot:
-            self.plot_array(analysis.sel(member=0), parameters.rr, 'Corrected field', f'{self.date_str}/Corrected_field_{self.date_str}{self.domain}.pdf', vmin=0, vmax=self.rrmax, cmap=plt.cm.YlGnBu, bias=bias)
+            self.plot_array(analysis.sel(member=0), parameters.rr, 'Corrected field', f'{self.date_str}/Corrected_field_{self.date_str}_{self.domain}.pdf', vmin=0, vmax=self.rrmax, cmap=plt.cm.YlGnBu, bias=bias)
             self.plot_array(error, parameters.rr, 'Error (mm)', f'{self.date_str}/ERROR_{self.domain}.pdf', vmin=0, vmax=np.max(error), cmap=plt.cm.Reds, bias=bias)
+            #self.plot_array(reference_field, parameters.rr, 'Precipitation (mm)', f'{self.date_str}/Reference_{self.date_str}_{self.domain}.pdf', vmin=0, vmax=self.rrmax, cmap=plt.cm.YlGnBu, bias=nivometeo.obs)
+            self.plot_array(reference_field, parameters.rr, 'Precipitation (mm)', f'{self.date_str}/Reference_{self.date_str}_{self.domain}.pdf', vmin=0, vmax=self.rrmax, cmap=plt.cm.YlGnBu)
 
             npoints = len(evaluation_points)
             if npoints <=3:
@@ -1770,10 +1787,10 @@ class RandomSampling(Assimilation):
                 ncol = npoints
             elif npoints <= 8:
                 nrow = 2
-                ncol = math.ceil(npoints//2)
+                ncol = math.ceil(npoints/2)
             elif npoints <= 12:
                 nrow = 3
-                ncol = math.ceil(npoints//3)
+                ncol = math.ceil(npoints/3)
             elif npoints <= 16:
                 nrow = 4
                 ncol = 4
@@ -1798,7 +1815,6 @@ class RandomSampling(Assimilation):
                 ax[i,j].bar(np.square(original_obs), 1, width=0.3, label='Original observation', color='k', alpha=0.5)
                 #obs = Y[point][0]
                 new_obs = analysis.sel(lat=lat, lon=lon, member=0, method='nearest').data
-                print(reference, np.square(original_obs), new_obs)
                 ax[i,j].bar(new_obs, 1, width=0.3, color='red', alpha=1)
                 #sd = sd[point][0]
                 std = error.sel(lat=lat, lon=lon, method='nearest').data
