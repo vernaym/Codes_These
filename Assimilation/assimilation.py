@@ -1698,7 +1698,10 @@ class RandomSampling(Assimilation):
                 ),
             )
         outname = f"ANTILOPEQ_{args.datebegin.strftime('%Y%m%d%H')}_{args.dateend.strftime('%Y%m%d%H')}_{args.domain}_corrected"
-        out.to_netcdf(os.path.join('/home/vernaym/These/DATA', f"{outname}.nc"))
+        import pdb
+        pdb.set_trace()
+        out.to_netcdf(os.path.join('/home/vernaym/These/DATA', f"{outname}.nc").encode('utf-8'))
+        #out.to_netcdf(os.path.join('/home/vernaym/These/DATA', f"{outname}.nc"))
 
     def random_draw(self, obs, sd):
         gauss = np.random.normal(loc=0.0, scale=1.0, size=1)[0]  # Draw random element from normal distribution
@@ -1747,18 +1750,21 @@ class RandomSampling(Assimilation):
 
         # Extract reference points and corresponding values
         nivometeo = self.nivometeo.sel({'date':date}).dropna(dim='num_poste').drop('date')
-        # Kriging of reference values to get a reference field
-        y    = nivometeo.lat
-        x    = nivometeo.lon
-        rr   = nivometeo.obs
-        kriging = UniversalKriging(x.data, y.data, rr.data, variogram_model='exponential')
-        rr_ref, ss = kriging.execute('grid', parameters.lon.data, parameters.lat.data)
-        reference_field = xr.DataArray(
-            name   = 'reference',
-            data   = rr_ref,
-            dims   = ["lat", "lon"],
-            coords = dict(lon=parameters.lon, lat=parameters.lat),
-        )
+        kriging = False
+        if len(nivometeo.num_poste) > 1:
+            kriging = True
+            # Kriging of reference values to get a reference field
+            y    = nivometeo.lat
+            x    = nivometeo.lon
+            rr   = nivometeo.obs
+            kriging = UniversalKriging(x.data, y.data, rr.data, variogram_model='exponential')
+            rr_ref, ss = kriging.execute('grid', parameters.lon.data, parameters.lat.data)
+            reference_field = xr.DataArray(
+                name   = 'reference',
+                data   = rr_ref,
+                dims   = ["lat", "lon"],
+                coords = dict(lon=parameters.lon, lat=parameters.lat),
+            )
 
         # Get data over evaluation points and compute errors
         evaluation_points = analysis.sel(member=0, lat=xr.DataArray(nivometeo.lat.data, dims="poste"), lon=xr.DataArray(nivometeo.lon.data, dims="poste"), method='nearest')
@@ -1779,7 +1785,8 @@ class RandomSampling(Assimilation):
             self.plot_array(analysis.sel(member=0), parameters.rr, 'Corrected field', f'{self.date_str}/Corrected_field_{self.date_str}_{self.domain}.pdf', vmin=0, vmax=self.rrmax, cmap=plt.cm.YlGnBu, bias=bias)
             self.plot_array(error, parameters.rr, 'Error (mm)', f'{self.date_str}/ERROR_{self.domain}.pdf', vmin=0, vmax=np.max(error), cmap=plt.cm.Reds, bias=bias)
             #self.plot_array(reference_field, parameters.rr, 'Precipitation (mm)', f'{self.date_str}/Reference_{self.date_str}_{self.domain}.pdf', vmin=0, vmax=self.rrmax, cmap=plt.cm.YlGnBu, bias=nivometeo.obs)
-            self.plot_array(reference_field, parameters.rr, 'Precipitation (mm)', f'{self.date_str}/Reference_{self.date_str}_{self.domain}.pdf', vmin=0, vmax=self.rrmax, cmap=plt.cm.YlGnBu)
+            if kriging:
+                self.plot_array(reference_field, parameters.rr, 'Precipitation (mm)', f'{self.date_str}/Reference_{self.date_str}_{self.domain}.pdf', vmin=0, vmax=self.rrmax, cmap=plt.cm.YlGnBu)
 
             npoints = len(evaluation_points)
             if npoints <=3:
@@ -1802,6 +1809,10 @@ class RandomSampling(Assimilation):
             #point = np.where(sd==np.nanmax(sd))  # max error (plot only)
             # plot distributions
             fig, ax = plt.subplots(nrows=nrow, ncols=ncol, figsize=(10*ncol,10*nrow))
+            if npoints == 1:
+                ax = np.array([[ax]])
+            elif npoints <=3:
+                ax = np.array([ax])
             i = 0
             j = 0
             for poste in nivometeo.num_poste.data:
