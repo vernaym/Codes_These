@@ -775,6 +775,7 @@ class Assimilation(object):
         else:
             ratio = 1  # No debiasing
         parameters['mu'] = parameters['rr'] / ratio  # TODO : check if the ensemble after assimilation is not biased
+        self.ratio = ratio
 
         # Observation error
         # Import multiplicative mask to increase observation error where necessary
@@ -816,7 +817,6 @@ class Assimilation(object):
                 #parameters['sigma'] =  mask.ratio  # Pas de valeur absolue pour le calcul des covariances !
                 parameters['sigma'] =  mask.error
                 #parameters['sigma'] =  (0.261 + 0.263 * parameters['rr'])*np.abs(mask.rr)  # PF
-
 
 #            except FileNotFoundError as e:
 #                print(e)
@@ -1513,7 +1513,7 @@ class Assimilation(object):
         add_boundaries(ax)
         finalize_fig(fig, im, label=label, outname=outname)
 
-    def plot_array(self, array, ref_field, label, outname, cmap=plt.cm.YlGnBu, vmin=None, vmax=None, domain=None, add_landmarks=True, bias=None):
+    def plot_array(self, array, ref_field, label, outname, cmap=plt.cm.YlGnBu, vmin=None, vmax=None, domain=None, add_landmarks=True, text1=None, text2=None):
         if domain is None:
             domain = self.domain
         field = xr.DataArray(
@@ -1555,11 +1555,18 @@ class Assimilation(object):
             add_cities(latmin, latmax, lonmin, lonmax)
             add_boundaries(ax)
 
-        if bias is not None:
+        if text1 is not None:
             #ax.scatter(bias.lon.data, bias.lat.data, c=bias.data)
-            for lon, lat, b in zip(bias.lon.data, bias.lat.data, bias.data):
-                text = f'{b:.2f}'
-                ax.text(lon, lat, text, fontsize=14)
+            for lon, lat, text in text1:
+                if lon>=lonmin and lon<=lonmax and lat>=latmin and lat<=latmax:
+                    text = f'{text:.2f}'
+                    ax.text(lon, lat, text, fontsize=14)
+        if text2 is not None:
+            #ax.scatter(bias.lon.data, bias.lat.data, c=bias.data)
+            for lon, lat, text in text2:
+                if lon>=lonmin and lon<=lonmax and lat>=latmin and lat<=latmax:
+                    text = f'{text:.2f}'
+                    ax.text(lon, lat, text, fontsize=14, color='red')
 
         finalize_fig(fig, im, label=label, outname=outname)
 
@@ -1599,6 +1606,59 @@ class RandomSampling(Assimilation):
         # Parameters to compute Euclidian distance between all points in the domain
         self.ld = ld
         self.max_dist = max_dist
+
+        self.read_obs_auto()
+
+    def read_obs_auto(self):
+        datadir = '/home/vernaym/These/DATA'
+        fic_score = os.path.join(datadir, f'obs_quotidienne_auto_RR_20211101_20220430.csv')
+        obs_auto = pd.read_csv(fic_score, sep=';', parse_dates=['date'], dtype={'num_poste':int, 'poste':str, 'lat':float, 'lon':float, 'alti':int, 'rr':float, 'reseau_poste':int})
+        #obs_auto.rename(columns={'dat':'date'}, inplace=True)
+        #obs_auto = obs_auto.set_index(['num_poste', 'date'])
+        obs_auto = obs_auto.set_index(['num_poste'])
+
+        self.obs_auto = obs_auto
+
+    def dynamic_error_estimation(self, antilope, obs_auto):
+        """
+        """
+        lons, lats = np.meshgrid(antilope.lon.data, antilope.lat.data)
+        initial_ratio = self.ratio.sel(lat=antilope.lat, lon=antilope.lon)
+        initial_error = antilope.sigma
+        weights = list()
+        ratios  = list()
+        errors  = list()
+        for i,poste in enumerate(obs_auto.index):
+            tmp = obs_auto.loc[poste]
+            rr_antilope = antilope.sel(lat=tmp.lat, lon=tmp.lon, method='nearest')  # TODO : remove obs outside the antilope domain
+            dist = np.sqrt((lats-tmp.lat)**2+(lons-tmp.lon)**2)  # Euclidian horizontal distance
+            w = np.exp(-(dist/self.ld)**2)  # Distance weighting
+
+            ratio = rr_antilope.rr.data/tmp.rr  # WARNING : division by 0
+            error = rr_antilope.rr.data - tmp.rr
+            if not np.isnan(error):
+                weights.append(w)
+                ratios.append(ratio*initial_ratio)
+                errors.append(error*w)
+
+        weights = np.array(weights)
+        ratios = np.array(ratios)
+        ratios[np.isnan(ratios)] = 1  # Security
+        ratios[np.isinf(ratios)] = 1  # No precipitation in reference
+        ratios[ratios==0] = 1  # No precipitation in antilope
+        #errors = np.array(errors)
+
+        totalweight = np.sum(weights, axis=0)
+        #w0 = 1-totalweight
+        #w0[w0<0] = 0
+        #estimated_ratio = (1*w0 + np.sum(weights*ratios, axis=0)) / (w0+totalweight)
+        new_ratio = (initial_ratio+np.sum(weights*ratios, axis=0)) / (1+totalweight)
+        #new_error = (initial_error+np.sum(weights*errors, axis=0)) / (1+totalweight)
+        new_error = (initial_error+np.sum(errors, axis=0)) / (1+totalweight)
+        self.plot_array(new_ratio, antilope, 'New ratio', 'ratio.pdf', cmap=plt.cm.RdBu)
+        self.plot_array(new_error, antilope, 'New error', 'error.pdf', cmap=plt.cm.YlOrBr)
+
+        return new_error
 
     @speedtest
     def run(self):
@@ -1644,6 +1704,19 @@ class RandomSampling(Assimilation):
 
             parameters = actual_parameters.sel({'time':date}).compute()
 
+            obs_auto = self.obs_auto[self.obs_auto.date==date]  # Select date
+#            latmax = np.max(parameters.lat.data) + self.max_dist
+#            latmin = np.min(parameters.lat.data) - self.max_dist
+#            lonmax = np.max(parameters.lon.data) + self.max_dist
+#            lonmin = np.min(parameters.lon.data) - self.max_dist
+            latmax = np.max(parameters.lat.data)
+            latmin = np.min(parameters.lat.data)
+            lonmax = np.max(parameters.lon.data)
+            lonmin = np.min(parameters.lon.data)
+            obs_auto = obs_auto[(obs_auto.lat>=latmin) & (obs_auto.lat<=latmax) & (obs_auto.lon>=lonmin) & (obs_auto.lon<=lonmax)]
+
+            parameters["error"] = self.dynamic_error_estimation(parameters, obs_auto)
+
             ####################  TMP  #####################
             # Plot distributions before / after conversion
 #            if self.plot:
@@ -1668,7 +1741,7 @@ class RandomSampling(Assimilation):
             parameters.rr.data = np.sqrt(parameters.rr.data)
 
             if self.gridded:
-                self.gridded_random_draw(date, idd, parameters, domain)
+                self.gridded_random_draw(date, idd, parameters, domain, obs_auto=obs_auto)
             else:
                 self.ponctual_random_draw(date, idd, parameters)
 
@@ -1724,7 +1797,7 @@ class RandomSampling(Assimilation):
         return np.square(ana)
 
     @speedtest
-    def gridded_random_draw(self, date, idd, parameters, domain, nmembers=16):
+    def gridded_random_draw(self, date, idd, parameters, domain, nmembers=16, obs_auto=None):
 
         # TODO : Add plots of various fields
 
@@ -1750,14 +1823,23 @@ class RandomSampling(Assimilation):
 
         # Extract reference points and corresponding values
         nivometeo = self.nivometeo.sel({'date':date}).dropna(dim='num_poste').drop('date')
+        # Get data over evaluation points and compute errors
+        evaluation_points = analysis.sel(member=0, lat=xr.DataArray(nivometeo.lat.data, dims="poste"), lon=xr.DataArray(nivometeo.lon.data, dims="poste"), method='nearest')
+        bias = evaluation_points - nivometeo.obs.data
+
+        df = nivometeo.to_dataframe().rename(columns={'nom':'poste', 'obs':'rr'})
+        obs_auto.drop(columns=['date', 'reseau_poste'], inplace=True)
+        allobs = pd.concat([obs_auto, df])
+        allobs = allobs[~np.isnan(allobs.rr)]
+        # Kriging of reference values to get a reference field
         kriging = False
-        if len(nivometeo.num_poste) > 1:
+        #if len(nivometeo.num_poste) > 1:
+        if len(allobs) > 1:
             kriging = True
-            # Kriging of reference values to get a reference field
-            y    = nivometeo.lat
-            x    = nivometeo.lon
-            rr   = nivometeo.obs
-            kriging = UniversalKriging(x.data, y.data, rr.data, variogram_model='exponential')
+            y    = allobs.lat.values
+            x    = allobs.lon.values
+            rr   = allobs.rr.values
+            kriging = UniversalKriging(x, y, rr, variogram_model='exponential')
             rr_ref, ss = kriging.execute('grid', parameters.lon.data, parameters.lat.data)
             reference_field = xr.DataArray(
                 name   = 'reference',
@@ -1765,10 +1847,6 @@ class RandomSampling(Assimilation):
                 dims   = ["lat", "lon"],
                 coords = dict(lon=parameters.lon, lat=parameters.lat),
             )
-
-        # Get data over evaluation points and compute errors
-        evaluation_points = analysis.sel(member=0, lat=xr.DataArray(nivometeo.lat.data, dims="poste"), lon=xr.DataArray(nivometeo.lon.data, dims="poste"), method='nearest')
-        bias = evaluation_points - nivometeo.obs.data
 
         #sd = Rdyn.diagonal().reshape((len(parameters.lat), len(parameters.lon)))  # Get standard deviation field
         sd = R.diagonal().reshape((len(parameters.lat), len(parameters.lon)))  # Get standard deviation field
@@ -1782,11 +1860,15 @@ class RandomSampling(Assimilation):
         )
 
         if self.plot:
-            self.plot_array(analysis.sel(member=0), parameters.rr, 'Corrected field', f'{self.date_str}/Corrected_field_{self.date_str}_{self.domain}.pdf', vmin=0, vmax=self.rrmax, cmap=plt.cm.YlGnBu, bias=bias)
-            self.plot_array(error, parameters.rr, 'Error (mm)', f'{self.date_str}/ERROR_{self.domain}.pdf', vmin=0, vmax=np.max(error), cmap=plt.cm.Reds, bias=bias)
+            text = zip(bias.lon.data, bias.lat.data, bias.data)
+            self.plot_array(analysis.sel(member=0), parameters.rr, 'Corrected field', f'{self.date_str}/Corrected_field_{self.date_str}_{self.domain}.pdf', vmin=0, vmax=self.rrmax, cmap=plt.cm.YlGnBu, text1=text)
+            self.plot_array(error, parameters.rr, 'Error (mm)', f'{self.date_str}/ERROR_{self.domain}.pdf', vmin=0, vmax=np.max(error), cmap=plt.cm.Reds, text1=text)
             #self.plot_array(reference_field, parameters.rr, 'Precipitation (mm)', f'{self.date_str}/Reference_{self.date_str}_{self.domain}.pdf', vmin=0, vmax=self.rrmax, cmap=plt.cm.YlGnBu, bias=nivometeo.obs)
             if kriging:
-                self.plot_array(reference_field, parameters.rr, 'Precipitation (mm)', f'{self.date_str}/Reference_{self.date_str}_{self.domain}.pdf', vmin=0, vmax=self.rrmax, cmap=plt.cm.YlGnBu)
+                #obs_auto = obs_auto[(obs_auto.lon<=np.max(parameters.lon.data)) & (obs_auto.lon>=np.min(parameters.lon.data)) & (obs_auto.lat<=np.max(parameters.lat.data)) & (obs_auto.lat>=np.min(parameters.lat.data))]
+                text1 = zip(obs_auto.lon.values, obs_auto.lat.values, obs_auto.rr.values)
+                text2 = zip(df.lon.values, df.lat.values, df.rr.values)  # nivometeo observations
+                self.plot_array(reference_field, parameters, 'Precipitation (mm)', f'{self.date_str}/Reference_{self.date_str}_{self.domain}.pdf', vmin=0, vmax=self.rrmax, cmap=plt.cm.YlGnBu, text1=text1, text2=text2)
 
             npoints = len(evaluation_points)
             if npoints <=3:
