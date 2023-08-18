@@ -19,6 +19,7 @@ from scipy.interpolate import interp1d
 from scipy.spatial import cKDTree
 from scipy.sparse import csc_matrix, csr_matrix, dia_matrix, diags
 from scipy.ndimage import uniform_filter
+from sklearn.linear_model import LinearRegression
 
 from These.radar import Preprocessing_ANTILOPE
 
@@ -70,17 +71,19 @@ def isolated_storm():
     return np.flip(field, axis=0)
 
 def perturbed_field(field, ratio):
-    #perturb = np.random.randint(0, 100, size=(Np, Np))/10. - 5  # generation of perturbations between -5 and 5
-    perturb = np.random.randint(0, 200, size=(Np, Np))/10. - 10  # generation of perturbations between -10 and 10
+    perturb = np.random.randint(0, 100, size=(Np, Np))/10. - 5  # generation of perturbations between -5 and 5
+    #perturb = np.random.randint(0, 200, size=(Np, Np))/10. - 10  # generation of perturbations between -10 and 10
     #perturb[perturb<0] = -perturb[perturb<0]
     #perturb[perturb==0] = 1
     #perturb = np.random.randint(1, 100, size=(Np, Np))/10.
-    perturb = uniform_filter(perturb, size=5)
+    #perturb = uniform_filter(perturb, size=5)
+    perturb = uniform_filter(perturb, size=10)
     perturb = np.flip(perturb, axis=0)
+    noise = np.random.randint(0, 40, size=(Np, Np))/100. - 0.2  # noise between -0.2 and 0.2
 
     plot_field(perturb, 'perturb.pdf', label='Ratio', cmap='RdBu_r', vmin=-2, vmax=2, add_circle=False)
 
-    new_ratio = ratio + np.abs(1-ratio)*perturb
+    new_ratio = ratio + np.abs(1-ratio)*perturb + noise
     new_ratio[new_ratio<0] = -new_ratio[new_ratio<0]
     new_ratio[new_ratio==0] = 0.1
     new_ratio = uniform_filter(new_ratio, size=3)
@@ -88,14 +91,14 @@ def perturbed_field(field, ratio):
     plot_field(new_ratio, 'new_ratio.pdf', label='ratio', cmap='RdBu_r', vmin=0.2, vmax=1.8, add_circle=False)
 
     perturbed_field =field*new_ratio
-    perturbed_field[perturbed_field<3] = 0
+    perturbed_field[perturbed_field<3] = 0  # Fake "missed precipitation"
     return perturbed_field
 
 
 def simple_error_field():
     ratio =  np.ones((Np, Np))
     ratio[(Np-1)//2, (Np-1)//2] = 0.2
-    plot_field(ratio, 'ratio_simple.pdf', label='Ratio', cmap='RdBu', vmin=0.2, vmax=1.8, add_circle=False)
+    plot_field(ratio, 'ratio_simple.pdf', label='Ratio', cmap='RdBu_r', vmin=0.2, vmax=1.8, add_circle=False)
 
     error = np.ones((Np, Np))
     error[(Np-1)//2, (Np-1)//2] = 10
@@ -107,6 +110,7 @@ def simple_error_field():
 
 def gaussian_field():
     """Generation of a Gaussian Kernel centered on point (X,Y)"""
+    # TODO : generation of a gaussian kernel on a random position of the domain
 
     k1d = signal.gaussian(Np, std=5).reshape(Np, 1)
     kernel = np.outer(k1d, k1d)
@@ -145,6 +149,39 @@ def plot_field(field, filename, label='Precipitation (mm)', cmap='YlGnBu', vmin=
     fig.tight_layout()
     fig.savefig(os.path.join(savedir, filename), format='pdf')
 
+def plot_scatter(reference, model, savename):
+    ref = reference.flatten()
+    mod = model.flatten()
+    bias = np.round(np.mean(mod - ref),2)
+    rmse = np.round(np.sqrt(np.mean((mod-ref)**2)), 2)
+    fig,ax = plt.subplots()
+    ax.scatter(ref, mod)  # scatterplot ref vs estimation
+
+    x = ref.reshape((-1,1))
+    y = mod
+    reg = LinearRegression().fit(x, y)
+    z = reg.predict(x)
+    r2 = np.round(reg.score(x, y), 2)
+
+    ax.plot(x, z, color='blue', linewidth=1, label=f'R²={r2:.4}, bias={bias}, rmse={rmse}')  # plot linear regression line
+    lims = [
+        np.min([ax.get_xlim(), ax.get_ylim()]),  # min of both axes
+        np.max([ax.get_xlim(), ax.get_ylim()]),  # max of both axes
+    ]
+
+    # Plot bissectrice and adjuste axes limits
+    ax.plot(lims, lims, 'k-', alpha=0.75, zorder=0)
+    ax.plot(lims, [1, 1], color='k', linestyle='--', linewidth=0.5)
+    ax.plot([1, 1], lims, color='k', linestyle='--', linewidth=0.5)
+    ax.set_aspect('equal')
+    ax.set_xlim(lims)
+    ax.set_ylim(lims)
+    ax.set_ylabel('Estimated value')
+    ax.set_xlabel('Real value')
+    ax.legend(fontsize=14)
+    plt.tight_layout()
+    fig.savefig(os.path.join(savedir, savename), format='pdf')
+
 
 if __name__ == "__main__":
 
@@ -153,49 +190,62 @@ if __name__ == "__main__":
     plot_field(field, f'real_field.pdf', vmin=0, vmax=30, add_circle=False)
 
     ratio = np.flip(xr.open_dataarray(os.path.join(datadir, 'Estimated_ratio_MontBlanc.nc')).data, axis=0)
-    plot_field(ratio, f'ratio.pdf', vmin=0.2, vmax=1.8, add_circle=False)
+    plot_field(ratio, f'ratio.pdf', cmap='RdBu_r', vmin=0.2, vmax=1.8, add_circle=False)
     error = np.flip(xr.open_dataarray(os.path.join(datadir, 'Observation_error_MontBlanc.nc')).data, axis=0)
 
-    field = perturbed_field(field, ratio)
-    plot_field(field, f'fake_antilope_field.pdf', vmin=0, vmax=30, add_circle=False)
+    perturbed_field = perturbed_field(field, ratio)
+    plot_field(perturbed_field, f'fake_antilope_field.pdf', vmin=0, vmax=30, add_circle=False)
 
-# Compute spatial correlations
+    # Compute spatial correlations
     coords = [(lon/100., lat/100.) for lat in range(Np) for lon in range(Np)]
     codist = Preprocessing_ANTILOPE.codistances(coords, ld=ld)
-#cd     = codist.toarray()
+    #cd     = codist.toarray()
     plot_field(codist.getrow(Np**2//2).toarray()[0].reshape((Np,Np)), "codist.pdf", label='Codistances', vmin=0, vmax=1, cmap='Greens', add_circle=True)  # Weights for central pixel correction
 
-# Add error ponderation
-# TODO : choisir la bonne formulation
-#pond = codist.dot(diags(np.exp(-(error-1)).flatten(), 0))  # error is in [1, inf[
+    # Add error ponderation
+    # TODO : choisir la bonne formulation
+    #pond = codist.dot(diags(np.exp(-(error-1)).flatten(), 0))  # error is in [1, inf[
     pond = codist.dot(diags((1/error).flatten(), 0))  # error is in [1, inf[
     plot_field(pond.diagonal().reshape((Np,Np)), "pond.pdf", label='Confidence', vmin=0, vmax=1, cmap='Greens')  # exp(-(error-1))
     plot_field(pond.getrow(Np**2//2).toarray()[0].reshape((Np,Np)), "weights_MontBlanc.pdf", label='Weights for Mont-Blanc correction', vmin=0, vmax=1, cmap='Greens', add_circle=True)  # Weights for central pixel correction
 
-# De-biasing only
-    db = field/ratio
+    # De-biasing only
+    db = perturbed_field/ratio
 
-# Dynamic correction only
-    dyn, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(field, pond)
+    # Dynamic correction only
+    dyn, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(perturbed_field, pond)
     dyn = dyn.reshape((Np, Np))
     plot_field(np.sqrt(sd.reshape((Np,Np))), f'dynamic_error_without_debiasing.pdf', label='Error (mm)', cmap=plt.cm.Reds)
 
-# De-biasing + Dynamic correction
-    dd, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(field/ratio, pond)
+    # De-biasing + Dynamic correction
+    dd, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(perturbed_field/ratio, pond)
     dd = dd.reshape((Np, Np))
     plot_field(np.sqrt(sd.reshape((Np,Np))), f'dynamic_error_with_debiasing.pdf', label='Error (mm)', cmap=plt.cm.Reds)
 
-#Dynamic correction + de-biasing
-    qq = dyn/ratio
+    #Dynamic correction + de-biasing  ==> does not work at all !
+    #qq = dyn/ratio
 
-#plt.imshow(new)
-#plt.show()
     savedir = '/home/vernaym/These/figures/illustration'
 
     plot_field(dyn, f'dynamic_correction_ld{ld}.pdf', vmin=0, vmax=30)
-    plot_field(db, f'debiasing_ld{ld}.pdf', vmin=0, vmax=30)
+    plot_field(db, f'debiasing.pdf', vmin=0, vmax=30)
     plot_field(dd, f'debiasing+dynamic_correction_ld{ld}.pdf', vmin=0, vmax=30)
-    plot_field(qq, f'dynamic_correction_ld{ld}+debiasing.pdf', vmin=0, vmax=30)
+    #plot_field(qq, f'dynamic_correction_ld{ld}+debiasing.pdf', vmin=0, vmax=30)
+
+    plot_scatter(field, perturbed_field, f"Initial_perturbations_scatterplot.pdf")
+    plot_scatter(field, dyn, f"dynamic_correction_ld{ld}_scatterplot.pdf")
+    plot_scatter(field, db, f"debiasing_scatterplot.pdf")
+    plot_scatter(field, dd, f"debiasing+dynamic_correction_ld{ld}_scatterplot.pdf")
+
+    #TODO :
+    # - Extend domain
+    # - Add more diversity in initial field (position, magnitude and spread of the gaussian kernel)
+    # - Perturbations using ratio field estimated with nivometeo observations
+    # - Simulation on Alps domain
+    # - Plot bias/rmse fields (--> ODG ?)
+    # - Add random sampling
+    # - Compute RS spread skill
+
 
 
 
