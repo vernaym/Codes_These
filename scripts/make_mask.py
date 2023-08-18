@@ -16,6 +16,7 @@ pd.options.mode.chained_assignment = None  # default='warn'
 import scipy
 from scipy.sparse import csr_matrix, diags
 from scipy.spatial import cKDTree
+from scipy.ndimage import uniform_filter
 
 from sklearn.linear_model import LinearRegression, RANSACRegressor
 
@@ -746,7 +747,7 @@ def ratio_estimation(field, model=None, moving_window=25):
     w0 = 1-totalweight
     w0[w0<0] = 0
     estimated_ratio = (1*w0 + np.sum(weights*ratios, axis=0)) / (w0+totalweight)
-
+    #estimated_ratio = uniform_filter(estimated_ratio, size=d0*100)
 
     #tmp.apply_along_axis(
     #np.take_along_axis(
@@ -777,19 +778,30 @@ def ratio_estimation(field, model=None, moving_window=25):
     # The error is constructed to be >=1mm/24h to account for representativity errors. TODO : justifier la valeur de l'erreur constante
     # It ensures that the observation error is always >1 mm/24h and it is thus possible to define
     # the observation confidence as the inverse of the observation error.
+    #observation_error = ratio_field.copy()
+    #observation_error[np.where(observation_error<1)] = 1/observation_error[np.where(observation_error<1)]
     observation_error = ratio_field - 1
     neg = np.where(observation_error.data<0)
     pos= np.where(observation_error.data>=0)
     #observation_error.data[neg] = 21.391*observation_error.data[neg]  # r=0.5 ==> err=-10.7  # 2018/2019
-    observation_error.data[neg] = 20.137*observation_error.data[neg]-1  # <0
+    #observation_error.data[neg] = 20.137*observation_error.data[neg]-1  # <0
+    observation_error.data[neg] = 20.137*observation_error.data[neg] - 1  # <0
+    #observation_error.data[neg] = 20*np.square(observation_error.data[neg]-1)  # <0
     #observation_error.data[neg] = 4*observation_error.data[neg]  # r=0.5 ==> err=-2
     #observation_error.data[pos] = 15.148*observation_error.data[pos]  # r=1.5 ==> err=7.574  " 2018/2019
-    observation_error.data[pos] = 1+16.787*observation_error.data[pos]  # r=1.5 ==> err=8.574  " 2021/2022
+    observation_error.data[pos] = 16.787*observation_error.data[pos] + 1  # r=1.5 ==> err=8.574  " 2021/2022
+    #observation_error.data[pos] = 16*np.square(observation_error.data[pos]+1)  # r=1.5 ==> err=8.574  " 2021/2022
     #observation_error.data[pos] = 2*observation_error.data[pos]  # r=1.5 ==> err = 1
     #observation_error = 1+np.abs(smoothratio-1)
     #observation_error = observation_error.rename('Observation error (mm)')
     # TODO : trouver la formulation optimale de l'erreur d'observation
+    #observation_error.data[neg] = 5/4*observation_error.data[neg]
+    #observation_error = np.square(np.abs(observation_error)+1)
+    observation_error.data = np.abs(observation_error.data)
     observation_error = observation_error.rename('error')
+    observation_confidence = observation_error.copy()
+    observation_confidence.data = 1/observation_confidence.data
+    #observation_error.data = uniform_filter(observation_error.data, size=3)
 
     #observation_error = np.abs(ratio_field-1)
     #observation_error = np.abs(ratio_field**2-1)*50
@@ -804,6 +816,7 @@ def ratio_estimation(field, model=None, moving_window=25):
     #scores = scores.loc[used_scores]  # TODO : voir pourquoi ca ne marche plus après update de la version de pandas
     rationame = f'Estimated_ratio_{domain}_{d0}_{h0}' if h0 is not None else f'Estimated_ratio_{domain}_{d0}'
     errorname = f'Observation_error_{d0}_{h0}_{domain}' if h0 is not None else f'Observation_error_{d0}_{domain}'
+    confidencename = f'Observation_confidence_{d0}_{h0}_{domain}' if h0 is not None else f'Observation_confidence_{d0}_{domain}'
     if domain == 'alp':
         #plot_and_save(ratio_field, rationame, vmin=0.2, vmax=1.8, cmap=plt.cm.coolwarm, scores=scores)
         # From https://qiita.com/tsukada_cs/items/d282f27f4024d00d7022 :
@@ -822,7 +835,8 @@ def ratio_estimation(field, model=None, moving_window=25):
         #plot_and_save(np.abs(observation_error), errorname, vmin=0, vmax=12, cmap=plt.cm.viridis, scores=scores)
         #plot_and_save(np.abs(observation_error), errorname, vmin=0, vmax=15, cmap=plt.cm.Reds, scores=scores)
         #plot_and_save(np.abs(observation_error), errorname, vmin=0, vmax=15, cmap=plt.cm.Greys, scores=scores)
-        plot_and_save(np.abs(observation_error), errorname, vmin=1, vmax=16, cmap=plt.cm.YlOrBr, scores=scores)
+        plot_and_save(observation_error, errorname, vmin=1, vmax=15, cmap=plt.cm.YlOrBr, scores=scores)
+        plot_and_save(observation_confidence, confidencename, vmin=0, vmax=1, cmap=plt.cm.Greens, scores=scores)
     elif domain == 'GrandesRousses':
         plot_and_save(ratio_field, rationame, vmin=0.6, vmax=1.4, cmap=plt.cm.coolwarm, scores=scores)
         #plot_and_save(observation_error, errorname, vmin=-6, vmax=6, cmap=plt.cm.coolwarm, scores=scores)
@@ -830,42 +844,55 @@ def ratio_estimation(field, model=None, moving_window=25):
 
     plt.close('all')
 
-    plot_ratio_estime_vs_ratio_reel(ratio_field)
+    plot_ratio_estime_vs_ratio_reel(ratio_field, observation_error)
 
-def plot_ratio_estime_vs_ratio_reel(ratio):
+def plot_ratio_estime_vs_ratio_reel(ratio, erreur):
+
     scores = pd.read_csv(os.path.join(datadir, f'scores_2021110106_2022043006_alp.csv'), sep=';')
     scores = scores.set_index('num_poste')
     scores = scores.sort_values('lats')
-    estimation = ratio.sel(lat=xr.DataArray(scores.lats.values, dims='poste'), lon=xr.DataArray(scores.lons.values, dims='poste'), method='nearest')
-    # Regression linéaire
+    ratio_estimation = ratio.sel(lat=xr.DataArray(scores.lats.values, dims='poste'), lon=xr.DataArray(scores.lons.values, dims='poste'), method='nearest')
+    error_estimation = erreur.sel(lat=xr.DataArray(scores.lats.values, dims='poste'), lon=xr.DataArray(scores.lons.values, dims='poste'), method='nearest')
+
+    def plot(x_values, y_values, x, y, savename):
+        fig,ax = plt.subplots()
+        #ax.scatter(scores.ratio.values, estimation.data, label=f'R²={r2:.4}', marker='+', color='blue')
+        ax.scatter(x_values, y_values, marker='+', color='blue')
+        #ax.plot(x, z, color='blue', linewidth=2, label=f'Slope={reg.coef_[0]:.3f}, Intercept={reg.intercept_:.3f}, R²={r2:.4}')
+        ax.plot(x, z, color='blue', linewidth=1, label=f'R²={r2:.4}')
+        lims = [
+            np.min([ax.get_xlim(), ax.get_ylim()]),  # min of both axes
+            np.max([ax.get_xlim(), ax.get_ylim()]),  # max of both axes
+        ]
+
+        # Plot bissectrice and adjuste axes limits
+        ax.plot(lims, lims, 'k-', alpha=0.75, zorder=0)
+        ax.plot(lims, [1, 1], color='k', linestyle='--', linewidth=0.5)
+        ax.plot([1, 1], lims, color='k', linestyle='--', linewidth=0.5)
+        ax.set_aspect('equal')
+        ax.set_xlim(lims)
+        ax.set_ylim(lims)
+        ax.set_ylabel('Estimated ratio')
+        ax.set_xlabel('Real ratio')
+        ax.legend(fontsize=18)
+        plt.tight_layout()
+        fig.savefig(os.path.join(savedir, savename))
+
+    # Regression linéaire pour le ratio
     x = scores.ratio.values.reshape((-1,1))
-    y = estimation.data
+    y = ratio_estimation.data
     reg = LinearRegression().fit(x, y)
     z = reg.predict(x)
     r2 = reg.score(x, y)
+    plot(scores.ratio.values, ratio_estimation.data, x, z, f'Estimated_ratio_vs_real_ratio_{domain}_{d0}.pdf')
+    # Regression linéaire pour l'erreur
+    x = scores.rmse.values.reshape((-1,1))
+    y = error_estimation.data
+    reg = LinearRegression().fit(x, y)
+    z = reg.predict(x)
+    r2 = reg.score(x, y)
+    plot(scores.rmse.values, error_estimation.data, x, z, f'Estimated_error_vs_real_error_{domain}_{d0}.pdf')
 
-    fig,ax = plt.subplots()
-    #ax.scatter(scores.ratio.values, estimation.data, label=f'R²={r2:.4}', marker='+', color='blue')
-    ax.scatter(scores.ratio.values, estimation.data, marker='+', color='blue')
-    #ax.plot(x, z, color='blue', linewidth=2, label=f'Slope={reg.coef_[0]:.3f}, Intercept={reg.intercept_:.3f}, R²={r2:.4}')
-    ax.plot(x, z, color='blue', linewidth=1, label=f'R²={r2:.4}')
-    lims = [
-        np.min([ax.get_xlim(), ax.get_ylim()]),  # min of both axes
-        np.max([ax.get_xlim(), ax.get_ylim()]),  # max of both axes
-    ]
-
-# Plot bissectrice and adjuste axes limits
-    ax.plot(lims, lims, 'k-', alpha=0.75, zorder=0)
-    ax.plot(lims, [1, 1], color='k', linestyle='--', linewidth=0.5)
-    ax.plot([1, 1], lims, color='k', linestyle='--', linewidth=0.5)
-    ax.set_aspect('equal')
-    ax.set_xlim(lims)
-    ax.set_ylim(lims)
-    ax.set_ylabel('Estimated ratio')
-    ax.set_xlabel('Real ratio')
-    ax.legend(fontsize=18)
-    plt.tight_layout()
-    fig.savefig(os.path.join(savedir, f'Estimated_ratio_vs_real_ratio_{domain}_{d0}.pdf'))
 
 def animation_mask(field):
 
