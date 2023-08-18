@@ -50,6 +50,8 @@ datadir = '/home/vernaym/These/DATA'
 savedir = '/home/vernaym/workdir/ASSIMILATION/mask/'
 #savedir = '/home/vernaym/workdir/ASSIMILATION/mask/ref/r2'
 savedir = f'/home/vernaym/workdir/ASSIMILATION/mask/{domain}'
+#savedir = f'/home/vernaym/workdir/ASSIMILATION/mask/{domain}/nivometeo'
+
 if not os.path.exists(savedir):
     os.makedirs(savedir)
 
