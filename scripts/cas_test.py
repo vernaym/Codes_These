@@ -29,6 +29,8 @@ if len(sys.argv) > 1:
 else:
     domain = 'MontBlanc'
 
+plot = False
+
 savedir = f'/home/vernaym/These/figures/illustration/{domain}'
 datadir = f'/home/vernaym/workdir/ASSIMILATION/mask/{domain}'
 
@@ -85,7 +87,26 @@ def isolated_storm():
 
     return np.flip(field, axis=0)
 
-def perturbed_field(field, ratio):
+def perturbed_ratio(ratio):
+    """
+    Perturbation of the "real" ANTILOPE vs reality ratio to add noise around "non-biased" pixels.
+    This accounts for the ratio estimation method errors where there is no obvious ANTILOPE spatial pattern.
+    --> to apply only once (climatological noise)
+    """
+    perturb = np.random.randint(0, 20, size=np.shape(ratio.data))/10. - 1  # generation of perturbations between -1 and 1
+    #perturb = uniform_filter(perturb, size=5)
+    ratio.data = ratio.data + np.exp(-np.abs(1-ratio.data))*perturb
+    ratio.data = uniform_filter(ratio.data, size=3)
+    plot_field(ratio, 'real_ratio.pdf', label='Ratio', cmap='RdBu_r', vmin=0.2, vmax=1.8, add_circle=False)
+    return ratio
+
+
+def perturb_field(field, ratio):
+    """
+    Perturbation of the idealised climatological ANTILOPE vs reality ratio to account for daily variability.
+    Here the perturbations are amplified for pixels with high climatolocical biases and a small random noise is added.
+    --> to apply at each new "event"
+    """
     perturb = np.random.randint(0, 100, size=np.shape(field))/10. - 5  # generation of perturbations between -5 and 5
     #perturb = np.random.randint(0, 200, size=np.shape(field))/10. - 10  # generation of perturbations between -10 and 10
     #perturb[perturb<0] = -perturb[perturb<0]
@@ -95,7 +116,8 @@ def perturbed_field(field, ratio):
     #perturb = uniform_filter(perturb, size=10)
     #perturb = np.flip(perturb, axis=0)
 
-    plot_field(perturb, 'perturb.pdf', label='Ratio', cmap='RdBu_r', vmin=-2, vmax=2, add_circle=False)
+    if plot:
+        plot_field(perturb, 'perturb.pdf', label='Ratio', cmap='RdBu_r', vmin=-2, vmax=2, add_circle=False)
 
     noise = np.random.randint(0, 40, size=np.shape(field))/100. - 0.2  # noise between -0.2 and 0.2
     new_ratio = ratio + np.abs(1-ratio)*perturb + noise
@@ -104,7 +126,8 @@ def perturbed_field(field, ratio):
     new_ratio[new_ratio==0] = 0.1
     new_ratio = uniform_filter(new_ratio, size=5)
 
-    plot_field(new_ratio, 'new_ratio.pdf', label='ratio', cmap='RdBu_r', vmin=0.2, vmax=1.8, add_circle=False)
+    if plot:
+        plot_field(new_ratio, 'daily_ratio.pdf', label='ratio', cmap='RdBu_r', vmin=0.2, vmax=1.8, add_circle=False)
 
     perturbed_field =field*new_ratio
     perturbed_field[perturbed_field<3] = 0  # Fake "missed precipitation"
@@ -114,13 +137,15 @@ def perturbed_field(field, ratio):
 def simple_error_field():
     ratio =  np.ones((Np, Np))
     ratio[(Np-1)//2, (Np-1)//2] = 0.2
-    plot_field(ratio, 'ratio_simple.pdf', label='Ratio', cmap='RdBu_r', vmin=0.2, vmax=1.8, add_circle=False)
+    if plot:
+        plot_field(ratio, 'ratio_simple.pdf', label='Ratio', cmap='RdBu_r', vmin=0.2, vmax=1.8, add_circle=False)
 
     error = np.ones((Np, Np))
     error[(Np-1)//2, (Np-1)//2] = 10
     #plt.imshow(field)
     #plt.show()
-    plot_field(error, 'error_simple.pdf', label='Error (mm)', cmap='YlOrBr', vmin=1, vmax=10, add_circle=False)
+    if plot:
+        plot_field(error, 'error_simple.pdf', label='Error (mm)', cmap='YlOrBr', vmin=1, vmax=10, add_circle=False)
 
     return ratio, error
 
@@ -151,6 +176,11 @@ def gaussian_field(X, Y, std, nlon, nlat):
 
 def plot_field(field, filename, label='Precipitation (mm)', cmap='YlGnBu', vmin=None, vmax=None, add_circle=True):
 
+    if vmin is None:
+        vmin = np.nanmin(field)
+    if vmax is None:
+        vmax = np.nanmax(field)
+
     #if not isinstance(field, xr.core.dataarray.DataArray):
     if isinstance(field, np.ndarray):
         field = make_mask.to_xarray(field, real_ratio)
@@ -159,10 +189,6 @@ def plot_field(field, filename, label='Precipitation (mm)', cmap='YlGnBu', vmin=
     if not filename.endswith('pdf'):
         filename = f'{filename}.pdf'
     fig.savefig(os.path.join(savedir, filename), format='pdf')
-#    if vmin is None:
-#        vmin = np.nanmin(field)
-#    if vmax is None:
-#        vmax = np.nanmax(field)
 #
 #    fig,ax = plt.subplots()
 #    fd = ax.imshow(field, cmap=cmap, vmin=vmin, vmax=vmax)
@@ -182,19 +208,33 @@ def plot_field(field, filename, label='Precipitation (mm)', cmap='YlGnBu', vmin=
 #    fig.tight_layout()
 #    fig.savefig(os.path.join(savedir, filename), format='pdf')
 
-def plot_scatter(reference, model, savename):
+def compare(reference, model):
+    diff = model-reference
+    ratio = model / reference
     ref = reference.flatten()
     mod = model.flatten()
-    bias = np.round(np.mean(mod - ref),2)
-    rmse = np.round(np.sqrt(np.mean((mod-ref)**2)), 2)
-    fig,ax = plt.subplots()
-    ax.scatter(ref, mod)  # scatterplot ref vs estimation
-
     x = ref.reshape((-1,1))
     y = mod
     reg = LinearRegression().fit(x, y)
     z = reg.predict(x)
     r2 = np.round(reg.score(x, y), 2)
+
+    return r2, diff, ratio
+
+
+def plot_scatter(reference, model, savename):
+    ref = reference.flatten()
+    mod = model.flatten()
+    bias = np.round(np.mean(mod - ref),2)
+    rmse = np.round(np.sqrt(np.mean((mod-ref)**2)), 2)
+    x = ref.reshape((-1,1))
+    y = mod
+    reg = LinearRegression().fit(x, y)
+    z = reg.predict(x)
+    r2 = np.round(reg.score(x, y), 2)
+
+    fig,ax = plt.subplots()
+    ax.scatter(ref, mod, marker='+')  # scatterplot ref vs estimation
 
     ax.plot(x, z, color='blue', linewidth=1, label=f'R²={r2:.4}, bias={bias}, rmse={rmse}')  # plot linear regression line
     lims = [
@@ -219,13 +259,7 @@ def plot_scatter(reference, model, savename):
 if __name__ == "__main__":
 
     real_ratio = np.flip(xr.open_dataarray(os.path.join(datadir, 'nivometeo', f'Estimated_ratio_{domain}_0.15.nc')), axis=0)  # Reference ratio estimated with nivometeo observations only
-
-    nlon = len(real_ratio.lon)
-    nlat = len(real_ratio.lat)
-    real_field = random_field(nlat, nlon)  # Randomly generated reference precipitation field
-    #field = isolated_storm()
-
-    perturbed_field = perturbed_field(real_field.data, real_ratio.data)  # Pertubation of the reference field to simulate an ANTILOPE field
+    real_ratio = perturbed_ratio(real_ratio)  # Climatological perturbations of the ratio field to account for the ratio estimation method's errros
 
     # Compute spatial correlations
     #coords = [(lon/100., lat/100.) for lat in range(nlon) for lon in range(nlat)]
@@ -235,63 +269,103 @@ if __name__ == "__main__":
     #plot_field(codist.getrow(Np**2//2).toarray()[0].reshape((Np,Np)), "codist.pdf", label='Codistances', vmin=0, vmax=1, cmap='Greens', add_circle=True)  # Weights for central pixel correction
 
     # Read ratio/error fields to evaluate
-#    ratio = np.flip(xr.open_dataarray(os.path.join(datadir, 'Estimated_ratio_MontBlanc.nc')).data, axis=0)
-#    plot_field(ratio, f'ratio.pdf', cmap='RdBu_r', vmin=0.2, vmax=1.8, add_circle=False)
-#    error = np.flip(xr.open_dataarray(os.path.join(datadir, 'Observation_error_MontBlanc.nc')).data, axis=0)
     estimated_ratio = np.flip(xr.open_dataarray(os.path.join(datadir, f'Estimated_ratio_{domain}_0.15.nc')), axis=0)  # Ratio estimated with automatic observations that we want to evaluate
-    #plot_field(estimated_ratio, f'estimated_ratio.pdf', cmap='RdBu_r', vmin=0.2, vmax=1.8, add_circle=False)
     error = np.flip(xr.open_dataarray(os.path.join(datadir, f'Observation_error_0.15_{domain}.nc')).data, axis=0)
 
-    # Add error ponderation
-    # TODO : reporter la formulation retenue dans l'expérience avec données réelles
-    pond = codist.dot(diags(np.exp(-(error-1)).flatten(), 0))  # error is in [1, inf[.
-    #pond = codist.dot(diags(np.exp(-error).flatten(), 0))  # error is in [1, inf[
-    #pond = codist.dot(diags((1/error).flatten(), 0))  # error is in [1, inf[
-    #plot_field(pond.diagonal().reshape((Np,Np)), "pond.pdf", label='Confidence', vmin=0, vmax=1, cmap='Greens')  # exp(-(error-1))
-    #plot_field(pond.getrow(Np**2//2).toarray()[0].reshape((Np,Np)), "weights_MontBlanc.pdf", label='Weights for Mont-Blanc correction', vmin=0, vmax=1, cmap='Greens', add_circle=True)  # Weights for central pixel correction
+    plot_scatter(real_ratio.data, estimated_ratio.data, f"ratios_scatterplot.pdf")
 
-    # De-biasing only
-    db = perturbed_field / estimated_ratio.data
+    nlon = len(real_ratio.lon)
+    nlat = len(real_ratio.lat)
 
-    # Dynamic correction only
-    dyn, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(perturbed_field, pond)
-    dyn = dyn.reshape((nlat, nlon))
-    #plot_field(np.sqrt(sd.reshape((nlat, nlon))), f'dynamic_error_without_debiasing.pdf', label='Error (mm)', cmap=plt.cm.Reds)
+    r2 = dict(raw=list(), debiasing=list(), dyn=list(), full=list())
+    err = dict(raw=list(), debiasing=list(), dyn=list(), full=list())
+    rat = dict(raw=list(), debiasing=list(), dyn=list(), full=list())
+    for i in range(100):
+    #for i in range(2):
 
-    # De-biasing + Dynamic correction
-    dd, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(perturbed_field.data/estimated_ratio.data, pond)
-    dd = dd.reshape((nlat, nlon))
-    #plot_field(np.sqrt(sd.reshape((nlat, nlon))), f'dynamic_error_with_debiasing.pdf', label='Error (mm)', cmap=plt.cm.Reds)
+        real_field = random_field(nlat, nlon)  # Randomly generated reference precipitation field
+        #field = isolated_storm()
 
-    #Dynamic correction + de-biasing  ==> does not work at all !
-    #qq = dyn/ratio
+        perturbed_field = perturb_field(real_field.data, real_ratio.data)  # Pertubation of the reference field to simulate an ANTILOPE field
 
-    plot_scatter(real_field, perturbed_field, f"Initial_perturbations_scatterplot.pdf")
-    plot_scatter(real_field, dyn, f"dynamic_correction_ld{ld}_scatterplot.pdf")
-    plot_scatter(real_field, db, f"debiasing_scatterplot.pdf")
-    plot_scatter(real_field, dd, f"debiasing+dynamic_correction_ld{ld}_scatterplot.pdf")
+        # Add error ponderation
+        # TODO : reporter la formulation retenue dans l'expérience avec données réelles
+        pond = codist.dot(diags(np.exp(-(error-1)).flatten(), 0))  # error is in [1, inf[.
 
-    real_field = make_mask.to_xarray(real_field, real_ratio, varname='Precipitation')
-    perturbed_field = make_mask.to_xarray(perturbed_field, real_ratio, varname='Precipitation')
-    dyn = make_mask.to_xarray(dyn, real_ratio, varname='Precipitation')
-    db = make_mask.to_xarray(db, real_ratio, varname='Precipitation')
-    dd = make_mask.to_xarray(dd, real_ratio, varname='Precipitation')
+        # De-biasing only
+        db = perturbed_field / estimated_ratio.data
 
-    vmax = max(np.max(real_field), np.max(perturbed_field), np.max(dyn), np.max(db), np.max(dd))
-    plot_field(real_field, f'real_field.pdf', vmin=0, vmax=vmax)
-    plot_field(perturbed_field, f'fake_antilope_field.pdf', vmin=0, vmax=vmax)
-    plot_field(dyn, f'dynamic_correction_ld{ld}.pdf', vmin=0, vmax=vmax)
-    plot_field(db, f'debiasing.pdf', vmin=0, vmax=vmax)
-    plot_field(dd, f'debiasing+dynamic_correction_ld{ld}.pdf', vmin=0, vmax=vmax)
-    #plot_field(qq, f'dynamic_correction_ld{ld}+debiasing.pdf', vmin=0, vmax=30)
+        # Dynamic correction only
+        dyn, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(perturbed_field, pond)
+        dyn = dyn.reshape((nlat, nlon))
+        #plot_field(np.sqrt(sd.reshape((nlat, nlon))), f'dynamic_error_without_debiasing.pdf', label='Error (mm)', cmap=plt.cm.Reds)
+
+        # De-biasing + Dynamic correction
+        dd, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(perturbed_field.data/estimated_ratio.data, pond)
+        dd = dd.reshape((nlat, nlon))
+        #plot_field(np.sqrt(sd.reshape((nlat, nlon))), f'dynamic_error_with_debiasing.pdf', label='Error (mm)', cmap=plt.cm.Reds)
+
+        #Dynamic correction + de-biasing  ==> does not work at all !
+        #qq = dyn/ratio
+
+        if plot:
+
+            plot_scatter(real_field, perturbed_field, f"Initial_perturbations_scatterplot.pdf")
+            plot_scatter(real_field, dyn, f"dynamic_correction_ld{ld}_scatterplot.pdf")
+            plot_scatter(real_field, db, f"debiasing_scatterplot.pdf")
+            plot_scatter(real_field, dd, f"debiasing+dynamic_correction_ld{ld}_scatterplot.pdf")
+
+            # Transform np arrays into xarray Dataarrays
+            real_field = make_mask.to_xarray(real_field, real_ratio, varname='Precipitation')
+            perturbed_field = make_mask.to_xarray(perturbed_field, real_ratio, varname='Precipitation')
+            dyn = make_mask.to_xarray(dyn, real_ratio, varname='Precipitation')
+            db = make_mask.to_xarray(db, real_ratio, varname='Precipitation')
+            dd = make_mask.to_xarray(dd, real_ratio, varname='Precipitation')
+
+            # Plot fields
+            vmax = max(np.max(real_field), np.max(perturbed_field), np.max(dyn), np.max(db), np.max(dd))
+            plot_field(real_field, f'real_field.pdf', vmin=0, vmax=vmax)
+            plot_field(perturbed_field, f'fake_antilope_field.pdf', vmin=0, vmax=vmax)
+            plot_field(dyn, f'dynamic_correction_ld{ld}.pdf', vmin=0, vmax=vmax)
+            plot_field(db, f'debiasing.pdf', vmin=0, vmax=vmax)
+            plot_field(dd, f'debiasing+dynamic_correction_ld{ld}.pdf', vmin=0, vmax=vmax)
+            #plot_field(qq, f'dynamic_correction_ld{ld}+debiasing.pdf', vmin=0, vmax=30)
+
+        else:
+
+            a,b,c = compare(real_field, perturbed_field)
+            r2['raw'].append(a)
+            err['raw'].append(b)
+            rat['raw'].append(c)
+            a,b,c = compare(real_field, db)
+            r2['debiasing'].append(a)
+            err['debiasing'].append(b)
+            rat['debiasing'].append(c)
+            a,b,c = compare(real_field, dyn)
+            r2['dyn'].append(a)
+            err['dyn'].append(b)
+            rat['dyn'].append(c)
+            a,b,c = compare(real_field, dd)
+            r2['full'].append(a)
+            err['full'].append(b)
+            rat['full'].append(c)
+
+    for product in r2.keys():
+        plot_field(np.mean(np.array(err[product]), axis=0), f'mean_bias_{product}.pdf', cmap='RdBu_r')
+        plot_field(np.sqrt(np.mean(np.array(err[product])**2, axis=0)), f'rmse_{product}.pdf', cmap='Reds')
+        plot_field(np.mean(np.array(rat[product]), axis=0), f'mean_ratio_{product}.pdf', cmap='RdBu_r', vmin=0.2, vmax=1.8)
+        print(f'Mean R2 for product {product} = ', np.mean(np.array(r2[product])))
 
 
     #TODO :
-    # - Extend domain
-    # - Add more diversity in initial field (position, magnitude and spread of the gaussian kernel)
-    # - Perturbations using ratio field estimated with nivometeo observations
-    # - Simulation on Alps domain
-    # - Plot bias/rmse fields (--> ODG ?)
+    # - Extend domain --> OK
+    # - Add more diversity in initial field (position, magnitude and spread of the gaussian kernel) --> OK
+    # - Perturbations using ratio field estimated with nivometeo observations --> OK
+    # - Simulation on the Alps domain --> [OK]
+    # - Statistics over ~1000 situations  --> 0K
+    # - Plot bias/rmse fields (--> ODG ?) --> Uniformiser les échelles entre les différents produits
+    # - PLot "improvment fields" (ex : "product bias" vs "raw bias")
+    # - Plot estimated error (compare ODG with "real" error)
     # - Add random sampling
     # - Compute RS spread skill
 
