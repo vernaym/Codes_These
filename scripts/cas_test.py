@@ -34,6 +34,15 @@ if len(sys.argv) > 1:
 else:
     domain = 'MontBlanc'
 
+figsize = dict(
+        alp            = (14,16),
+        GrandesRousses = (15,7),
+        HauteSavoie    = (12,12),
+        HautesAlpes    = (16,10),
+        MontBlanc      = (15,10),
+        Savoie         = (16,8),
+        Isere          = (16,8),
+)
 
 savedir = f'/home/vernaym/These/figures/illustration/{domain}'
 datadir = f'/home/vernaym/workdir/ASSIMILATION/mask/{domain}'
@@ -102,9 +111,10 @@ def perturbed_ratio(ratio):
     perturb = np.random.randint(0, 20, size=np.shape(ratio.data))/10. - 1  # generation of perturbations between -1 and 1
     #perturb = uniform_filter(perturb, size=5)
     #ratio.data = ratio.data + np.exp(-np.abs(1-ratio.data))*perturb
-    ratio.data = ratio.data + (1+np.abs(1-ratio.data))*perturb
-    ratio.data = uniform_filter(ratio.data, size=5)
+    fact = uniform_filter(ratio.data, size=10)
+    ratio.data = ratio.data + 1/(1+np.abs(fact-1))*perturb
     ratio.data[ratio.data<=0] = -ratio.data[ratio.data<=0]+0.01
+    ratio.data = uniform_filter(ratio.data, size=20)
     plot_field(ratio, 'real_ratio.pdf', label='Ratio', cmap='RdBu_r', vmin=0.2, vmax=1.8, add_circle=False)
     return ratio
 
@@ -120,14 +130,15 @@ def perturb_field(field, ratio):
     #perturb[perturb<0] = -perturb[perturb<0]
     #perturb[perturb==0] = 1
     #perturb = np.random.randint(1, 100, size=(Np, Np))/10.
-    perturb = uniform_filter(perturb, size=5)
-    #perturb = uniform_filter(perturb, size=10)
+    #perturb = uniform_filter(perturb, size=5)
+    perturb = uniform_filter(perturb, size=10)
     #perturb = np.flip(perturb, axis=0)
 
     if plot:
         plot_field(perturb, 'perturb.pdf', label='Ratio', cmap='RdBu_r', vmin=-1, vmax=1, add_circle=False)
 
-    noise = np.random.randint(0, 4, size=np.shape(field))/10. - 0.2  # noise between -0.2 and 0.2
+    noise = np.random.randint(0, 10, size=np.shape(field))/10. - 0.5  # noise between -0.5 and 0.5
+    noise = uniform_filter(noise, size=5)
     new_ratio = ratio + (1+np.abs(1-ratio))*perturb + noise
     #new_ratio = ratio + np.abs(1-ratio)*perturb
     new_ratio = uniform_filter(new_ratio, size=5)
@@ -185,6 +196,24 @@ def gaussian_field(X, Y, std, nlon, nlat):
     #return np.flip(A, axis=0)
     return A
 
+def plot_mean_and_dispersion(ensemble, vmin=None, vmax=None, cmap=plt.cm.YlGnBu):
+    """
+    Dispersion = sqrt(sum((Xi-Xmean)(Xi-Xmean)'))
+    """
+#    if vmin is None:
+#        vmin = np.nanmin(ensemble)
+#    if vmax is None:
+#        vmax = np.nanmax(ensemble)
+
+    mean = np.mean(np.array(ensemble), axis=0)
+    ensemble_mean = make_mask.to_xarray(mean, real_ratio, varname='Precipitation')
+    plot_field(mean, f'Ensemble_mean.pdf', label='Precipitation (mm)', cmap=cmap, vmin=0, vmax=vmax)
+
+    N = len(ensemble)
+    dispersion = np.sqrt(np.sum(np.array([(member-mean)**1 for member in ensemble]), axis=0)/N)
+    dispersion = make_mask.to_xarray(dispersion, real_ratio, varname='Dispersion')
+    plot_field(dispersion, f'Ensemble_dispersion.pdf', label='Precipitation (mm)', cmap=cmap)
+
 def plot_field(field, filename, label='Precipitation (mm)', cmap='YlGnBu', vmin=None, vmax=None, add_circle=True):
 
     if vmin is None:
@@ -197,7 +226,7 @@ def plot_field(field, filename, label='Precipitation (mm)', cmap='YlGnBu', vmin=
         field = make_mask.to_xarray(field, real_ratio)
     nlat = len(field.lat)
     nlon = len(field.lon)
-    fig, ax = plt.subplots(figsize=(10*nlon/nlat, 10))
+    fig, ax = plt.subplots(figsize=figsize[domain])
     make_mask.plot_field(fig, ax, field, cmap=cmap, vmin=vmin, vmax=vmax)
     if not filename.endswith('pdf'):
         filename = f'{filename}.pdf'
@@ -221,6 +250,27 @@ def plot_field(field, filename, label='Precipitation (mm)', cmap='YlGnBu', vmin=
 #    ax.set_yticks([])
 #    fig.tight_layout()
 #    fig.savefig(os.path.join(savedir, filename), format='pdf')
+
+def plot_ensemble_field(field, ax, vmin, vmax, title=None, cmap=plt.cm.YlGnBu):
+
+    im = field.plot(ax=ax, add_colorbar=False, vmin=vmin, vmax=vmax, cmap=cmap)
+    ax.set_aspect('equal')
+    ax.axis('off')
+    if title is not None:
+        ax.set_title(title)
+
+    return im
+
+def finalize_fig(figure, imm, label, outname):
+    figure.tight_layout()
+    figure.subplots_adjust(right=0.85)
+    cbar_ax = figure.add_axes([0.87, 0.05, 0.03, 0.9])
+    cb = figure.colorbar(imm, cax=cbar_ax)
+    cb.ax.tick_params(labelsize=20)
+    cb.set_label(label, size=24)
+    figure.savefig(os.path.join(savedir, outname), format='pdf')
+    plt.close(figure)
+
 
 def compare(reference, model):
     diff = model-reference
@@ -322,7 +372,35 @@ if __name__ == "__main__":
         # De-biasing + Dynamic correction
         dd, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(perturbed_field.data/estimated_ratio.data, pond)
         dd = dd.reshape((nlat, nlon))
-        #plot_field(np.sqrt(sd.reshape((nlat, nlon))), f'dynamic_error_with_debiasing.pdf', label='Error (mm)', cmap=plt.cm.Reds)
+        sd = sd.reshape((nlat, nlon))
+        sd = uniform_filter(sd, size=10)  # TODO : TMP !!!
+        #plot_field(np.sqrt(sd), f'dynamic_error_with_debiasing.pdf', label='Error (mm)', cmap=plt.cm.Reds)
+        plot_field(sd, f'dynamic_error_with_debiasing.pdf', label='Error (mm)', cmap=plt.cm.Reds)
+
+        vmax = max(np.max(real_field), np.max(perturbed_field), np.max(dyn), np.max(dd))
+        if plot:
+            fig,ax = plt.subplots(nrows=4, ncols=4, figsize=figsize[domain])
+            i = 0
+            j = 0
+        analysis = list()
+        for member in range(16):
+            #ana = Preprocessing_ANTILOPE.random_draw(dd, np.sqrt(sd))
+            #ana = Preprocessing_ANTILOPE.random_draw(dd, sd)
+            ana = Preprocessing_ANTILOPE.random_draw(dd, sd+error.data)
+            analysis.append(ana)
+            ana = make_mask.to_xarray(ana, real_ratio, varname='Precipitation')
+            if plot:
+                im = plot_ensemble_field(ana, ax[i,j], 0, vmax)
+                #im  = make_mask.plot_field(fig, ax[i,j], ana, cmap='YlGnBu', vmin=0, vmax=vmax)
+                ax[i,j].set_title(None)
+                j = j + 1
+                if j==4:
+                    j = 0
+                    i = i + 1
+        finalize_fig(fig, im, label='24-hour precipitation (mm)', outname=f'Analysis_ensemble.pdf')
+
+        if plot:
+            plot_mean_and_dispersion(analysis, vmax=vmax)
 
         #Dynamic correction + de-biasing  ==> does not work at all !
         #qq = dyn/ratio
@@ -343,13 +421,19 @@ if __name__ == "__main__":
 
             # Plot fields
             #vmax = max(np.max(real_field), np.max(perturbed_field), np.max(dyn), np.max(db), np.max(dd))
-            vmax = max(np.max(real_field), np.max(perturbed_field), np.max(dyn), np.max(dd))
             plot_field(real_field, f'real_field.pdf', vmin=0, vmax=vmax)
             plot_field(perturbed_field, f'fake_antilope_field.pdf', vmin=0, vmax=vmax)
             plot_field(dyn, f'dynamic_correction_ld{ld}.pdf', vmin=0, vmax=vmax)
             plot_field(db, f'debiasing.pdf', vmin=0, vmax=vmax)
             plot_field(dd, f'debiasing+dynamic_correction_ld{ld}.pdf', vmin=0, vmax=vmax)
             #plot_field(qq, f'dynamic_correction_ld{ld}+debiasing.pdf', vmin=0, vmax=30)
+
+            # Plot errors
+            vmax = np.max(np.abs(dd.data-real_field.data))
+            plot_field(dd-real_field, f'diff_full_correction-real_field.pdf', cmap='RdBu_r', vmin=-vmax, vmax=vmax)
+            plot_field(np.abs(dd-real_field), f'real_error_full_correction.pdf', cmap='Reds', vmin=0, vmax=vmax)
+            vmax = np.nanmax(np.abs(dd.data/real_field.data)-1)
+            plot_field(dd/real_field, f'ratio_full_correction-real_field.pdf', cmap='RdBu_r', vmin=1-vmax, vmax=1+vmax)
 
         else:
 
@@ -381,7 +465,8 @@ if __name__ == "__main__":
             ratio[product]  = np.nanmean(np.array(rat[product]), axis=0)
 
         #bmin = min([np.min(arr) for arr in bias.values()])
-        bb = bias.pop('debiasing')
+        bb = bias.copy()
+        bb.pop('debiasing')
         bmax = max([np.max(np.abs(arr)) for arr in bb.values()])
         emin = min([np.min(arr) for arr in rmse.values()])
         emax = max([np.max(arr) for arr in rmse.values()])
@@ -392,25 +477,34 @@ if __name__ == "__main__":
             plot_field(rmse[product], f'rmse_{product}.pdf', cmap='Reds', vmin=0, vmax=emax)
             plot_field(ratio[product], f'mean_ratio_{product}.pdf', cmap='RdBu_r', vmin=0.2, vmax=1.8)
             if product != 'raw':
-                plot_field(bias[product]-bias['raw'], f'diff_bias_{product}-raw.pdf', cmap='RdBu_r')
-                plot_field(rmse[product]-rmse['raw'], f'diff_rmse_{product}-raw.pdf', cmap='RdBu_r')
-                plot_field(ratio[product]-ratio['raw'], f'diff_ratio_{product}-raw.pdf', cmap='RdBu_r')
+                plot_scatter(bias[product], bias['raw'], f"bias_{product}-raw_scatterplot.pdf")
+                plot_scatter(rmse[product], rmse['raw'], f"rmse_{product}-raw_scatterplot.pdf")
+                plot_scatter(ratio[product], ratio['raw'], f"ratio_{product}-raw_scatterplot.pdf")
+                #plot_field(bias[product]-bias['raw'], f'diff_bias_{product}-raw.pdf', cmap='RdBu_r')
+                #plot_field(rmse[product]-rmse['raw'], f'diff_rmse_{product}-raw.pdf', cmap='RdBu_r')
+                #plot_field(ratio[product]-ratio['raw'], f'diff_ratio_{product}-raw.pdf', cmap='RdBu_r')
 
         for product in r2.keys():
             print(f'Mean R2 for product {product} = ', np.mean(np.array(r2[product])))
+            if not product == 'raw':
+                # TODO : improve representation
+                plot_scatter(np.array(r2[product]), np.array(r2['raw']), f"RS_{product}_vs_raw_scatterplot.pdf")
 
 
     #TODO :
+    # - Improve plot_field formats (same figsizes as in "extract_domain")
+    # - Plot estimated error (compare ODG with "real" error)
+    # - Add random sampling
+    # - Compute RS spread skill
+
+    # DONE :
     # - Extend domain --> OK
     # - Add more diversity in initial field (position, magnitude and spread of the gaussian kernel) --> OK
     # - Perturbations using ratio field estimated with nivometeo observations --> OK
     # - Simulation on the Alps domain --> [OK]
     # - Statistics over ~100 situations  --> 0K
-    # - Plot bias/rmse fields (--> ODG ?) --> Uniformiser les échelles entre les différents produits
-    # - PLot "improvment fields" (ex : "product bias" vs "raw bias")
-    # - Plot estimated error (compare ODG with "real" error)
-    # - Add random sampling
-    # - Compute RS spread skill
+    # - Plot bias/rmse fields (--> ODG ?) --> Uniformiser les échelles entre les différents produits --> OK
+    # - PLot "improvment fields" (ex : "product bias" vs "raw bias") --> OK
 
 
 
