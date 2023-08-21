@@ -11,6 +11,8 @@ import matplotlib
 import matplotlib.pyplot as plt
 import palettable
 
+import make_mask
+
 if len(sys.argv) > 1:
     domain = sys.argv[1]
 else:
@@ -26,15 +28,26 @@ domain_coords = dict(
         Savoie         = dict(lonmin=6.06, lonmax=7.06, latmin=45.15, latmax=45.65),
         Isere          = dict(lonmin=5.54, lonmax=6.19, latmin=44.89, latmax=45.16),
         Brianconnais   = dict(lonmin=6.48, lonmax=6.95, latmin=44.67, latmax=44.95),
-        HautesAlpes    = dict(lonmin=5.90, lonmax=6.36, latmin=44.58, latmax=44.81),
-        AlpesSud       = dict(lonmin=6.56, lonmax=6.92, latmin=44.18, latmax=40.49),
+        HautesAlpes    = dict(lonmin=6.1, lonmax=7.1, latmin=44.4, latmax=45.2),
+        AlpesSud       = dict(lonmin=6.56, lonmax=6.92, latmin=44.18, latmax=44.49),
         alp            = dict(latmax=46.450, latmin=44.100, lonmin=5.400, lonmax=7.200),
+)
+
+figsize = dict(
+        alp            = (14,16),
+        GrandesRousses = (15,7),
+        HauteSavoie    = (12,12),
+        HautesAlpes    = (16,10),
+        MontBlanc      = (15,10),
+        Savoie         = (16,8),
+        Isere          = (16,8),
 )
 
 #datadir = f'/home/vernaym/workdir/ASSIMILATION/mask/alp/nivometeo'
 #savedir = f'/home/vernaym/workdir/ASSIMILATION/mask/{domain}/nivometeo'
 datadir = f'/home/vernaym/workdir/ASSIMILATION/mask/alp'
 savedir = f'/home/vernaym/workdir/ASSIMILATION/mask/{domain}'
+
 # Coordonnées du Mont Blanc :
 #lat = 45.83
 #lon = 6.86
@@ -43,13 +56,14 @@ savedir = f'/home/vernaym/workdir/ASSIMILATION/mask/{domain}'
 extract_lat = np.round(np.arange(domain_coords[domain]['latmin'], domain_coords[domain]['latmax'], 0.01, dtype=float), 2)
 extract_lon = np.round(np.arange(domain_coords[domain]['lonmin'], domain_coords[domain]['lonmax'], 0.01, dtype=float), 2)
 
-def plot_and_save(field, name, cmap=plt.cm.Greys, vmin=None, vmax=None, scores=None):
-    fig, ax = plt.subplots()
-    ax = plot_field(fig, ax, field, cmap=cmap, vmin=vmin, vmax=vmax, scores=scores)
+def plot_and_save(field, name, cmap=plt.cm.Greys, vmin=None, vmax=None, scores=None, subdir=''):
+    fig, ax = plt.subplots(figsize=figsize[domain])
+    #ax = plot_field(fig, ax, field, cmap=cmap, vmin=vmin, vmax=vmax, scores=scores)
+    ax = make_mask.plot_field(fig, ax, field, cmap=cmap, vmin=vmin, vmax=vmax, scores=scores)
     #fig.savefig(os.path.join(savedir, f'{name}.pdf'), format='pdf', layout='tight')
     fig.tight_layout()
-    fig.savefig(os.path.join(savedir, f'{name}.pdf'), format='pdf')
-    field.to_netcdf(os.path.join(savedir, f'{name}.nc'))  # WARNING : does not work if nctoolkit is installed
+    fig.savefig(os.path.join(savedir, subdir, f'{name}.pdf'), format='pdf')
+    field.to_netcdf(os.path.join(savedir, subdir, f'{name}.nc'))  # WARNING : does not work if nctoolkit is installed
 
 def plot_field(fig, ax, field, cmap=plt.cm.Greys, vmin=None, vmax=None, scores=None, colorbar=True):
 
@@ -83,12 +97,15 @@ def plot_field(fig, ax, field, cmap=plt.cm.Greys, vmin=None, vmax=None, scores=N
 
 if __name__ == "__main__":
 
-    fic_error = os.path.join(datadir, f'Observation_error_0.15_alp.nc')
-    fic_ratio = os.path.join(datadir, f'Estimated_ratio_alp_0.15.nc')
-    error = xr.open_dataarray(fic_error)
-    ratio = xr.open_dataarray(fic_ratio)
-    reduced_error = error.sel({'lat':np.intersect1d(extract_lat, error.lat), 'lon':np.intersect1d(extract_lon, error.lon)})
-    reduced_ratio = ratio.sel({'lat':np.intersect1d(extract_lat, ratio.lat), 'lon':np.intersect1d(extract_lon, ratio.lon)})
-    plot_and_save(reduced_error, f'Observation_error_0.15_{domain}', vmin=1, vmax=16, cmap=plt.cm.YlOrBr)
-    plot_and_save(reduced_ratio, f'Estimated_ratio_{domain}_0.15', vmin=0.2, vmax=1.8, cmap=plt.cm.RdBu_r)
+    for subdir in ['', 'nivometeo']:
+        if not os.path.exists(os.path.join(savedir, subdir)):
+            os.makedirs(os.path.join(savedir, subdir))
+        fic_error = os.path.join(datadir, subdir, f'Observation_error_0.15_alp.nc')
+        fic_ratio = os.path.join(datadir, subdir, f'Estimated_ratio_alp_0.15.nc')
+        error = xr.open_dataarray(fic_error)
+        ratio = xr.open_dataarray(fic_ratio)
+        reduced_error = error.sel({'lat':np.intersect1d(extract_lat, error.lat), 'lon':np.intersect1d(extract_lon, error.lon)})
+        reduced_ratio = ratio.sel({'lat':np.intersect1d(extract_lat, ratio.lat), 'lon':np.intersect1d(extract_lon, ratio.lon)})
+        plot_and_save(reduced_error, f'Observation_error_0.15_{domain}', vmin=1, vmax=16, cmap=plt.cm.YlOrBr, subdir=subdir)
+        plot_and_save(reduced_ratio, f'Estimated_ratio_{domain}_0.15', vmin=0.2, vmax=1.8, cmap=plt.cm.RdBu_r, subdir=subdir)
 
