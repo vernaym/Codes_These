@@ -114,7 +114,7 @@ def perturbed_ratio(ratio):
     fact = uniform_filter(ratio.data, size=10)
     ratio.data = ratio.data + 1/(1+np.abs(fact-1))*perturb
     ratio.data[ratio.data<=0] = -ratio.data[ratio.data<=0]+0.01
-    ratio.data = uniform_filter(ratio.data, size=20)
+    ratio.data = uniform_filter(ratio.data, size=5)  # Increasing the window increases the mean negative bias over the Hautes Alpes
     plot_field(ratio, 'real_ratio.pdf', label='Ratio', cmap='RdBu_r', vmin=0.2, vmax=1.8, add_circle=False)
     return ratio
 
@@ -130,28 +130,29 @@ def perturb_field(field, ratio):
     #perturb[perturb<0] = -perturb[perturb<0]
     #perturb[perturb==0] = 1
     #perturb = np.random.randint(1, 100, size=(Np, Np))/10.
-    #perturb = uniform_filter(perturb, size=5)
     perturb = uniform_filter(perturb, size=10)
+    #perturb = uniform_filter(perturb, size=10)
     #perturb = np.flip(perturb, axis=0)
 
     if plot:
         plot_field(perturb, 'perturb.pdf', label='Ratio', cmap='RdBu_r', vmin=-1, vmax=1, add_circle=False)
 
     noise = np.random.randint(0, 10, size=np.shape(field))/10. - 0.5  # noise between -0.5 and 0.5
-    noise = uniform_filter(noise, size=5)
-    new_ratio = ratio + (1+np.abs(1-ratio))*perturb + noise
-    #new_ratio = ratio + np.abs(1-ratio)*perturb
-    new_ratio = uniform_filter(new_ratio, size=5)
-    new_ratio[new_ratio<=0] = 0.01
+    noise = uniform_filter(noise, size=10)
+    #new_ratio = ratio + (1+np.abs(1-ratio))*perturb + noise
+    new_ratio = ratio * (1+perturb) + noise
+    #new_ratio = ratio + np.abs(1-ratio)*perturb + noise
+    new_ratio = uniform_filter(new_ratio, size=2)  # Increasing the window increases the mean negative bias over the Hautes Alpes
+    new_ratio[new_ratio<=0] = -new_ratio[new_ratio<=0]+0.01
     #new_ratio[new_ratio==0] = 0.01
 
     if plot:
         plot_field(new_ratio, 'daily_ratio.pdf', label='ratio', cmap='RdBu_r', vmin=0.2, vmax=1.8, add_circle=False)
 
     perturbed_field =field*new_ratio
-    noise = np.random.randint(0, 10, size=np.shape(field)) - 5  # Add noise between -5mm and 5 mm
-    noise = uniform_filter(noise, size=5)
-    perturbed_field = perturbed_field + noise
+    #noise = np.random.randint(0, 10, size=np.shape(field)) - 5  # Add noise between -5mm and 5 mm
+    #noise = uniform_filter(noise, size=5)
+    #perturbed_field = perturbed_field + noise
     perturbed_field[perturbed_field<0.1] = 0  # Fake "missed precipitation"
     return perturbed_field
 
@@ -232,6 +233,7 @@ def plot_field(field, filename, label='Precipitation (mm)', cmap='YlGnBu', vmin=
         filename = f'{filename}.pdf'
     fig.subplots_adjust( left=None, bottom=None,  right=None, top=None, wspace=None, hspace=None)
     fig.savefig(os.path.join(savedir, filename), format='pdf')
+    plt.close(fig)
 #
 #    fig,ax = plt.subplots()
 #    fd = ax.imshow(field, cmap=cmap, vmin=vmin, vmax=vmax)
