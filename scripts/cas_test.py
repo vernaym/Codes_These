@@ -5,6 +5,8 @@
 
 import os, sys
 import numpy as np
+np.seterr(divide='ignore', invalid='ignore')
+
 import pandas as pd
 import xarray as xr
 
@@ -24,12 +26,14 @@ from sklearn.linear_model import LinearRegression
 from These.radar import Preprocessing_ANTILOPE
 import make_mask
 
+plot = False
 if len(sys.argv) > 1:
     domain = sys.argv[1]
+    if len(sys.argv)>2:
+        plot = True
 else:
     domain = 'MontBlanc'
 
-plot = False
 
 savedir = f'/home/vernaym/These/figures/illustration/{domain}'
 datadir = f'/home/vernaym/workdir/ASSIMILATION/mask/{domain}'
@@ -66,7 +70,8 @@ def random_field(nlon, nlat):
     field = K0*field  # Add intensity
 
     #Nk = np.random.randint(0, 100)  # Number of additional kernels
-    Nk = np.random.randint(0, 5)  # Number of additional kernels
+    #Nk = np.random.randint(0, 5)  # Number of additional kernels
+    Nk = np.random.randint(0, 10)  # Number of additional kernels
     for i in range(Nk):
         X   = np.random.randint(0, nlon)  # Position of the center of the kernel
         Y   = np.random.randint(0, nlat)  # Position of the center of the kernel
@@ -75,7 +80,8 @@ def random_field(nlon, nlat):
         field = field + K * gaussian_field(X, Y, std, nlon, nlat)  # Add small scale kernel to the field
 
     #field = uniform_filter(field, size=3)
-    field[field<3] = 0
+    field = field -3
+    field[field<0] = 0
 
     return np.flip(field, axis=0)
 
@@ -95,8 +101,10 @@ def perturbed_ratio(ratio):
     """
     perturb = np.random.randint(0, 20, size=np.shape(ratio.data))/10. - 1  # generation of perturbations between -1 and 1
     #perturb = uniform_filter(perturb, size=5)
-    ratio.data = ratio.data + np.exp(-np.abs(1-ratio.data))*perturb
-    ratio.data = uniform_filter(ratio.data, size=3)
+    #ratio.data = ratio.data + np.exp(-np.abs(1-ratio.data))*perturb
+    ratio.data = ratio.data + (1+np.abs(1-ratio.data))*perturb
+    ratio.data = uniform_filter(ratio.data, size=5)
+    ratio.data[ratio.data<=0] = -ratio.data[ratio.data<=0]+0.01
     plot_field(ratio, 'real_ratio.pdf', label='Ratio', cmap='RdBu_r', vmin=0.2, vmax=1.8, add_circle=False)
     return ratio
 
@@ -107,7 +115,7 @@ def perturb_field(field, ratio):
     Here the perturbations are amplified for pixels with high climatolocical biases and a small random noise is added.
     --> to apply at each new "event"
     """
-    perturb = np.random.randint(0, 100, size=np.shape(field))/10. - 5  # generation of perturbations between -5 and 5
+    perturb = np.random.randint(0, 20, size=np.shape(field))/10. - 1  # generation of perturbations between -1 and 1
     #perturb = np.random.randint(0, 200, size=np.shape(field))/10. - 10  # generation of perturbations between -10 and 10
     #perturb[perturb<0] = -perturb[perturb<0]
     #perturb[perturb==0] = 1
@@ -117,20 +125,23 @@ def perturb_field(field, ratio):
     #perturb = np.flip(perturb, axis=0)
 
     if plot:
-        plot_field(perturb, 'perturb.pdf', label='Ratio', cmap='RdBu_r', vmin=-2, vmax=2, add_circle=False)
+        plot_field(perturb, 'perturb.pdf', label='Ratio', cmap='RdBu_r', vmin=-1, vmax=1, add_circle=False)
 
-    noise = np.random.randint(0, 40, size=np.shape(field))/100. - 0.2  # noise between -0.2 and 0.2
-    new_ratio = ratio + np.abs(1-ratio)*perturb + noise
+    noise = np.random.randint(0, 4, size=np.shape(field))/10. - 0.2  # noise between -0.2 and 0.2
+    new_ratio = ratio + (1+np.abs(1-ratio))*perturb + noise
     #new_ratio = ratio + np.abs(1-ratio)*perturb
-    new_ratio[new_ratio<0] = -new_ratio[new_ratio<0]
-    new_ratio[new_ratio==0] = 0.1
     new_ratio = uniform_filter(new_ratio, size=5)
+    new_ratio[new_ratio<=0] = 0.01
+    #new_ratio[new_ratio==0] = 0.01
 
     if plot:
         plot_field(new_ratio, 'daily_ratio.pdf', label='ratio', cmap='RdBu_r', vmin=0.2, vmax=1.8, add_circle=False)
 
     perturbed_field =field*new_ratio
-    perturbed_field[perturbed_field<3] = 0  # Fake "missed precipitation"
+    noise = np.random.randint(0, 10, size=np.shape(field)) - 5  # Add noise between -5mm and 5 mm
+    noise = uniform_filter(noise, size=5)
+    perturbed_field = perturbed_field + noise
+    perturbed_field[perturbed_field<0.1] = 0  # Fake "missed precipitation"
     return perturbed_field
 
 
@@ -184,10 +195,13 @@ def plot_field(field, filename, label='Precipitation (mm)', cmap='YlGnBu', vmin=
     #if not isinstance(field, xr.core.dataarray.DataArray):
     if isinstance(field, np.ndarray):
         field = make_mask.to_xarray(field, real_ratio)
-    fig, ax = plt.subplots()
+    nlat = len(field.lat)
+    nlon = len(field.lon)
+    fig, ax = plt.subplots(figsize=(10*nlon/nlat, 10))
     make_mask.plot_field(fig, ax, field, cmap=cmap, vmin=vmin, vmax=vmax)
     if not filename.endswith('pdf'):
         filename = f'{filename}.pdf'
+    fig.subplots_adjust( left=None, bottom=None,  right=None, top=None, wspace=None, hspace=None)
     fig.savefig(os.path.join(savedir, filename), format='pdf')
 #
 #    fig,ax = plt.subplots()
@@ -211,6 +225,7 @@ def plot_field(field, filename, label='Precipitation (mm)', cmap='YlGnBu', vmin=
 def compare(reference, model):
     diff = model-reference
     ratio = model / reference
+    ratio[np.isinf(ratio)] = np.nan
     ref = reference.flatten()
     mod = model.flatten()
     x = ref.reshape((-1,1))
@@ -234,6 +249,7 @@ def plot_scatter(reference, model, savename):
     r2 = np.round(reg.score(x, y), 2)
 
     fig,ax = plt.subplots()
+    # TODO : plot points with ratio inversion in red
     ax.scatter(ref, mod, marker='+')  # scatterplot ref vs estimation
 
     ax.plot(x, z, color='blue', linewidth=1, label=f'R²={r2:.4}, bias={bias}, rmse={rmse}')  # plot linear regression line
@@ -280,7 +296,10 @@ if __name__ == "__main__":
     r2 = dict(raw=list(), debiasing=list(), dyn=list(), full=list())
     err = dict(raw=list(), debiasing=list(), dyn=list(), full=list())
     rat = dict(raw=list(), debiasing=list(), dyn=list(), full=list())
-    for i in range(100):
+
+    if plot: N = 1
+    else : N=100
+    for i in range(N):
     #for i in range(2):
 
         real_field = random_field(nlat, nlon)  # Randomly generated reference precipitation field
@@ -323,7 +342,8 @@ if __name__ == "__main__":
             dd = make_mask.to_xarray(dd, real_ratio, varname='Precipitation')
 
             # Plot fields
-            vmax = max(np.max(real_field), np.max(perturbed_field), np.max(dyn), np.max(db), np.max(dd))
+            #vmax = max(np.max(real_field), np.max(perturbed_field), np.max(dyn), np.max(db), np.max(dd))
+            vmax = max(np.max(real_field), np.max(perturbed_field), np.max(dyn), np.max(dd))
             plot_field(real_field, f'real_field.pdf', vmin=0, vmax=vmax)
             plot_field(perturbed_field, f'fake_antilope_field.pdf', vmin=0, vmax=vmax)
             plot_field(dyn, f'dynamic_correction_ld{ld}.pdf', vmin=0, vmax=vmax)
@@ -350,11 +370,34 @@ if __name__ == "__main__":
             err['full'].append(b)
             rat['full'].append(c)
 
-    for product in r2.keys():
-        plot_field(np.mean(np.array(err[product]), axis=0), f'mean_bias_{product}.pdf', cmap='RdBu_r')
-        plot_field(np.sqrt(np.mean(np.array(err[product])**2, axis=0)), f'rmse_{product}.pdf', cmap='Reds')
-        plot_field(np.mean(np.array(rat[product]), axis=0), f'mean_ratio_{product}.pdf', cmap='RdBu_r', vmin=0.2, vmax=1.8)
-        print(f'Mean R2 for product {product} = ', np.mean(np.array(r2[product])))
+    if not plot:
+
+        bias = dict(raw=list(), debiasing=list(), dyn=list(), full=list())
+        rmse = dict(raw=list(), debiasing=list(), dyn=list(), full=list())
+        ratio  = dict(raw=list(), debiasing=list(), dyn=list(), full=list())
+        for product in r2.keys():
+            bias[product] = np.nanmean(np.array(err[product]), axis=0)
+            rmse[product] = np.sqrt(np.nanmean(np.array(err[product])**2, axis=0))
+            ratio[product]  = np.nanmean(np.array(rat[product]), axis=0)
+
+        #bmin = min([np.min(arr) for arr in bias.values()])
+        bb = bias.pop('debiasing')
+        bmax = max([np.max(np.abs(arr)) for arr in bb.values()])
+        emin = min([np.min(arr) for arr in rmse.values()])
+        emax = max([np.max(arr) for arr in rmse.values()])
+        #rmin = min([np.max(arr) for arr in rat.values()])
+        rmax = max([np.max(np.abs(arr)) for arr in ratio.values()])
+        for product in r2.keys():
+            plot_field(bias[product], f'mean_bias_{product}.pdf', cmap='RdBu_r', vmin=-bmax, vmax=bmax)
+            plot_field(rmse[product], f'rmse_{product}.pdf', cmap='Reds', vmin=0, vmax=emax)
+            plot_field(ratio[product], f'mean_ratio_{product}.pdf', cmap='RdBu_r', vmin=0.2, vmax=1.8)
+            if product != 'raw':
+                plot_field(bias[product]-bias['raw'], f'diff_bias_{product}-raw.pdf', cmap='RdBu_r')
+                plot_field(rmse[product]-rmse['raw'], f'diff_rmse_{product}-raw.pdf', cmap='RdBu_r')
+                plot_field(ratio[product]-ratio['raw'], f'diff_ratio_{product}-raw.pdf', cmap='RdBu_r')
+
+        for product in r2.keys():
+            print(f'Mean R2 for product {product} = ', np.mean(np.array(r2[product])))
 
 
     #TODO :
@@ -362,7 +405,7 @@ if __name__ == "__main__":
     # - Add more diversity in initial field (position, magnitude and spread of the gaussian kernel) --> OK
     # - Perturbations using ratio field estimated with nivometeo observations --> OK
     # - Simulation on the Alps domain --> [OK]
-    # - Statistics over ~1000 situations  --> 0K
+    # - Statistics over ~100 situations  --> 0K
     # - Plot bias/rmse fields (--> ODG ?) --> Uniformiser les échelles entre les différents produits
     # - PLot "improvment fields" (ex : "product bias" vs "raw bias")
     # - Plot estimated error (compare ODG with "real" error)
