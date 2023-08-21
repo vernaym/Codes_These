@@ -30,7 +30,6 @@ import seaborn as sns
 import cmocean
 import palettable
 
-
 #plt.rcParams["figure.figsize"] = [7.50, 3.50]
 plt.rcParams["figure.autolayout"] = True
 
@@ -634,6 +633,11 @@ def ratio_estimation(field, model=None, moving_window=25):
     scores = scores
     used_scores = []
 
+    if model is not None:
+        ratio_modele = model.rr_cumul / uniform_filter(model.rr_cumul.data, int(d0*100))  # ~ gradient vertical modele
+        ratio_modele = uniform_filter(ratio_modele, int(d0*100))
+        plot_and_save(ratio_modele, 'model_gradient' , vmin=0.8, vmax=1.2, cmap=plt.cm.RdBu_r)
+
     # Mont-Blanc
 #    xx = np.where(field.lon==6.82)[0][0]
 #    yy = np.where(field.lat==45.85)[0][0]
@@ -664,8 +668,8 @@ def ratio_estimation(field, model=None, moving_window=25):
             elevation_dist = mnt.Band1.data - ref_elevation
             if model is not None:
                 model_cumul = model.rr_cumul.data[idx[0],idy[0]]  # Cumul du modele au point d'évaluation
-                ratio_modele = model.rr_cumul.data/model_cumul  # Ratio entre chaque point du modele et le point d'évaluation 
-                #grad_modele = (model.rr_cumul.data-model_cumul)/(365*elevation_dist)  # gradient vertical modèle moyen (WARNING : adapter la formule à la durée du cumul)
+                ratio_modele = model.rr_cumul.data/model_cumul  # Ratio entre chaque point du modele et le point d'évaluation
+                #ratio_modele = model.rr_cumul.data / uniform_filter(model.rr_cumul.data, 10)  # ~ gradient vertical modele
             if poste == 74056416:
                 rcc = ref_cumul.copy()
                 rr0 = ratio.copy()
@@ -993,7 +997,13 @@ if __name__ == "__main__":
 #    plot(antilope, datebegin, dateend, categories=True)
 #    plot(antilope, datebegin, dateend, categories=False)
 
+    # Estimation with automatic stations observations
     ratio_estimation(antilope, model=model)
+    # Estimation with nivometeo observations
+    savedir = os.path.join(savedir, 'nivometeo')
+    fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_alp.csv')
+    ratio_estimation(antilope, model=model)
+
 #    ratio_estimation(antilope)
 #    KalmanFilter(antilope)
 #    animation_mask(antilope)
