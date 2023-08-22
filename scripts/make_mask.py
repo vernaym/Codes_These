@@ -669,8 +669,8 @@ def ratio_estimation(field, model=None, moving_window=25):
             elevation_dist = mnt.Band1.data - ref_elevation
             if model is not None:
                 model_cumul = model.rr_cumul.data[idx[0],idy[0]]  # Cumul du modele au point d'évaluation
-                #ratio_modele = model.rr_cumul.data/model_cumul  # Ratio entre chaque point du modele et le point d'évaluation
-                ratio_modele = model.rr_cumul.data / uniform_filter(model.rr_cumul.data, int(d0*100))  # ~ gradient vertical modele
+                ratio_modele = model.rr_cumul.data/model_cumul  # Ratio entre chaque point du modele et le point d'évaluation
+                #ratio_modele = model.rr_cumul.data / uniform_filter(model.rr_cumul.data, int(d0*100))  # ~ gradient vertical modele
             if poste == 74056416:
                 rcc = ref_cumul.copy()
                 rr0 = ratio.copy()
