@@ -49,6 +49,7 @@ datadir = '/home/vernaym/These/DATA'
 savedir = '/home/vernaym/workdir/ASSIMILATION/mask/'
 #savedir = '/home/vernaym/workdir/ASSIMILATION/mask/ref/r2'
 savedir = f'/home/vernaym/workdir/ASSIMILATION/mask/{domain}'
+rootdir = f'/home/vernaym/workdir/ASSIMILATION/mask/{domain}'
 #savedir = f'/home/vernaym/workdir/ASSIMILATION/mask/{domain}/nivometeo'
 
 if not os.path.exists(savedir):
@@ -433,7 +434,7 @@ def plot_and_save(field, name, cmap=plt.cm.Greys, vmin=None, vmax=None, scores=N
         fig, ax = plt.subplots(figsize=(24,8))
     else:
         fig, ax = plt.subplots()
-    ax = plot_field(fig, ax, field, cmap=cmap, vmin=vmin, vmax=vmax, scores=scores)
+    im = plot_field(fig, ax, field, cmap=cmap, vmin=vmin, vmax=vmax, scores=scores)
     #fig.savefig(os.path.join(savedir, f'{name}.pdf'), format='pdf', layout='tight')
     fig.savefig(os.path.join(savedir, f'{name}.pdf'), format='pdf')
     field.to_netcdf(os.path.join(savedir, f'{name}.nc').encode('utf-8'))
@@ -472,7 +473,7 @@ def plot_field(fig, ax, field, cmap=plt.cm.Greys, vmin=None, vmax=None, scores=N
         cb.set_label(field.name, fontsize=24)
         cb.ax.tick_params(labelsize=20)
 
-    return ax
+    return cml
 
 def codistances(coords):
     """
@@ -635,7 +636,7 @@ def ratio_estimation(field, model=None, moving_window=25):
 
     if model is not None:
         ratio_modele = model.rr_cumul / uniform_filter(model.rr_cumul.data, int(d0*100))  # ~ gradient vertical modele
-        ratio_modele = uniform_filter(ratio_modele, int(d0*100))
+        ratio_modele.data = uniform_filter(ratio_modele.data, int(d0*100))
         plot_and_save(ratio_modele, 'model_gradient' , vmin=0.8, vmax=1.2, cmap=plt.cm.RdBu_r)
 
     # Mont-Blanc
@@ -668,8 +669,8 @@ def ratio_estimation(field, model=None, moving_window=25):
             elevation_dist = mnt.Band1.data - ref_elevation
             if model is not None:
                 model_cumul = model.rr_cumul.data[idx[0],idy[0]]  # Cumul du modele au point d'évaluation
-                ratio_modele = model.rr_cumul.data/model_cumul  # Ratio entre chaque point du modele et le point d'évaluation
-                #ratio_modele = model.rr_cumul.data / uniform_filter(model.rr_cumul.data, 10)  # ~ gradient vertical modele
+                #ratio_modele = model.rr_cumul.data/model_cumul  # Ratio entre chaque point du modele et le point d'évaluation
+                ratio_modele = model.rr_cumul.data / uniform_filter(model.rr_cumul.data, int(d0*100))  # ~ gradient vertical modele
             if poste == 74056416:
                 rcc = ref_cumul.copy()
                 rr0 = ratio.copy()
@@ -997,12 +998,18 @@ if __name__ == "__main__":
 #    plot(antilope, datebegin, dateend, categories=True)
 #    plot(antilope, datebegin, dateend, categories=False)
 
-    # Estimation with automatic stations observations
+    # Estimation with automatic stations observations and AROME
+    savedir = rootdir
     ratio_estimation(antilope, model=model)
-    # Estimation with nivometeo observations
-    savedir = os.path.join(savedir, 'nivometeo')
+    # Estimation with automatic stations observations only
+    savedir = os.path.join(rootdir, 'sans_arome')
+    ratio_estimation(antilope)
+    # Estimation with nivometeo observations and AROME
+    savedir = os.path.join(rootdir, 'nivometeo')
     fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_alp.csv')
     ratio_estimation(antilope, model=model)
+    savedir = os.path.join(rootdir, 'nivometeo', 'sans_arome')
+    ratio_estimation(antilope)
 
 #    ratio_estimation(antilope)
 #    KalmanFilter(antilope)
