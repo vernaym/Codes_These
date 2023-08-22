@@ -753,7 +753,8 @@ def ratio_estimation(field, model=None, moving_window=25):
     totalweight = np.sum(weights, axis=0)  # =1 if enough info else <1
     w0 = 1-totalweight
     w0[w0<0] = 0
-    estimated_ratio = (1*w0 + np.sum(weights*ratios, axis=0)) / (w0+totalweight)
+    #estimated_ratio = (1*w0 + np.sum(weights*ratios, axis=0)) / (w0+totalweight)
+    estimated_ratio = (1 + np.sum(weights*ratios, axis=0)) / (1+totalweight)
     #estimated_ratio = uniform_filter(estimated_ratio, size=d0*100)
 
     #tmp.apply_along_axis(
