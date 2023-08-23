@@ -74,19 +74,21 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
         super_ensemble[super_ensemble.nonzero()] = 1  # Position of pixels to inclue in the spread computation
     if weight is None:
         pond.data[np.isnan(pond.data)] = 0.0
-        weight = pond.sum(axis=1).getA1()  # The sum of the weights (axis=1 <==> sum over rows)
+        weight = pond.sum(axis=1).A1  # The sum of the weights (axis=1 <==> sum over rows)
 
-    mean = pond.dot(X).sum(axis=1).getA1()  # getA1 transforms the 1*N matrix object into a 1D np.array
+    mean = pond.dot(X).sum(axis=1).A1  # getA1 transforms the 1*N matrix object into a 1D np.array
     mean = mean / weight
     pixel_weight = pond.diagonal()  # = "exp(-err)" ou "1/err" pour l'obs et "likelyhood" du pixel pour les membres de l'ensemble
-    sums = pond.sum(axis=1).A1
-    nb_nonzero = (pond != 0).sum(0).getA1()  # Count non zero elements of each row
-    meanweight = sums / nb_nonzero
+    #weight = pond.sum(axis=1).A1
+    nb_nonzero = (pond != 0).sum(0).A1  # Count non zero elements of each row
+    meanweight = weight / nb_nonzero
     # pixel_weight is in ]0, 1]
     # Do not try to preserve values of pixels with low errors on average : the dynamic correction must account
     # for temporary failures as well as uncertainties due to the error estimation method
-    #newfield = (initial_field * pixel_weight + mean * meanweight) / (pixel_weight + meanweight)
-    newfield = (initial_field * pixel_weight + mean * meanweight/pixel_weight) / (pixel_weight + meanweight/pixel_weight)
+    #newfield = (initial_field * pixel_weight + mean * meanweight) / (pixel_weight + meanweight)  # Stay closer to the original value (spatial structures can still be visible)
+    newfield = (initial_field * pixel_weight + mean * meanweight/pixel_weight) / (pixel_weight + meanweight/pixel_weight)  # Smoother fields --> underestimation of extreme values
+    #newfield = (initial_field * pixel_weight + mean * meanweight/(meanweight+pixel_weight)) / (pixel_weight + meanweight/(meanweight+pixel_weight))
+    #newfield = (initial_field * pixel_weight + mean * meanweight/(meanweight+pixel_weight)) / (pixel_weight + meanweight/(meanweight+pixel_weight))
     newfield = np.round(newfield, 1)
 
     # Plot correction coefficient
@@ -101,13 +103,13 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
         ct.plot_field(original_value_coefficient, filename, label='Original value coefficient', cmap=plt.cm.viridis, vmin=0, vmax=1, add_circle=True)
 
     #sd = get_std(X, newfield, pond, weight=weight, super_ensemble=super_ensemble)  # Dispersion of the super ensemble
-    # TODO : Objevtive evaluation of formulas 1 and 2
-    sd = get_std(X, initial_field, pond, weight=weight, super_ensemble=super_ensemble)  # 1. Dispersion of the super ensemble around the initial field --> More dispersion on high error pixels (--> spatial structures)
-    #sd = get_std(X, mean, pond, weight=weight, super_ensemble=super_ensemble)  # 2. Dispersion of the super ensemble around the mean --> Smoother fields
-    #sd = sd + np.abs(initial_field-newfield)  # Dispersion + obs displacment to the dynamic error
-    #sd = np.abs(initial_field-newfield)  # Obs displacment  --> Apparition of spatial structures
+    # TODO : Objective evaluation of formulas 1 and 2
+    sd1 = get_std(X, initial_field, pond, weight=weight, super_ensemble=super_ensemble)  # 1. Dispersion of the super ensemble around the initial field --> More dispersion on high error pixels (--> spatial structures)
+    sd2 = get_std(X, mean, pond, weight=weight, super_ensemble=super_ensemble)  # 2. Dispersion of the super ensemble around the mean --> Smoother fields
+    #sd3 = np.abs(initial_field-newfield)  # Obs displacment  --> Apparition of spatial structures
 
     #sd = sd + 1  # Add 1 to ensure that the error is >1 (mm or mm^(1/2)). --> Dispersion too large
+    sd = (sd1+sd2)/2
 
     return newfield, mean, sd
 
@@ -122,7 +124,7 @@ def get_std(data, mean, pond, weight=None, super_ensemble=None):
 
     OUTPUT
     ------
-    * sd  : nk vector of the dispersion of the neighborhood of each pixel of the domain (in mm)
+    * sd  : Nk vector of the dispersion of the neighborhood of each pixel of the domain (in mm)
 
     """
 
@@ -156,7 +158,7 @@ def codistances(coords, ld=0.07):
 
 def random_draw(obs, sd):
     gauss = np.random.normal(loc=0.0, scale=1.0, size=1)[0]  # Draw random element from normal distribution
-    exp = np.random.default_rng().exponential(scale=5)  # TODO : set scale parameter using the density of pixels at 0mm in the vicinity ?
+    exp = np.random.default_rng().exponential(scale=1)  # TODO : set scale parameter using the density of pixels at 0mm in the vicinity ?
 
     # Ensure that RR are >=0
     # ==> Draw from gama distribution ? ==> Not a good idea since the conversion to square root precipitation aims at
