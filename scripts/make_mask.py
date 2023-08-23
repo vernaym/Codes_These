@@ -766,26 +766,29 @@ def ratio_estimation(field, model=None, moving_window=25):
     D[W==0] = 0
     #D = np.sum(weights*(ratios-mean_ratio)**2, axis=0)/W
     #D = np.sqrt(np.sum(weights*(np.abs(1-ratios)-np.abs(1-mean_ratio))**2, axis=0)/W)
-    tmp = to_xarray(D, field, varname='dispersion')
-    plot_and_save(tmp, "Ratio spread", cmap=plt.cm.viridis, scores=scores, vmin=0, vmax=1)
+    ratio_dispersion = to_xarray(D, field, varname='dispersion')
+    plot_and_save(ratio_dispersion, "Ratio spread", cmap=plt.cm.viridis, scores=scores, vmin=0, vmax=1)
 
     #w1 = W
     # Decrease the weight for pixels with large ratio dispersion (more uncertainty !)
     # Ensure that estimated ratio for pixels with no information around (W=0) stay at 1
+    # Rules :
+    # * w0+w1=1  (Keep ratio ODG)
+    # * W=0 ==> w1=0  (Ensure that estimated ratio for pixels with no information around (W=0) stay at 1)
+    # * D=0 ==> w1=W/(W+1)
+    # * D-->inf ==> w1-->0  (choix : D=1 ==> w1=1/2)
+    # * W-->inf ==> w1-->1
+    # w1 can be seen as a measure of the confidence in the method
+
     #w1 = W / (1+D)
     #w1 = W / (1+D)**2
     #w1 = W / np.exp(D)
     #w1 = W / np.exp(D**2)
     #w1 = W / np.exp(1+D)  # First to have a real impact --> increase ratio correlation to >0.37 !
     #K = W * (1 - D / (W * (D + 1)))
-    # Rules :
-    # * w0+w1=1  (Keep ratio ODG)
-    # * W=0 ==> w1=0  (Ensure that estimated ratio for pixels with no information around (W=0) stay at 1)
-    # * D=0 ==> w1=W
-    # * D-->inf ==> w1-->0  (choix : D=1 ==> w1=1/2)
-    # * W-->inf ==> w1-->1
-    X = W/(2*W-1)  # Fcateur pour assurer la condition D=1 ==> w1=1/2
-    K = W * (1 - D / (D + X/W))
+    X = 1/(2*W-1)  # Facteur pour assurer la condition D=1 ==> w1=1/2. WARNING : W=1/2 valeur singulière
+    K = W * (1 - D / (D + X))
+    K[W==0.5] = 0.5  # W=1/2 valeur singulière de X
     K[W==0] = 0
     w1 = K / (1 + K)  # normalisation
     w1[np.isnan(w1)] = 0
@@ -832,6 +835,8 @@ def ratio_estimation(field, model=None, moving_window=25):
     #observation_error = (np.abs(ratio_field-1)*5 + 5*np.abs(diff))**2
     #observation_error = ratio_field-1  # r=06 ==> err = -1.4
 
+    ###################################################################################################################################
+    # WARNING : OBSERVATION ERROR NOT USED ANYMORE
     # OLD : To take into account spatial correlation we must keep the sign of the observtaion error
     # The following values are based on the rmse vs ratio linear regression of the ANTILOPE evaluation
     # (figure rmse_vs_ratio_scatterplot_yyyymmdd_YYYYmmddhh_10.pdf)
@@ -859,16 +864,12 @@ def ratio_estimation(field, model=None, moving_window=25):
     #observation_error = np.square(np.abs(observation_error)+1)
     observation_error.data = np.abs(observation_error.data)
     observation_error = observation_error.rename('error')
-    observation_confidence = observation_error.copy()
-    observation_confidence.data = 1/observation_confidence.data
     #observation_error.data = uniform_filter(observation_error.data, size=3)
+    ###################################################################################################################################
 
-    #observation_error = np.abs(ratio_field-1)
-    #observation_error = np.abs(ratio_field**2-1)*50
-    #observation_error = np.exp((observation_error-0.3))
-#    plt.hist(observation_error, bins = [0,0.05,0.1,0.15,0.2,0.25,0.3,0.35,0.4,0.45,0.5,0.55])
-#    plt.title("histogram")
-#    plt.show()
+    uncertainty = observation_error*(1+w1)  # Observation error > 1
+    #confidence = uncertainty.copy()
+    #confidence.data = 1/confidence.data
 
     # PLots
     #######
@@ -876,32 +877,23 @@ def ratio_estimation(field, model=None, moving_window=25):
     #scores = scores.loc[used_scores]  # TODO : voir pourquoi ca ne marche plus après update de la version de pandas
     rationame = f'Estimated_ratio_{domain}_{d0}_{h0}' if h0 is not None else f'Estimated_ratio_{domain}_{d0}'
     errorname = f'Observation_error_{d0}_{h0}_{domain}' if h0 is not None else f'Observation_error_{d0}_{domain}'
+    uncertaintyname = f'Observation_uncertainty_{d0}_{h0}_{domain}' if h0 is not None else f'Observation_uncertainty_{d0}_{domain}'
     confidencename = f'Observation_confidence_{d0}_{h0}_{domain}' if h0 is not None else f'Observation_confidence_{d0}_{domain}'
     if domain == 'alp':
-        #plot_and_save(ratio_field, rationame, vmin=0.2, vmax=1.8, cmap=plt.cm.coolwarm, scores=scores)
         # From https://qiita.com/tsukada_cs/items/d282f27f4024d00d7022 :
-        #plot_and_save(ratio_field, rationame, vmin=0.2, vmax=1.8, cmap=palettable.cmocean.diverging.Balance_10.mpl_colormap, scores=scores)
-        #plot_and_save(ratio_field, rationame, vmin=0.2, vmax=1.8, cmap=palettable.scientific.diverging.Vik_20.mpl_colormap, scores=scores)
-        #plot_and_save(ratio_field, rationame, vmin=0.2, vmax=1.8, cmap=palettable.lightbartlein.diverging.BlueDarkRed18_5.mpl_colormap, scores=scores)
-        #plot_and_save(ratio_field, rationame, vmin=0.2, vmax=1.8, cmap=palettable.colorbrewer.diverging.RdBu_11_r.mpl_colormap, scores=scores)
         #plot_and_save(ratio_field, rationame, vmin=0.2, vmax=1.8, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, scores=scores)  # Albane's choice !
         plot_and_save(ratio_field, rationame, vmin=0.4, vmax=1.6, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, scores=scores)  # Albane's choice !
-        #plot_and_save(ratio_field, rationame, vmin=0.2, vmax=1.8, cmap=sns.color_palette("vlag", as_cmap=True), scores=scores)
-        #plot_and_save(ratio_field, rationame, vmin=0.2, vmax=1.8, cmap=cmocean.cm.balance, scores=scores)
-        #plot_and_save(ratio_field, rationame, vmin=0.2, vmax=1.8, cmap=plt.cm.seismic, scores=scores)
-        #plot_and_save(ratio_field, rationame, vmin=0.2, vmax=1.8, cmap=plt.cm.bwr, scores=scores)
-        #plot_and_save(ratio_field, rationame, vmin=0.2, vmax=1.8, cmap=plt.cm.RdBu_r, scores=scores)
         #plot_and_save(ratio_field, rationame + '_free_scale', vmin=0, vmax=2, cmap=plt.cm.coolwarm, scores=scores)
-        #plot_and_save(observation_error, errorname, vmin=-12, vmax=12, cmap=plt.cm.coolwarm, scores=scores)
         #plot_and_save(np.abs(observation_error), errorname, vmin=0, vmax=12, cmap=plt.cm.viridis, scores=scores)
         #plot_and_save(np.abs(observation_error), errorname, vmin=0, vmax=15, cmap=plt.cm.Reds, scores=scores)
         #plot_and_save(np.abs(observation_error), errorname, vmin=0, vmax=15, cmap=plt.cm.Greys, scores=scores)
-        plot_and_save(observation_error, errorname, vmin=1, vmax=15, cmap=plt.cm.YlOrBr, scores=scores)
-        plot_and_save(observation_confidence, confidencename, vmin=0, vmax=1, cmap=plt.cm.Greens, scores=scores)
+        #plot_and_save(observation_error, errorname, vmin=1, vmax=15, cmap=plt.cm.YlOrBr, scores=scores)
+        #plot_and_save(observation_confidence, confidencename, vmin=0, vmax=1, cmap=plt.cm.Greens, scores=scores)
+        plot_and_save(uncertainty, uncertaintyname, vmin=1, vmax=20, cmap=plt.cm.YlOrBr, scores=scores)
     elif domain == 'GrandesRousses':
         plot_and_save(ratio_field, rationame, vmin=0.6, vmax=1.4, cmap=plt.cm.coolwarm, scores=scores)
         #plot_and_save(observation_error, errorname, vmin=-6, vmax=6, cmap=plt.cm.coolwarm, scores=scores)
-        plot_and_save(np.abs(observation_error), erroname, vmin=1, vmax=8, cmap=plt.cm.viridis, scores=scores)
+        #plot_and_save(np.abs(observation_error), erroname, vmin=1, vmax=8, cmap=plt.cm.viridis, scores=scores)
 
     plt.close('all')
 
