@@ -7,6 +7,7 @@ import os, sys
 from datetime import datetime,timedelta
 import time
 import numpy as np
+#np.seterr(invalid='ignore')
 from scipy.ndimage import uniform_filter
 import xarray as xr
 import pandas as pd
@@ -102,6 +103,7 @@ if domain == 'pyr':
     fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_{domain}.csv')
 else:
     #fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_alp.csv')
+    #fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_alpes_10_obs_auto.csv')
     fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_alpes_obs_auto.csv')
 
 
@@ -637,7 +639,7 @@ def ratio_estimation(field, model=None, moving_window=25):
     if model is not None:
         ratio_modele = model.rr_cumul / uniform_filter(model.rr_cumul.data, int(d0*100))  # ~ gradient vertical modele
         ratio_modele.data = uniform_filter(ratio_modele.data, int(d0*100))
-        plot_and_save(ratio_modele, 'model_gradient' , vmin=0.8, vmax=1.2, cmap=plt.cm.RdBu_r)
+        plot_and_save(ratio_modele, 'model_gradient' , vmin=0.8, vmax=1.2, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap)
 
     # Mont-Blanc
 #    xx = np.where(field.lon==6.82)[0][0]
@@ -703,9 +705,9 @@ def ratio_estimation(field, model=None, moving_window=25):
             if h0 is not None:
                 w = np.exp(-(dist/d0))*np.exp(-(np.abs(elevation_dist)/h0))
             else:
-                w = np.exp(-(dist/d0))  # Propagates reference score further
-                #w = np.exp(-(dist**2/d0))
-                #w = np.exp(-(dist/d0)**2)  # Sticks more to the reference
+                w = np.round(np.exp(-(dist/d0)), 2)  # Propagates reference score further
+                #w = np.round(np.exp(-(dist**2/d0)), 2)
+                #w = np.round(np.exp(-(dist/d0)**2), 2)  # Sticks more to the reference
 
             weights.append(w)
             # To take into account the increasing difference of cumuls with the distance
@@ -713,9 +715,8 @@ def ratio_estimation(field, model=None, moving_window=25):
             if model is None:
                 ratios.append(ratio*cumul_ratio)
             else:
-                ratios.append(ratio*cumul_ratio/ratio_modele)  # v2=r1*a2/a1*m1/m2
+                ratios.append(ratio*cumul_ratio/ratio_modele)  # v2=r1*a2/a1*m1/m2=r1*a2/a1*1/rm
                 #ratios.append(field.rr_cumul.data/(ref_cumul/ratio+grad_modele))  # r2 = a2/(a1/r1+gradv)
-
 #            guess = ratio*cumul_ratio
             #print(poste)
             #print(toto[xx,yy], w[xx,yy])
@@ -746,14 +747,66 @@ def ratio_estimation(field, model=None, moving_window=25):
 #    tmp = np.cumsum(sweights,axis=0)  # ex [0.8, 1.1, 1.3, 1.4]
 #    tmp[tmp>1] = 1  # Filter values > 1 : [0.8, 1, 1, 1]
 #    tmp = np.diff(tmp, axis=0, prepend=0)  # "Un-cumsum" : [0.8, 1, 0, 0]
-#    totalweight = np.sum(tmp, axis=0)  # =1 if enough info else <1
-#    w0 = 1 - totalweight
+#    W = np.sum(tmp, axis=0)  # =1 if enough info else <1
+#    w0 = 1 - W
 #    estimated_ratio = 1*w0 + np.sum(tmp*sratios, axis=0)
 
-    totalweight = np.sum(weights, axis=0)  # =1 if enough info else <1
-    w0 = 1-totalweight
-    w0[w0<0] = 0
-    estimated_ratio = (1*w0 + np.sum(weights*ratios, axis=0)) / (w0+totalweight)
+    W = np.sum(weights, axis=0)  # =1 if enough info else <1
+    W[np.isnan(W)] = 0
+    tmp = to_xarray(W, field, varname='mean_ratio')
+    plot_and_save(tmp, "Total_weight", cmap=plt.cm.viridis, scores=scores, vmin=0.)
+    mean_ratio = np.divide(np.sum(weights*ratios, axis=0), W)
+    mean_ratio[np.isinf(mean_ratio)] = np.nan
+    # Equivalent aux 2 lignes précédentes
+    #mean_ratio = np.sum(weights*ratios, axis=0)/W
+    #mean_ratio[W==0] = np.nan
+    tmp = to_xarray(mean_ratio, field, varname='mean_ratio')
+    plot_and_save(tmp, "Mean_ratio", cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, scores=scores, vmin=0.2, vmax=1.8)
+    D = np.sqrt(np.sum(weights*(ratios-mean_ratio)**2, axis=0)/W)
+    D[W==0] = 0
+    #D = np.sum(weights*(ratios-mean_ratio)**2, axis=0)/W
+    #D = np.sqrt(np.sum(weights*(np.abs(1-ratios)-np.abs(1-mean_ratio))**2, axis=0)/W)
+    tmp = to_xarray(D, field, varname='dispersion')
+    plot_and_save(tmp, "Ratio spread", cmap=plt.cm.viridis, scores=scores, vmin=0, vmax=1)
+
+    #w1 = W
+    # Decrease the weight for pixels with large ratio dispersion (more uncertainty !)
+    # Ensure that estimated ratio for pixels with no information around (W=0) stay at 1
+    #w1 = W / (1+D)
+    #w1 = W / (1+D)**2
+    #w1 = W / np.exp(D)
+    #w1 = W / np.exp(D**2)
+    #w1 = W / np.exp(1+D)  # First to have a real impact --> increase ratio correlation to >0.37 !
+    #K = W * (1 - D / (W * (D + 1)))
+    # Rules :
+    # * w0+w1=1  (Keep ratio ODG)
+    # * W=0 ==> w1=0  (Ensure that estimated ratio for pixels with no information around (W=0) stay at 1)
+    # * D=0 ==> w1=W
+    # * D-->inf ==> w1-->0  (choix : D=1 ==> w1=1/2)
+    # * W-->inf ==> w1-->1
+    X = W/(2*W-1)  # Fcateur pour assurer la condition D=1 ==> w1=1/2
+    K = W * (1 - D / (D + X/W))
+    K[W==0] = 0
+    w1 = K / (1 + K)  # normalisation
+    w1[np.isnan(w1)] = 0
+    #relativeweight = W / np.exp((1+D)**2)
+    tmp = to_xarray(w1, field, varname='mean_ratio')
+    plot_and_save(tmp, "Relative_weight", cmap=plt.cm.viridis, scores=scores, vmin=0., vmax=1)
+    # TODO : include ratio dispersion in error estimation
+    #w0 = 1-W  # Ensures that estimated ratio for pixels with no information around stay near 1
+    w0 = 1 - w1
+    #w0[w0<0] = 0
+    #w0 = (1+D) / relativeweight  # Ensures that estimated ratio for pixels with no information around stay near 1
+    #w0[W==0] = 1  # Ensures that estimated ratio for pixels with no information around stay 1
+    #w0[np.isnan(w1)] = 1
+    tmp = to_xarray(w0/(w0+w1), field, varname='mean_ratio')
+    plot_and_save(tmp, "W0", cmap=plt.cm.viridis, scores=scores, vmin=0, vmax=1)
+    tmp = to_xarray(w1/(w0+w1), field, varname='mean_ratio')
+    plot_and_save(tmp, "W1", cmap=plt.cm.viridis, scores=scores, vmin=0, vmax=1)
+    estimated_ratio = (1*w0 + w1*mean_ratio) / (w0+w1)
+    #estimated_ratio = (1*w0 + W*mean_ratio) / (w0+W)
+    #estimated_ratio = mean_ratio
+    #estimated_ratio = (1*w0 + np.sum(weights*ratios, axis=0)) / (w0+W)
     #estimated_ratio = uniform_filter(estimated_ratio, size=d0*100)
 
     #tmp.apply_along_axis(
@@ -831,7 +884,8 @@ def ratio_estimation(field, model=None, moving_window=25):
         #plot_and_save(ratio_field, rationame, vmin=0.2, vmax=1.8, cmap=palettable.scientific.diverging.Vik_20.mpl_colormap, scores=scores)
         #plot_and_save(ratio_field, rationame, vmin=0.2, vmax=1.8, cmap=palettable.lightbartlein.diverging.BlueDarkRed18_5.mpl_colormap, scores=scores)
         #plot_and_save(ratio_field, rationame, vmin=0.2, vmax=1.8, cmap=palettable.colorbrewer.diverging.RdBu_11_r.mpl_colormap, scores=scores)
-        plot_and_save(ratio_field, rationame, vmin=0.2, vmax=1.8, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, scores=scores)  # Albane's choice !
+        #plot_and_save(ratio_field, rationame, vmin=0.2, vmax=1.8, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, scores=scores)  # Albane's choice !
+        plot_and_save(ratio_field, rationame, vmin=0.4, vmax=1.6, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, scores=scores)  # Albane's choice !
         #plot_and_save(ratio_field, rationame, vmin=0.2, vmax=1.8, cmap=sns.color_palette("vlag", as_cmap=True), scores=scores)
         #plot_and_save(ratio_field, rationame, vmin=0.2, vmax=1.8, cmap=cmocean.cm.balance, scores=scores)
         #plot_and_save(ratio_field, rationame, vmin=0.2, vmax=1.8, cmap=plt.cm.seismic, scores=scores)
@@ -856,8 +910,8 @@ def ratio_estimation(field, model=None, moving_window=25):
 def plot_ratio_estime_vs_ratio_reel(ratio, erreur):
 
     scores = pd.read_csv(os.path.join(datadir, f'scores_2021110106_2022043006_alp.csv'), sep=';')
-    scores = scores.set_index('num_poste')
-    scores = scores.sort_values('lats')
+    #scores = scores.set_index('num_poste')
+    #scores = scores.sort_values('lats')
     ratio_estimation = ratio.sel(lat=xr.DataArray(scores.lats.values, dims='poste'), lon=xr.DataArray(scores.lons.values, dims='poste'), method='nearest')
     error_estimation = erreur.sel(lat=xr.DataArray(scores.lats.values, dims='poste'), lon=xr.DataArray(scores.lons.values, dims='poste'), method='nearest')
 
@@ -866,7 +920,10 @@ def plot_ratio_estime_vs_ratio_reel(ratio, erreur):
         #ax.scatter(scores.ratio.values, estimation.data, label=f'R²={r2:.4}', marker='+', color='blue')
         ax.scatter(x_values, y_values, marker='+', color='blue')
         #ax.plot(x, z, color='blue', linewidth=2, label=f'Slope={reg.coef_[0]:.3f}, Intercept={reg.intercept_:.3f}, R²={r2:.4}')
-        ax.plot(x, z, color='blue', linewidth=1, label=f'R²={r2:.4}')
+        ax.plot(x, z, color='blue', linewidth=1, label=f'R²={r2:.3}, bias={bias}, rmse={rmse}')
+        # To add num_postes in scatterplot (dev only !)
+        #for idx in scores.index:
+        #    txt = plt.text(x_values[idx], y_values[idx], scores['num_poste'][idx], fontsize=12)
         lims = [
             np.min([ax.get_xlim(), ax.get_ylim()]),  # min of both axes
             np.max([ax.get_xlim(), ax.get_ylim()]),  # max of both axes
@@ -881,11 +938,13 @@ def plot_ratio_estime_vs_ratio_reel(ratio, erreur):
         ax.set_ylim(lims)
         ax.set_ylabel('Estimated ratio')
         ax.set_xlabel('Real ratio')
-        ax.legend(fontsize=18)
+        ax.legend(fontsize=12)
         plt.tight_layout()
         fig.savefig(os.path.join(savedir, savename))
 
     # Regression linéaire pour le ratio
+    bias = np.round(np.mean(ratio_estimation.data-scores.ratio.values), 3)
+    rmse = np.round(np.sqrt(np.mean((ratio_estimation.data-scores.ratio.values)**2)), 3)
     x = scores.ratio.values.reshape((-1,1))
     y = ratio_estimation.data
     reg = LinearRegression().fit(x, y)
@@ -893,12 +952,12 @@ def plot_ratio_estime_vs_ratio_reel(ratio, erreur):
     r2 = reg.score(x, y)
     plot(scores.ratio.values, ratio_estimation.data, x, z, f'Estimated_ratio_vs_real_ratio_{domain}_{d0}.pdf')
     # Regression linéaire pour l'erreur
-    x = scores.rmse.values.reshape((-1,1))
-    y = error_estimation.data
-    reg = LinearRegression().fit(x, y)
-    z = reg.predict(x)
-    r2 = reg.score(x, y)
-    plot(scores.rmse.values, error_estimation.data, x, z, f'Estimated_error_vs_real_error_{domain}_{d0}.pdf')
+    #x = scores.rmse.values.reshape((-1,1))
+    #y = error_estimation.data
+    #reg = LinearRegression().fit(x, y)
+    #z = reg.predict(x)
+    #r2 = reg.score(x, y)
+    #plot(scores.rmse.values, error_estimation.data, x, z, f'Estimated_error_vs_real_error_{domain}_{d0}.pdf')
 
 
 def animation_mask(field):
