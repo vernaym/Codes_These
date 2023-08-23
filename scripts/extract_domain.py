@@ -100,12 +100,13 @@ if __name__ == "__main__":
     for subdir in ['', 'nivometeo']:
         if not os.path.exists(os.path.join(savedir, subdir)):
             os.makedirs(os.path.join(savedir, subdir))
-        fic_error = os.path.join(datadir, subdir, f'Observation_error_0.15_alp.nc')
+        #fic_error = os.path.join(datadir, subdir, f'Observation_error_0.15_alp.nc')
+        fic_error = os.path.join(datadir, subdir, f'Observation_uncertainty_0.15_alp.nc')
         fic_ratio = os.path.join(datadir, subdir, f'Estimated_ratio_alp_0.15.nc')
         error = xr.open_dataarray(fic_error)
         ratio = xr.open_dataarray(fic_ratio)
         reduced_error = error.sel({'lat':np.intersect1d(extract_lat, error.lat), 'lon':np.intersect1d(extract_lon, error.lon)})
         reduced_ratio = ratio.sel({'lat':np.intersect1d(extract_lat, ratio.lat), 'lon':np.intersect1d(extract_lon, ratio.lon)})
-        plot_and_save(reduced_error, f'Observation_error_0.15_{domain}', vmin=1, vmax=16, cmap=plt.cm.YlOrBr, subdir=subdir)
-        plot_and_save(reduced_ratio, f'Estimated_ratio_{domain}_0.15', vmin=0.2, vmax=1.8, cmap=plt.cm.RdBu_r, subdir=subdir)
+        plot_and_save(reduced_error, f'Observation_error_0.15_{domain}', vmin=1, vmax=20, cmap=plt.cm.YlOrBr, subdir=subdir)
+        plot_and_save(reduced_ratio, f'Estimated_ratio_{domain}_0.15', vmin=0.4, vmax=1.6, cmap=plt.cm.RdBu_r, subdir=subdir)
 
