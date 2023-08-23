@@ -14,6 +14,8 @@ import matplotlib as mpl
 #matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import seaborn as sns
+import palettable
+
 from scipy.stats import norm, gamma
 from scipy import signal
 import random
@@ -88,7 +90,11 @@ def random_field(nlon, nlat):
         K   = np.random.randint(0, 20)  # Intensity of the kernel
         field = field + K * gaussian_field(X, Y, std, nlon, nlat)  # Add small scale kernel to the field
 
-    #field = uniform_filter(field, size=3)
+    random_ratio = np.random.randint(0, 20, size=np.shape(field))/10.  # generation of random ratio field between 0 and 2
+    random_ratio = uniform_filter(random_ratio, size=5)
+
+    field = field * random_ratio
+
     field = field -3
     field[field<0] = 0
 
@@ -109,13 +115,16 @@ def perturbed_ratio(ratio):
     --> to apply only once (climatological noise)
     """
     perturb = np.random.randint(0, 20, size=np.shape(ratio.data))/10. - 1  # generation of perturbations between -1 and 1
+    perturb = uniform_filter(perturb, size=10)  # Do not perturb the structure of the ratio field too much
     #perturb = uniform_filter(perturb, size=5)
-    #ratio.data = ratio.data + np.exp(-np.abs(1-ratio.data))*perturb
-    fact = uniform_filter(ratio.data, size=10)
-    ratio.data = ratio.data + 1/(1+np.abs(fact-1))*perturb
+    #fact = uniform_filter(ratio.data, size=5)
+    fact = ratio.data
+    ratio.data = ratio.data + (1+np.exp(-np.abs(1-fact)**2/1))*perturb
+    #ratio.data = ratio.data + 1/(1+np.abs(fact-1))*perturb
+    #ratio.data = ratio.data + 1/(1+np.abs(fact-1))*perturb
     ratio.data[ratio.data<=0] = -ratio.data[ratio.data<=0]+0.01
-    ratio.data = uniform_filter(ratio.data, size=5)  # Increasing the window increases the mean negative bias over the Hautes Alpes
-    plot_field(ratio, 'real_ratio.pdf', label='Ratio', cmap='RdBu_r', vmin=0.2, vmax=1.8, add_circle=False)
+    #ratio.data = uniform_filter(ratio.data, size=5)  # Increasing the window increases the mean negative bias over the Hautes Alpes
+    plot_field(ratio, 'real_ratio.pdf', label='Ratio', cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=0.4, vmax=1.6, add_circle=False)
     return ratio
 
 
@@ -130,12 +139,12 @@ def perturb_field(field, ratio):
     #perturb[perturb<0] = -perturb[perturb<0]
     #perturb[perturb==0] = 1
     #perturb = np.random.randint(1, 100, size=(Np, Np))/10.
-    perturb = uniform_filter(perturb, size=10)
+    perturb = uniform_filter(perturb, size=5)
     #perturb = uniform_filter(perturb, size=10)
     #perturb = np.flip(perturb, axis=0)
 
     if plot:
-        plot_field(perturb, 'perturb.pdf', label='Ratio', cmap='RdBu_r', vmin=-1, vmax=1, add_circle=False)
+        plot_field(perturb, 'perturb.pdf', label='Ratio', cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=-1, vmax=1, add_circle=False)
 
     noise = np.random.randint(0, 10, size=np.shape(field))/10. - 0.5  # noise between -0.5 and 0.5
     noise = uniform_filter(noise, size=10)
@@ -143,11 +152,15 @@ def perturb_field(field, ratio):
     new_ratio = ratio * (1+perturb) + noise
     #new_ratio = ratio + np.abs(1-ratio)*perturb + noise
     new_ratio = uniform_filter(new_ratio, size=2)  # Increasing the window increases the mean negative bias over the Hautes Alpes
+
+    #bias = np.random.randint(0, 4)/10. - 0.2  # Uniform bias of +/-20% over the domain
+    #new_ratio = new_ratio + bias
+
     new_ratio[new_ratio<=0] = -new_ratio[new_ratio<=0]+0.01
     #new_ratio[new_ratio==0] = 0.01
 
     if plot:
-        plot_field(new_ratio, 'daily_ratio.pdf', label='ratio', cmap='RdBu_r', vmin=0.2, vmax=1.8, add_circle=False)
+        plot_field(new_ratio, 'daily_ratio.pdf', label='ratio', cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=0.4, vmax=1.6, add_circle=False)
 
     perturbed_field =field*new_ratio
     #noise = np.random.randint(0, 10, size=np.shape(field)) - 5  # Add noise between -5mm and 5 mm
@@ -161,7 +174,7 @@ def simple_error_field():
     ratio =  np.ones((Np, Np))
     ratio[(Np-1)//2, (Np-1)//2] = 0.2
     if plot:
-        plot_field(ratio, 'ratio_simple.pdf', label='Ratio', cmap='RdBu_r', vmin=0.2, vmax=1.8, add_circle=False)
+        plot_field(ratio, 'ratio_simple.pdf', label='Ratio', cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=0.4, vmax=1.6, add_circle=False)
 
     error = np.ones((Np, Np))
     error[(Np-1)//2, (Np-1)//2] = 10
@@ -341,6 +354,10 @@ if __name__ == "__main__":
     error = np.flip(xr.open_dataarray(os.path.join(datadir, f'Observation_error_0.15_{domain}.nc')).data, axis=0)
 
     plot_scatter(real_ratio.data, estimated_ratio.data, f"ratios_scatterplot.pdf")
+    r1 = real_ratio.data.flatten()
+    r2 = estimated_ratio.data.flatten()
+    mask = np.random.randint(0, len(r1), 60)
+    plot_scatter(r1[mask], r2[mask], f"ratios_scatterplot_sample.pdf")
 
     nlon = len(real_ratio.lon)
     nlat = len(real_ratio.lat)
@@ -432,10 +449,10 @@ if __name__ == "__main__":
 
             # Plot errors
             vmax = np.max(np.abs(dd.data-real_field.data))
-            plot_field(dd-real_field, f'diff_full_correction-real_field.pdf', cmap='RdBu_r', vmin=-vmax, vmax=vmax)
+            plot_field(dd-real_field, f'diff_full_correction-real_field.pdf', cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=-vmax, vmax=vmax)
             plot_field(np.abs(dd-real_field), f'real_error_full_correction.pdf', cmap='Reds', vmin=0, vmax=vmax)
             vmax = np.nanmax(np.abs(dd.data/real_field.data)-1)
-            plot_field(dd/real_field, f'ratio_full_correction-real_field.pdf', cmap='RdBu_r', vmin=1-vmax, vmax=1+vmax)
+            plot_field(dd/real_field, f'ratio_full_correction-real_field.pdf', cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=1-vmax, vmax=1+vmax)
 
         else:
 
@@ -475,9 +492,9 @@ if __name__ == "__main__":
         #rmin = min([np.max(arr) for arr in rat.values()])
         rmax = max([np.max(np.abs(arr)) for arr in ratio.values()])
         for product in r2.keys():
-            plot_field(bias[product], f'mean_bias_{product}.pdf', cmap='RdBu_r', vmin=-bmax, vmax=bmax)
+            plot_field(bias[product], f'mean_bias_{product}.pdf', cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=-bmax, vmax=bmax)
             plot_field(rmse[product], f'rmse_{product}.pdf', cmap='Reds', vmin=0, vmax=emax)
-            plot_field(ratio[product], f'mean_ratio_{product}.pdf', cmap='RdBu_r', vmin=0.2, vmax=1.8)
+            plot_field(ratio[product], f'mean_ratio_{product}.pdf', cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=0.4, vmax=1.6)
             if product != 'raw':
                 plot_scatter(bias[product], bias['raw'], f"bias_{product}-raw_scatterplot.pdf")
                 plot_scatter(rmse[product], rmse['raw'], f"rmse_{product}-raw_scatterplot.pdf")
@@ -494,6 +511,7 @@ if __name__ == "__main__":
 
 
     #TODO :
+    # - Draw ~80 pixels to plot the ratio scatterplot on the same sample size and match correlations
     # - Improve plot_field formats (same figsizes as in "extract_domain")
     # - Plot estimated error (compare ODG with "real" error)
     # - Add random sampling
