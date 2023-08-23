@@ -367,10 +367,10 @@ if __name__ == "__main__":
     nlon = len(real_ratio.lon)
     nlat = len(real_ratio.lat)
 
-    r2 = dict(raw=list(), debiasing=list(), dyn=list(), full=list())
-    err = dict(raw=list(), debiasing=list(), dyn=list(), full=list())
-    rat = dict(raw=list(), debiasing=list(), dyn=list(), full=list())
-    slp = dict(raw=list(), debiasing=list(), dyn=list(), full=list())
+    r2 = dict(raw=list(), debiasing=list(), smoothing=list(), dyn=list(), full=list())
+    err = dict(raw=list(), debiasing=list(), smoothing=list(), dyn=list(), full=list())
+    rat = dict(raw=list(), debiasing=list(), smoothing=list(), dyn=list(), full=list())
+    slp = dict(raw=list(), debiasing=list(), smoothing=list(), dyn=list(), full=list())
 
     if plot: N = 1
     else : N=100
@@ -386,10 +386,11 @@ if __name__ == "__main__":
         # TODO : reporter la formulation retenue dans l'expérience avec données réelles
         #pond = codist.dot(diags(np.exp(-(error-1)).flatten(), 0))  # error is in [1, inf[.
         #pond = codist.dot(diags(np.exp(-error)).flatten(), 0))  # error is in [1, inf[.
-        pond = codist.dot(diags(1/error.flatten(), 0))  # error is in [1, inf[.
+        pond = codist.dot(diags(1/error.flatten(), 0))  # error is in [1, inf[.  # Best formulation with new observation error formula
 
         # De-biasing only
         db = perturbed_field / estimated_ratio.data
+        smooth = uniform_filter(db, size=15)
 
         # Dynamic correction only
         dyn, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(perturbed_field, pond)
@@ -401,7 +402,6 @@ if __name__ == "__main__":
         dd = dd.reshape((nlat, nlon))
         sd = sd.reshape((nlat, nlon))
         #plot_field(np.sqrt(sd), f'dynamic_error_with_debiasing.pdf', label='Error (mm)', cmap=plt.cm.Reds)
-        plot_field(sd, f'dynamic_error_with_debiasing.pdf', label='Error (mm)', cmap=plt.cm.Reds)
 
         vmax = max(np.max(real_field), np.max(perturbed_field), np.max(dyn), np.max(dd))*1.1
         if plot:
@@ -412,7 +412,7 @@ if __name__ == "__main__":
         for member in range(16):
             #ana = Preprocessing_ANTILOPE.random_draw(dd, np.sqrt(sd))
             #ana = Preprocessing_ANTILOPE.random_draw(dd, sd+error.data)
-            ana = Preprocessing_ANTILOPE.random_draw(dd, sd)
+            ana = Preprocessing_ANTILOPE.random_draw(dd, sd)  # Good ODG with real error
             analysis.append(ana)
             ana = make_mask.to_xarray(ana, real_ratio, varname='Precipitation')
             if plot:
@@ -435,6 +435,7 @@ if __name__ == "__main__":
             plot_scatter(real_field, perturbed_field, f"Initial_perturbations_scatterplot.pdf")
             plot_scatter(real_field, dyn, f"dynamic_correction_ld{ld}_scatterplot.pdf")
             plot_scatter(real_field, db, f"debiasing_scatterplot.pdf")
+            plot_scatter(real_field, smooth, f"smooth_scatterplot.pdf")
             plot_scatter(real_field, dd, f"debiasing+dynamic_correction_ld{ld}_scatterplot.pdf")
 
             # Transform np arrays into xarray Dataarrays
@@ -446,10 +447,12 @@ if __name__ == "__main__":
 
             # Plot fields
             #vmax = max(np.max(real_field), np.max(perturbed_field), np.max(dyn), np.max(db), np.max(dd))
+            plot_field(sd, f'Estimated_error.pdf', label='Error (mm)', cmap=plt.cm.Reds)
             plot_field(real_field, f'real_field.pdf', vmin=0, vmax=vmax)
             plot_field(perturbed_field, f'fake_antilope_field.pdf', vmin=0, vmax=vmax)
             plot_field(dyn, f'dynamic_correction_ld{ld}.pdf', vmin=0, vmax=vmax)
             plot_field(db, f'debiasing.pdf', vmin=0, vmax=vmax)
+            plot_field(smooth, f'Smoothed_debiased_field.pdf', vmin=0, vmax=vmax)
             plot_field(dd, f'debiasing+dynamic_correction_ld{ld}.pdf', vmin=0, vmax=vmax)
             #plot_field(qq, f'dynamic_correction_ld{ld}+debiasing.pdf', vmin=0, vmax=30)
 
@@ -472,6 +475,11 @@ if __name__ == "__main__":
             err['debiasing'].append(b)
             rat['debiasing'].append(c)
             slp['debiasing'].append(d)
+            a,b,c,d = compare(real_field, smooth)
+            r2['smoothing'].append(a)
+            err['smoothing'].append(b)
+            rat['smoothing'].append(c)
+            slp['smoothing'].append(d)
             a,b,c,d = compare(real_field, dyn)
             r2['dyn'].append(a)
             err['dyn'].append(b)
@@ -485,9 +493,9 @@ if __name__ == "__main__":
 
     if not plot:
 
-        bias = dict(raw=list(), debiasing=list(), dyn=list(), full=list())
-        rmse = dict(raw=list(), debiasing=list(), dyn=list(), full=list())
-        ratio  = dict(raw=list(), debiasing=list(), dyn=list(), full=list())
+        bias = dict(raw=list(), debiasing=list(), smoothing=list(), dyn=list(), full=list())
+        rmse = dict(raw=list(), debiasing=list(), smoothing=list(), dyn=list(), full=list())
+        ratio  = dict(raw=list(), debiasing=list(), smoothing=list(), dyn=list(), full=list())
         for product in r2.keys():
             bias[product] = np.nanmean(np.array(err[product]), axis=0)
             rmse[product] = np.sqrt(np.nanmean(np.array(err[product])**2, axis=0))
@@ -495,7 +503,8 @@ if __name__ == "__main__":
 
         #bmin = min([np.min(arr) for arr in bias.values()])
         bb = bias.copy()
-        bb.pop('debiasing')
+        bb.pop('debiasing')  # The debiasing method genreates unrealistically high biases
+        bb.pop('raw')
         bmax = max([np.max(np.abs(arr)) for arr in bb.values()])
         emin = min([np.min(arr) for arr in rmse.values()])
         emax = max([np.max(arr) for arr in rmse.values()])
