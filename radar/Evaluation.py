@@ -469,7 +469,10 @@ def plot_massif(mydf, massif=None, subdomain=None, error=0.2, threshold=None, **
     tmp['biais'] = tmp['rr_radar'] - tmp['rr_ref']
     mydf['diff'] = np.square(mydf[f'rr_{kw["product"]}'] - mydf['rr_ref'])
     tmp['nb_days'] = mydf.groupby(['num_poste']).date.count()
-    tmp = tmp[tmp['nb_days']>100]
+    if args.threshold is None:
+        tmp = tmp[tmp['nb_days']>100]
+    else:
+        tmp = tmp[tmp['nb_days']>10]
     #tmp = tmp[tmp['rr_ref']>0]
     tmp['rmse']  = np.sqrt(mydf.groupby(['num_poste'])["diff"].mean())
     tmp['ratio'] = tmp['rr_radar'] / tmp['rr_ref']
@@ -925,7 +928,7 @@ def read_obs_auto():
     lats          = auto.groupby(['num_poste']).lat.mean()
     lons          = auto.groupby(['num_poste']).lon.mean()
     num_poste     = auto.groupby(['num_poste']).num_poste.mean()
-    plot_obs(lats.to_numpy(), lons.to_numpy(), elevations.to_numpy(), num_poste.to_numpy(), args.datebegin.strftime('%Y%m%d'), args.dateend.strftime('%Y%m%d'))
+    #plot_obs(lats.to_numpy(), lons.to_numpy(), elevations.to_numpy(), num_poste.to_numpy(), args.datebegin.strftime('%Y%m%d'), args.dateend.strftime('%Y%m%d'))
 
     return auto
 
@@ -1092,7 +1095,7 @@ if __name__ == "__main__":
         daily_scatterplot(workdf, args.datebegin, args.dateend, subdomain=args.subdomain, suffix=suffix, product=args.product)
     else:
         # 1. Plot rain-gauges informations
-        plot_obs(lats.to_numpy(), lons.to_numpy(), elevations.to_numpy(), num_poste.to_numpy(), args.datebegin.strftime('%Y%m%d'), args.dateend.strftime('%Y%m%d'))
+        #plot_obs(lats.to_numpy(), lons.to_numpy(), elevations.to_numpy(), num_poste.to_numpy(), args.datebegin.strftime('%Y%m%d'), args.dateend.strftime('%Y%m%d'))
         # 2. Raw sactter plot of all availbale stations
         raw_scatterplot(df_stat['rr_ref'].to_numpy(), df_stat[f'rr_{args.product}'].to_numpy(), df_stat['elevation'].to_numpy(), args.datebegin, args.dateend, suffix=suffix, product=args.product)
         # 3. Scatter plot with stations sorted by elevation range
