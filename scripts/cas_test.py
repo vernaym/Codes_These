@@ -43,7 +43,7 @@ figsize = dict(
         alp            = (14,16),
         GrandesRousses = (15,7),
         HauteSavoie    = (12,12),
-        HautesAlpes    = (16,10),
+        HautesAlpes    = (24,15),
         MontBlanc      = (17,10),
         Savoie         = (16,8),
         Isere          = (16,8),
@@ -170,7 +170,7 @@ def perturb_field(field, ratio):
     #noise = np.random.randint(0, 10, size=np.shape(field)) - 5  # Add noise between -5mm and 5 mm
     #noise = uniform_filter(noise, size=5)
     #perturbed_field = perturbed_field + noise
-    perturbed_field[perturbed_field<0.1] = 0  # Fake "missed precipitation"
+    perturbed_field[perturbed_field<0.5] = 0  # Fake "missed precipitation"
     return perturbed_field
 
 
@@ -391,6 +391,7 @@ if __name__ == "__main__":
         # De-biasing only
         db = perturbed_field / estimated_ratio.data
         smooth = uniform_filter(db, size=15)
+        smootherr = db - smooth
 
         # Dynamic correction only
         dyn, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(perturbed_field, pond)
@@ -401,6 +402,7 @@ if __name__ == "__main__":
         dd, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(perturbed_field.data/estimated_ratio.data, pond)
         dd = dd.reshape((nlat, nlon))
         sd = sd.reshape((nlat, nlon))
+        sd = np.sqrt(sd*dd)  # TODO : TMP !
         #plot_field(np.sqrt(sd), f'dynamic_error_with_debiasing.pdf', label='Error (mm)', cmap=plt.cm.Reds)
 
         vmax = max(np.max(real_field), np.max(perturbed_field), np.max(dyn), np.max(dd))*1.1
@@ -437,6 +439,7 @@ if __name__ == "__main__":
             plot_scatter(real_field, db, f"debiasing_scatterplot.pdf")
             plot_scatter(real_field, smooth, f"smooth_scatterplot.pdf")
             plot_scatter(real_field, dd, f"debiasing+dynamic_correction_ld{ld}_scatterplot.pdf")
+            plot_scatter(np.abs(dd-real_field), sd, f"error_scatterplot.pdf")
 
             # Transform np arrays into xarray Dataarrays
             real_field = make_mask.to_xarray(real_field, real_ratio, varname='Precipitation')
@@ -447,7 +450,6 @@ if __name__ == "__main__":
 
             # Plot fields
             #vmax = max(np.max(real_field), np.max(perturbed_field), np.max(dyn), np.max(db), np.max(dd))
-            plot_field(sd, f'Estimated_error.pdf', label='Error (mm)', cmap=plt.cm.Reds)
             plot_field(real_field, f'real_field.pdf', vmin=0, vmax=vmax)
             plot_field(perturbed_field, f'fake_antilope_field.pdf', vmin=0, vmax=vmax)
             plot_field(dyn, f'dynamic_correction_ld{ld}.pdf', vmin=0, vmax=vmax)
@@ -457,11 +459,13 @@ if __name__ == "__main__":
             #plot_field(qq, f'dynamic_correction_ld{ld}+debiasing.pdf', vmin=0, vmax=30)
 
             # Plot errors
-            vmax = np.max(np.abs(dd.data-real_field.data))
+            vmax = max(np.max(np.abs(dd.data-real_field.data)), np.max(sd), np.max(smootherr))
+            plot_field(smootherr, f'Estimated_error_smooth.pdf', label='Error (mm)', cmap=plt.cm.Reds, vmin=0, vmax=vmax)
+            plot_field(sd, f'Estimated_error_full.pdf', label='Error (mm)', cmap=plt.cm.Reds, vmin=0, vmax=vmax)
             plot_field(dd-real_field, f'diff_full_correction-real_field.pdf', cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=-vmax, vmax=vmax)
             plot_field(np.abs(dd-real_field), f'real_error_full_correction.pdf', cmap='Reds', vmin=0, vmax=vmax)
             vmax = np.nanmax(np.abs(dd.data/real_field.data)-1)
-            plot_field(dd/real_field, f'ratio_full_correction-real_field.pdf', cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=1-vmax, vmax=1+vmax)
+            #plot_field(dd/real_field, f'ratio_full_correction-real_field.pdf', cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=1-vmax, vmax=1+vmax)
 
         else:
 

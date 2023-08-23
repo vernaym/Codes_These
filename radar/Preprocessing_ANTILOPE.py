@@ -109,7 +109,9 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
     #sd3 = np.abs(initial_field-newfield)  # Obs displacment  --> Apparition of spatial structures
 
     #sd = sd + 1  # Add 1 to ensure that the error is >1 (mm or mm^(1/2)). --> Dispersion too large
-    sd = (sd1+sd2)/2
+    #sd = (sd1+sd2)/2
+    #sd = sd1/2+sd2
+    sd = sd2
 
     return newfield, mean, sd
 
