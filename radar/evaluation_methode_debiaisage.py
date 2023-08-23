@@ -123,10 +123,17 @@ if __name__ == "__main__":
     #rat = np.nanmean(ant.rr.data[mask]/nivometeo.obs.data[mask], axis=0)  # Raw ANTILOPE ratio
     labels.append(scores.violinplot(ax, position, bias, 'Raw ANTILOPE'))
 
-    for suffix in ['arome', 'sans_arome', 'nivometeo_arome', 'nivometeo_sans_arome']:
+    suffix = 'ref'
+    suffix = 'v2'
+    suffix = 'v3'
+    suffix = 'v4'
+    suffix = 'v5'
+    product = 'arome'
+    #for product in ['arome', 'sans_arome', 'nivometeo_arome', 'nivometeo_sans_arome']:
+    for suffix in ['v2', 'v4', 'v5', 'v6']:
         position = position + 1
 
-        ratio  = xr.open_dataset(os.path.join(workdir, f"Estimated_ratio_alp_0.15_{suffix}_ref.nc"))
+        ratio  = xr.open_dataset(os.path.join(workdir, f"Estimated_ratio_alp_0.15_{product}_{suffix}.nc"))
         #error = xr.open_dataset(os.path.join(workdir, "Observation_error_0.15_alp.nc"))
 
         rat = ratio.sel(lat=xr.DataArray(lats, dims='num_poste'), lon=xr.DataArray(lons, dims='num_poste'), method='nearest').ratio
@@ -134,6 +141,7 @@ if __name__ == "__main__":
 
         #bias = scores.bias(ant.rr.data/rat.data, nivometeo.obs.data)  # ANTILOPE bias after debiasing
         bias = np.nanmean(ant.rr.data/rat.data-nivometeo.obs.data, axis=0)  # ANTILOPE bias after debiasing
+        #labels.append(scores.violinplot(ax, position, bias, f'Method {product}'))
         labels.append(scores.violinplot(ax, position, bias, f'Method {suffix}'))
 
     ax.set_ylabel(f'Bias', fontsize=28)
@@ -141,5 +149,6 @@ if __name__ == "__main__":
     ax.set_xticks(range(position))
     ax.yaxis.set_tick_params(labelsize=28)
     ax.legend(*zip(*labels), fontsize=18)
-    fig.savefig(f'{workdir}/bias.pdf', format='pdf',  bbox_inches='tight')
+    #fig.savefig(f'{workdir}/bias_{suffix}.pdf', format='pdf',  bbox_inches='tight')
+    fig.savefig(f'{workdir}/bias_{product}.pdf', format='pdf',  bbox_inches='tight')
 
