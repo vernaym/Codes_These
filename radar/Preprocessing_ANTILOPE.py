@@ -69,7 +69,6 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
     X = diags(field.flatten(), 0)
 
     # 1. Calcul de la moyenne pondérée par la distance ET l'erreur statique
-
     if super_ensemble is None:
         super_ensemble = pond.copy()  # WARNING : make a copy or pond will change when super_ensemble changes
         super_ensemble[super_ensemble.nonzero()] = 1  # Position of pixels to inclue in the spread computation
@@ -79,7 +78,7 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
 
     mean = pond.dot(X).sum(axis=1).getA1()  # getA1 transforms the 1*N matrix object into a 1D np.array
     mean = mean / weight
-    pixel_weight = pond.diagonal()  # = "exp(-erreur_statique)" pour l'obs et "likelyhood" du pixel pour les membres de l'ensemble
+    pixel_weight = pond.diagonal()  # = "exp(-err)" ou "1/err" pour l'obs et "likelyhood" du pixel pour les membres de l'ensemble
     sums = pond.sum(axis=1).A1
     nb_nonzero = (pond != 0).sum(0).getA1()  # Count non zero elements of each row
     meanweight = sums / nb_nonzero
@@ -88,6 +87,7 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
     # for temporary failures as well as uncertainties due to the error estimation method
     #newfield = (initial_field * pixel_weight + mean * meanweight) / (pixel_weight + meanweight)
     newfield = (initial_field * pixel_weight + mean * meanweight/pixel_weight) / (pixel_weight + meanweight/pixel_weight)
+    newfield = np.round(newfield, 1)
 
     # Plot correction coefficient
     if plot:
@@ -108,7 +108,6 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
     #sd = np.abs(initial_field-newfield)  # Obs displacment  --> Apparition of spatial structures
 
     #sd = sd + 1  # Add 1 to ensure that the error is >1 (mm or mm^(1/2)). --> Dispersion too large
-    sd = sd
 
     return newfield, mean, sd
 
@@ -154,6 +153,29 @@ def codistances(coords, ld=0.07):
     np.exp(-dist.data**2/2, out=dist.data )
 
     return dist
+
+def random_draw(obs, sd):
+    gauss = np.random.normal(loc=0.0, scale=1.0, size=1)[0]  # Draw random element from normal distribution
+    exp = np.random.default_rng().exponential(scale=5)  # TODO : set scale parameter using the density of pixels at 0mm in the vicinity ?
+
+    # Ensure that RR are >=0
+    # ==> Draw from gama distribution ? ==> Not a good idea since the conversion to square root precipitation aims at
+    # normalising the distribution
+    #ana = obs+gauss*sd/5
+    #sd = np.sqrt(sd)  # sigma --> sigma² dans la formulation de la loi normale
+    # TODO : comprendre pourquoi la conversion R^1/2 --> R disperse autant l'ensemble
+    #ana = np.square(obs)+gauss*sd  # Gaussian perturbation around >0 obs
+    ana = obs+gauss*sd  # Gaussian perturbation around >0 obs
+    #ana[ana<0] = exp*sd[ana<0]  # Avoid "mass accumulation" in 0. !! WARNING : the analysis distribution is not Normal anymore !!
+    # TODO : different treatment of values <1 and >1 since conversion RR^1/2 --> RR completly changes the behavior
+    ana[ana<0] = 0  # WARNING : "mass accumulation" in 0 (analysis distribution not normal anymore)
+    ana[obs==0] = obs[obs==0]+exp*sd[obs==0]  # Exponential perturbation arround 0. TODO : arround 0, use the density
+    ana = np.round(ana, 1)
+    # of pixels at 0mm in the vicinity instead of sd ?
+    #ana[ana<0] = 0
+
+    return ana
+    #return np.square(ana)
 
 
 class AntilopePreprocessing(object):
