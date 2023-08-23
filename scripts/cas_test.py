@@ -36,12 +36,15 @@ if len(sys.argv) > 1:
 else:
     domain = 'MontBlanc'
 
+d0 = 0.15
+d0 = 0.25
+
 figsize = dict(
         alp            = (14,16),
         GrandesRousses = (15,7),
         HauteSavoie    = (12,12),
         HautesAlpes    = (16,10),
-        MontBlanc      = (15,10),
+        MontBlanc      = (17,10),
         Savoie         = (16,8),
         Isere          = (16,8),
 )
@@ -52,6 +55,7 @@ datadir = f'/home/vernaym/workdir/ASSIMILATION/mask/{domain}'
 #Np = 15  # Domain size
 Np = 31  # Domain size
 ld = 0.07  # Correlation length
+#ld = 0.05  # Correlation length
 
 def diagonal_field():
     """Generation of an idealised precipitation field"""
@@ -91,7 +95,7 @@ def random_field(nlon, nlat):
         field = field + K * gaussian_field(X, Y, std, nlon, nlat)  # Add small scale kernel to the field
 
     random_ratio = np.random.randint(0, 20, size=np.shape(field))/10.  # generation of random ratio field between 0 and 2
-    random_ratio = uniform_filter(random_ratio, size=5)
+    random_ratio = uniform_filter(random_ratio, size=10)
 
     field = field * random_ratio
 
@@ -212,7 +216,7 @@ def gaussian_field(X, Y, std, nlon, nlat):
 
 def plot_mean_and_dispersion(ensemble, vmin=None, vmax=None, cmap=plt.cm.YlGnBu):
     """
-    Dispersion = sqrt(sum((Xi-Xmean)(Xi-Xmean)'))
+    Dispersion = sqrt(sum((Xi-Xmean)(Xi-Xmean)')/(N-1))
     """
 #    if vmin is None:
 #        vmin = np.nanmin(ensemble)
@@ -224,7 +228,7 @@ def plot_mean_and_dispersion(ensemble, vmin=None, vmax=None, cmap=plt.cm.YlGnBu)
     plot_field(mean, f'Ensemble_mean.pdf', label='Precipitation (mm)', cmap=cmap, vmin=0, vmax=vmax)
 
     N = len(ensemble)
-    dispersion = np.sqrt(np.sum(np.array([(member-mean)**1 for member in ensemble]), axis=0)/N)
+    dispersion = np.sqrt(np.sum(np.array([(member-mean)**2 for member in ensemble]), axis=0)/(N-1))
     dispersion = make_mask.to_xarray(dispersion, real_ratio, varname='Dispersion')
     plot_field(dispersion, f'Ensemble_dispersion.pdf', label='Precipitation (mm)', cmap=cmap)
 
@@ -297,27 +301,28 @@ def compare(reference, model):
     y = mod
     reg = LinearRegression().fit(x, y)
     z = reg.predict(x)
-    r2 = np.round(reg.score(x, y), 2)
+    r2 = np.round(reg.score(x, y), 3)
+    slope = np.round(reg.coef_[0], 3)
 
-    return r2, diff, ratio
+    return r2, diff, ratio, slope
 
 
 def plot_scatter(reference, model, savename):
     ref = reference.flatten()
     mod = model.flatten()
-    bias = np.round(np.mean(mod - ref),2)
-    rmse = np.round(np.sqrt(np.mean((mod-ref)**2)), 2)
+    bias = np.round(np.mean(mod - ref),3)
+    rmse = np.round(np.sqrt(np.mean((mod-ref)**2)), 3)
     x = ref.reshape((-1,1))
     y = mod
     reg = LinearRegression().fit(x, y)
     z = reg.predict(x)
-    r2 = np.round(reg.score(x, y), 2)
+    r2 = np.round(reg.score(x, y), 3)
 
     fig,ax = plt.subplots()
     # TODO : plot points with ratio inversion in red
     ax.scatter(ref, mod, marker='+')  # scatterplot ref vs estimation
 
-    ax.plot(x, z, color='blue', linewidth=1, label=f'R²={r2:.4}, bias={bias}, rmse={rmse}')  # plot linear regression line
+    ax.plot(x, z, color='blue', linewidth=1, label=f'Slope={reg.coef_[0]:.3f}, Intercept={reg.intercept_:.3f}\nR²={r2:.4}, bias={bias}, rmse={rmse}')  # plot linear regression line
     lims = [
         np.min([ax.get_xlim(), ax.get_ylim()]),  # min of both axes
         np.max([ax.get_xlim(), ax.get_ylim()]),  # max of both axes
@@ -332,14 +337,14 @@ def plot_scatter(reference, model, savename):
     ax.set_ylim(lims)
     ax.set_ylabel('Estimated value')
     ax.set_xlabel('Real value')
-    ax.legend(fontsize=14)
+    ax.legend(fontsize=10)
     plt.tight_layout()
     fig.savefig(os.path.join(savedir, savename), format='pdf')
 
 
 if __name__ == "__main__":
 
-    real_ratio = np.flip(xr.open_dataarray(os.path.join(datadir, 'nivometeo', f'Estimated_ratio_{domain}_0.15.nc')), axis=0)  # Reference ratio estimated with nivometeo observations only
+    real_ratio = np.flip(xr.open_dataarray(os.path.join(datadir, 'nivometeo', f'Estimated_ratio_{domain}_{d0}.nc')), axis=0)  # Reference ratio estimated with nivometeo observations only
     real_ratio = perturbed_ratio(real_ratio)  # Climatological perturbations of the ratio field to account for the ratio estimation method's errros
 
     # Compute spatial correlations
@@ -350,8 +355,8 @@ if __name__ == "__main__":
     #plot_field(codist.getrow(Np**2//2).toarray()[0].reshape((Np,Np)), "codist.pdf", label='Codistances', vmin=0, vmax=1, cmap='Greens', add_circle=True)  # Weights for central pixel correction
 
     # Read ratio/error fields to evaluate
-    estimated_ratio = np.flip(xr.open_dataarray(os.path.join(datadir, f'Estimated_ratio_{domain}_0.15.nc')), axis=0)  # Ratio estimated with automatic observations that we want to evaluate
-    error = np.flip(xr.open_dataarray(os.path.join(datadir, f'Observation_error_0.15_{domain}.nc')).data, axis=0)
+    estimated_ratio = np.flip(xr.open_dataarray(os.path.join(datadir, f'Estimated_ratio_{domain}_{d0}.nc')), axis=0)  # Ratio estimated with automatic observations that we want to evaluate
+    error = np.flip(xr.open_dataarray(os.path.join(datadir, f'Observation_error_{d0}_{domain}.nc')).data, axis=0)
 
     plot_scatter(real_ratio.data, estimated_ratio.data, f"ratios_scatterplot.pdf")
     r1 = real_ratio.data.flatten()
@@ -365,6 +370,7 @@ if __name__ == "__main__":
     r2 = dict(raw=list(), debiasing=list(), dyn=list(), full=list())
     err = dict(raw=list(), debiasing=list(), dyn=list(), full=list())
     rat = dict(raw=list(), debiasing=list(), dyn=list(), full=list())
+    slp = dict(raw=list(), debiasing=list(), dyn=list(), full=list())
 
     if plot: N = 1
     else : N=100
@@ -378,7 +384,9 @@ if __name__ == "__main__":
 
         # Add error ponderation
         # TODO : reporter la formulation retenue dans l'expérience avec données réelles
-        pond = codist.dot(diags(np.exp(-(error-1)).flatten(), 0))  # error is in [1, inf[.
+        #pond = codist.dot(diags(np.exp(-(error-1)).flatten(), 0))  # error is in [1, inf[.
+        #pond = codist.dot(diags(np.exp(-error)).flatten(), 0))  # error is in [1, inf[.
+        pond = codist.dot(diags(1/error.flatten(), 0))  # error is in [1, inf[.
 
         # De-biasing only
         db = perturbed_field / estimated_ratio.data
@@ -392,11 +400,10 @@ if __name__ == "__main__":
         dd, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(perturbed_field.data/estimated_ratio.data, pond)
         dd = dd.reshape((nlat, nlon))
         sd = sd.reshape((nlat, nlon))
-        sd = uniform_filter(sd, size=10)  # TODO : TMP !!!
         #plot_field(np.sqrt(sd), f'dynamic_error_with_debiasing.pdf', label='Error (mm)', cmap=plt.cm.Reds)
         plot_field(sd, f'dynamic_error_with_debiasing.pdf', label='Error (mm)', cmap=plt.cm.Reds)
 
-        vmax = max(np.max(real_field), np.max(perturbed_field), np.max(dyn), np.max(dd))
+        vmax = max(np.max(real_field), np.max(perturbed_field), np.max(dyn), np.max(dd))*1.1
         if plot:
             fig,ax = plt.subplots(nrows=4, ncols=4, figsize=figsize[domain])
             i = 0
@@ -404,8 +411,8 @@ if __name__ == "__main__":
         analysis = list()
         for member in range(16):
             #ana = Preprocessing_ANTILOPE.random_draw(dd, np.sqrt(sd))
-            #ana = Preprocessing_ANTILOPE.random_draw(dd, sd)
-            ana = Preprocessing_ANTILOPE.random_draw(dd, sd+error.data)
+            #ana = Preprocessing_ANTILOPE.random_draw(dd, sd+error.data)
+            ana = Preprocessing_ANTILOPE.random_draw(dd, sd)
             analysis.append(ana)
             ana = make_mask.to_xarray(ana, real_ratio, varname='Precipitation')
             if plot:
@@ -416,9 +423,8 @@ if __name__ == "__main__":
                 if j==4:
                     j = 0
                     i = i + 1
-        finalize_fig(fig, im, label='24-hour precipitation (mm)', outname=f'Analysis_ensemble.pdf')
-
         if plot:
+            finalize_fig(fig, im, label='24-hour precipitation (mm)', outname=f'Analysis_ensemble.pdf')
             plot_mean_and_dispersion(analysis, vmax=vmax)
 
         #Dynamic correction + de-biasing  ==> does not work at all !
@@ -456,22 +462,26 @@ if __name__ == "__main__":
 
         else:
 
-            a,b,c = compare(real_field, perturbed_field)
+            a,b,c,d = compare(real_field, perturbed_field)
             r2['raw'].append(a)
             err['raw'].append(b)
             rat['raw'].append(c)
-            a,b,c = compare(real_field, db)
+            slp['raw'].append(d)
+            a,b,c,d = compare(real_field, db)
             r2['debiasing'].append(a)
             err['debiasing'].append(b)
             rat['debiasing'].append(c)
-            a,b,c = compare(real_field, dyn)
+            slp['debiasing'].append(d)
+            a,b,c,d = compare(real_field, dyn)
             r2['dyn'].append(a)
             err['dyn'].append(b)
             rat['dyn'].append(c)
-            a,b,c = compare(real_field, dd)
+            slp['dyn'].append(d)
+            a,b,c,d = compare(real_field, dd)
             r2['full'].append(a)
             err['full'].append(b)
             rat['full'].append(c)
+            slp['full'].append(d)
 
     if not plot:
 
@@ -504,10 +514,11 @@ if __name__ == "__main__":
                 #plot_field(ratio[product]-ratio['raw'], f'diff_ratio_{product}-raw.pdf', cmap='RdBu_r')
 
         for product in r2.keys():
-            print(f'Mean R2 for product {product} = ', np.mean(np.array(r2[product])))
+            print(f'Mean R2 for product {product} = ', np.nanmean(np.array(r2[product])))
+            print(f'Mean slope for product {product} = ', np.nanmean(np.array(slp[product])))
             if not product == 'raw':
                 # TODO : improve representation
-                plot_scatter(np.array(r2[product]), np.array(r2['raw']), f"RS_{product}_vs_raw_scatterplot.pdf")
+                plot_scatter(np.array(r2[product]), np.array(r2['raw']), f"R2_{product}_vs_raw_scatterplot.pdf")
 
 
     #TODO :
