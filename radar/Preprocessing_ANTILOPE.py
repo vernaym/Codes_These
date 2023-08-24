@@ -97,16 +97,27 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
     #newfield = (initial_field * pixel_weight + mean * meanweight/(meanweight+pixel_weight)) / (pixel_weight + meanweight/(meanweight+pixel_weight))
     newfield = np.round(newfield, 1)
 
-    # Try to match extreme values with original field
+    # Try to match extreme values with original field (quantile-quantile like method)
+    # The goal is to bring the field distribution closer to the debiased one
+    # Le but est de rapprocher la pente de la régression linéaire du champs corrigé vs le champs initial de 1
+    # WARNINGs : 
+    # 1. cette méthode débiaise le champs corrigé --> utiliser une loi normale pour les perturbations
+    # 2. le champs produit n'est plus aussi lisse
     rmax = np.max(initial_field)/np.max(newfield)
     rmin = np.min(initial_field)/np.min(newfield)
     #a = (rmax-rmin)/(np.max(newfield)-np.min(newfield))
     #b = rmin-a*np.min(newfield)
-    #ratio = rmax/(np.max(newfield)-np.min(newfield))
+    #ratio = rmax/(np.max(newfield)-np.min(newfield))  # --> can lean to large errors !
+    #ratio = a*newfield/(np.max(newfield)-np.min(newfield))+b  # --> can lean to large errors !
+    #ratio[np.isnan(ratio)] = 0
     ratio = (rmax-rmin)/(np.max(newfield)-np.min(newfield))
     if np.isnan(ratio): ratio=0
-    print('Ratio=',ratio)
+    #print('Ratio=',ratio)
     newfield = newfield*(1+ratio)
+    # Increase error consistently
+    sd2 = sd2*(1+np.abs(ratio))
+
+    # TODO : there is still a probleme for low precipitation fields (artefacts)
 
     # Plot correction coefficient
     if plot:
@@ -129,7 +140,7 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
     #sd = (sd1+sd2)/2
     #sd = sd1/2+sd2
     sd = sd2
-    #sd = np.sqrt(sd1*sd2)
+    #sd = np.sqrt(sd1*sd2)  -> 
     #sd = sd1
 
     return newfield, mean, sd
