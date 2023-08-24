@@ -63,7 +63,7 @@ def plot_and_save(field, name, cmap=plt.cm.Greys, vmin=None, vmax=None, scores=N
     #fig.savefig(os.path.join(savedir, f'{name}.pdf'), format='pdf', layout='tight')
     fig.tight_layout()
     fig.savefig(os.path.join(savedir, subdir, f'{name}.pdf'), format='pdf')
-    field.to_netcdf(os.path.join(savedir, subdir, f'{name}.nc'))  # WARNING : does not work if nctoolkit is installed
+    field.to_netcdf(os.path.join(savedir, subdir, f'{name}.nc').encode('utf-8'))  # WARNING : encode ncessary if name contains a formatted flot
 
 def plot_field(fig, ax, field, cmap=plt.cm.Greys, vmin=None, vmax=None, scores=None, colorbar=True):
 
@@ -110,5 +110,5 @@ if __name__ == "__main__":
         reduced_error = error.sel({'lat':np.intersect1d(extract_lat, error.lat), 'lon':np.intersect1d(extract_lon, error.lon)})
         reduced_ratio = ratio.sel({'lat':np.intersect1d(extract_lat, ratio.lat), 'lon':np.intersect1d(extract_lon, ratio.lon)})
         plot_and_save(reduced_error, f'Observation_error_{d0}_{domain}', vmin=1, vmax=20, cmap=plt.cm.YlOrBr, subdir=subdir)
-        plot_and_save(reduced_ratio, f'Estimated_ratio_{domain}_{d0}', vmin=0.4, vmax=1.6, cmap=plt.cm.RdBu_r, subdir=subdir)
+        plot_and_save(reduced_ratio, f'Estimated_ratio_{domain}_{d0}', vmin=0.4, vmax=1.6, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, subdir=subdir)
 
