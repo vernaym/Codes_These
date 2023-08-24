@@ -81,8 +81,9 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
 
     sd1 = get_std(X, initial_field, pond, weight=weight, super_ensemble=super_ensemble)  # 1. Dispersion of the super ensemble around the initial field --> More dispersion on high error pixels (--> spatial structures)
     sd2 = get_std(X, mean, pond, weight=weight, super_ensemble=super_ensemble)  # 2. Dispersion of the super ensemble around the mean --> Smoother fields
+    #sd3 = np.abs(initial_field-newfield)  # Obs displacment  --> Apparition of spatial structures
 
-    # TODO : include sd in the field modification algorithm
+    # TODO : include sd in the field modification algorithm ?
 
     pixel_weight = pond.diagonal()  # = "exp(-err)" ou "1/err" pour l'obs et "likelyhood" du pixel pour les membres de l'ensemble
     #weight = pond.sum(axis=1).A1
@@ -115,7 +116,6 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
     #print('Ratio=',ratio)
     newfield = newfield*(1+ratio)
     # Increase error consistently
-    sd2 = sd2*(1+np.abs(ratio))
 
     # TODO : there is still a probleme for low precipitation fields (artefacts)
 
@@ -130,18 +130,14 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
         filename = 'Original_value_weight.pdf'
         ct.plot_field(original_value_coefficient, filename, label='Original value coefficient', cmap=plt.cm.viridis, vmin=0, vmax=1, add_circle=True)
 
-    #sd = get_std(X, newfield, pond, weight=weight, super_ensemble=super_ensemble)  # Dispersion of the super ensemble
-    # TODO : Objective evaluation of formulas 1 and 2
-    sd1 = get_std(X, initial_field, pond, weight=weight, super_ensemble=super_ensemble)  # 1. Dispersion of the super ensemble around the initial field --> More dispersion on high error pixels (--> spatial structures)
-    sd2 = get_std(X, mean, pond, weight=weight, super_ensemble=super_ensemble)  # 2. Dispersion of the super ensemble around the mean --> Smoother fields
-    #sd3 = np.abs(initial_field-newfield)  # Obs displacment  --> Apparition of spatial structures
 
     #sd = sd + 1  # Add 1 to ensure that the error is >1 (mm or mm^(1/2)). --> Dispersion too large
     #sd = (sd1+sd2)/2
     #sd = sd1/2+sd2
-    sd = sd2
-    #sd = np.sqrt(sd1*sd2)  -> 
+    #sd = sd2
+    sd = np.sqrt(sd1*sd2)  # --> Increase spread (overdispersif)
     #sd = sd1
+    sd = sd * (1+np.abs(ratio))
 
     return newfield, mean, sd
 
