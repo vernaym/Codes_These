@@ -376,7 +376,7 @@ def ensemble_evaluation(observation, rawfield, smoothfield, correctedfield, ense
     crps3 = crps3.reshape(Ndates, nlat, nlon)
     crps4 = scores.CRPS(cr, obse)
     crps4 = crps4.reshape(Ndates, nlat, nlon)
-    vmax = max(np.max(crps1), np.max(crps3), np.max(crps4))
+    vmax = max(np.max(np.mean(crps1, axis=0)), np.max(np.mean(crps3, axis=0)), np.max(np.mean(crps4, axis=0)))
     plot_field(np.mean(crps1, axis=0), f'CRPS_ensemble.pdf', label='CRPS (mm)', cmap=plt.cm.Reds, vmin=0, vmax=vmax)
     plot_field(np.mean(crps2, axis=0), f'CRPS_raw.pdf', label='CRPS (mm)', cmap=plt.cm.Reds, vmin=0, vmax=vmax)
     plot_field(np.mean(crps3, axis=0), f'CRPS_smooth.pdf', label='CRPS (mm)', cmap=plt.cm.Reds, vmin=0, vmax=vmax)

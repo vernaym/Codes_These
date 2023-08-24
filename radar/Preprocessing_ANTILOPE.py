@@ -78,6 +78,12 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
 
     mean = pond.dot(X).sum(axis=1).A1  # getA1 transforms the 1*N matrix object into a 1D np.array
     mean = mean / weight
+
+    sd1 = get_std(X, initial_field, pond, weight=weight, super_ensemble=super_ensemble)  # 1. Dispersion of the super ensemble around the initial field --> More dispersion on high error pixels (--> spatial structures)
+    sd2 = get_std(X, mean, pond, weight=weight, super_ensemble=super_ensemble)  # 2. Dispersion of the super ensemble around the mean --> Smoother fields
+
+    # TODO : include sd in the field modification algorithm
+
     pixel_weight = pond.diagonal()  # = "exp(-err)" ou "1/err" pour l'obs et "likelyhood" du pixel pour les membres de l'ensemble
     #weight = pond.sum(axis=1).A1
     nb_nonzero = (pond != 0).sum(0).A1  # Count non zero elements of each row
@@ -90,6 +96,17 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
     #newfield = (initial_field * pixel_weight + mean * meanweight/(meanweight+pixel_weight)) / (pixel_weight + meanweight/(meanweight+pixel_weight))
     #newfield = (initial_field * pixel_weight + mean * meanweight/(meanweight+pixel_weight)) / (pixel_weight + meanweight/(meanweight+pixel_weight))
     newfield = np.round(newfield, 1)
+
+    # Try to match extreme values with original field
+    rmax = np.max(initial_field)/np.max(newfield)
+    rmin = np.min(initial_field)/np.min(newfield)
+    #a = (rmax-rmin)/(np.max(newfield)-np.min(newfield))
+    #b = rmin-a*np.min(newfield)
+    #ratio = rmax/(np.max(newfield)-np.min(newfield))
+    ratio = (rmax-rmin)/(np.max(newfield)-np.min(newfield))
+    if np.isnan(ratio): ratio=0
+    print('Ratio=',ratio)
+    newfield = newfield*(1+ratio)
 
     # Plot correction coefficient
     if plot:
@@ -112,6 +129,7 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
     #sd = (sd1+sd2)/2
     #sd = sd1/2+sd2
     sd = sd2
+    #sd = np.sqrt(sd1*sd2)
     #sd = sd1
 
     return newfield, mean, sd
@@ -133,6 +151,7 @@ def get_std(data, mean, pond, weight=None, super_ensemble=None):
 
     se_mean = diags(mean, 0).dot(super_ensemble)  # matrix with mean[i] at each non-zero element of line i of super_ensemble
     X = super_ensemble.dot(data)-se_mean  # M.diag(obs)-diag(mean).M  --> difference between each neighbor value and the neighborhood mean
+    #TODO : récupérer le nombre de 0 dans chaque voisinage pour la génération de l'ensemble
     sd = X.multiply(X).multiply(pond).sum(axis=1).getA1()  # Ponderation of the squared difference by the confidence (pond) + sum over all neighbor values
     sd = sd / weight  # Normalisation with the total weight in the neighborhood
     sd = np.sqrt(sd)
