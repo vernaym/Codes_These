@@ -340,6 +340,7 @@ def plot_scatter(reference, model, savename):
     ax.legend(fontsize=10)
     plt.tight_layout()
     fig.savefig(os.path.join(savedir, savename), format='pdf')
+    plt.close(fig)
 
 
 if __name__ == "__main__":
@@ -371,6 +372,9 @@ if __name__ == "__main__":
     err = dict(raw=list(), debiasing=list(), smoothing=list(), dyn=list(), full=list())
     rat = dict(raw=list(), debiasing=list(), smoothing=list(), dyn=list(), full=list())
     slp = dict(raw=list(), debiasing=list(), smoothing=list(), dyn=list(), full=list())
+    estimated_error = list()
+    real_error      = list()
+    smooth_error    = list()
 
     if plot: N = 1
     else : N=100
@@ -469,6 +473,9 @@ if __name__ == "__main__":
 
         else:
 
+            estimated_error.append(sd)
+            real_error.append(np.abs(dd-real_field))
+            smooth_error.append(smootherr)
             a,b,c,d = compare(real_field, perturbed_field)
             r2['raw'].append(a)
             err['raw'].append(b)
@@ -532,6 +539,21 @@ if __name__ == "__main__":
             if not product == 'raw':
                 # TODO : improve representation
                 plot_scatter(np.array(r2[product]), np.array(r2['raw']), f"R2_{product}_vs_raw_scatterplot.pdf")
+
+        full_error_mean = np.mean(np.array(estimated_error), axis=0)
+        real_error_mean = np.mean(np.array(real_error), axis=0)
+        smooth_error_mean = np.mean(np.array(smooth_error), axis=0)
+        vmax = max(np.nanmax(full_error_mean), np.nanmax(real_error_mean), np.nanmax(smooth_error_mean))
+        plot_field(full_error_mean, f'mean_error_full.pdf', cmap=plt.cm.Reds, vmin=0, vmax=vmax)
+        plot_field(real_error_mean, f'mean_error_real.pdf', cmap=plt.cm.Reds, vmin=0, vmax=vmax)
+        plot_field(smooth_error_mean, f'mean_error_smooth.pdf', cmap=plt.cm.Reds, vmin=0, vmax=vmax)
+
+        mean_full_error = np.mean(np.array(estimated_error), axis=(1,2))
+        mean_estimated_error = np.mean(np.array(real_error), axis=(1,2))
+        mean_smooth_error = np.mean(np.array(smooth_error), axis=(1,2))
+        plot_scatter(mean_estimated_error, mean_full_error, f"estimated_error_full-real_scatterplot.pdf")
+        plot_scatter(mean_estimated_error, mean_smooth_error, f"estimated_error_smooth-real_scatterplot.pdf")
+
 
 
     #TODO :
