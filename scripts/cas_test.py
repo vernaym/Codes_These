@@ -353,7 +353,7 @@ def ensemble_evaluation(observation, rawfield, smoothfield, correctedfield, ense
 
     # 1. Brier score over all dates and pixels for different thresholds
     brier = dict(ens=list(), rw = list(), sm=list(), cr=list())
-    for threshold in range(1, 50):
+    for threshold in range(1, 51):
         brier['rw'].append(scores.brier(rw, obse, threshold=threshold))
         brier['sm'].append(scores.brier(sm, obse, threshold=threshold))
         brier['cr'].append(scores.brier(cr, obse, threshold=threshold))
@@ -361,7 +361,7 @@ def ensemble_evaluation(observation, rawfield, smoothfield, correctedfield, ense
 
     fig, ax = plt.subplots()
     for key, value in brier.items():
-        ax.plot(range(1, 50), value, label=key)
+        ax.plot(range(1, 51), value, label=key)
     ax.legend()
     plt.tight_layout()
     fig.savefig(os.path.join(savedir, "Brier.pdf"), format='pdf')
@@ -370,16 +370,17 @@ def ensemble_evaluation(observation, rawfield, smoothfield, correctedfield, ense
     # 2. CRPS
     crps1 = scores.CRPS(ens, obse)
     crps1 = crps1.reshape(Ndates, nlat, nlon)
-    plot_field(np.mean(crps1, axis=0), f'CRPS_ensemble.pdf', label='CRPS (mm)', cmap=plt.cm.Reds)
     crps2 = scores.CRPS(rw, obse)
     crps2 = crps2.reshape(Ndates, nlat, nlon)
-    plot_field(np.mean(crps2, axis=0), f'CRPS_raw.pdf', label='CRPS (mm)', cmap=plt.cm.Reds)
     crps3 = scores.CRPS(sm, obse)
     crps3 = crps3.reshape(Ndates, nlat, nlon)
-    plot_field(np.mean(crps3, axis=0), f'CRPS_smooth.pdf', label='CRPS (mm)', cmap=plt.cm.Reds)
     crps4 = scores.CRPS(cr, obse)
     crps4 = crps4.reshape(Ndates, nlat, nlon)
-    plot_field(np.mean(crps4, axis=0), f'CRPS_correction.pdf', label='CRPS (mm)', cmap=plt.cm.Reds)
+    vmax = max(np.max(crps1), np.max(crps2), np.max(crps3), np.max(crps4))
+    plot_field(np.mean(crps1, axis=0), f'CRPS_ensemble.pdf', label='CRPS (mm)', cmap=plt.cm.Reds, vmin=0, vmax=vmax)
+    plot_field(np.mean(crps2, axis=0), f'CRPS_raw.pdf', label='CRPS (mm)', cmap=plt.cm.Reds, vmin=0, vmax=vmax)
+    plot_field(np.mean(crps3, axis=0), f'CRPS_smooth.pdf', label='CRPS (mm)', cmap=plt.cm.Reds, vmin=0, vmax=vmax)
+    plot_field(np.mean(crps4, axis=0), f'CRPS_correction.pdf', label='CRPS (mm)', cmap=plt.cm.Reds, vmin=0, vmax=vmax)
 
     # 3. Spread-skill relationship
     N, Ne = np.shape(ens)
@@ -397,14 +398,31 @@ def ensemble_evaluation(observation, rawfield, smoothfield, correctedfield, ense
 
     # 5. Obs out of ensemble frequency
     # TODO : faire varier le threshold
-    freq_error_raw = scores.error_frequency(rw, obse)
-    print('Raw error >20% frequency : ', freq_error_raw)
-    freq_error_smooth = scores.error_frequency(sm, obse)
-    print('Smooth error >20% frequency : ', freq_error_smooth)
-    freq_error_correction = scores.error_frequency(cr, obse)
-    print('Correction error >20% frequency : ', freq_error_correction)
+    freq_error_raw = list()
+    freq_error_smooth = list()
+    freq_error_correction = list()
+    for threshold in np.arange(0.1, 0.61, 0.1):
+        freq_error_raw.append(scores.error_frequency(rw, obse, threshold=threshold))
+        #print('Raw error >20% frequency : ', freq_error_raw)
+        freq_error_smooth.append(scores.error_frequency(sm, obse, treshold=threshold))
+        #print('Smooth error >20% frequency : ', freq_error_smooth)
+        freq_error_correction.append(scores.error_frequency(cr, obse, treshold=threshold))
+        #print('Correction error >20% frequency : ', freq_error_correction)
+    fig, ax = plt.subplots()
+    ax.plot(np.arange(10, 61, 10), np.array(freq_error_raw), label='Raw')
+    ax.plot(np.arange(10, 61, 10), np.array(freq_error_smooth), label='Smooth')
+    ax.plot(np.arange(10, 61, 10), np.array(freq_error_correction), label='Correction')
+    ax.set_xlabel('Error threshold (%)')
+    ax.set_ylabel('Frequency of error > threshold (%)')
+    ax.legend(fontsize=14)
     freq_error_ensemble = scores.error_frequency(ens, obse)
-    print('Obs outside analysis ensemble frequency : ', freq_error_ensemble)
+    #print('Obs outside analysis ensemble frequency : ', freq_error_ensemble)
+    ax2 = ax.twinx()
+    ax2.axhline(freq_error_ensemble, color='k')
+    ax2.set_ylim(ax.get_ylim())
+    ax2.set_ylabel("Frequency of observation outside the ensemble")
+    fig.savefig(os.path.join(savedir, "error_frequency.pdf"), format='pdf')
+    plt.close(fig)
 
     # 6. ROC
     fig, ax = plt.subplots()
@@ -414,14 +432,9 @@ def ensemble_evaluation(observation, rawfield, smoothfield, correctedfield, ense
     scores.ROC(ens, obse, 'analysis', ax)
     ax.set_xlabel('False alarm rate')
     ax.set_ylabel('Sucess rate')
-    ax.legend(fontsize=20)
+    ax.legend(fontsize=14)
     fig.savefig(os.path.join(savedir, "ROC.pdf"), format='pdf')
     plt.close(fig)
-
-    import pdb
-    pdb.set_trace()
-
-
 
 
 if __name__ == "__main__":
@@ -459,7 +472,7 @@ if __name__ == "__main__":
 
     if plot: Ndates = 1
     else : Ndates = 100
-    #else : N=2
+    #else : Ndates=2
     obs = xr.DataArray(dims=["date", "lat", "lon"], coords={'lon':real_ratio.lon, 'lat':real_ratio.lat, 'date':range(Ndates)})
     raw = xr.DataArray(dims=["date", "lat", "lon"], coords={'lon':real_ratio.lon, 'lat':real_ratio.lat, 'date':range(Ndates)})
     smo = xr.DataArray(dims=["date", "lat", "lon"], coords={'lon':real_ratio.lon, 'lat':real_ratio.lat, 'date':range(Ndates)})
@@ -497,8 +510,7 @@ if __name__ == "__main__":
         dd = dd.reshape((nlat, nlon))
         cor.data[date] = dd
         sd = sd.reshape((nlat, nlon))
-        #sd = np.sqrt(sd*dd)  # Overdispersion !
-        sd = np.sqrt(sd*dd)  # TODO : TMP !
+        sd = np.sqrt(sd*dd)  # Overdispersion !
         #plot_field(np.sqrt(sd), f'dynamic_error_with_debiasing.pdf', label='Error (mm)', cmap=plt.cm.Reds)
 
         vmax = max(np.max(real_field), np.max(perturbed_field), np.max(dyn), np.max(dd))*1.1
@@ -530,7 +542,8 @@ if __name__ == "__main__":
         for member in range(16):
             #ana = Preprocessing_ANTILOPE.random_draw(dd, np.sqrt(sd))
             #ana = Preprocessing_ANTILOPE.random_draw(dd, sd+error.data)
-            ana = Preprocessing_ANTILOPE.random_draw(dd, sd)  # Good ODG with real error
+            #ana = Preprocessing_ANTILOPE.random_draw(dd, sd, distribution='gamma')  # Good ODG with real error
+            ana = Preprocessing_ANTILOPE.random_draw(dd, sd, distribution='normal')  # Good ODG with real error
             analysis.data[date, member] = ana
             ensemble.append(ana)
             ana = make_mask.to_xarray(ana, real_ratio, varname='Precipitation')

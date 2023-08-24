@@ -112,6 +112,7 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
     #sd = (sd1+sd2)/2
     #sd = sd1/2+sd2
     sd = sd2
+    #sd = sd1
 
     return newfield, mean, sd
 
@@ -158,30 +159,23 @@ def codistances(coords, ld=0.07):
 
     return dist
 
-def random_draw(obs, sd):
-    gauss = np.random.normal(loc=0.0, scale=1.0, size=1)[0]  # Draw random element from normal distribution
-    gamma = np.random.gamma(1, scale=1)  # Draw random element from normal distribution (>0 only ==> shift necessary to convert into perturbations)
+def random_draw(obs, sd, distribution='normal'):
+    if distribution == 'normal':
+        gauss = np.random.normal(loc=0.0, scale=1.0, size=1)[0]  # Draw random element from normal distribution
+        ana = obs+gauss*sd  # Gaussian perturbation around >0 obs
+    else:
+        k = 3
+        gamma = np.random.gamma(k, scale=1)  # Draw random element from normal distribution (>0 only ==> shift necessary to convert into perturbations)
+        ana = obs+(gamma-(k-1))*sd  # Shift gamma distribution so that the mode ((k-1)*theta=k-1) is on 0
     exp = np.random.default_rng().exponential(scale=1)  # TODO : set scale parameter using the density of pixels at 0mm in the vicinity ?
 
-    # Ensure that RR are >=0
-    # ==> Draw from gama distribution ? ==> Not a good idea since the conversion to square root precipitation aims at
-    # normalising the distribution
-    #ana = obs+gauss*sd/5
-    #sd = np.sqrt(sd)  # sigma --> sigma² dans la formulation de la loi normale
-    # TODO : comprendre pourquoi la conversion R^1/2 --> R disperse autant l'ensemble
-    #ana = np.square(obs)+gauss*sd  # Gaussian perturbation around >0 obs
-    #ana = obs+gauss*sd  # Gaussian perturbation around >0 obs
-    ana = obs+(gamma-1)*sd  # Shift gamma distribution so that the mode ((k-1)*theta=k-1) is on 0
     #ana[ana<0] = exp*sd[ana<0]  # Avoid "mass accumulation" in 0. !! WARNING : the analysis distribution is not Normal anymore !!
     ana[ana<0] = 0  # WARNING : "mass accumulation" in 0 (analysis distribution not normal anymore)
     #ana[np.where(sd<=1)] = obs[np.where(sd<=1)]+gauss*sd[np.where(sd<=1)]  # Gaussian perturbations around pixels with for small errors
     ana[obs==0] = obs[obs==0]+exp*sd[obs==0]  # Exponential perturbation arround 0. TODO : arround 0, use the density
     ana = np.round(ana, 1)
-    # of pixels at 0mm in the vicinity instead of sd ?
-    #ana[ana<0] = 0
 
     return ana
-    #return np.square(ana)
 
 
 class AntilopePreprocessing(object):
