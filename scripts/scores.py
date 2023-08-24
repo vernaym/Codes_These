@@ -52,21 +52,22 @@ def error_frequency(simu, obs, treshold=0.2, *args, **kw):
     obs = obs[~np.isnan(obs)]
 
     if np.shape(simu) == np.shape(obs):  # "Simulation" déterministe
-        bias = simu - obs
-    else:  # Simulation s'ensmble
-        bias = mean_error(simu, obs)
+        error = np.where((simu>obs*(1+treshold)) | (simu<obs*(1-treshold)))
+    else:  # Simulation d'ensmble
+        error = np.where( (np.max(simu, axis=1)<obs) | (np.min(simu, axis=1)>obs) )
 
-    error_above_treshold = np.where((simu>=obs*(1+treshold)) & (simu<=obs*(1-treshold)))
     #freq_error = (np.count_nonzero(error_above_treshold) / len(error_above_treshold) * 100
-    freq_error = (len(error_above_treshold) / len(obs)) * 100
+    freq_error = (len(error[0]) / len(obs)) * 100
 
     return freq_error
 
 def dispersion(ensemble):
     """
-    spread over all dates (and pixels ?)
+    return spread over all dates
     """
-    disp = np.sqrt(np.mean([np.nanmean((ensemble.loc[{'member':m}].rr.data-mean(ensemble))**2) for m in ensemble.member.data]))
+    #disp = np.sqrt(np.mean([np.nanmean((ensemble.loc[{'member':m}].rr.data-mean(ensemble))**2) for m in ensemble.member.data]))
+    N, Ne = np.shape(ensemble)
+    disp = np.sqrt((ensemble-mean(ensemble, axis=1))**2/Ne)
     print('Dispersion = ', disp)
 
     return disp
@@ -87,14 +88,19 @@ def brier_skill_score(simu, obs, ref, threshold=10):
     return 1 - brier(simu, obs, threshold) / brier(ref, obs, threshold)
 
 def brier(simu, obs, Ne=16, threshold=10, *args):
-
-    # TODO : verifier le calcul du score de brier
+    """
+    * simu : 2D numpy array of shape(N*Ne)
+    * obs  : 1D numpy array of size N
+    N = Number of events
+    Ne = number of ensemble members
+    """
     simu = simu[~np.isnan(obs)]
     obs = obs[~np.isnan(obs)]
 
     if np.shape(simu) == np.shape(obs):  # "Simulation" déterministe
         psimu = np.where(simu>=threshold, 1, 0)
     else:  # Simulation d'ensemble
+        N, Ne = np.shape(simu)
         psimu  = np.count_nonzero(simu>=threshold, axis=1) / Ne
         #psimu  = (np.count_nonzero(simu>=threshold, axis=1)+ 2/3) / (Ne+4/3)  # Tukey's plotting position
     fobs   = np.where(obs>=threshold, 1, 0)
@@ -112,7 +118,8 @@ def CRPS(simu, obs, *args):
         else:
             crps.append(pscore(simu[i], obs[i]).compute()[0])
 
-    return np.nanmean(np.array(crps))
+    #return np.nanmean(np.array(crps))
+    return np.array(crps)
 
 def ROC(simu, obs, product, ax, Ne=16, threshold=10):
     """ 
@@ -168,7 +175,7 @@ def ROC(simu, obs, product, ax, Ne=16, threshold=10):
 
     return (false_alarm, succes_rate)
 
-def rank_histogram(ensemble, obs, product, ax, *args):
+def rank_histogram(ensemble, obs, ax, *args):
     """
     Inspired from : https://github.com/oliverangelil/rankhistogram/blob/master/ranky.py
     When two or more forecasts have same value (most commonly 0), random selection is made for which bin receives the count.

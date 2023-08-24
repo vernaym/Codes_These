@@ -27,6 +27,7 @@ from sklearn.linear_model import LinearRegression
 
 from These.radar import Preprocessing_ANTILOPE
 import make_mask
+import scores
 
 plot = False
 if len(sys.argv) > 1:
@@ -118,6 +119,9 @@ def perturbed_ratio(ratio):
     This accounts for the ratio estimation method errors where there is no obvious ANTILOPE spatial pattern.
     --> to apply only once (climatological noise)
     """
+    pile_ou_face = np.random.randint(0, 1)
+    if pile_ou_face == 1:
+        ratio.data[(ratio.data>0.7) & (ratio.data<1.3)] = 1
     perturb = np.random.randint(0, 20, size=np.shape(ratio.data))/10. - 1  # generation of perturbations between -1 and 1
     perturb = uniform_filter(perturb, size=10)  # Do not perturb the structure of the ratio field too much
     #perturb = uniform_filter(perturb, size=5)
@@ -130,7 +134,6 @@ def perturbed_ratio(ratio):
     #ratio.data = uniform_filter(ratio.data, size=5)  # Increasing the window increases the mean negative bias over the Hautes Alpes
     plot_field(ratio, 'real_ratio.pdf', label='Ratio', cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=0.4, vmax=1.6, add_circle=False)
     return ratio
-
 
 def perturb_field(field, ratio):
     """
@@ -239,8 +242,8 @@ def plot_field(field, filename, label='Precipitation (mm)', cmap='YlGnBu', vmin=
     if vmax is None:
         vmax = np.nanmax(field)
 
-    #if not isinstance(field, xr.core.dataarray.DataArray):
-    if isinstance(field, np.ndarray):
+    #if isinstance(field, np.ndarray):
+    if not isinstance(field, xr.core.dataarray.DataArray):
         field = make_mask.to_xarray(field, real_ratio)
     nlat = len(field.lat)
     nlon = len(field.lon)
@@ -290,7 +293,6 @@ def finalize_fig(figure, imm, label, outname):
     figure.savefig(os.path.join(savedir, outname), format='pdf')
     plt.close(figure)
 
-
 def compare(reference, model):
     diff = model-reference
     ratio = model / reference
@@ -305,7 +307,6 @@ def compare(reference, model):
     slope = np.round(reg.coef_[0], 3)
 
     return r2, diff, ratio, slope
-
 
 def plot_scatter(reference, model, savename):
     ref = reference.flatten()
@@ -342,6 +343,86 @@ def plot_scatter(reference, model, savename):
     fig.savefig(os.path.join(savedir, savename), format='pdf')
     plt.close(fig)
 
+def ensemble_evaluation(observation, rawfield, smoothfield, correctedfield, ensemble):
+
+    obse = observation.stack(points=["date", "lat", "lon"]).data
+    ens = ensemble.stack(points=["date", "lat", "lon"]).transpose().data
+    rw = rawfield.stack(points=["date", "lat", "lon"]).data
+    sm = smoothfield.stack(points=["date", "lat", "lon"]).data
+    cr = correctedfield.stack(points=["date", "lat", "lon"]).data
+
+    # 1. Brier score over all dates and pixels for different thresholds
+    brier = dict(ens=list(), rw = list(), sm=list(), cr=list())
+    for threshold in range(1, 50):
+        brier['rw'].append(scores.brier(rw, obse, threshold=threshold))
+        brier['sm'].append(scores.brier(sm, obse, threshold=threshold))
+        brier['cr'].append(scores.brier(cr, obse, threshold=threshold))
+        brier['ens'].append(scores.brier(ens, obse, threshold=threshold))
+
+    fig, ax = plt.subplots()
+    for key, value in brier.items():
+        ax.plot(range(1, 50), value, label=key)
+    ax.legend()
+    plt.tight_layout()
+    fig.savefig(os.path.join(savedir, "Brier.pdf"), format='pdf')
+    plt.close(fig)
+
+    # 2. CRPS
+    crps1 = scores.CRPS(ens, obse)
+    crps1 = crps1.reshape(Ndates, nlat, nlon)
+    plot_field(np.mean(crps1, axis=0), f'CRPS_ensemble.pdf', label='CRPS (mm)', cmap=plt.cm.Reds)
+    crps2 = scores.CRPS(rw, obse)
+    crps2 = crps2.reshape(Ndates, nlat, nlon)
+    plot_field(np.mean(crps2, axis=0), f'CRPS_raw.pdf', label='CRPS (mm)', cmap=plt.cm.Reds)
+    crps3 = scores.CRPS(sm, obse)
+    crps3 = crps3.reshape(Ndates, nlat, nlon)
+    plot_field(np.mean(crps3, axis=0), f'CRPS_smooth.pdf', label='CRPS (mm)', cmap=plt.cm.Reds)
+    crps4 = scores.CRPS(cr, obse)
+    crps4 = crps4.reshape(Ndates, nlat, nlon)
+    plot_field(np.mean(crps4, axis=0), f'CRPS_correction.pdf', label='CRPS (mm)', cmap=plt.cm.Reds)
+
+    # 3. Spread-skill relationship
+    N, Ne = np.shape(ens)
+    mean = np.mean(ens, axis=1)
+    disp = np.sqrt(np.sum((ens.transpose()-mean)**2, axis=0)/Ne)
+    err  = np.abs(mean-obse)
+    plot_scatter(err, disp, "Spread-skill_relationship.pdf")
+
+    # 4. rank histogram
+    fig, ax = plt.subplots()
+    scores.rank_histogram(ens, obse, ax)
+    plt.tight_layout()
+    fig.savefig(os.path.join(savedir, "Rank_histogram.pdf"), format='pdf')
+    plt.close(fig)
+
+    # 5. Obs out of ensemble frequency
+    # TODO : faire varier le threshold
+    freq_error_raw = scores.error_frequency(rw, obse)
+    print('Raw error >20% frequency : ', freq_error_raw)
+    freq_error_smooth = scores.error_frequency(sm, obse)
+    print('Smooth error >20% frequency : ', freq_error_smooth)
+    freq_error_correction = scores.error_frequency(cr, obse)
+    print('Correction error >20% frequency : ', freq_error_correction)
+    freq_error_ensemble = scores.error_frequency(ens, obse)
+    print('Obs outside analysis ensemble frequency : ', freq_error_ensemble)
+
+    # 6. ROC
+    fig, ax = plt.subplots()
+    scores.ROC(rw, obse, 'raw', ax)
+    scores.ROC(sm, obse, 'smooth', ax)
+    scores.ROC(cr, obse, 'correction', ax)
+    scores.ROC(ens, obse, 'analysis', ax)
+    ax.set_xlabel('False alarm rate')
+    ax.set_ylabel('Sucess rate')
+    ax.legend(fontsize=20)
+    fig.savefig(os.path.join(savedir, "ROC.pdf"), format='pdf')
+    plt.close(fig)
+
+    import pdb
+    pdb.set_trace()
+
+
+
 
 if __name__ == "__main__":
 
@@ -376,15 +457,23 @@ if __name__ == "__main__":
     real_error      = list()
     smooth_error    = list()
 
-    if plot: N = 1
-    else : N=100
-    for i in range(N):
-    #for i in range(2):
+    if plot: Ndates = 1
+    else : Ndates = 100
+    #else : N=2
+    obs = xr.DataArray(dims=["date", "lat", "lon"], coords={'lon':real_ratio.lon, 'lat':real_ratio.lat, 'date':range(Ndates)})
+    raw = xr.DataArray(dims=["date", "lat", "lon"], coords={'lon':real_ratio.lon, 'lat':real_ratio.lat, 'date':range(Ndates)})
+    smo = xr.DataArray(dims=["date", "lat", "lon"], coords={'lon':real_ratio.lon, 'lat':real_ratio.lat, 'date':range(Ndates)})
+    cor = xr.DataArray(dims=["date", "lat", "lon"], coords={'lon':real_ratio.lon, 'lat':real_ratio.lat, 'date':range(Ndates)})
+    analysis = xr.DataArray(dims=["date", "member", "lat", "lon"], coords={'lon':real_ratio.lon, 'lat':real_ratio.lat, 'date':range(Ndates), 'member':range(16)})
+    for date in range(Ndates):
+    #for date in range(2):
 
         real_field = random_field(nlat, nlon)  # Randomly generated reference precipitation field
+        obs.data[date] = real_field
         #field = isolated_storm()
 
         perturbed_field = perturb_field(real_field.data, real_ratio.data)  # Pertubation of the reference field to simulate an ANTILOPE field
+        raw.data[date] = perturbed_field
 
         # Add error ponderation
         # TODO : reporter la formulation retenue dans l'expérience avec données réelles
@@ -395,6 +484,7 @@ if __name__ == "__main__":
         # De-biasing only
         db = perturbed_field / estimated_ratio.data
         smooth = uniform_filter(db, size=15)
+        smo.data[date] = smooth
         smootherr = db - smooth
 
         # Dynamic correction only
@@ -403,23 +493,46 @@ if __name__ == "__main__":
         #plot_field(np.sqrt(sd.reshape((nlat, nlon))), f'dynamic_error_without_debiasing.pdf', label='Error (mm)', cmap=plt.cm.Reds)
 
         # De-biasing + Dynamic correction
-        dd, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(perturbed_field.data/estimated_ratio.data, pond)
+        dd, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(db, pond)
         dd = dd.reshape((nlat, nlon))
+        cor.data[date] = dd
         sd = sd.reshape((nlat, nlon))
+        #sd = np.sqrt(sd*dd)  # Overdispersion !
         sd = np.sqrt(sd*dd)  # TODO : TMP !
         #plot_field(np.sqrt(sd), f'dynamic_error_with_debiasing.pdf', label='Error (mm)', cmap=plt.cm.Reds)
 
         vmax = max(np.max(real_field), np.max(perturbed_field), np.max(dyn), np.max(dd))*1.1
+
+        #######################################################################
+        # TMP : Try to re-increase extreme values
+        # --> should be done for each neighborhood : unfeasible !!
+#        ref = db.flatten()
+#        mod = dd.flatten()
+#        x = ref.reshape((-1,1))
+#        y = mod
+#        reg = LinearRegression().fit(x, y)
+#        z = reg.predict(x)
+#        r2 = np.round(reg.score(x, y), 3)
+#        slope = reg.coef_[0]
+#        intercep = reg.intercept_
+#        toto = intercep + slope * db
+#        plot_field(toto.reshape((nlat, nlon)), f'test.pdf', vmin=0, vmax=vmax)
+#        plot_scatter(db, dd, f"dd_vs_db_scatterplot.pdf")
+#        plot_scatter(db, toto, f"toto_vs_db_scatterplot.pdf")
+#        plot_scatter(real_field, toto, f"toto_vs_real_scatterplot.pdf")
+        #######################################################################
+
         if plot:
             fig,ax = plt.subplots(nrows=4, ncols=4, figsize=figsize[domain])
             i = 0
             j = 0
-        analysis = list()
+        ensemble = list()
         for member in range(16):
             #ana = Preprocessing_ANTILOPE.random_draw(dd, np.sqrt(sd))
             #ana = Preprocessing_ANTILOPE.random_draw(dd, sd+error.data)
             ana = Preprocessing_ANTILOPE.random_draw(dd, sd)  # Good ODG with real error
-            analysis.append(ana)
+            analysis.data[date, member] = ana
+            ensemble.append(ana)
             ana = make_mask.to_xarray(ana, real_ratio, varname='Precipitation')
             if plot:
                 im = plot_ensemble_field(ana, ax[i,j], 0, vmax)
@@ -429,9 +542,10 @@ if __name__ == "__main__":
                 if j==4:
                     j = 0
                     i = i + 1
+
         if plot:
             finalize_fig(fig, im, label='24-hour precipitation (mm)', outname=f'Analysis_ensemble.pdf')
-            plot_mean_and_dispersion(analysis, vmax=vmax)
+            plot_mean_and_dispersion(ensemble, vmax=vmax)
 
         #Dynamic correction + de-biasing  ==> does not work at all !
         #qq = dyn/ratio
@@ -471,6 +585,11 @@ if __name__ == "__main__":
             vmax = np.nanmax(np.abs(dd.data/real_field.data)-1)
             #plot_field(dd/real_field, f'ratio_full_correction-real_field.pdf', cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=1-vmax, vmax=1+vmax)
 
+            simu  = analysis.data[0].reshape(16, nlat*nlon).transpose()
+            obse = obs.data[0].flatten()
+
+            brier = scores.brier(simu, obse, threshold=10)
+
         else:
 
             estimated_error.append(sd)
@@ -501,6 +620,9 @@ if __name__ == "__main__":
             err['full'].append(b)
             rat['full'].append(c)
             slp['full'].append(d)
+
+    # Ensemble analysis evaluation
+    ensemble_evaluation(obs, raw, smo, cor, analysis)
 
     if not plot:
 
