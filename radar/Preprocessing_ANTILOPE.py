@@ -164,9 +164,11 @@ def random_draw(obs, sd, distribution='normal'):
         gauss = np.random.normal(loc=0.0, scale=1.0, size=1)[0]  # Draw random element from normal distribution
         ana = obs+gauss*sd  # Gaussian perturbation around >0 obs
     else:
-        k = 3
-        gamma = np.random.gamma(k, scale=1)  # Draw random element from normal distribution (>0 only ==> shift necessary to convert into perturbations)
-        ana = obs+(gamma-(k-1))*sd  # Shift gamma distribution so that the mode ((k-1)*theta=k-1) is on 0
+        k = 2  # k>1
+        theta = np.sqrt(1/2)  # Ensure a variance of 1 (var=k*theta^2)
+        shift = (k-1)*theta  # shift = mode
+        gamma = np.random.gamma(k, scale=theta)  # Draw random element from normal distribution (>0 only ==> shift necessary to convert into perturbations)
+        ana = obs+(gamma-shift)*sd  # Shift gamma distribution so that the mode ((k-1)*theta) is on 0
     exp = np.random.default_rng().exponential(scale=1)  # TODO : set scale parameter using the density of pixels at 0mm in the vicinity ?
 
     #ana[ana<0] = exp*sd[ana<0]  # Avoid "mass accumulation" in 0. !! WARNING : the analysis distribution is not Normal anymore !!

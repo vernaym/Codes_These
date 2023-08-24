@@ -376,18 +376,19 @@ def ensemble_evaluation(observation, rawfield, smoothfield, correctedfield, ense
     crps3 = crps3.reshape(Ndates, nlat, nlon)
     crps4 = scores.CRPS(cr, obse)
     crps4 = crps4.reshape(Ndates, nlat, nlon)
-    vmax = max(np.max(crps1), np.max(crps2), np.max(crps3), np.max(crps4))
+    vmax = max(np.max(crps1), np.max(crps3), np.max(crps4))
     plot_field(np.mean(crps1, axis=0), f'CRPS_ensemble.pdf', label='CRPS (mm)', cmap=plt.cm.Reds, vmin=0, vmax=vmax)
     plot_field(np.mean(crps2, axis=0), f'CRPS_raw.pdf', label='CRPS (mm)', cmap=plt.cm.Reds, vmin=0, vmax=vmax)
     plot_field(np.mean(crps3, axis=0), f'CRPS_smooth.pdf', label='CRPS (mm)', cmap=plt.cm.Reds, vmin=0, vmax=vmax)
     plot_field(np.mean(crps4, axis=0), f'CRPS_correction.pdf', label='CRPS (mm)', cmap=plt.cm.Reds, vmin=0, vmax=vmax)
 
     # 3. Spread-skill relationship
-    N, Ne = np.shape(ens)
-    mean = np.mean(ens, axis=1)
-    disp = np.sqrt(np.sum((ens.transpose()-mean)**2, axis=0)/Ne)
-    err  = np.abs(mean-obse)
-    plot_scatter(err, disp, "Spread-skill_relationship.pdf")
+    # Long et inutile
+#    N, Ne = np.shape(ens)
+#    mean = np.mean(ens, axis=1)
+#    disp = np.sqrt(np.sum((ens.transpose()-mean)**2, axis=0)/Ne)
+#    err  = np.abs(mean-obse)
+#    plot_scatter(err, disp, "Spread-skill_relationship.pdf")
 
     # 4. rank histogram
     fig, ax = plt.subplots()
@@ -510,7 +511,7 @@ if __name__ == "__main__":
         dd = dd.reshape((nlat, nlon))
         cor.data[date] = dd
         sd = sd.reshape((nlat, nlon))
-        sd = np.sqrt(sd*dd)  # Overdispersion !
+        #sd = np.sqrt(sd*dd)  # Overdispersion !
         #plot_field(np.sqrt(sd), f'dynamic_error_with_debiasing.pdf', label='Error (mm)', cmap=plt.cm.Reds)
 
         vmax = max(np.max(real_field), np.max(perturbed_field), np.max(dyn), np.max(dd))*1.1
@@ -542,8 +543,8 @@ if __name__ == "__main__":
         for member in range(16):
             #ana = Preprocessing_ANTILOPE.random_draw(dd, np.sqrt(sd))
             #ana = Preprocessing_ANTILOPE.random_draw(dd, sd+error.data)
-            #ana = Preprocessing_ANTILOPE.random_draw(dd, sd, distribution='gamma')  # Good ODG with real error
-            ana = Preprocessing_ANTILOPE.random_draw(dd, sd, distribution='normal')  # Good ODG with real error
+            ana = Preprocessing_ANTILOPE.random_draw(dd, sd, distribution='gamma')  # Good ODG with real error
+            #ana = Preprocessing_ANTILOPE.random_draw(dd, sd, distribution='normal')  # Good ODG with real error
             analysis.data[date, member] = ana
             ensemble.append(ana)
             ana = make_mask.to_xarray(ana, real_ratio, varname='Precipitation')
@@ -634,10 +635,8 @@ if __name__ == "__main__":
             rat['full'].append(c)
             slp['full'].append(d)
 
-    # Ensemble analysis evaluation
-    ensemble_evaluation(obs, raw, smo, cor, analysis)
-
     if not plot:
+        ensemble_evaluation(obs, raw, smo, cor, analysis)
 
         bias = dict(raw=list(), debiasing=list(), smoothing=list(), dyn=list(), full=list())
         rmse = dict(raw=list(), debiasing=list(), smoothing=list(), dyn=list(), full=list())
