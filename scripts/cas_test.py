@@ -120,14 +120,17 @@ def perturbed_ratio(ratio):
     --> to apply only once (climatological noise)
     """
     pile_ou_face = np.random.randint(0, 1)
+    pile_ou_face = 1
     if pile_ou_face == 1:
         ratio.data[(ratio.data>0.7) & (ratio.data<1.3)] = 1
     perturb = np.random.randint(0, 20, size=np.shape(ratio.data))/10. - 1  # generation of perturbations between -1 and 1
-    perturb = uniform_filter(perturb, size=10)  # Do not perturb the structure of the ratio field too much
+    #perturb = uniform_filter(perturb, size=10)  # Do not perturb the structure of the ratio field too much
+    perturb = uniform_filter(perturb, size=7)  # Do not perturb the structure of the ratio field too much
     #perturb = uniform_filter(perturb, size=5)
     #fact = uniform_filter(ratio.data, size=5)
     fact = ratio.data
-    ratio.data = ratio.data + (1+np.exp(-np.abs(1-fact)**2/1))*perturb
+    #ratio.data = ratio.data + (1+np.exp(-np.abs(1-fact)**2/1))*perturb
+    ratio.data = ratio.data + perturb
     #ratio.data = ratio.data + 1/(1+np.abs(fact-1))*perturb
     #ratio.data = ratio.data + 1/(1+np.abs(fact-1))*perturb
     ratio.data[ratio.data<=0] = -ratio.data[ratio.data<=0]+0.01
@@ -439,6 +442,8 @@ def ensemble_evaluation(observation, rawfield, smoothfield, correctedfield, ense
 
 
 if __name__ == "__main__":
+
+    # TODO : loop over realities
 
     real_ratio = np.flip(xr.open_dataarray(os.path.join(datadir, 'nivometeo', f'Estimated_ratio_{domain}_{d0}.nc')), axis=0)  # Reference ratio estimated with nivometeo observations only
     real_ratio = perturbed_ratio(real_ratio)  # Climatological perturbations of the ratio field to account for the ratio estimation method's errros
