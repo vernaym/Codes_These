@@ -120,12 +120,12 @@ def perturbed_ratio(ratio):
     --> to apply only once (climatological noise)
     """
     pile_ou_face = np.random.randint(0, 1)
-    pile_ou_face = 0
+    pile_ou_face =1
     if pile_ou_face == 1:
         ratio.data[(ratio.data>0.7) & (ratio.data<1.3)] = 1
     perturb = np.random.randint(0, 20, size=np.shape(ratio.data))/10. - 1  # generation of perturbations between -1 and 1
     #perturb = uniform_filter(perturb, size=10)  # Do not perturb the structure of the ratio field too much
-    perturb = uniform_filter(perturb, size=7)  # Do not perturb the structure of the ratio field too much
+    perturb = uniform_filter(perturb, size=5)  # Do not perturb the structure of the ratio field too much
     #perturb = uniform_filter(perturb, size=5)
     #fact = uniform_filter(ratio.data, size=5)
     fact = ratio.data
