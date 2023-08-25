@@ -687,15 +687,14 @@ class Evaluation(object):
             #filename = 'ANTILOPEQ_2021073106_2022070106_GrandesRousses.nc'
             filename = 'ANTILOPEH_2021103000_2022060200_alp.nc'
             antilope = xr.open_dataset(os.path.join(datadir, filename))
-            antilope = antilope.loc[{'time':np.intersect1d(dates, antilope.time.data)}]
+            #antilope = antilope.loc[{'time':np.intersect1d(dates, antilope.time.data)}]
             if filename.startswith('ANTILOPEH'):
                 # Convert hourly precipitation into 24h precipitation between 7h (6 UTC in winter) J-1 and 7h (6 UTC) J
                 # Problem : the xarray tools to do that allows only accumulations between
                 # 0h and 24h.
                 # solution : shift time serie by 7h, compute 24h accumulations and
                 # shift back !
-                #antilope['time'] = antilope.time-np.timedelta64(7, 'h')
-                antilope['time'] = antilope.time-np.timedelta64(6, 'h')  # Nivometeo observations are done at 6:00 UTC (in winter)
+                antilope['time'] = antilope.time-np.timedelta64(7, 'h')
                 antilope = antilope.resample(time='1D').sum(dim='time')  # !!! VERY SLOW !!! WARNING : does not work with pandas>=2.0.0
                 antilope['time'] = antilope.time+np.timedelta64(30, 'h')
             print('DBUG fin lecture antilope')
@@ -972,6 +971,7 @@ class Evaluation(object):
                             else:
                                 score.append(getattr(self, 'brier')(data[product][-1][~np.isnan(obs)], obs[~np.isnan(obs)], threshold=threshold))
                         else:
+                            print(score_name, product)
                             score.append(getattr(self, score_name)(data[product][-1][~np.isnan(obs)], obs[~np.isnan(obs)]))
                     t7 = time.time()
                     #print(f'Computing score for simulation {xpid} took {(t7-t6)*1000.}ms')
