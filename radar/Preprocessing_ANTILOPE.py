@@ -115,6 +115,7 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
     if np.isnan(ratio): ratio=0
     #print('Ratio=',ratio)
     newfield = newfield*(1+ratio)
+    sd2 = sd2 * (1+ratio)  # Increase spread !
     # Increase error consistently
 
     # TODO : there is still a probleme for low precipitation fields (artefacts)
