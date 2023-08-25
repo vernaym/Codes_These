@@ -251,9 +251,9 @@ algo = dict(
 #        KD33          = 'EnsembleKalmanFilter/XP33/EnKF_2021120106_2022050106_daily_alp.nc',
 #        RS04          = 'RandomSampling/XP04/Random_Sampling_2021120106_2022050106_daily_alp.nc'
         ####################
-        PF30          = 'XP30/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
-        KD34          = 'EnsembleKalmanFilter/XP34/EnKF_2021120106_2022050106_daily_alp.nc',
-        RS05          = 'RandomSampling/XP05/Random_Sampling_2021120106_2022050106_daily_alp.nc'
+        #PF30          = 'XP30/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
+        KD35          = 'EnsembleKalmanFilter/XP35/EnKF_2021120106_2022050106_daily_alp.nc',
+        RS07          = 'RandomSampling/XP07/Random_Sampling_2021120106_2022050106_daily_alp.nc'
     )
 
 
@@ -353,6 +353,7 @@ xpid_label = dict(
         KD31          = 'Daily analysis with Ensemble Kalman Filter and no debiasing',  # Idem KD30 mais sans débiaisage
         KD33          = 'Ensemble Kalman Filter analysis',
         KD34          = 'Ensemble Kalman Filter analysis',
+        KD35          = 'Ensemble Kalman Filter analysis',
         PF29          = 'Particle Filter analysis',
         PF30          = 'Particle Filter analysis',
         #LDM9D3        = 'PF, mask9=estimated_ratio, debiaisage3=0.1_2',
@@ -363,6 +364,7 @@ xpid_label = dict(
         RS03          = 'Random Sampling with increased dynamic dispersion + static',
         RS04          = 'Random Sampling',
         RS05          = 'Random Sampling',
+        RS07          = 'Random Sampling',
     )
 
 def nearest(array, value):
@@ -678,19 +680,28 @@ class Evaluation(object):
 #        subdata = metadata[(metadata['poste_nivo.lat_dg']>=latmin) & (metadata['poste_nivo.lat_dg']<=latmax) & (metadata['poste_nivo.lon_dg']>=lonmin) & (metadata['poste_nivo.lon_dg']<=lonmax)]
 #        return dict(zip(np.array(subdata['poste_nivo.num_poste']), zip(np.array(subdata['poste_nivo.lat_dg']), np.array(subdata['poste_nivo.lon_dg']))))
 #
-    def read_antilope(self):
-        #filename = 'ANTILOPEQ_2021073106_2022070106_GrandesRousses.nc'
-        filename = 'ANTILOPEH_2021103000_2022060200_alp.nc'
-        antilope = xr.open_dataset(os.path.join(datadir, filename))
-        if filename.startswith('ANTILOPEH'):
-            # Convert hourly precipitation into 24h precipitation between 6h J-1 and 6h J
-            # Problem : the xarray tools to do that allows only accumulations between
-            # 0h and 23h.
-            # solution : shift time serie by 7h, compute 24h accumulations and
-            # shift back !
-            antilope['time'] = antilope.time-np.timedelta64(7, 'h')
-            antilope = antilope.resample(time='1D').sum(dim='time')  # !!! VERY SLOW !!! WARNING : does not work with pandas>=2.0.0
-            antilope['time'] = antilope.time+np.timedelta64(30, 'h')
+    def read_antilope(self, dates):
+        print('DBUG debut lecture antilope')
+        fic = 'ANTILOPEQ_evaluation.nc'
+        if not os.path.exists(os.path.join(datadir, fic)):
+            #filename = 'ANTILOPEQ_2021073106_2022070106_GrandesRousses.nc'
+            filename = 'ANTILOPEH_2021103000_2022060200_alp.nc'
+            antilope = xr.open_dataset(os.path.join(datadir, filename))
+            antilope = antilope.loc[{'time':np.intersect1d(dates, antilope.time.data)}]
+            if filename.startswith('ANTILOPEH'):
+                # Convert hourly precipitation into 24h precipitation between 7h (6 UTC in winter) J-1 and 7h (6 UTC) J
+                # Problem : the xarray tools to do that allows only accumulations between
+                # 0h and 24h.
+                # solution : shift time serie by 7h, compute 24h accumulations and
+                # shift back !
+                #antilope['time'] = antilope.time-np.timedelta64(7, 'h')
+                antilope['time'] = antilope.time-np.timedelta64(6, 'h')  # Nivometeo observations are done at 6:00 UTC (in winter)
+                antilope = antilope.resample(time='1D').sum(dim='time')  # !!! VERY SLOW !!! WARNING : does not work with pandas>=2.0.0
+                antilope['time'] = antilope.time+np.timedelta64(30, 'h')
+            print('DBUG fin lecture antilope')
+            antilope.to_netcdf(os.path.join(datadir, fic))
+        else:
+            antilope = xr.open_dataset(os.path.join(datadir, fic))
 
         return antilope
 
@@ -709,23 +720,32 @@ class Evaluation(object):
 
         return antilope
 
-    def read_raw_ensemble(self):
-        #filenames = [os.path.join(datadir, f'aspearome_{mb:03d}_2021073106_2022070106_GrandesRousses_daily.nc') for mb in range(1,17)]
-        filenames = [os.path.join(datadir, f'aspearome_{mb:03d}_2021102806_2022060206_alp_hourly.nc') for mb in range(1,17)]
-        #raw = xr.open_mfdataset(filenames, combine='nested', concat_dim='member').compute().clip(0)
-        raw = xr.open_mfdataset(filenames, combine='nested', concat_dim='member', chunks={'time': 24})  # Setting chunks is critical (read the doc !)
-        raw['member']=np.arange(1,17)
-        # Convert hourly precipitation into 24h precipitation between 6h J-1 and 6h J
-        # Problem : the xarray tools to do that allows only accumulations between
-        # 0h and 23h.
-        # solution : shift time serie by 7h, compute 24h accumulations and
-        # shift back !
-        raw['time'] = raw.time-np.timedelta64(7, 'h')
-        raw = raw.resample(time='D').sum(dim='time')  # !!! VERY SLOW !!!
-        raw['time'] = raw.time+np.timedelta64(30, 'h')
-        #raw = raw.compute().clip(0)  # TODO : try without computing (seems towork !)
-        raw = raw.clip(0)  # TODO : try without computing (seems towork !)
-        raw = raw.transpose('lat', 'lon', 'time', 'member')  # transpose data to put dimension in the same order as assimilated fields
+    def read_raw_ensemble(self, dates):
+        print('DBUG debut lecture ensemble')
+        filename = 'RAW_pearome_alp_daily.nc'
+        if not os.path.exists(os.path.join(datadir, filename)):
+            #filenames = [os.path.join(datadir, f'aspearome_{mb:03d}_2021073106_2022070106_GrandesRousses_daily.nc') for mb in range(1,17)]
+            filenames = [os.path.join(datadir, f'aspearome_{mb:03d}_2021102806_2022060206_alp_hourly.nc') for mb in range(1,17)]
+            #raw = xr.open_mfdataset(filenames, combine='nested', concat_dim='member').compute().clip(0)
+            raw = xr.open_mfdataset(filenames, combine='nested', concat_dim='member', chunks={'time': 24})  # Setting chunks is critical (read the doc !)
+            raw['member']=np.arange(1,17)
+            # Convert hourly precipitation into 24h precipitation between 6h J-1 and 6h J
+            # Problem : the xarray tools to do that allows only accumulations between
+            # 0h and 23h.
+            # solution : shift time serie by 7h, compute 24h accumulations and
+            # shift back !
+            raw['time'] = raw.time-np.timedelta64(7, 'h')
+            raw = raw.resample(time='D').sum(dim='time')  # !!! VERY SLOW !!!
+            raw['time'] = raw.time+np.timedelta64(30, 'h')
+            #raw = raw.compute().clip(0)  # TODO : try without computing (seems towork !)
+            raw = raw.clip(0)  # TODO : try without computing (seems towork !)
+            raw = raw.transpose('lat', 'lon', 'time', 'member')  # transpose data to put dimension in the same order as assimilated fields
+            raw = raw.loc[{'time':dates}]
+            raw = raw.compute()
+            raw.to_netcdf(os.path.join(datadir, filename))
+        else:
+            raw = xr.open_dataset(os.path.join(datadir, filename))
+        print('DBUG fin lecture ensemble')
 
         return raw
 
@@ -734,6 +754,8 @@ class Evaluation(object):
 #        if not os.path.exists(filename):
 #            print(f'WARNING : file {filename} does not exist, looking for it under {workdir}')
 #            filename = os.path.join(workdir, filename)
+
+        print('DBUG debut lecture simu')
 
         if os.path.exists(filename):
             simulation =  xr.open_dataset(filename)
@@ -760,6 +782,7 @@ class Evaluation(object):
             #import pdb
             #pdb.set_trace()
 
+        print('DBUG fin lecture simu')
         return simulation
 
     def evaluate(self):
@@ -796,20 +819,19 @@ class Evaluation(object):
 #        data = self.obs.loc[self.obs["Q.num_poste"].isin(liste_poste)]  # TODO a adapter
 #        self.stations = self.data[['num_poste', 'nom', 'lat', 'lon', 'alti']].drop_duplicates()
 
-        antilope = self.read_antilope()
-
         dates_obs = self.data.date
+
+        antilope = self.read_antilope(dates_obs)
         dates_antilope = antilope.time.data
-        dates = np.intersect1d(dates_obs, dates_antilope)
+        dates = np.intersect1d(dates_obs, antilope.time.data)
+        antilope = antilope.loc[{'time':dates}]
         self.data = self.data.loc[{'date':dates}]
 
         ##data = dict(antilope=list(), antiloper=list(), antiloped=list(), raw=list())
-        #data = dict(antilope=list(), raw=list())
+        data = dict(antilope=list(), raw=list(), antilopec=list())
         #data = dict(antilopec=list())
-        data = dict(antilope=list(), antiloped=list(), antilopec=list())
-        data = dict(antilope=list(), antiloped=list())
-
-        antilope = antilope.loc[{'time':dates}]
+        #data = dict(antilope=list(), antiloped=list(), antilopec=list())
+        #data = dict(antilope=list(), antiloped=list())
 
         #mask = xr.open_dataset(os.path.join(datadir, 'mask', f"Estimated_ratio.nc"))
         self.ratio  = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask/alp", "Estimated_ratio.nc"))  # To test a new estimation
@@ -845,20 +867,25 @@ class Evaluation(object):
         antiloper = antiloper.clip(0)
         antiloper = antiloper.transpose('lat', 'lon', 'time', 'member')
 
-        if 'antilopec' in data.keys():
-            antilopec = self.read_corrected_antilope()
-            antilopec = antilopec.loc[{'date':dates}]
+        simus = dict()
+        for xpid,filename in experiments.items():
+            tmp = self.read_simu(os.path.join(workdir, filename)).loc[{'time':dates}]
+            print(xpid)
+            if xpid.startswith('RS'):
+                antilopec = tmp.loc[{'member':0}]
+                antilopec = antilopec.loc[{'time':dates}]
+            tmp = tmp.loc[{'member':range(1,17)}]
+            simus[xpid] = tmp
 
         if 'raw' in data.keys():
-            raw = self.read_raw_ensemble()
-            raw = raw.loc[{'time':dates}]
-            raw = raw.compute()
+            raw = self.read_raw_ensemble(dates)
             self.data['member'] = np.arange(1,17)
             self.data['pseudo_member'] = np.arange(1,4)
 
-        simus = dict()
-        for xpid,filename in experiments.items():
-            simus[xpid] = self.read_simu(os.path.join(workdir, filename)).loc[{'time':dates}]
+
+        if 'antilopec' in data.keys() and len(data['antilopec'])==0:
+            antilopec = self.read_corrected_antilope()
+            antilopec = antilopec.loc[{'date':dates}]
 
 #        scores_list = ['reliability', 'resolution', 'uncertainty', 'rmse', 'bias', 'brier', 'error_frequency']
         scores_list = ['rmse', 'bias'] + [f'brier_{threshold}' for threshold in self.thresholds] + ['CRPS']
@@ -910,9 +937,9 @@ class Evaluation(object):
                         data[xpid].append(simus[xpid].sel({'lat':nearest(simus[xpid].lat, lat), 'lon':nearest(simus[xpid].lon, lon)}).rr.data)
                     else:
                         data[xpid].append(simus[xpid].sel({'num_poste':num_poste}).rr.data)
-#                    t5 = time.time()
-#                    print(f'Reading simulation {xpid} took {(t5-t4)*1000.}ms')
-                self.temporal_plot(dates, obs, num_poste, lat, lon, alti, antilope=data['antilope'][-1])
+                    #t5 = time.time()
+                    #print(f'Reading simulation {xpid} took {(t5-t4)*1000.}ms')
+#                self.temporal_plot(dates, obs, num_poste, lat, lon, alti, antilope=data['antilope'][-1])
                 #self.temporal_plot(dates, obs, num_poste, lat, lon, alti, antilope=data['antilope'][-1], corrected=data['antilopec'][-1])
                 #self.temporal_plot(dates, obs, num_poste, lat, lon, alti, raw=data['raw'][-1], antilope=data['antilope'][-1])
                 #self.temporal_plot(dates, data['LH0'][-1], obs, num_poste, raw=data['raw'][-1], antilope=data['antilope'][-1], simu2=data['LD0'][-1])
