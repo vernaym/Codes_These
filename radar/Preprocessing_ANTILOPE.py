@@ -23,7 +23,6 @@ from pyproj import Proj, transform
 import matplotlib
 import matplotlib.pyplot as plt
 
-import These.scripts.cas_test as ct
 
 import scipy
 from scipy.sparse import csr_matrix, csc_matrix, diags
@@ -151,6 +150,7 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
 
     # Plot correction coefficient
     if plot:
+        import These.scripts.cas_test as ct
         correction_coefficient = (meanweight/pixel_weight * 1 / (pixel_weight + meanweight/pixel_weight)).reshape(np.shape(field))
         filename = 'Correction_weight.pdf'
         ct.plot_field(correction_coefficient, filename, label='Correction coefficient', cmap=plt.cm.viridis, vmin=0, vmax=1, add_circle=True)
@@ -216,16 +216,19 @@ def codistances(coords, ld=0.07):
 
     return dist
 
-def random_draw(obs, sd, distribution='normal'):
+def random_draw(obs, sd, distribution='gamma'):
     if distribution == 'normal':
         gauss = np.random.normal(loc=0.0, scale=1.0, size=1)[0]  # Draw random element from normal distribution
         ana = obs+gauss*sd  # Gaussian perturbation around >0 obs
-    else:
+    elif distribution == 'gamma':
         k = 2  # k>1
         theta = np.sqrt(1/2)  # Ensure a variance of 1 (var=k*theta^2)
         shift = (k-1)*theta  # shift = mode
         gamma = np.random.gamma(k, scale=theta)  # Draw random element from normal distribution (>0 only ==> shift necessary to convert into perturbations)
         ana = obs+(gamma-shift)*sd  # Shift gamma distribution so that the mode ((k-1)*theta) is on 0
+    else:
+        print('Error : unknown distribution')
+        return None
     exp = np.random.default_rng().exponential(scale=1)  # TODO : set scale parameter using the density of pixels at 0mm in the vicinity ?
 
     #ana[ana<0] = exp*sd[ana<0]  # Avoid "mass accumulation" in 0. !! WARNING : the analysis distribution is not Normal anymore !!

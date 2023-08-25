@@ -1236,87 +1236,24 @@ class Assimilation(object):
 
         return M
 
-    def observation_ECM(self, parameters, date):
-
-        ref_field = self.ref_field(parameters.mu, date)
-        std = parameters.sigma.data
-        #X = diags((np.sqrt(parameters.mu.data)*std).flatten(), 0)
-        X = diags((np.sqrt(parameters.mu.data)).flatten(), 0)
-#        X = diags((np.sqrt(ref_field.data)).flatten(), 0)
-#        X = diags(ref_field.data.flatten(), 0)
-        Rdyn = X.dot(self.pond.dot(X))
-#        Rdyn = 0.263 * X.dot(self.pond.dot(X))  # To minimize the impact on large precipitation ?
-        #Rdyn = self.pond.multiply(np.outer(np.sqrt(parameters.mu)*std, np.sqrt(parameters.mu)*std))
-#        Rstat = self.pond.multiply(np.outer(std,std))  # TODO : fixer l'erreur d'obs en absence de precipitation
-#        Rdyn = self.pond.multiply(np.outer(ref_field, ref_field))
-        # La dispersion de l'analyse est principalement augmentée par Rstat
-        X = diags(std.flatten())
-        #Rstat = self.pond.multiply(np.outer(std*10, std*10))  # TODO : fixer l'erreur d'obs en absence de precipitation
-        Rstat = X.dot(self.pond.dot(X))
-        # TODO : add static error depending on the vertical distance to the radar elevation ?
-
-        R = Rstat + Rdyn  # Rstat améliore sensiblement les petites precip (sinon error obs=0).
-#        R = Rstat.multiply(Rdyn)+Rstat
-
-        R.data = np.nan_to_num(R.data, copy=False)
-
-        return R, Rstat, Rdyn, ref_field
-
 #    @speedtest
     def observation_ECM_new(self, parameters, date, plot=None):
 
-        # TODO : Réduire l'erreur d'obs si tout est à 0 pour éviter d'introduire des précipitations irréalistes
-        # TODO : Introduire le gradient vertical AROME
-
         initial_obs = parameters.rr.data.flatten()
         std = np.abs(parameters.sigma.data)
-        #std = np.abs(parameters.error.data) + np.abs(parameters.sigma.data)
         Rstat = diags(std.flatten())
-        #Rstat = np.sqrt(diags(std.flatten()))  # !! TODO : TMP !! revoir plutot la conversion ratio estimé --> erreur obs
-
-        # TODO : revoir la pondération pour assurer que une erreur statique importante a un poids moins élevé qu'un point très loin avec une faible erreur statique
-        pond = self.pond.dot(diags(np.exp(-std).flatten(), 0))  # Pondération par la distance et l'erreur statique !! ATTENTION A L'ORDRE !!
-        #pond = self.pond.dot(diags(1/std.flatten(), 0))  # Pondération par la distance et l'erreur statique !! ATTENTION A L'ORDRE !!
-
-        # Inverser l'ordre (calcul de l'erreur et modification de l'obs PUIS débiaisage) ne marche pas du tout (cf cas_test) !!
+        #pond = self.pond.dot(diags(np.exp(-std).flatten(), 0))  # Pondération par la distance et l'erreur statique !! ATTENTION A L'ORDRE !!
+        pond = self.pond.dot(diags(1/std.flatten(), 0))
         obs = parameters.mu.data.flatten()  # De-biased observation
-        #obs = parameters.rr.data.flatten()  # To apply correction directly on the original observation : not good enough (cf cas_test)
-
-        # It is necessary to update observations with large static error since it is the way to account for correlations
-        # But the observation must be significantly modified only for point with a very high static error
-        # TODO : trouver une meilleur façon de modifier l'obs vers la moyenne du super ensemble de façon plus pondérée
-        #mean, sd = self.get_parameters(obs, pond, replacement_strategy='keep')  # Keep original observation value to avoid double penalty
-        # TODO : calculer l'erreur par rapport à la vraie moyenne pour éviter de suretimer l'erreur d'obs !
-        #mean, sd = self.get_parameters(obs, pond, replacement_strategy='toward_mean')  # Update obs
-        #mean, sd = .get_parameters(obs, pond, replacement_strategy='toward_mean')  # Update obs
         newfield, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(obs, pond)
-
-        #############################   TMP  #########################
-#        X = diags(initial_obs, 0)
-#        pond.data[np.isnan(pond.data)] = 0.0
-#        weight = pond.sum(axis=1).getA1()  # The sum of the weights (axis=1 <==> sum over rows)
-#        sd = self.get_std(X, initial_obs, pond, weight=weight)
-#        sd = sd + np.abs(initial_obs-mean)  # Add displacement to error (--> increase error)  !! WARNING : check for double penalty !!
-#        #sd = sd + np.sqrt(0.263 * np.square(newfield))  # Add error proportionnal to precipitation intensity
-        #############################   TMP  #########################
-
         Rdyn = diags(sd, 0)
-        #Rdyn = np.sqrt(diags(sd, 0))
-        #R    = dia_matrix(diags(sd, 0) + Rstat)  # WARNING : the sum of 2 dia_matrix returns a csr_matrix...
-        # TODO : Add a constant error to ensure an error >0 even if mean==0 and sd==0 or consider that in this case there is probably no precipitation ?
-        #R    = dia_matrix(diags(sd, 0) + Rstat.multiply(diags(mean)*0.263))  # WARNING : the sum of 2 dia_matrix returns a csr_matrix...
-        #R    = dia_matrix(Rdyn + Rstat.multiply(diags(newfield)*0.263))  # TODO : test this formulation
-        #R    = np.sqrt(dia_matrix(Rdyn + Rstat.multiply(diags(newfield)*0.263)))  # TODO : test this formulation
-        #R    = np.sqrt(dia_matrix(Rdyn + Rstat.multiply(diags(newfield))))  # TODO : test this formulation
-        #R    = dia_matrix(Rdyn + Rstat.multiply(diags(newfield)*0.263) + 0.05*Rstat)  # TODO : test this formulation
-        #R    = dia_matrix(Rdyn + Rstat*0.263)  # TODO : test this formulation
-
-        # Use only the dynamic error to avoid excessively large errors and the apparition of fixed spatial patterns
-        R = dia_matrix(Rdyn)  # Déjà homogène à des mm^1/2 par construction !
-        # TODO : change the magnitude of the static error to add it back to account for large uncertainties over mountain ridges !!!!
-        #R = dia_matrix(np.sqrt(Rdyn+0.05*Rstat))
-        #R = dia_matrix(Rdyn+0.05*np.sqrt(Rstat))  # Rdyn déjà homogène. --> Apparition de structures spatiales
-
+        R = dia_matrix(Rdyn)
+        new_obs = xr.DataArray(
+            data   = newfield.reshape((len(parameters.lat), len(parameters.lon))),
+            name   = 'obs',
+            dims   = ["lat", "lon"],
+            coords = dict(lon=parameters.lon, lat=parameters.lat)
+        )
 
         # Plot data
         if plot is not None:
@@ -1338,18 +1275,6 @@ class Assimilation(object):
                     point = np.where((lat.flatten()==plot['lat']) & (lon.flatten()==plot['lon']))[0][0]
                     #self.plot_super_ensemble(point, obs, mean[point], sd[point], pond, f'Observation_{num_poste}_{date}', reference=ref, initial_obs=initial_obs)
                     self.plot_super_ensemble(point, obs, mean[point], R.diagonal()[point], pond, f'Observation_{num_poste}_{date}', reference=ref, initial_obs=initial_obs)
-
-        # !! WARNING : modification de l'obs !!
-        # --> cela a tendance à lisser le champs en atténuant les valeurs extremes !!
-        new_obs = xr.DataArray(
-            #data   = mean.reshape((len(parameters.lat), len(parameters.lon))),
-            data   = newfield.reshape((len(parameters.lat), len(parameters.lon))),
-            name   = 'obs',
-            dims   = ["lat", "lon"],
-            coords = dict(lon=parameters.lon, lat=parameters.lat)
-        )
-        # To keep the original (debiased) field
-        #new_obs = parameters.mu
 
         return R, Rstat, Rdyn, new_obs
 
@@ -1716,7 +1641,7 @@ class RandomSampling(Assimilation):
             lonmin = np.min(parameters.lon.data)
             obs_auto = obs_auto[(obs_auto.lat>=latmin) & (obs_auto.lat<=latmax) & (obs_auto.lon>=lonmin) & (obs_auto.lon<=lonmax)]
 
-            parameters["error"] = self.dynamic_error_estimation(parameters, obs_auto)
+            #parameters["error"] = self.dynamic_error_estimation(parameters, obs_auto)
 
             ####################  TMP  #####################
             # Plot distributions before / after conversion
@@ -1738,8 +1663,8 @@ class RandomSampling(Assimilation):
             ####################  END  #####################
 
             # Change variable R --> R^(1/2) to bring the distributions closer to a Normal one
-            parameters.mu.data = np.sqrt(parameters.mu.data)
-            parameters.rr.data = np.sqrt(parameters.rr.data)
+            #parameters.mu.data = np.sqrt(parameters.mu.data)
+            #parameters.rr.data = np.sqrt(parameters.rr.data)
 
             if self.gridded:
                 self.gridded_random_draw(date, idd, parameters, domain, obs_auto=obs_auto)
@@ -1772,10 +1697,8 @@ class RandomSampling(Assimilation):
                 ),
             )
         outname = f"ANTILOPEQ_{args.datebegin.strftime('%Y%m%d%H')}_{args.dateend.strftime('%Y%m%d%H')}_{args.domain}_corrected"
-        import pdb
-        pdb.set_trace()
         # WARNING : encode(utf-8) nécessaire si outname contient un entier formatté en string
-        out.to_netcdf(os.path.join('/home/vernaym/These/DATA', f"{outname}.nc".encode('utf-8')))
+        out.to_netcdf(os.path.join('/home/vernaym/These/DATA', f"{outname}.nc").encode('utf-8'))
         #out.to_netcdf(os.path.join('/home/vernaym/These/DATA', f"{outname}.nc"))
 
     @speedtest
@@ -1786,8 +1709,10 @@ class RandomSampling(Assimilation):
         self.rrmin = 0.
         self.rrmax = min(80, max(
                 #np.nanmax(np.square(parameters.obs.data)),
-                np.nanmax(np.square(parameters.rr.data)),
-                np.nanmax(np.square(parameters.mu.data)),
+                #np.nanmax(np.square(parameters.rr.data)),
+                #np.nanmax(np.square(parameters.mu.data)),
+                np.nanmax(parameters.rr.data),
+                np.nanmax(parameters.mu.data),
                 ))
 
         R, Rstat, Rdyn, updated_obs = self.observation_ECM_new(parameters, date)
@@ -1802,7 +1727,8 @@ class RandomSampling(Assimilation):
         obs = np.round(obs, 1)  # Round precipitation <0.1 at 0 (different distribution used in this case) TODO : convertir dans l'espace r^1/2
 
         # Fill first member with corrected observation
-        analysis.loc[{'member':0}] = np.square(obs)
+        analysis.loc[{'member':0}] = obs
+        #analysis.loc[{'member':0}] = np.square(obs)
 
         # Extract reference points and corresponding values
         nivometeo = self.nivometeo.sel({'date':date}).dropna(dim='num_poste').drop('date')
@@ -1890,7 +1816,7 @@ class RandomSampling(Assimilation):
                 ax[i,j].bar(reference, 1, width=0.3, label='Reference observation', color='Green', alpha=1)
                 original_obs = parameters.sel(lat=lat, lon=lon, method='nearest').rr.data
                 #original_obs = parameters.rr.data[point]
-                ax[i,j].bar(np.square(original_obs), 1, width=0.3, label='Original observation', color='k', alpha=0.5)
+                ax[i,j].bar(original_obs, 1, width=0.3, label='Original observation', color='k', alpha=0.5)
                 #obs = Y[point][0]
                 new_obs = analysis.sel(lat=lat, lon=lon, member=0, method='nearest').data
                 ax[i,j].bar(new_obs, 1, width=0.3, color='red', alpha=1)
@@ -1909,7 +1835,7 @@ class RandomSampling(Assimilation):
             j = 0
 
         for member in analysis.member.data:
-            ana = Preprocessing_ANTILOPE.random_draw(obs, sd)
+            ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='gamma')
             analysis.loc[{'member':member}] = ana
 
             if self.plot and member>0:
@@ -1953,13 +1879,13 @@ class RandomSampling(Assimilation):
             plt.close(fig)
 
             #ECM_max = np.square(np.nanmax(R))
-            ECM_max = np.nanmax(np.square(R.toarray()))
-            self.plot_matrix(np.square(R), parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_ECM_{domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.viridis)
-            self.plot_matrix(np.square(Rdyn), parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_dyn_ECM_{domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.viridis)
-            self.plot_matrix(np.square(Rstat), parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_stat_ECM_{domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.viridis)
+            ECM_max = np.nanmax(R.toarray())
+            self.plot_matrix(R, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_ECM_{domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.viridis)
+            #self.plot_matrix(Rdyn, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_dyn_ECM_{domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.viridis)
+            self.plot_matrix(Rstat, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_stat_ECM_{domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.viridis)
 
-            parameters.mu.data = np.square(parameters.mu.data)
-            parameters.rr.data = np.square(parameters.rr.data)
+            #parameters.mu.data = np.square(parameters.mu.data)
+            #parameters.rr.data = np.square(parameters.rr.data)
 
             evaluation_points = parameters.rr.sel(lat=xr.DataArray(nivometeo.lat.data, dims="poste"), lon=xr.DataArray(nivometeo.lon.data, dims="poste"), method='nearest')
             bias = evaluation_points - nivometeo.obs.data  # Raw observation error
@@ -2014,9 +1940,9 @@ class RandomSampling(Assimilation):
                 R, Rstat, Rdyn, updated_obs = self.observation_ECM_new(parameters_loc, date, plot=dict(lat=nearest_lat, lon=nearest_lon, date=date, num_poste=num_poste))
             else:
                 R, Rstat, Rdyn, updated_obs = self.observation_ECM_new(parameters_loc, date)
-            Y = updated_obs.data  # Observation vector. WARNING : Use mu to take debiasing into account !
+            Y = updated_obs.data  # Observation vector
             obs = Y.reshape((len(parameters_loc.lat), len(parameters_loc.lon)))  # Get observation field
-            obs = np.round(obs, 1)  # Round precipitation <0.1 at 0 (different distribution used in this case) TODO : convertir dans l'espace r^1/2
+            obs = np.round(obs, 1)  # Round precipitation <0.1 at 0 (different distribution used in this case)
 
             # Initialisation of ensemble output field
             analysis = xr.DataArray(
@@ -2031,7 +1957,8 @@ class RandomSampling(Assimilation):
             sd = R.diagonal().reshape((len(analysis.lat), len(analysis.lon)))  # Get standard deviation field
             error = xr.DataArray(
                 name   = 'error',
-                data   = np.square(sd),
+                #data   = np.square(sd),
+                data   = sd,
                 dims   = ["lat", "lon"],
                 coords = dict(lon=parameters_loc.lon, lat=parameters_loc.lat),
             )
@@ -2039,7 +1966,7 @@ class RandomSampling(Assimilation):
 
             # Fill other members with random draw arround the corrected observation
             for member in analysis.member.data:
-                ana = Preprocessing_ANTILOPE.random_draw(obs, sd)
+                ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='gamma')
                 analysis.loc[{'member':member}] = ana
 
                 self.newlocalfield[member][idp,idd] = analysis.sel({'lat':nearest_lat, 'lon':nearest_lon, 'member':member}).data
@@ -2125,27 +2052,27 @@ class EnsembleKalmanFilter(Assimilation):
 
             ####################  TMP  #####################
             # Plot distributions before / after conversion
-            if self.plot:
-                fig, ax = plt.subplots()
-                R1 = parameters.mu.data.flatten()
-                R2 = np.sqrt(R1)
-                ax.hist(R2, density=True, bins=np.arange(np.floor(np.nanmin(R2))-0.1, np.ceil(np.nanmax(R2)) + 0.1, 0.1), label='R* (mm^1/2)', alpha=0.5)
-                mu = np.nanmean(R2)
-                sd = np.sum((R2-mu)**2)/len(R2)
-                ax = plot_distribution(ax, mu, sd, color='blue')
-                ax.hist(R1, density=True, bins=np.arange(np.floor(np.nanmin(R1))-0.1, np.ceil(np.nanmax(R1)) + 0.1, 0.1), label='R (mm)', alpha=0.5)
-                ax.legend()
-                ax.set_xlim(right=13)
-                if not os.path.exists(f'{self.date_str}/distributions'):
-                    os.makedirs(f'{self.date_str}/distributions')
-                fig.savefig(f'{self.date_str}/distributions/conversion_rr.pdf')
-                plt.close(fig)
+#            if self.plot:
+#                fig, ax = plt.subplots()
+#                R1 = parameters.mu.data.flatten()
+#                R2 = np.sqrt(R1)
+#                ax.hist(R2, density=True, bins=np.arange(np.floor(np.nanmin(R2))-0.1, np.ceil(np.nanmax(R2)) + 0.1, 0.1), label='R* (mm^1/2)', alpha=0.5)
+#                mu = np.nanmean(R2)
+#                sd = np.sum((R2-mu)**2)/len(R2)
+#                ax = plot_distribution(ax, mu, sd, color='blue')
+#                ax.hist(R1, density=True, bins=np.arange(np.floor(np.nanmin(R1))-0.1, np.ceil(np.nanmax(R1)) + 0.1, 0.1), label='R (mm)', alpha=0.5)
+#                ax.legend()
+#                ax.set_xlim(right=13)
+#                if not os.path.exists(f'{self.date_str}/distributions'):
+#                    os.makedirs(f'{self.date_str}/distributions')
+#                fig.savefig(f'{self.date_str}/distributions/conversion_rr.pdf')
+#                plt.close(fig)
             ####################  END  #####################
 
             # Change variable R --> R^(1/2) to bring the distributions closer to a Normal one
-            ensemble.rr.data = np.sqrt(ensemble.rr.data)
-            parameters.mu.data = np.sqrt(parameters.mu.data)
-            parameters.rr.data = np.sqrt(parameters.rr.data)
+            #ensemble.rr.data = np.sqrt(ensemble.rr.data)
+            #parameters.mu.data = np.sqrt(parameters.mu.data)
+            #parameters.rr.data = np.sqrt(parameters.rr.data)
 
             if self.gridded:
                 self.gridded_analysis(date, idd,  ensemble, parameters, domain)
@@ -2205,7 +2132,7 @@ class EnsembleKalmanFilter(Assimilation):
                 A = X + K.dot(Y-X)
 
                 # On peut maintenant extraire les vrais domaines (on a plus besoind e la marge sur les bords)
-                analysis.loc[{'member':member}] = np.square(A.reshape((len(raw.lat), len(raw.lon))))  # Draw member
+                analysis.loc[{'member':member}] = A.reshape((len(raw.lat), len(raw.lon)))
 
                 self.newlocalfield[member][idp,idd] = analysis.sel({'lat':nearest_lat, 'lon':nearest_lon, 'member':member}).data
 
@@ -2253,9 +2180,9 @@ class EnsembleKalmanFilter(Assimilation):
         self.rrmax = min(80, max(
                 #np.nanmax(np.square(ensemble.raw.data)),
                 #np.nanmax(np.square(ensemble.rr.data)),
-                np.nanmax(np.square(parameters.obs.data)),
-                np.nanmax(np.square(parameters.rr.data)),
-                np.nanmax(np.square(parameters.mu.data)),
+                np.nanmax(parameters.obs.data),
+                np.nanmax(parameters.rr.data),
+                np.nanmax(parameters.mu.data),
                 ))
 
         # TODO Ajouter une étape de comparaison des distribution d'ébauche et d'obs (augmentation de l'erreur d'ébauche
@@ -2305,7 +2232,7 @@ class EnsembleKalmanFilter(Assimilation):
             A = X+B.dot(Z)
 
             # On peut maintenant extraire les vrais domaines (on a plus besoind e la marge sur les bords)
-            analysis.loc[{'member':member}] = np.square(A.reshape((len(ensemble.lat), len(ensemble.lon))))  # Go back in the real precipitation space
+            analysis.loc[{'member':member}] = A.reshape((len(ensemble.lat), len(ensemble.lon)))  # Go back in the real precipitation space
 
             # Reduction du domain en enlevant la marge en bordure
             # Inutile : la domain est réduit au moment de plotter les champs
@@ -2313,7 +2240,7 @@ class EnsembleKalmanFilter(Assimilation):
 
             if self.plot:
                 if not os.path.exists(f'{self.date_str}/RAW_{self.date_str}_{self.domain}.pdf'):
-                    im1 = plot_field(np.square(raw), ax1[i,j], self.rrmin, self.rrmax, self.domain)
+                    im1 = plot_field(raw, ax1[i,j], self.rrmin, self.rrmax, self.domain)
                     ax1[i,j].set_title(None)
 
                     #######################  TMP  ################
@@ -2334,11 +2261,11 @@ class EnsembleKalmanFilter(Assimilation):
                     #######################  TMP  ################
 
                 if not os.path.exists(f'{self.date_str}/BACKGROUND_{self.date_str}_{self.domain}.pdf'):
-                    im4 = plot_field(np.square(background), ax4[i,j], self.rrmin, self.rrmax, self.domain)
+                    im4 = plot_field(background, ax4[i,j], self.rrmin, self.rrmax, self.domain)
                     ax4[i,j].set_title(None)
                 im2 = plot_field(analysis.loc[{'member':member}], ax2[i,j], self.rrmin, self.rrmax, self.domain)
                 ax2[i,j].set_title(None)
-                im3 = plot_field(np.square(parameters.mu)-np.square(raw), ax3[i,j], np.nanmin(np.square(parameters.mu.data-raw.data)), np.nanmax(np.square(parameters.mu.data-raw.data)), self.domain)
+                im3 = plot_field(parameters.mu-raw, ax3[i,j], np.nanmin(parameters.mu.data-raw.data), np.nanmax(parameters.mu.data-raw.data), self.domain)
                 j = j + 1
                 if j==4:
                     j = 0
@@ -2382,11 +2309,11 @@ class EnsembleKalmanFilter(Assimilation):
             self.plot_matrix(Rstat, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_stat_ECM_{domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.viridis)
             #self.plot_matrix(Rstat, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_stat_ECM_{domain}.pdf', vmin=0, cmap=plt.cm.viridis)
 
-            ensemble.rr.data = np.square(ensemble.rr.data)
-            ensemble.raw.data = np.square(ensemble.raw.data)
-            parameters.mu.data = np.square(parameters.mu.data)
-            parameters.rr.data = np.square(parameters.rr.data)
-            parameters.obs.data = np.square(parameters.obs.data)
+            ensemble.rr.data = ensemble.rr.data
+            ensemble.raw.data = ensemble.raw.data
+            parameters.mu.data = parameters.mu.data
+            parameters.rr.data = parameters.rr.data
+            parameters.obs.data = parameters.obs.data
 
             self.plot_obs(parameters, domain=domain)
             if self.debiasing:

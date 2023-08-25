@@ -34,6 +34,9 @@ import seaborn as sns
 # TODO : Réorganiser le code avec un module "score" séparé qui puisse être appellé par différents scirpts
 
 #domain = 'GrandesRousses'
+if len(sys.argv) == 1:
+    domain = 'alp'  # default value
+    xpid = 'reference'
 if len(sys.argv) == 2:
     domain = 'alp'  # default value
     xpid = sys.argv[1]
@@ -277,6 +280,7 @@ xpid_label = dict(
         antilope      = 'ANTILOPE',
         antiloper     = 'ANTILOPE + error',
         antiloped     = 'ANTILOPE + error + debiaisage',
+        antilopec     = 'ANTILOPE + debiaisage + correction',
         raw           = 'Raw PE-AROME ensemble',
         GD0           = 'Global daily analysis',
         LD0           = 'Daily analysis with PF',
@@ -371,12 +375,12 @@ def nearest(array, value):
 
 class Evaluation(object):
 
-    def __init__(self, threshold):
+    def __init__(self):
         #self.data = xr.Dataset()
 #        self.ensemble = ensemble  # DataArray(lat,lon,time,member)
         #self.Ne = 16  # TODO : à definir dynamiquement
         self.scores = None
-        self.threshold = threshold  # threshold to use as event detection in the Brier Score
+        self.threshold = 10  # threshold to use as event detection in the Brier Score
         self.lpn = None
         self.obs_error = None
         self.thresholds = [1, 2, 3, 4, 5, 10, 15, 20, 25, 30]
@@ -406,11 +410,28 @@ class Evaluation(object):
 
         return np.nanmean(bias)
 
+    def error_frequency(self, simu, obs, treshold=0.2, *args, **kw):
+
+        simu = simu[~np.isnan(obs)]
+        obs = obs[~np.isnan(obs)]
+
+        if np.shape(simu) == np.shape(obs):  # "Simulation" déterministe
+            bias = simu - obs
+        else:  # Simulation s'ensmble
+            bias = self.mean_error(simu, obs)
+
+        error_above_treshold = np.where((simu>=obs*(1+treshold)) & (simu<=obs*(1-treshold)))
+        #freq_error = (np.count_nonzero(error_above_treshold) / len(error_above_treshold) * 100
+        freq_error = (len(error_above_treshold) / len(obs)) * 100
+
+        return freq_error
+
     def dispersion(self):
         """
-        spread over all dates (and pixels ?)
+        Spread over all dates.
+        Spread = sqrt(1/(N-1)*sum(X-M)**2)
         """
-        disp = np.sqrt(np.mean([np.nanmean((self.ensemble.loc[{'member':m}].rr.data-self.mean)**2) for m in self.ensemble.member.data]))
+        disp = np.sqrt(np.sum([np.nanmean((self.ensemble.loc[{'member':m}].rr.data-self.mean)**2) for m in self.ensemble.member.data])/(len(self.ensemble.member)-1))
         print('Dispersion = ', disp)
 
         return disp
@@ -428,7 +449,7 @@ class Evaluation(object):
 
     def brier_skill_score(self, simu, obs, ref, threshold=10):
         """  BSS = 1 - BS / BSref  """
-        return 1 - self.brier_score(simu, obs, threshold) / self.brier_score(ref, obs, threshold)
+        return 1 - self.brier(simu, obs, threshold) / self.brier(ref, obs, threshold)
 
     def brier(self, simu, obs, Ne=16, threshold=10, *args):
 
@@ -673,6 +694,21 @@ class Evaluation(object):
 
         return antilope
 
+    def read_corrected_antilope(self):
+        filename = 'ANTILOPEQ_2021120106_2022050106_alp_corrected.nc'
+        antilope = xr.open_dataset(os.path.join(datadir, filename))
+        if filename.startswith('ANTILOPEH'):
+            # Convert hourly precipitation into 24h precipitation between 6h J-1 and 6h J
+            # Problem : the xarray tools to do that allows only accumulations between
+            # 0h and 23h.
+            # solution : shift time serie by 7h, compute 24h accumulations and
+            # shift back !
+            antilope['time'] = antilope.time-np.timedelta64(7, 'h')
+            antilope = antilope.resample(time='1D').sum(dim='time')  # !!! VERY SLOW !!! WARNING : does not work with pandas>=2.0.0
+            antilope['time'] = antilope.time+np.timedelta64(30, 'h')
+
+        return antilope
+
     def read_raw_ensemble(self):
         #filenames = [os.path.join(datadir, f'aspearome_{mb:03d}_2021073106_2022070106_GrandesRousses_daily.nc') for mb in range(1,17)]
         filenames = [os.path.join(datadir, f'aspearome_{mb:03d}_2021102806_2022060206_alp_hourly.nc') for mb in range(1,17)]
@@ -765,9 +801,15 @@ class Evaluation(object):
         dates_obs = self.data.date
         dates_antilope = antilope.time.data
         dates = np.intersect1d(dates_obs, dates_antilope)
+        self.data = self.data.loc[{'date':dates}]
+
+        ##data = dict(antilope=list(), antiloper=list(), antiloped=list(), raw=list())
+        #data = dict(antilope=list(), raw=list())
+        #data = dict(antilopec=list())
+        data = dict(antilope=list(), antiloped=list(), antilopec=list())
+        data = dict(antilope=list(), antiloped=list())
 
         antilope = antilope.loc[{'time':dates}]
-        self.data = self.data.loc[{'date':dates}]
 
         #mask = xr.open_dataset(os.path.join(datadir, 'mask', f"Estimated_ratio.nc"))
         self.ratio  = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask/alp", "Estimated_ratio.nc"))  # To test a new estimation
@@ -787,35 +829,41 @@ class Evaluation(object):
 #            ds2 = ds - error
             return xr.concat([ds, ds1, ds2], 'member')
 
+        # ANTILOPE + debiasage
         #antiloped = antilope.groupby('date').apply(debiaise)
         antiloped = antilope.apply(debiaise)
         #antiloped = antilope.apply(to_ensemble)
         # Génération d'un ensemble de 3 membres prenant en compte l'erreur d'observation
-        antiloped = antiloped.expand_dims('member')
-        antiloped = antiloped.apply(to_ensemble)
-        antiloped = antiloped.clip(0)
-        antiloped = antiloped.transpose('lat', 'lon', 'time', 'member')
+#        antiloped = antiloped.expand_dims('member')
+#        antiloped = antiloped.apply(to_ensemble)
+#        antiloped = antiloped.clip(0)
+#        antiloped = antiloped.transpose('lat', 'lon', 'time', 'member')
 
+        # ANTILOPE + error
         antiloper = antilope.expand_dims('member')
         antiloper = antiloper.apply(to_ensemble)
         antiloper = antiloper.clip(0)
         antiloper = antiloper.transpose('lat', 'lon', 'time', 'member')
 
-        raw = self.read_raw_ensemble()
-        raw = raw.loc[{'time':dates}]
-        raw = raw.compute()
-        self.data['member'] = np.arange(1,17)
-        self.data['pseudo_member'] = np.arange(1,4)
+        if 'antilopec' in data.keys():
+            antilopec = self.read_corrected_antilope()
+            antilopec = antilopec.loc[{'date':dates}]
 
-        #data = dict(antilope=list(), antiloper=list(), antiloped=list(), raw=list())
-        data = dict(antilope=list(), raw=list())
+        if 'raw' in data.keys():
+            raw = self.read_raw_ensemble()
+            raw = raw.loc[{'time':dates}]
+            raw = raw.compute()
+            self.data['member'] = np.arange(1,17)
+            self.data['pseudo_member'] = np.arange(1,4)
+
         simus = dict()
         for xpid,filename in experiments.items():
             simus[xpid] = self.read_simu(os.path.join(workdir, filename)).loc[{'time':dates}]
 
-#        scores_list = ['reliability', 'resolution', 'uncertainty', 'rmse', 'bias', 'brier']
+#        scores_list = ['reliability', 'resolution', 'uncertainty', 'rmse', 'bias', 'brier', 'error_frequency']
         scores_list = ['rmse', 'bias'] + [f'brier_{threshold}' for threshold in self.thresholds] + ['CRPS']
         scores = dict()
+
         #dates = dates[:10]
         liste_postes = np.array([])
         for idx, num_poste in enumerate(self.data.num_poste.data):
@@ -847,9 +895,12 @@ class Evaluation(object):
                     data['antiloped'].append(antiloped.sel({'lat':nearest(antiloped.lat, lat), 'lon':nearest(antiloped.lon, lon)}).rr.data)
                 if 'antiloper' in data.keys():
                     data['antiloper'].append(antiloper.sel({'lat':nearest(antiloper.lat, lat), 'lon':nearest(antiloper.lon, lon)}).rr.data)
+                if 'antilopec' in data.keys():
+                    data['antilopec'].append(antilopec.sel({'num_poste':num_poste}).rr.data)
                 t3 = time.time()
                 print(f'Reading antilope informations took {(t3-t2)*1000.}ms')
-                data['raw'].append(raw.sel({'lat':nearest(raw.lat, lat), 'lon':nearest(raw.lon, lon)}).rr.data)
+                if 'raw' in data.keys():
+                    data['raw'].append(raw.sel({'lat':nearest(raw.lat, lat), 'lon':nearest(raw.lon, lon)}).rr.data)
                 t4 = time.time()
                 print(f'Reading raw ensemble took {(t4-t3)*1000.}ms')
                 for xpid,filename in experiments.items():
@@ -862,6 +913,7 @@ class Evaluation(object):
 #                    t5 = time.time()
 #                    print(f'Reading simulation {xpid} took {(t5-t4)*1000.}ms')
                 self.temporal_plot(dates, obs, num_poste, lat, lon, alti, antilope=data['antilope'][-1])
+                #self.temporal_plot(dates, obs, num_poste, lat, lon, alti, antilope=data['antilope'][-1], corrected=data['antilopec'][-1])
                 #self.temporal_plot(dates, obs, num_poste, lat, lon, alti, raw=data['raw'][-1], antilope=data['antilope'][-1])
                 #self.temporal_plot(dates, data['LH0'][-1], obs, num_poste, raw=data['raw'][-1], antilope=data['antilope'][-1], simu2=data['LD0'][-1])
                 #self.temporal_plot(dates, data['LDML'][-1], obs, num_poste, raw=data['raw'][-1], antilope=data['antilope'][-1], simu2=data['LDM'][-1])
@@ -887,7 +939,8 @@ class Evaluation(object):
                             threshold = float(score_name.split('_')[-1])
                             if product == 'antilope':
                                 score.append(getattr(self, 'brier')(data[product][-1][~np.isnan(obs)], obs[~np.isnan(obs)], Ne=1, threshold=threshold))
-                            elif product in ['antiloped', 'antiloper']:
+                            #elif product in ['antiloped', 'antiloper']:
+                            elif product in ['antiloper']:
                                 score.append(getattr(self, 'brier')(data[product][-1][~np.isnan(obs)], obs[~np.isnan(obs)], Ne=3, threshold=threshold))
                             else:
                                 score.append(getattr(self, 'brier')(data[product][-1][~np.isnan(obs)], obs[~np.isnan(obs)], threshold=threshold))
@@ -909,19 +962,22 @@ class Evaluation(object):
         if 'antiloper' in data.keys():
             self.data['antiloper'] = (('num_poste', 'date', 'pseudo_member'), data['antiloper'])
         if 'antiloped' in data.keys():
-            self.data['antiloped'] = (('num_poste', 'date', 'pseudo_member'), data['antiloped'])
-        self.data['raw'] = (('num_poste', 'date', 'member'), data['raw'])
+            #self.data['antiloped'] = (('num_poste', 'date', 'pseudo_member'), data['antiloped'])
+            self.data['antiloped'] = (('num_poste', 'date'), data['antiloped'])
+        if 'raw' in data.keys():
+            self.data['raw'] = (('num_poste', 'date', 'member'), data['raw'])
         for xpid in experiments.keys():
             self.data[xpid] = (('num_poste', 'date', 'member'), data[xpid])
         t8 = time.time()
         #print(f'Filling self.data took {(t8-t7)*1000.}ms')
 
         fig1,ax1 = plt.subplots()
-        for product in ['raw'] + [xpid for xpid in experiments.keys()]:
-            self.reliability_diagram(self.data[product].data.reshape(-1, 16), self.data.obs.data.flatten(), product, ax1)
-            fig2,ax2 = plt.subplots()
-            self.rank_histogram(self.data[product].data.reshape(-1, 16), self.data.obs.data.flatten(), product, ax2)
-            fig2.savefig(f'{savedir}/rank_histogram_{product}.pdf', format='pdf')
+        if 'raw' in data.keys():
+            for product in ['raw'] + [xpid for xpid in experiments.keys()]:
+                self.reliability_diagram(self.data[product].data.reshape(-1, 16), self.data.obs.data.flatten(), product, ax1)
+                fig2,ax2 = plt.subplots()
+                self.rank_histogram(self.data[product].data.reshape(-1, 16), self.data.obs.data.flatten(), product, ax2)
+                fig2.savefig(f'{savedir}/rank_histogram_{product}.pdf', format='pdf')
         ax1.plot([0,1], [0,1], linestyle=':', color='k')
         ax1.set_xlim([0, 1])
         ax1.set_ylim([0, 1])
@@ -933,14 +989,16 @@ class Evaluation(object):
         for threshold in [0, 1, 10, 20]:
             fig,ax = plt.subplots()
             ax.set_title(f'Threshold={threshold}mm')
-            for product in ['raw'] + [xpid for xpid in experiments.keys()]:
-                # TODO : vérifier les données (virer les dates où obs=nan,...)
-                self.ROC(self.data[product].data.reshape(-1, 16), self.data.obs.data.flatten(), product, ax, threshold=threshold)
+            if 'raw' in data.keys():
+                for product in ['raw'] + [xpid for xpid in experiments.keys()]:
+                    # TODO : vérifier les données (virer les dates où obs=nan,...)
+                    self.ROC(self.data[product].data.reshape(-1, 16), self.data.obs.data.flatten(), product, ax, threshold=threshold)
             self.ROC(self.data['antilope'].data.flatten(), self.data.obs.data.flatten(), 'antilope', ax, threshold=threshold)
             if 'antiloper' in data.keys():
                 self.ROC(self.data['antiloper'].data.reshape(-1, 3), self.data.obs.data.flatten(), 'antiloper', ax, Ne=3, threshold=threshold)
             if 'antiloped' in data.keys():
-                self.ROC(self.data['antiloped'].data.reshape(-1, 3), self.data.obs.data.flatten(), 'antiloped', ax, Ne=3, threshold=threshold)
+                #self.ROC(self.data['antiloped'].data.reshape(-1, 3), self.data.obs.data.flatten(), 'antiloped', ax, Ne=3, threshold=threshold)
+                self.ROC(self.data['antiloped'].data.flatten(), self.data.obs.data.flatten(), 'antiloped', ax, threshold=threshold)
             ax.set_xlim([0, 0.5])
             ax.set_ylim([0.5, 1])
             ax.set_xlabel('False alarm rate')
@@ -1016,7 +1074,7 @@ class Evaluation(object):
                 labels.append(self.add_label(ax.violinplot(x[~np.isnan(x)], showmeans=True, positions=[pos]), xpid_label[product]))
                 if score == 'bias':
                     ax.axhline(color='k')
-                if score.startswith('brier') and product not in ['antilope', 'antiloped', 'raw']:
+                if score.startswith('brier') and product not in ['antilope', 'antiloped', 'antilopec', 'raw']:
                     ref = self.scores.loc[{'score':score}]['raw'].data
                     bss = 1 - x / ref
                     add_num_poste(ax2, pos2, bss)
@@ -1087,7 +1145,7 @@ class Evaluation(object):
     def read_ratio(self):
         self.ratio = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask/alp", "Estimated_ratio.nc"))  # To test a new estimation
 
-    def temporal_plot(self, time, obs, num_poste, lat, lon, alti, raw=None, antilope=None, xpid=None, simu=None, simu2=None):
+    def temporal_plot(self, time, obs, num_poste, lat, lon, alti, raw=None, antilope=None, corrected=None, xpid=None, simu=None, simu2=None):
         # TODO : add flexibility in the number and oreder of simulations (use dict !)
 
         if self.lpn is None:
@@ -1125,6 +1183,10 @@ class Evaluation(object):
             #antped = plt.errorbar(positions, antilope/ratio, yerr=error+0.263*antilope/ratio, fmt="+", color='blue', alpha=0.5)
             antped = plt.errorbar(positions, antilope/ratio, yerr=error*antilope/ratio, fmt="+", color='blue', alpha=0.5)
             self.labels.append((antped, 'Antilope debiaisé'))
+        if corrected is not None:
+            antpec, = plt.plot(positions, corrected, marker='+', linestyle='', color='green')
+            #antpec = plt.errorbar(positions, corrected, yerr=corrected*error, fmt="+", color='green', alpha=0.5)
+            self.labels.append((antpec, 'Antilope Corrected field'))
         if simu2 is not None:
             #add_label(plt.violinplot(np.transpose(simu2), positions=positions), 'Daily assimilation', color='skyblue')
             self.add_label(plt.violinplot(np.transpose(simu2), positions=positions), 'Daily assimilation')
@@ -1171,7 +1233,7 @@ class Evaluation(object):
 
 if __name__ == "__main__":
 
-    evaluation = Evaluation(threshold=10)
+    evaluation = Evaluation()
     #evaluation.ensemble_attributes()
     evaluation.plot_scores()
 
