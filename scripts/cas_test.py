@@ -121,21 +121,30 @@ def perturbed_ratio(ratio):
     """
     pile_ou_face = np.random.randint(0, 1)
     pile_ou_face = 1
+
+    #fact = ratio.data ** 2
+    fact = ratio.data
+
     if pile_ou_face == 1:
-        ratio.data[(ratio.data>0.8) & (ratio.data<1.8)] = 1
+        #ratio.data[(ratio.data>0.8) & (ratio.data<1.2)] = 1
+        fact[(fact>0.7) & (fact<1.3)] = 1  # Filter out areas that the method almost certainly identify as bad
+
+    increase = np.random.normal(30, scale=20)  # Draw random percentage of increase in bad areas
+    #increase = 30  #  increase error in bad areas of 50%
+    #increase = 30  #  increase error in bad areas of 50%
+    k = 100 / increase
+    fact = fact - (1-fact) / k  # Increase error in bad areas
 
     perturb = np.random.randint(0, 20, size=np.shape(ratio.data))/10. - 1  # generation of perturbations between -1 and 1
-    #perturb = uniform_filter(perturb, size=10)  # Do not perturb the structure of the ratio field too much
     perturb = uniform_filter(perturb, size=5)  # Do not perturb the structure of the ratio field too much
+    #perturb = uniform_filter(perturb, size=5)  # Do not perturb the structure of the ratio field too much
     #perturb = uniform_filter(perturb, size=5)
     #fact = uniform_filter(ratio.data, size=5)
-    fact = ratio.data
     #ratio.data = ratio.data + (1+np.exp(-np.abs(1-fact)**2/1))*perturb
-    ratio.data = ratio.data ** 2   + perturb * (1+np.exp(-np.abs(1-fact)**2/1))
-    #ratio.data = ratio.data + 1/(1+np.abs(fact-1))*perturb
-    #ratio.data = ratio.data + 1/(1+np.abs(fact-1))*perturb
-    ratio.data[ratio.data<=0] = -ratio.data[ratio.data<=0]+0.01
-    #ratio.data = uniform_filter(ratio.data, size=5)  # Increasing the window increases the mean negative bias over the Hautes Alpes
+    tmp = fact + perturb
+    tmp[tmp<=0] = -tmp[tmp<=0]+0.01
+    #tmp = np.sqrt(tmp)
+    ratio.data =  tmp
     plot_field(ratio, 'real_ratio.pdf', label='Ratio', cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=0.4, vmax=1.6, add_circle=False)
     return ratio
 
