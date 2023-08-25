@@ -130,7 +130,7 @@ if __name__ == "__main__":
     suffix = 'v5'
     product = 'arome'
     #for product in ['arome', 'sans_arome', 'nivometeo_arome', 'nivometeo_sans_arome']:
-    for suffix in ['v2', 'v4', 'v5', 'v6']:
+    for suffix in ['v2', 'v4', 'v5', 'v6', 'v7']:
         position = position + 1
 
         ratio  = xr.open_dataset(os.path.join(workdir, f"Estimated_ratio_alp_0.15_{product}_{suffix}.nc"))

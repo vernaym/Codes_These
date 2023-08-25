@@ -88,7 +88,7 @@ onlypostes = [73306403]
 
 blacklist = [1373001, 1189001]
 
-d0 = 0.15  # Portée horizontale
+d0 = 0.25  # Portée horizontale
 #h0 = 2000  # Portée altitudinale
 h0 = None
 c0 = 2
@@ -868,6 +868,7 @@ def ratio_estimation(field, model=None, moving_window=25):
     ###################################################################################################################################
 
     uncertainty = observation_error*(1+w1)  # Observation error > 1
+    uncertainty.data = uniform_filter(uncertainty.data, size=2)
     #confidence = uncertainty.copy()
     #confidence.data = 1/confidence.data
 
@@ -912,7 +913,7 @@ def plot_ratio_estime_vs_ratio_reel(ratio, erreur):
         #ax.scatter(scores.ratio.values, estimation.data, label=f'R²={r2:.4}', marker='+', color='blue')
         ax.scatter(x_values, y_values, marker='+', color='blue')
         #ax.plot(x, z, color='blue', linewidth=2, label=f'Slope={reg.coef_[0]:.3f}, Intercept={reg.intercept_:.3f}, R²={r2:.4}')
-        ax.plot(x, z, color='blue', linewidth=1, label=f'R²={r2:.3}, bias={bias}, rmse={rmse}')
+        ax.plot(x, z, color='blue', linewidth=1, label=f'Slope={reg.coef_[0]:.3f}, Intercept={reg.intercept_:.3f}\nR²={r2:.3}, bias={bias}, rmse={rmse}')
         # To add num_postes in scatterplot (dev only !)
         #for idx in scores.index:
         #    txt = plt.text(x_values[idx], y_values[idx], scores['num_poste'][idx], fontsize=12)
@@ -930,7 +931,7 @@ def plot_ratio_estime_vs_ratio_reel(ratio, erreur):
         ax.set_ylim(lims)
         ax.set_ylabel('Estimated ratio')
         ax.set_xlabel('Real ratio')
-        ax.legend(fontsize=12)
+        ax.legend(fontsize=10)
         plt.tight_layout()
         fig.savefig(os.path.join(savedir, savename))
 
