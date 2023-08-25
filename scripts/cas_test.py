@@ -115,14 +115,15 @@ def isolated_storm():
 
 def perturbed_ratio(ratio):
     """
-    Perturbation of the "real" ANTILOPE vs reality ratio to add noise around "non-biased" pixels.
+    Perturbation of the "real" ANTILOPE vs reality ratio to add noise and match the estimated vs observed ratio scatter plot slope
     This accounts for the ratio estimation method errors where there is no obvious ANTILOPE spatial pattern.
     --> to apply only once (climatological noise)
     """
     pile_ou_face = np.random.randint(0, 1)
-    pile_ou_face =1
+    pile_ou_face =0
     if pile_ou_face == 1:
         ratio.data[(ratio.data>0.7) & (ratio.data<1.3)] = 1
+
     perturb = np.random.randint(0, 20, size=np.shape(ratio.data))/10. - 1  # generation of perturbations between -1 and 1
     #perturb = uniform_filter(perturb, size=10)  # Do not perturb the structure of the ratio field too much
     perturb = uniform_filter(perturb, size=5)  # Do not perturb the structure of the ratio field too much
@@ -130,7 +131,7 @@ def perturbed_ratio(ratio):
     #fact = uniform_filter(ratio.data, size=5)
     fact = ratio.data
     #ratio.data = ratio.data + (1+np.exp(-np.abs(1-fact)**2/1))*perturb
-    ratio.data = ratio.data + perturb
+    ratio.data = ratio.data + (1+np.abs(1-fact)) * perturb
     #ratio.data = ratio.data + 1/(1+np.abs(fact-1))*perturb
     #ratio.data = ratio.data + 1/(1+np.abs(fact-1))*perturb
     ratio.data[ratio.data<=0] = -ratio.data[ratio.data<=0]+0.01
