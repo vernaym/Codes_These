@@ -131,7 +131,7 @@ def perturbed_ratio(ratio):
     #fact = uniform_filter(ratio.data, size=5)
     fact = ratio.data
     #ratio.data = ratio.data + (1+np.exp(-np.abs(1-fact)**2/1))*perturb
-    ratio.data = ratio.data ** 2   + perturb
+    ratio.data = ratio.data ** 2   + perturb * (1+np.exp(-np.abs(1-fact)**2/1))
     #ratio.data = ratio.data + 1/(1+np.abs(fact-1))*perturb
     #ratio.data = ratio.data + 1/(1+np.abs(fact-1))*perturb
     ratio.data[ratio.data<=0] = -ratio.data[ratio.data<=0]+0.01
