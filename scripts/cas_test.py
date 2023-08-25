@@ -41,7 +41,7 @@ d0 = 0.15
 d0 = 0.25
 
 figsize = dict(
-        alp            = (14,16),
+        alp            = (25,30),
         GrandesRousses = (15,7),
         HauteSavoie    = (12,12),
         HautesAlpes    = (24,15),
@@ -629,8 +629,8 @@ if __name__ == "__main__":
             plot_scatter(real_field, perturbed_field, f"Initial_perturbations_scatterplot.pdf")
             plot_scatter(real_field, dyn, f"dynamic_correction_ld{ld}_scatterplot.pdf")
             plot_scatter(real_field, db, f"debiasing_scatterplot.pdf")
-            plot_scatter(real_field, smooth5, f"smooth5_scatterplot.pdf")
-            plot_scatter(real_field, smooth10, f"smooth10_scatterplot.pdf")
+            #plot_scatter(real_field, smooth5, f"smooth5_scatterplot.pdf")
+            #plot_scatter(real_field, smooth10, f"smooth10_scatterplot.pdf")
             plot_scatter(real_field, smooth15, f"smooth15_scatterplot.pdf")
             plot_scatter(real_field, dd, f"debiasing+dynamic_correction_ld{ld}_scatterplot.pdf")
             plot_scatter(np.abs(dd-real_field), sd, f"error_scatterplot.pdf")
@@ -648,8 +648,8 @@ if __name__ == "__main__":
             plot_field(perturbed_field, f'fake_antilope_field.pdf', vmin=0, vmax=vmax)
             plot_field(dyn, f'dynamic_correction_ld{ld}.pdf', vmin=0, vmax=vmax)
             plot_field(db, f'debiasing.pdf', vmin=0, vmax=vmax)
-            plot_field(smooth5, f'Smoothed5_debiased_field.pdf', vmin=0, vmax=vmax)
-            plot_field(smooth10, f'Smoothed10_debiased_field.pdf', vmin=0, vmax=vmax)
+            #plot_field(smooth5, f'Smoothed5_debiased_field.pdf', vmin=0, vmax=vmax)
+            #plot_field(smooth10, f'Smoothed10_debiased_field.pdf', vmin=0, vmax=vmax)
             plot_field(smooth15, f'Smoothed15_debiased_field.pdf', vmin=0, vmax=vmax)
             plot_field(dd, f'debiasing+dynamic_correction_ld{ld}.pdf', vmin=0, vmax=vmax)
             #plot_field(qq, f'dynamic_correction_ld{ld}+debiasing.pdf', vmin=0, vmax=30)
