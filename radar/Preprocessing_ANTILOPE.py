@@ -54,7 +54,7 @@ ld = 0.05
 max_dist = ld*3
 
 
-def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False):
+def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False, qq_adjustment=False):
     """
     * field          : 2D (n*k) array containing the field to modify
     * pond           : (nk*nk) sparse ponderation matrix (each line gives the correlation between the corresponding pixel
@@ -98,25 +98,30 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
     #newfield = (initial_field * pixel_weight + mean * meanweight/(meanweight+pixel_weight)) / (pixel_weight + meanweight/(meanweight+pixel_weight))
     newfield = np.round(newfield, 1)
 
-    # Try to match extreme values with original field (quantile-quantile like method)
-    # The goal is to bring the field distribution closer to the debiased one
-    # Le but est de rapprocher la pente de la régression linéaire du champs corrigé vs le champs initial de 1
-    # WARNINGs : 
-    # 1. cette méthode débiaise le champs corrigé --> utiliser une loi normale pour les perturbations
-    # 2. le champs produit n'est plus aussi lisse
-    rmax = np.max(initial_field)/np.max(newfield)
-    rmin = np.min(initial_field)/np.min(newfield)
-    #a = (rmax-rmin)/(np.max(newfield)-np.min(newfield))
-    #b = rmin-a*np.min(newfield)
-    #ratio = rmax/(np.max(newfield)-np.min(newfield))  # --> can lean to large errors !
-    #ratio = a*newfield/(np.max(newfield)-np.min(newfield))+b  # --> can lean to large errors !
-    #ratio[np.isnan(ratio)] = 0
-    ratio = (rmax-rmin)/(np.max(newfield)-np.min(newfield))
-    if np.isnan(ratio): ratio=0
-    #print('Ratio=',ratio)
-    newfield = newfield*(1+ratio)
-    sd2 = sd2 * (1+ratio)  # Increase spread !
-    # Increase error consistently
+    if qq_adjustment:
+        # Try to match extreme values with original field (quantile-quantile like method)
+        # The goal is to bring the field distribution closer to the debiased one
+        # Le but est de rapprocher la pente de la régression linéaire du champs corrigé vs le champs initial de 1
+        # WARNINGs :
+        # 1. cette méthode débiaise le champs corrigé --> utiliser une loi normale pour les perturbations ?
+        # 2. le champs produit n'est plus aussi lisse
+
+        rmax = np.max(initial_field)/np.max(newfield)
+        rmin = np.mean(initial_field)/np.mean(newfield)  # Pour éviter le cas ou lin min initial est 0 et le nouveau min est >0
+        if (np.mean(initial_field) == 0) or (np.mean(newfield)):
+            rmin = 1
+        slope = (rmax-rmin)/(np.max(newfield)-np.mean(newfield))
+        if np.max(newfield) == np.mean(newfield) : slope = 1
+        intersect = rmin - slope * np.mean(newfield)
+        newfield = newfield * ( 1 + slope ) + intersect
+        sd2 = sd2 * (1+slope)  # Increase spread !
+
+        # Seems good, does not work :
+        slope = (np.max(initial_field)-np.min(initial_field))/(np.max(newfield)-np.min(newfield))  # Slope of the regression to match min and max values
+        if np.max(newfield) == np.min(newfield) : slope = 1
+        intersect = np.min(initial_field) - slope * np.min(newfield)
+        newfield = slope*newfield+intersect  # --> can lean to large errors !
+        sd2 = sd2 * slope
 
     # TODO : there is still a probleme for low precipitation fields (artefacts)
 

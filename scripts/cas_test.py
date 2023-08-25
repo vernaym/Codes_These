@@ -356,15 +356,16 @@ def plot_scatter(reference, model, savename):
     fig.savefig(os.path.join(savedir, savename), format='pdf')
     plt.close(fig)
 
-def ensemble_evaluation(observation, rawfield, smoothfield, correctedfield, ensemble, smoothfield5=None, smoothfield10=None):
+def ensemble_evaluation(observation, rawfield, smoothfield, correctedfield, dynamiccorrection, ensemble, smoothfield5=None, smoothfield10=None):
 
     obse = observation.stack(points=["date", "lat", "lon"]).data
     ens = ensemble.stack(points=["date", "lat", "lon"]).transpose().data
     rw = rawfield.stack(points=["date", "lat", "lon"]).data
     sm = smoothfield.stack(points=["date", "lat", "lon"]).data
+    dy = dynamiccorrection.stack(points=["date", "lat", "lon"]).data
     cr = correctedfield.stack(points=["date", "lat", "lon"]).data
 
-    labels = dict(ens='Analysis ensemble', rw='Raw ANTILOPE', sm="Smoothed debiased ANTILOPE field", cr="Dynamic correction method")
+    labels = dict(ens='Analysis ensemble', rw='Raw ANTILOPE', sm="Smoothed debiased ANTILOPE field", dy="Dynamic correction method alone", cr="Dynamic correction method with quantile-quantile adjustment")
 
     if smoothfield5 is not None:
         sm5 = smoothfield5.stack(points=["date", "lat", "lon"]).data
@@ -373,7 +374,7 @@ def ensemble_evaluation(observation, rawfield, smoothfield, correctedfield, ense
 
     # 1. Brier score over all dates and pixels for different thresholds
     #brier = dict(ens=list(), rw = list(), sm=list(), cr=list(), sm5=list(), sm10=list())
-    brier = dict(ens=list(), rw = list(), sm=list(), cr=list())
+    brier = dict(ens=list(), rw = list(), sm=list(), cr=list(), dy=list())
     if smoothfield5 is not None:
         brier['sm5'] = list()
     if smoothfield10 is not None:
@@ -382,6 +383,7 @@ def ensemble_evaluation(observation, rawfield, smoothfield, correctedfield, ense
     for threshold in thresholds:
         brier['rw'].append(scores.brier(rw, obse, threshold=threshold))
         brier['sm'].append(scores.brier(sm, obse, threshold=threshold))
+        brier['dy'].append(scores.brier(dy, obse, threshold=threshold))
         brier['cr'].append(scores.brier(cr, obse, threshold=threshold))
         brier['ens'].append(scores.brier(ens, obse, threshold=threshold))
         if smoothfield5 is not None:
@@ -398,7 +400,8 @@ def ensemble_evaluation(observation, rawfield, smoothfield, correctedfield, ense
     plt.tight_layout()
     ax.set_xlabel('Threshold (mm)')
     ax.set_ylabel('Brier score')
-    ax.legend(fontsize=14)
+    ax.legend(fontsize=8)
+    plt.tight_layout()
     fig.savefig(os.path.join(savedir, "Brier.pdf"), format='pdf')
     plt.close(fig)
 
@@ -415,10 +418,10 @@ def ensemble_evaluation(observation, rawfield, smoothfield, correctedfield, ense
 #        ax.plot(range(1, 51), 1 - np.array(brier['sm10'])/np.array(brier['rw']), label='smooth')
     ax.axhline(0, color='k')
     ax.legend()
-    plt.tight_layout()
     ax.set_xlabel('Threshold (mm)')
     ax.set_ylabel('Brier Skill Score')
-    ax.legend(fontsize=14)
+    ax.legend(fontsize=8)
+    plt.tight_layout()
     fig.savefig(os.path.join(savedir, "Brier_Skill_Score.pdf"), format='pdf')
     plt.close(fig)
 
@@ -427,14 +430,15 @@ def ensemble_evaluation(observation, rawfield, smoothfield, correctedfield, ense
     crps1 = crps1.reshape(Ndates, nlat, nlon)
     crps2 = scores.CRPS(rw, obse)
     crps2 = crps2.reshape(Ndates, nlat, nlon)
-    crps3 = scores.CRPS(sm, obse)
+    #crps3 = scores.CRPS(sm, obse)
+    crps3 = scores.CRPS(dy, obse)
     crps3 = crps3.reshape(Ndates, nlat, nlon)
     crps4 = scores.CRPS(cr, obse)
     crps4 = crps4.reshape(Ndates, nlat, nlon)
     vmax = max(np.max(np.mean(crps1, axis=0)), np.max(np.mean(crps3, axis=0)), np.max(np.mean(crps4, axis=0)))
     plot_field(np.mean(crps1, axis=0), f'CRPS_ensemble.pdf', label='CRPS (mm)', cmap=plt.cm.Reds, vmin=0, vmax=vmax)
     plot_field(np.mean(crps2, axis=0), f'CRPS_raw.pdf', label='CRPS (mm)', cmap=plt.cm.Reds, vmin=0, vmax=vmax)
-    plot_field(np.mean(crps3, axis=0), f'CRPS_smooth.pdf', label='CRPS (mm)', cmap=plt.cm.Reds, vmin=0, vmax=vmax)
+    plot_field(np.mean(crps3, axis=0), f'CRPS_dyn.pdf', label='CRPS (mm)', cmap=plt.cm.Reds, vmin=0, vmax=vmax)
     plot_field(np.mean(crps4, axis=0), f'CRPS_correction.pdf', label='CRPS (mm)', cmap=plt.cm.Reds, vmin=0, vmax=vmax)
 
     # 3. Spread-skill relationship
@@ -456,28 +460,32 @@ def ensemble_evaluation(observation, rawfield, smoothfield, correctedfield, ense
     # TODO : faire varier le threshold
     freq_error_raw = list()
     freq_error_smooth = list()
+    freq_error_dyn = list()
     freq_error_correction = list()
     for threshold in np.arange(0.1, 0.61, 0.1):
         freq_error_raw.append(scores.error_frequency(rw, obse, threshold=threshold))
         #print('Raw error >20% frequency : ', freq_error_raw)
         freq_error_smooth.append(scores.error_frequency(sm, obse, treshold=threshold))
         #print('Smooth error >20% frequency : ', freq_error_smooth)
+        freq_error_dyn.append(scores.error_frequency(dy, obse, treshold=threshold))
         freq_error_correction.append(scores.error_frequency(cr, obse, treshold=threshold))
         #print('Correction error >20% frequency : ', freq_error_correction)
     freq_error_ensemble = scores.error_frequency(ens, obse)
     fig, ax = plt.subplots()
     ax.plot(np.arange(10, 61, 10), np.array(freq_error_raw), label=labels['rw'])
     ax.plot(np.arange(10, 61, 10), np.array(freq_error_smooth), label=labels['sm'])
+    ax.plot(np.arange(10, 61, 10), np.array(freq_error_dyn), label=labels['dy'])
     ax.plot(np.arange(10, 61, 10), np.array(freq_error_correction), label=labels['cr'])
     ax.set_xlabel('Error threshold (%)')
     ax.set_ylabel('Frequency of error > threshold or observation outside ensemble (%)')
     ax.axhline(freq_error_ensemble, color='k', label=labels['ens'])
-    ax.legend(fontsize=14)
+    ax.legend(fontsize=8)
     #print('Obs outside analysis ensemble frequency : ', freq_error_ensemble)
     #ax2 = ax.twinx()
     #ax2.axhline(freq_error_ensemble, color='k')
     #ax2.set_ylim(ax.get_ylim())
     #ax2.set_ylabel("Frequency of observation outside the ensemble")
+    plt.tight_layout()
     fig.savefig(os.path.join(savedir, "error_frequency.pdf"), format='pdf')
     plt.close(fig)
 
@@ -489,11 +497,13 @@ def ensemble_evaluation(observation, rawfield, smoothfield, correctedfield, ense
         scores.ROC(sm5, obse, 'smooth5', ax)
     if smoothfield10 is not None:
         scores.ROC(sm10, obse, 'smooth10', ax)
+    scores.ROC(dy, obse, 'dynamic', ax)
     scores.ROC(cr, obse, 'correction', ax)
     scores.ROC(ens, obse, 'analysis', ax)
     ax.set_xlabel('False alarm rate')
     ax.set_ylabel('Sucess rate')
-    ax.legend(fontsize=14)
+    ax.legend(fontsize=8)
+    plt.tight_layout()
     fig.savefig(os.path.join(savedir, "ROC.pdf"), format='pdf')
     plt.close(fig)
 
@@ -538,6 +548,7 @@ if __name__ == "__main__":
     slp = dict(raw=list(), debiasing=list(), smoothing5=list(), smoothing10=list(), smoothing15=list(), dyn=list(), full=list())
     estimated_error = list()
     real_error      = list()
+    real_error_dyn  = list()
     smooth_error    = list()
 
     if plot: Ndates = 1
@@ -549,6 +560,7 @@ if __name__ == "__main__":
     smo10 = xr.DataArray(dims=["date", "lat", "lon"], coords={'lon':real_ratio.lon, 'lat':real_ratio.lat, 'date':range(Ndates)})
     smo15 = xr.DataArray(dims=["date", "lat", "lon"], coords={'lon':real_ratio.lon, 'lat':real_ratio.lat, 'date':range(Ndates)})
     cor = xr.DataArray(dims=["date", "lat", "lon"], coords={'lon':real_ratio.lon, 'lat':real_ratio.lat, 'date':range(Ndates)})
+    cor2 = xr.DataArray(dims=["date", "lat", "lon"], coords={'lon':real_ratio.lon, 'lat':real_ratio.lat, 'date':range(Ndates)})
     analysis = xr.DataArray(dims=["date", "member", "lat", "lon"], coords={'lon':real_ratio.lon, 'lat':real_ratio.lat, 'date':range(Ndates), 'member':range(16)})
     for date in range(Ndates):
     #for date in range(2):
@@ -576,18 +588,22 @@ if __name__ == "__main__":
         smo15.data[date] = smooth15
         smootherr = db - smooth15
 
-        # Dynamic correction only
-        dyn, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(perturbed_field, pond)
+        # De-biasing + Dynamic correction only
+        dyn, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(db, pond)
         dyn = dyn.reshape((nlat, nlon))
+        cor2.data[date] = dyn
+        sd1 = sd.reshape((nlat, nlon))
         #plot_field(np.sqrt(sd.reshape((nlat, nlon))), f'dynamic_error_without_debiasing.pdf', label='Error (mm)', cmap=plt.cm.Reds)
 
-        # De-biasing + Dynamic correction
-        dd, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(db, pond)
+        # De-biasing + Dynamic correction + qq adjustment
+        dd, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(db, pond, qq_adjustment=True)
         dd = dd.reshape((nlat, nlon))
         cor.data[date] = dd
-        sd = sd.reshape((nlat, nlon))
+        sd2 = sd.reshape((nlat, nlon))
+        sd = sd2  # TODO : confirmer ce choix
         #sd = np.sqrt(sd*dd)  # Overdispersion !
         #plot_field(np.sqrt(sd), f'dynamic_error_with_debiasing.pdf', label='Error (mm)', cmap=plt.cm.Reds)
+
 
         vmax = max(np.max(real_field), np.max(perturbed_field), np.max(dyn), np.max(dd))*1.1
 
@@ -670,10 +686,12 @@ if __name__ == "__main__":
             #plot_field(qq, f'dynamic_correction_ld{ld}+debiasing.pdf', vmin=0, vmax=30)
 
             # Plot errors
-            vmax = max(np.max(np.abs(dd.data-real_field.data)), np.max(sd), np.max(smootherr))
+            vmax = max(np.max(np.abs(dd.data-real_field.data)), np.max(sd1), np.max(sd2), np.max(smootherr))
             plot_field(smootherr, f'Estimated_error_smooth.pdf', label='Error (mm)', cmap=plt.cm.Reds, vmin=0, vmax=vmax)
-            plot_field(sd, f'Estimated_error_full.pdf', label='Error (mm)', cmap=plt.cm.Reds, vmin=0, vmax=vmax)
+            plot_field(sd1, f'Estimated_error_dyn.pdf', label='Error (mm)', cmap=plt.cm.Reds, vmin=0, vmax=vmax)
+            plot_field(sd2, f'Estimated_error_full.pdf', label='Error (mm)', cmap=plt.cm.Reds, vmin=0, vmax=vmax)
             plot_field(dd-real_field, f'diff_full_correction-real_field.pdf', cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=-vmax, vmax=vmax)
+            plot_field(np.abs(dyn-real_field), f'real_error_dynamic_correction.pdf', cmap='Reds', vmin=0, vmax=vmax)
             plot_field(np.abs(dd-real_field), f'real_error_full_correction.pdf', cmap='Reds', vmin=0, vmax=vmax)
             vmax = np.nanmax(np.abs(dd.data/real_field.data)-1)
             #plot_field(dd/real_field, f'ratio_full_correction-real_field.pdf', cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=1-vmax, vmax=1+vmax)
@@ -687,6 +705,7 @@ if __name__ == "__main__":
 
             estimated_error.append(sd)
             real_error.append(np.abs(dd-real_field))
+            real_error_dyn.append(np.abs(dyn-real_field))
             smooth_error.append(smootherr)
             a,b,c,d = compare(real_field, perturbed_field)
             r2['raw'].append(a)
@@ -726,7 +745,7 @@ if __name__ == "__main__":
 
     if not plot:
         #ensemble_evaluation(obs, raw, smo15, cor, analysis, smo5, smo10)
-        ensemble_evaluation(obs, raw, smo15, cor, analysis)
+        ensemble_evaluation(obs, raw, smo15, cor, cor2, analysis)
 
         #bias = dict(raw=list(), debiasing=list(), smoothing5=list(), smoothing10=list(), smoothing15=list(), dyn=list(), full=list())
         #rmse = dict(raw=list(), debiasing=list(), smoothing=list(), smoothing10=list(), smoothing15=list(), dyn=list(), full=list())
