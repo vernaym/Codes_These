@@ -347,28 +347,56 @@ def plot_scatter(reference, model, savename):
     fig.savefig(os.path.join(savedir, savename), format='pdf')
     plt.close(fig)
 
-def ensemble_evaluation(observation, rawfield, smoothfield, correctedfield, ensemble):
+def ensemble_evaluation(observation, rawfield, smoothfield, correctedfield, ensemble, smoothfield5=None, smoothfield10=None):
 
     obse = observation.stack(points=["date", "lat", "lon"]).data
     ens = ensemble.stack(points=["date", "lat", "lon"]).transpose().data
     rw = rawfield.stack(points=["date", "lat", "lon"]).data
     sm = smoothfield.stack(points=["date", "lat", "lon"]).data
     cr = correctedfield.stack(points=["date", "lat", "lon"]).data
+    if smoothfield5 is not None:
+        sm5 = smoothfield5.stack(points=["date", "lat", "lon"]).data
+    if smoothfield10 is not None:
+        sm10 = smoothfield10.stack(points=["date", "lat", "lon"]).data
 
     # 1. Brier score over all dates and pixels for different thresholds
-    brier = dict(ens=list(), rw = list(), sm=list(), cr=list())
+    brier = dict(ens=list(), rw = list(), sm=list(), cr=list(), sm5=list(), sm10=list())
     for threshold in range(1, 51):
         brier['rw'].append(scores.brier(rw, obse, threshold=threshold))
         brier['sm'].append(scores.brier(sm, obse, threshold=threshold))
         brier['cr'].append(scores.brier(cr, obse, threshold=threshold))
         brier['ens'].append(scores.brier(ens, obse, threshold=threshold))
+        if smoothfield5 is not None:
+            brier['sm5'].append(scores.brier(sm5, obse, threshold=threshold))
+        if smoothfield10 is not None:
+            brier['sm10'].append(scores.brier(sm10, obse, threshold=threshold))
+
 
     fig, ax = plt.subplots()
     for key, value in brier.items():
-        ax.plot(range(1, 51), value, label=key)
+        if len(value) > 0:
+            ax.plot(range(1, 51), value, label=key)
     ax.legend()
     plt.tight_layout()
+    ax.set_xlabel('Threshold (mm)')
+    ax.set_ylabel('Brier score')
     fig.savefig(os.path.join(savedir, "Brier.pdf"), format='pdf')
+    plt.close(fig)
+
+    fig, ax = plt.subplots()
+    ax.plot(range(1, 51), 1 - np.array(brier['sm'])/np.array(brier['rw']), label='smooth')
+    ax.plot(range(1, 51), 1 - np.array(brier['cr'])/np.array(brier['rw']), label='correction')
+    ax.plot(range(1, 51), 1 - np.array(brier['ens'])/np.array(brier['rw']), label='ensemble')
+    if smoothfield5 is not None:
+        ax.plot(range(1, 51), 1 - np.array(brier['sm5'])/np.array(brier['rw']), label='smooth')
+    if smoothfield10 is not None:
+        ax.plot(range(1, 51), 1 - np.array(brier['sm10'])/np.array(brier['rw']), label='smooth')
+    ax.axhline(0, color='k')
+    ax.legend()
+    plt.tight_layout()
+    ax.set_xlabel('Threshold (mm)')
+    ax.set_ylabel('Brier Skill Score')
+    fig.savefig(os.path.join(savedir, "Brier_Skill_Score.pdf"), format='pdf')
     plt.close(fig)
 
     # 2. CRPS
@@ -432,13 +460,23 @@ def ensemble_evaluation(observation, rawfield, smoothfield, correctedfield, ense
     # 6. ROC
     fig, ax = plt.subplots()
     scores.ROC(rw, obse, 'raw', ax)
-    scores.ROC(sm, obse, 'smooth', ax)
+    scores.ROC(sm, obse, 'smooth15', ax)
+    if smoothfield5 is not None:
+        scores.ROC(sm5, obse, 'smooth5', ax)
+    if smoothfield10 is not None:
+        scores.ROC(sm10, obse, 'smooth10', ax)
     scores.ROC(cr, obse, 'correction', ax)
     scores.ROC(ens, obse, 'analysis', ax)
     ax.set_xlabel('False alarm rate')
     ax.set_ylabel('Sucess rate')
     ax.legend(fontsize=14)
     fig.savefig(os.path.join(savedir, "ROC.pdf"), format='pdf')
+    plt.close(fig)
+
+    # 7. Reliability diagram
+    fig, ax = plt.subplots()
+    scores.reliability_diagram(ens, obse, 'Analysis', ax, threshold=10)
+    fig.savefig(os.path.join(savedir, "Reliability_diagram.pdf"), format='pdf')
     plt.close(fig)
 
 
@@ -469,10 +507,11 @@ if __name__ == "__main__":
     nlon = len(real_ratio.lon)
     nlat = len(real_ratio.lat)
 
-    r2 = dict(raw=list(), debiasing=list(), smoothing=list(), dyn=list(), full=list())
-    err = dict(raw=list(), debiasing=list(), smoothing=list(), dyn=list(), full=list())
-    rat = dict(raw=list(), debiasing=list(), smoothing=list(), dyn=list(), full=list())
-    slp = dict(raw=list(), debiasing=list(), smoothing=list(), dyn=list(), full=list())
+    #r2 = dict(raw=list(), debiasing=list(), smoothing5=list(), smoothing10=list(), smoothing15=list(), dyn=list(), full=list())
+    r2 = dict(raw=list(), debiasing=list(), smoothing15=list(), dyn=list(), full=list())
+    err = dict(raw=list(), debiasing=list(), smoothing5=list(), smoothing10=list(), smoothing15=list(), dyn=list(), full=list())
+    rat = dict(raw=list(), debiasing=list(), smoothing5=list(), smoothing10=list(), smoothing15=list(), dyn=list(), full=list())
+    slp = dict(raw=list(), debiasing=list(), smoothing5=list(), smoothing10=list(), smoothing15=list(), dyn=list(), full=list())
     estimated_error = list()
     real_error      = list()
     smooth_error    = list()
@@ -482,7 +521,9 @@ if __name__ == "__main__":
     #else : Ndates=2
     obs = xr.DataArray(dims=["date", "lat", "lon"], coords={'lon':real_ratio.lon, 'lat':real_ratio.lat, 'date':range(Ndates)})
     raw = xr.DataArray(dims=["date", "lat", "lon"], coords={'lon':real_ratio.lon, 'lat':real_ratio.lat, 'date':range(Ndates)})
-    smo = xr.DataArray(dims=["date", "lat", "lon"], coords={'lon':real_ratio.lon, 'lat':real_ratio.lat, 'date':range(Ndates)})
+    smo5 = xr.DataArray(dims=["date", "lat", "lon"], coords={'lon':real_ratio.lon, 'lat':real_ratio.lat, 'date':range(Ndates)})
+    smo10 = xr.DataArray(dims=["date", "lat", "lon"], coords={'lon':real_ratio.lon, 'lat':real_ratio.lat, 'date':range(Ndates)})
+    smo15 = xr.DataArray(dims=["date", "lat", "lon"], coords={'lon':real_ratio.lon, 'lat':real_ratio.lat, 'date':range(Ndates)})
     cor = xr.DataArray(dims=["date", "lat", "lon"], coords={'lon':real_ratio.lon, 'lat':real_ratio.lat, 'date':range(Ndates)})
     analysis = xr.DataArray(dims=["date", "member", "lat", "lon"], coords={'lon':real_ratio.lon, 'lat':real_ratio.lat, 'date':range(Ndates), 'member':range(16)})
     for date in range(Ndates):
@@ -503,9 +544,13 @@ if __name__ == "__main__":
 
         # De-biasing only
         db = perturbed_field / estimated_ratio.data
-        smooth = uniform_filter(db, size=15)
-        smo.data[date] = smooth
-        smootherr = db - smooth
+        #smooth5 = uniform_filter(db, size=5)
+        #smooth10 = uniform_filter(db, size=10)
+        smooth15 = uniform_filter(db, size=15)
+        #smo5.data[date] = smooth5
+        #smo10.data[date] = smooth10
+        smo15.data[date] = smooth15
+        smootherr = db - smooth15
 
         # Dynamic correction only
         dyn, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(perturbed_field, pond)
@@ -575,7 +620,9 @@ if __name__ == "__main__":
             plot_scatter(real_field, perturbed_field, f"Initial_perturbations_scatterplot.pdf")
             plot_scatter(real_field, dyn, f"dynamic_correction_ld{ld}_scatterplot.pdf")
             plot_scatter(real_field, db, f"debiasing_scatterplot.pdf")
-            plot_scatter(real_field, smooth, f"smooth_scatterplot.pdf")
+            plot_scatter(real_field, smooth5, f"smooth5_scatterplot.pdf")
+            plot_scatter(real_field, smooth10, f"smooth10_scatterplot.pdf")
+            plot_scatter(real_field, smooth15, f"smooth15_scatterplot.pdf")
             plot_scatter(real_field, dd, f"debiasing+dynamic_correction_ld{ld}_scatterplot.pdf")
             plot_scatter(np.abs(dd-real_field), sd, f"error_scatterplot.pdf")
 
@@ -592,7 +639,9 @@ if __name__ == "__main__":
             plot_field(perturbed_field, f'fake_antilope_field.pdf', vmin=0, vmax=vmax)
             plot_field(dyn, f'dynamic_correction_ld{ld}.pdf', vmin=0, vmax=vmax)
             plot_field(db, f'debiasing.pdf', vmin=0, vmax=vmax)
-            plot_field(smooth, f'Smoothed_debiased_field.pdf', vmin=0, vmax=vmax)
+            plot_field(smooth5, f'Smoothed5_debiased_field.pdf', vmin=0, vmax=vmax)
+            plot_field(smooth10, f'Smoothed10_debiased_field.pdf', vmin=0, vmax=vmax)
+            plot_field(smooth15, f'Smoothed15_debiased_field.pdf', vmin=0, vmax=vmax)
             plot_field(dd, f'debiasing+dynamic_correction_ld{ld}.pdf', vmin=0, vmax=vmax)
             #plot_field(qq, f'dynamic_correction_ld{ld}+debiasing.pdf', vmin=0, vmax=30)
 
@@ -625,11 +674,21 @@ if __name__ == "__main__":
             err['debiasing'].append(b)
             rat['debiasing'].append(c)
             slp['debiasing'].append(d)
-            a,b,c,d = compare(real_field, smooth)
-            r2['smoothing'].append(a)
-            err['smoothing'].append(b)
-            rat['smoothing'].append(c)
-            slp['smoothing'].append(d)
+#            a,b,c,d = compare(real_field, smooth5)
+#            r2['smoothing5'].append(a)
+#            err['smoothing5'].append(b)
+#            rat['smoothing5'].append(c)
+#            slp['smoothing5'].append(d)
+#            a,b,c,d = compare(real_field, smooth10)
+#            r2['smoothing10'].append(a)
+#            err['smoothing10'].append(b)
+#            rat['smoothing10'].append(c)
+#            slp['smoothing10'].append(d)
+            a,b,c,d = compare(real_field, smooth15)
+            r2['smoothing15'].append(a)
+            err['smoothing15'].append(b)
+            rat['smoothing15'].append(c)
+            slp['smoothing15'].append(d)
             a,b,c,d = compare(real_field, dyn)
             r2['dyn'].append(a)
             err['dyn'].append(b)
@@ -642,11 +701,15 @@ if __name__ == "__main__":
             slp['full'].append(d)
 
     if not plot:
-        ensemble_evaluation(obs, raw, smo, cor, analysis)
+        #ensemble_evaluation(obs, raw, smo15, cor, analysis, smo5, smo10)
+        ensemble_evaluation(obs, raw, smo15, cor, analysis)
 
-        bias = dict(raw=list(), debiasing=list(), smoothing=list(), dyn=list(), full=list())
-        rmse = dict(raw=list(), debiasing=list(), smoothing=list(), dyn=list(), full=list())
-        ratio  = dict(raw=list(), debiasing=list(), smoothing=list(), dyn=list(), full=list())
+        #bias = dict(raw=list(), debiasing=list(), smoothing5=list(), smoothing10=list(), smoothing15=list(), dyn=list(), full=list())
+        #rmse = dict(raw=list(), debiasing=list(), smoothing=list(), smoothing10=list(), smoothing15=list(), dyn=list(), full=list())
+        #ratio  = dict(raw=list(), debiasing=list(), smoothing=list(), smoothing10=list(), smoothing15=list(), dyn=list(), full=list())
+        bias = dict(raw=list(), debiasing=list(), smoothing15=list(), dyn=list(), full=list())
+        rmse = dict(raw=list(), debiasing=list(), smoothing15=list(), dyn=list(), full=list())
+        ratio  = dict(raw=list(), debiasing=list(), smoothing15=list(), dyn=list(), full=list())
         for product in r2.keys():
             bias[product] = np.nanmean(np.array(err[product]), axis=0)
             rmse[product] = np.sqrt(np.nanmean(np.array(err[product])**2, axis=0))

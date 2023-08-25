@@ -215,16 +215,17 @@ def rank_histogram(ensemble, obs, ax, *args):
     #ax.hist(ranks, bins=range(np.shape(ensemble)[0]))
     ax.hist(ranks, bins=np.linspace(0.5, combined.shape[0]+0.5, combined.shape[0]+1))
 
-def reliability_diagram(simu, obs, product, ax, Ne=16):
+def reliability_diagram(simu, obs, product, ax, Ne=16, threshold=10):
     ndays = len(obs)
     simu = simu[~np.isnan(obs)]
     obs = obs[~np.isnan(obs)]
     proba, catsize, freq_occ, global_freq_occ = probability_classes(simu, obs, Ne=Ne)
     # TODO : taille du marker proportionelle au nombre de prevision dans une categorie
     ax.plot(proba, freq_occ, marker=None, linestyle='-', label=f'{product}')
-    ax.scatter(proba, freq_occ, catsize)
+    ax.scatter(proba, freq_occ, catsize/np.mean(catsize))
+    ax1.plot([0,1], [0,1], linestyle=':', color='k')
 
-def probability_classes(simu, obs, treshold=10, Ne=16, nb_cat=17):
+def probability_classes(simu, obs, threshold=10, Ne=16, nb_cat=17):
 
     # TODO : la décomposition du score de Brier devrait donner le même résultat
     # que le calcul direct (BS=BSfiab-BSres+BSunc), mais ce n'est pas le cas...
