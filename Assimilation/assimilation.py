@@ -511,12 +511,13 @@ def read_obs(args):
         #antilope = antilope.where((antilope.lon>=lonmin) & (antilope.lon<=lonmax) & (antilope.lat>=latmin) & (antilope.lat<=latmax), drop=True)
         # Pour une assimilation quotidienne, sommer les cumuls horaires
         if args.frequency == 'daily' and  'ANTILOPEH' in filename:
-            # Convert hourly precipitation into 24h precipitation between 6h J-1 and 6h J
+            # Convert hourly precipitation into 24h precipitation between 6h UTC J-1 and 6h UTC J
             # Problem : the xarray tools to do that allows only accumulations between
-            # 0h and 23h.
-            # solution : shift time serie by 7h, compute 24h accumulations and
+            # 0h and 24h.
+            # solution : shift time serie by 6h, compute 24h accumulations and
             # shift back !
-            antilope['time'] = antilope.time-np.timedelta64(7, 'h')
+            #antilope['time'] = antilope.time-np.timedelta64(7, 'h')
+            antilope['time'] = antilope.time-np.timedelta64(6, 'h')
             antilope = antilope.resample(time='D').sum(dim='time')  # !!! VERY SLOW !!!
             antilope['time'] = antilope.time+np.timedelta64(30, 'h')
     else:
