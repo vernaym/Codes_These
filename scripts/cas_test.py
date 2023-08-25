@@ -363,6 +363,9 @@ def ensemble_evaluation(observation, rawfield, smoothfield, correctedfield, ense
     rw = rawfield.stack(points=["date", "lat", "lon"]).data
     sm = smoothfield.stack(points=["date", "lat", "lon"]).data
     cr = correctedfield.stack(points=["date", "lat", "lon"]).data
+
+    labels = dict(ens='Analysis ensemble', rw='Raw ANTILOPE', sm="Smoothed debiased ANTILOPE field", cr="Dynamic correction method")
+
     if smoothfield5 is not None:
         sm5 = smoothfield5.stack(points=["date", "lat", "lon"]).data
     if smoothfield10 is not None:
@@ -390,18 +393,19 @@ def ensemble_evaluation(observation, rawfield, smoothfield, correctedfield, ense
     for key, value in brier.items():
         if len(value) > 0:
             #ax.plot(range(1, 51), value, label=key)
-            ax.semilogx(thresholds, value, label=key)
+            ax.semilogx(thresholds, value, label=labels[key])
     ax.legend()
     plt.tight_layout()
     ax.set_xlabel('Threshold (mm)')
     ax.set_ylabel('Brier score')
+    ax.legend(fontsize=14)
     fig.savefig(os.path.join(savedir, "Brier.pdf"), format='pdf')
     plt.close(fig)
 
     fig, ax = plt.subplots()
     for key, value in brier.items():
         if key != 'rw':
-            ax.semilogx(thresholds, 1 - np.array(brier[key])/np.array(brier['rw']), label=key)
+            ax.semilogx(thresholds, 1 - np.array(brier[key])/np.array(brier['rw']), label=labels[key])
 #    ax.plot(range(1, 51), 1 - np.array(brier['sm'])/np.array(brier['rw']), label='smooth')
 #    ax.plot(range(1, 51), 1 - np.array(brier['cr'])/np.array(brier['rw']), label='correction')
 #    ax.plot(range(1, 51), 1 - np.array(brier['ens'])/np.array(brier['rw']), label='ensemble')
@@ -414,6 +418,7 @@ def ensemble_evaluation(observation, rawfield, smoothfield, correctedfield, ense
     plt.tight_layout()
     ax.set_xlabel('Threshold (mm)')
     ax.set_ylabel('Brier Skill Score')
+    ax.legend(fontsize=14)
     fig.savefig(os.path.join(savedir, "Brier_Skill_Score.pdf"), format='pdf')
     plt.close(fig)
 
@@ -459,19 +464,20 @@ def ensemble_evaluation(observation, rawfield, smoothfield, correctedfield, ense
         #print('Smooth error >20% frequency : ', freq_error_smooth)
         freq_error_correction.append(scores.error_frequency(cr, obse, treshold=threshold))
         #print('Correction error >20% frequency : ', freq_error_correction)
-    fig, ax = plt.subplots()
-    ax.plot(np.arange(10, 61, 10), np.array(freq_error_raw), label='Raw')
-    ax.plot(np.arange(10, 61, 10), np.array(freq_error_smooth), label='Smooth')
-    ax.plot(np.arange(10, 61, 10), np.array(freq_error_correction), label='Correction')
-    ax.set_xlabel('Error threshold (%)')
-    ax.set_ylabel('Frequency of error > threshold (%)')
-    ax.legend(fontsize=14)
     freq_error_ensemble = scores.error_frequency(ens, obse)
+    fig, ax = plt.subplots()
+    ax.plot(np.arange(10, 61, 10), np.array(freq_error_raw), label=labels['rw'])
+    ax.plot(np.arange(10, 61, 10), np.array(freq_error_smooth), label=labels['sm'])
+    ax.plot(np.arange(10, 61, 10), np.array(freq_error_correction), label=labels['cr'])
+    ax.set_xlabel('Error threshold (%)')
+    ax.set_ylabel('Frequency of error > threshold or observation outside ensemble (%)')
+    ax.axhline(freq_error_ensemble, color='k', label=labels['ens'])
+    ax.legend(fontsize=14)
     #print('Obs outside analysis ensemble frequency : ', freq_error_ensemble)
-    ax2 = ax.twinx()
-    ax2.axhline(freq_error_ensemble, color='k')
-    ax2.set_ylim(ax.get_ylim())
-    ax2.set_ylabel("Frequency of observation outside the ensemble")
+    #ax2 = ax.twinx()
+    #ax2.axhline(freq_error_ensemble, color='k')
+    #ax2.set_ylim(ax.get_ylim())
+    #ax2.set_ylabel("Frequency of observation outside the ensemble")
     fig.savefig(os.path.join(savedir, "error_frequency.pdf"), format='pdf')
     plt.close(fig)
 
