@@ -2101,22 +2101,14 @@ class EnsembleKalmanFilter(Assimilation):
                 parameters_loc = parameters.sel({'lat':np.round([nearest_lat], 2), 'lon':np.round([nearest_lon], 2)})
                 self.pond = scipy.sparse.eye(1)
 
-            if self.localisation is None:
-                R, Rstat, Rdyn, ref_field = self.observation_ECM(parameters_loc, date)
-                B = self.background_error_covariance(ensemble_loc)  # Background error covariance matrix
-                Y = parameters_loc.mu.data  # Observation vector. WARNING : Use mu to take debiasing into account !
-            else:
-                R, Rstat, Rdyn, updated_obs = self.observation_ECM_new(parameters_loc, date)
-                B, updated_ensemble = self.background_error_covariance_new(ensemble_loc, updated_obs, R)  # Background error covariance matrix
-                ensemble_loc = updated_ensemble
-                Y = updated_obs.data  # Observation vector. WARNING : Use mu to take debiasing into account !
-                parameters_loc = parameters_loc.update({'obs':updated_obs})
-
+            R, Rstat, Rdyn, updated_obs = self.observation_ECM_new(parameters_loc, date)
+            Y = updated_obs.data  # Observation vector. WARNING : Use mu to take debiasing into account !
+            parameters_loc = parameters_loc.update({'obs':updated_obs})
+            B, updated_ensemble = self.background_error_covariance_new(ensemble_loc, updated_obs, R)  # Background error covariance matrix
+            ensemble_loc = updated_ensemble
 
             # TODO Ajouter une étape de comparaison des distribution d'ébauche et d'obs (augmentation de l'erreur d'ébauche
             # si distribution disjointes : on fait plus confiance à l'obs dans ce cas)
-
-            K = B.dot(np.linalg.inv((B+R).toarray()))
 
             Y = Y.flatten()
 
@@ -2129,7 +2121,16 @@ class EnsembleKalmanFilter(Assimilation):
             for member in ensemble_loc.member.data:
                 raw = ensemble_loc.sel({'member':member}).rr
                 X = raw.data.flatten()  # Ensemble member vector
-                A = X + K.dot(Y-X)
+                Z = spsolve(B+R, Y-X)
+                A = X+B.dot(Z)
+                #A = X + K.dot(Y-X)
+#            Solution to avoid the "B+R" matrix inversion :
+#            1. solve (B+R).Z=Y-X
+#            --> the matrix is already "band diagonal" but could be converted using a
+#            reverse_cuthill_mckee algorithm
+#            --> use "spsolve" method for sparse matrices (solveh_banded for dense
+#            matrices)
+#            2. compute anlaysis as A=X+BZ
 
                 # On peut maintenant extraire les vrais domaines (on a plus besoind e la marge sur les bords)
                 analysis.loc[{'member':member}] = A.reshape((len(raw.lat), len(raw.lon)))
@@ -2143,15 +2144,11 @@ class EnsembleKalmanFilter(Assimilation):
     @speedtest
     def gridded_analysis(self, date, idd, ensemble, parameters, domain):
 
-        if self.localisation is None:
-            #B = self.background_error_covariance(ensemble)  # Background error covariance matrix
-            B, updated_ensemble = self.background_error_covariance_new(ensemble, updated_obs, R)  # Background error covariance matrix
-            R, Rstat, Rdyn, ref_field = self.observation_ECM(parameters, date)
-            Y = parameters.mu.data  # Observation vector. WARNING : Use mu to take debiasing into account !
-        else:
-            R, Rstat, Rdyn, updated_obs = self.observation_ECM_new(parameters, date)
-            Y = updated_obs.data  # Observation vector. WARNING : Use mu to take debiasing into account !
-            B, updated_ensemble = self.background_error_covariance_new(ensemble, updated_obs, R)  # Background error covariance matrix
+        R, Rstat, Rdyn, updated_obs = self.observation_ECM_new(parameters, date)
+        Y = updated_obs.data  # Observation vector. WARNING : Use mu to take debiasing into account !
+        parameters = parameters.update({'obs':updated_obs})
+        B, updated_ensemble = self.background_error_covariance_new(ensemble, updated_obs, R)  # Background error covariance matrix
+        if self.localisation is not None:
             point = np.where(Y==np.nanmax(Y))  # max observation (plot only)
             #point = np.where(Y==np.nanmin(Y))  # min observation (plot only)
             original_ens = ensemble.isel(lat=point[0], lon=point[1]).rr.data.flatten()  # (plot only)
