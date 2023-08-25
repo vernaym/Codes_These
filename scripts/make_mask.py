@@ -807,6 +807,7 @@ def ratio_estimation(field, model=None, moving_window=25):
     tmp = to_xarray(w1/(w0+w1), field, varname='mean_ratio')
     plot_and_save(tmp, "W1", cmap=plt.cm.viridis, scores=scores, vmin=0, vmax=1)
     estimated_ratio = (1*w0 + w1*mean_ratio) / (w0+w1)
+    estimated_ratio[np.isnan(estimated_ratio)] = 1
     #estimated_ratio = (1*w0 + W*mean_ratio) / (w0+W)
     #estimated_ratio = mean_ratio
     #estimated_ratio = (1*w0 + np.sum(weights*ratios, axis=0)) / (w0+W)
