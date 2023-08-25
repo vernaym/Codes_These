@@ -100,7 +100,7 @@ def random_field(nlon, nlat):
 
     field = field * random_ratio
 
-    field = field -3
+    #field = field - 10  # Try to increase the number of non precipitation situations
     field[field<0] = 0
 
     return np.flip(field, axis=0)
@@ -130,7 +130,6 @@ def perturbed_ratio(ratio):
         fact[(fact>0.7) & (fact<1.3)] = 1  # Filter out areas that the method almost certainly identify as bad
 
     increase = np.random.normal(30, scale=20)  # Draw random percentage of increase in bad areas
-    #increase = 30  #  increase error in bad areas of 50%
     #increase = 30  #  increase error in bad areas of 50%
     k = 100 / increase
     fact = fact - (1-fact) / k  # Increase error in bad areas
@@ -374,12 +373,13 @@ def ensemble_evaluation(observation, rawfield, smoothfield, correctedfield, dyna
 
     # 1. Brier score over all dates and pixels for different thresholds
     #brier = dict(ens=list(), rw = list(), sm=list(), cr=list(), sm5=list(), sm10=list())
-    brier = dict(ens=list(), rw = list(), sm=list(), cr=list(), dy=list())
+    brier = dict(rw = list(), sm=list(), dy=list(), cr=list(), ens=list())
     if smoothfield5 is not None:
         brier['sm5'] = list()
     if smoothfield10 is not None:
         brier['sm10'] = list()
-    thresholds = [x/10 for x in range(1,10)] + [x for x in range(1, 51)]
+    #thresholds = [x/10 for x in range(1,10)] + [x for x in range(1, 51)]
+    thresholds = [x for x in range(1, 51)]  # Ignore small precipitation problems for now
     for threshold in thresholds:
         brier['rw'].append(scores.brier(rw, obse, threshold=threshold))
         brier['sm'].append(scores.brier(sm, obse, threshold=threshold))
@@ -394,10 +394,11 @@ def ensemble_evaluation(observation, rawfield, smoothfield, correctedfield, dyna
     fig, ax = plt.subplots()
     for key, value in brier.items():
         if len(value) > 0:
-            #ax.plot(range(1, 51), value, label=key)
-            ax.semilogx(thresholds, value, label=labels[key])
+            ax.plot(thresholds, value, label=labels[key])
+            #ax.semilogx(thresholds, value, label=labels[key])  # Ignore small precipitation problems for now
     ax.legend()
     plt.tight_layout()
+    ax.set_ylim(bottom=0, top=0.25)
     ax.set_xlabel('Threshold (mm)')
     ax.set_ylabel('Brier score')
     ax.legend(fontsize=8)
@@ -406,9 +407,11 @@ def ensemble_evaluation(observation, rawfield, smoothfield, correctedfield, dyna
     plt.close(fig)
 
     fig, ax = plt.subplots()
+    next(ax._get_lines.prop_cycler)['color']  # Drop first color corresponding to raw product not show on the BSS
     for key, value in brier.items():
         if key != 'rw':
-            ax.semilogx(thresholds, 1 - np.array(brier[key])/np.array(brier['rw']), label=labels[key])
+            ax.plot(thresholds, 1 - np.array(brier[key])/np.array(brier['rw']), label=labels[key])
+            #ax.semilogx(thresholds, 1 - np.array(brier[key])/np.array(brier['rw']), label=labels[key])  # Ignore small precipitation problems for now
 #    ax.plot(range(1, 51), 1 - np.array(brier['sm'])/np.array(brier['rw']), label='smooth')
 #    ax.plot(range(1, 51), 1 - np.array(brier['cr'])/np.array(brier['rw']), label='correction')
 #    ax.plot(range(1, 51), 1 - np.array(brier['ens'])/np.array(brier['rw']), label='ensemble')
@@ -418,6 +421,7 @@ def ensemble_evaluation(observation, rawfield, smoothfield, correctedfield, dyna
 #        ax.plot(range(1, 51), 1 - np.array(brier['sm10'])/np.array(brier['rw']), label='smooth')
     ax.axhline(0, color='k')
     ax.legend()
+    ax.set_ylim(bottom=-1, top=1)
     ax.set_xlabel('Threshold (mm)')
     ax.set_ylabel('Brier Skill Score')
     ax.legend(fontsize=8)
@@ -476,9 +480,10 @@ def ensemble_evaluation(observation, rawfield, smoothfield, correctedfield, dyna
     ax.plot(np.arange(10, 61, 10), np.array(freq_error_smooth), label=labels['sm'])
     ax.plot(np.arange(10, 61, 10), np.array(freq_error_dyn), label=labels['dy'])
     ax.plot(np.arange(10, 61, 10), np.array(freq_error_correction), label=labels['cr'])
+    #ax.axhline(freq_error_ensemble, color='k', label=labels['ens'])
+    ax.axhline(freq_error_ensemble, color=next(ax._get_lines.prop_cycler)['color'], label=labels['ens'])
     ax.set_xlabel('Error threshold (%)')
-    ax.set_ylabel('Frequency of error > threshold or observation outside ensemble (%)')
-    ax.axhline(freq_error_ensemble, color='k', label=labels['ens'])
+    ax.set_ylabel('Frequency of error above threshold (%)\nFrequency of observation outside the ensemble (%)')
     ax.legend(fontsize=8)
     #print('Obs outside analysis ensemble frequency : ', freq_error_ensemble)
     #ax2 = ax.twinx()

@@ -135,7 +135,7 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
         #ratio = rmax/(np.max(newfield)-np.min(newfield))
         slope = (rmax-rmin)/(np.max(newfield)-np.min(newfield))
         if np.isnan(slope): slope=0
-        print('Slope=',slope)
+        #print('Slope=',slope)
         newfield = newfield*(1+slope)
         sd2 = sd2 * (1+slope)  # Increase spread !
 
