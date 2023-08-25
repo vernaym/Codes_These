@@ -106,22 +106,46 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
         # 1. cette méthode débiaise le champs corrigé --> utiliser une loi normale pour les perturbations ?
         # 2. le champs produit n'est plus aussi lisse
 
+        # METHODE 1
+#        rmax = np.max(initial_field)/np.max(newfield)
+#        rmin = np.min(initial_field)/np.min(newfield)
+#        if (np.min(initial_field) == 0) or (np.min(newfield) == 0):
+#            rmin = 1
+#        #slope = (rmax-rmin)/(np.max(newfield)-np.min(newfield))
+#        #if np.max(newfield) == np.min(newfield) : slope = 1
+#        #intersect = rmin - slope * np.min(newfield)
+#        rmean = np.mean(initial_field)/np.mean(newfield)  # Pour éviter le cas ou le min initial est 0 et le nouveau min est >0
+#        if (np.mean(initial_field) == 0) or (np.mean(newfield) == 0):
+#            rmean = 1
+#        slope = (rmax-rmean)/(np.max(newfield)-np.mean(newfield))
+#        if np.max(newfield) == np.mean(newfield) : slope = 1
+#        intersect = rmean - slope * np.mean(newfield)
+#        ratio = slope * newfield + intersect
+#        newfield = newfield * ratio
+#        sd2 = sd2 * (1+slope)  # Increase spread !
+        # * QQ correction does not outperform the dynamic correction alone
+        # Need to draw from a normal law to produce an ensemble
+
+        # METHODE 2 --> BEST method so far ! (XP6, XP9)
+        # Try to match extreme values with original field
         rmax = np.max(initial_field)/np.max(newfield)
-        rmin = np.mean(initial_field)/np.mean(newfield)  # Pour éviter le cas ou lin min initial est 0 et le nouveau min est >0
-        if (np.mean(initial_field) == 0) or (np.mean(newfield)):
-            rmin = 1
-        slope = (rmax-rmin)/(np.max(newfield)-np.mean(newfield))
-        if np.max(newfield) == np.mean(newfield) : slope = 1
-        intersect = rmin - slope * np.mean(newfield)
-        newfield = newfield * ( 1 + slope ) + intersect
+        rmin = np.min(initial_field)/np.min(newfield)
+        #a = (rmax-rmin)/(np.max(newfield)-np.min(newfield))
+        #b = rmin-a*np.min(newfield)
+        #ratio = rmax/(np.max(newfield)-np.min(newfield))
+        slope = (rmax-rmin)/(np.max(newfield)-np.min(newfield))
+        if np.isnan(slope): slope=0
+        print('Slope=',slope)
+        newfield = newfield*(1+slope)
         sd2 = sd2 * (1+slope)  # Increase spread !
 
+        # METHODE 3
         # Seems good, does not work :
-        slope = (np.max(initial_field)-np.min(initial_field))/(np.max(newfield)-np.min(newfield))  # Slope of the regression to match min and max values
-        if np.max(newfield) == np.min(newfield) : slope = 1
-        intersect = np.min(initial_field) - slope * np.min(newfield)
-        newfield = slope*newfield+intersect  # --> can lean to large errors !
-        sd2 = sd2 * slope
+#        slope = (np.max(initial_field)-np.min(initial_field))/(np.max(newfield)-np.min(newfield))  # Slope of the regression to match min and max values
+#        if np.max(newfield) == np.min(newfield) : slope = 1
+#        intersect = np.min(initial_field) - slope * np.min(newfield)
+#        newfield = slope*newfield+intersect  # --> can lean to large errors !
+#        sd2 = sd2 * slope
 
     # TODO : there is still a probleme for low precipitation fields (artefacts)
 
