@@ -222,8 +222,12 @@ def reliability_diagram(simu, obs, product, ax, Ne=16, threshold=10):
     proba, catsize, freq_occ, global_freq_occ = probability_classes(simu, obs, Ne=Ne)
     # TODO : taille du marker proportionelle au nombre de prevision dans une categorie
     ax.plot(proba, freq_occ, marker=None, linestyle='-', label=f'{product}')
-    ax.scatter(proba, freq_occ, catsize/np.mean(catsize))
-    ax1.plot([0,1], [0,1], linestyle=':', color='k')
+    ax.scatter(proba, freq_occ, catsize/np.mean(catsize)*100)
+    ax.plot([0,1], [0,1], linestyle=':', color='k')
+    ax.set_xlim([0, 1])
+    ax.set_ylim([0, 1])
+    ax.set_xlabel('Forecast Probability')
+    ax.set_ylabel('Observed Frequency')
 
 def probability_classes(simu, obs, threshold=10, Ne=16, nb_cat=17):
 

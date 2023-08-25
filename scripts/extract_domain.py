@@ -19,13 +19,14 @@ else:
     domain = 'MontBlanc'
 
 domain_coords = dict(
-        GrandesRousses = dict(latmax=45.240, latmin=44.990, lonmin=6.010, lonmax = 6.490),
+        #GrandesRousses = dict(latmax=45.240, latmin=44.990, lonmin=6.010, lonmax = 6.490),
+        GrandesRousses = dict(latmax=45.4, latmin=44.9, lonmin=5.8, lonmax = 6.6),
         NorthernAlps   = dict(lonmin=6.0, lonmax=6.9, latmin=45.6, latmax=46.35),
         CentralAlps    = dict(lonmin=5.6, lonmax=7.0, latmin=45.0, latmax=45.6),
         SouthernAlps   = dict(lonmin=5.7, lonmax=7.0, latmin=44.2, latmax=45.0),
         HauteSavoie    = dict(lonmin=6.45, lonmax=6.95, latmin=45.67, latmax=46.35),
         MontBlanc      = dict(lonmin=6.45, lonmax=7.1, latmin=45.65, latmax=46.1),
-        Savoie         = dict(lonmin=6.06, lonmax=7.06, latmin=45.15, latmax=45.65),
+        Savoie         = dict(lonmin=6.0, lonmax=7.2, latmin=45.1, latmax=45.9),
         Isere          = dict(lonmin=5.54, lonmax=6.19, latmin=44.89, latmax=45.16),
         Brianconnais   = dict(lonmin=6.48, lonmax=6.95, latmin=44.67, latmax=44.95),
         HautesAlpes    = dict(lonmin=6.1, lonmax=7.1, latmin=44.4, latmax=45.2),

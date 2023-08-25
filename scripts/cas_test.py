@@ -360,8 +360,14 @@ def ensemble_evaluation(observation, rawfield, smoothfield, correctedfield, ense
         sm10 = smoothfield10.stack(points=["date", "lat", "lon"]).data
 
     # 1. Brier score over all dates and pixels for different thresholds
-    brier = dict(ens=list(), rw = list(), sm=list(), cr=list(), sm5=list(), sm10=list())
-    for threshold in range(1, 51):
+    #brier = dict(ens=list(), rw = list(), sm=list(), cr=list(), sm5=list(), sm10=list())
+    brier = dict(ens=list(), rw = list(), sm=list(), cr=list())
+    if smoothfield5 is not None:
+        brier['sm5'] = list()
+    if smoothfield10 is not None:
+        brier['sm10'] = list()
+    thresholds = [x/10 for x in range(1,10)] + [x for x in range(1, 51)]
+    for threshold in thresholds:
         brier['rw'].append(scores.brier(rw, obse, threshold=threshold))
         brier['sm'].append(scores.brier(sm, obse, threshold=threshold))
         brier['cr'].append(scores.brier(cr, obse, threshold=threshold))
@@ -371,11 +377,11 @@ def ensemble_evaluation(observation, rawfield, smoothfield, correctedfield, ense
         if smoothfield10 is not None:
             brier['sm10'].append(scores.brier(sm10, obse, threshold=threshold))
 
-
     fig, ax = plt.subplots()
     for key, value in brier.items():
         if len(value) > 0:
-            ax.plot(range(1, 51), value, label=key)
+            #ax.plot(range(1, 51), value, label=key)
+            ax.semilogx(thresholds, value, label=key)
     ax.legend()
     plt.tight_layout()
     ax.set_xlabel('Threshold (mm)')
@@ -384,13 +390,16 @@ def ensemble_evaluation(observation, rawfield, smoothfield, correctedfield, ense
     plt.close(fig)
 
     fig, ax = plt.subplots()
-    ax.plot(range(1, 51), 1 - np.array(brier['sm'])/np.array(brier['rw']), label='smooth')
-    ax.plot(range(1, 51), 1 - np.array(brier['cr'])/np.array(brier['rw']), label='correction')
-    ax.plot(range(1, 51), 1 - np.array(brier['ens'])/np.array(brier['rw']), label='ensemble')
-    if smoothfield5 is not None:
-        ax.plot(range(1, 51), 1 - np.array(brier['sm5'])/np.array(brier['rw']), label='smooth')
-    if smoothfield10 is not None:
-        ax.plot(range(1, 51), 1 - np.array(brier['sm10'])/np.array(brier['rw']), label='smooth')
+    for key, value in brier.items():
+        if key != 'rw':
+            ax.semilogx(thresholds, 1 - np.array(brier[key])/np.array(brier['rw']), label=key)
+#    ax.plot(range(1, 51), 1 - np.array(brier['sm'])/np.array(brier['rw']), label='smooth')
+#    ax.plot(range(1, 51), 1 - np.array(brier['cr'])/np.array(brier['rw']), label='correction')
+#    ax.plot(range(1, 51), 1 - np.array(brier['ens'])/np.array(brier['rw']), label='ensemble')
+#    if smoothfield5 is not None:
+#        ax.plot(range(1, 51), 1 - np.array(brier['sm5'])/np.array(brier['rw']), label='smooth')
+#    if smoothfield10 is not None:
+#        ax.plot(range(1, 51), 1 - np.array(brier['sm10'])/np.array(brier['rw']), label='smooth')
     ax.axhline(0, color='k')
     ax.legend()
     plt.tight_layout()
