@@ -133,7 +133,8 @@ def add_postes_nivometeo(ax):
     fic_score = os.path.join('/home/vernaym/These/DATA', 'postes_nivometeo.csv')
     scores = pd.read_csv(fic_score, sep=';')
 
-    sc = ax.scatter(scores['poste_nivo.lon_dg'], scores['poste_nivo.lat_dg'], marker='o', s=150, color='black', edgecolors='black')
+    #sc = ax.scatter(scores['poste_nivo.lon_dg'], scores['poste_nivo.lat_dg'], c=scores['poste_nivo.alti'],  marker='^', s=300)
+    sc = ax.scatter(scores['poste_nivo.lon_dg'], scores['poste_nivo.lat_dg'],  marker='^', s=450, color='k')
 
 def add_radar_positions(ax):
     radars = dict(
@@ -232,33 +233,31 @@ mnt = xr.open_dataset(os.path.join(datadir, "DEM_ALPES_WGS84_250m_bilinear.nc"))
 mnt=mnt.where((mnt['lat']>=latmin) & (mnt['lat']<=latmax) & (mnt['lon']>=lonmin) & (mnt['lon']<=lonmax), drop=True)
 mnt = mnt.rename({'Band1':'elevation'})
 
-cross = extract_cross_section(mnt)
-plot_vertical_cross_section(cross)
+crossection = False
+if crossection:
 
-ratio = xr.open_dataset(os.path.join('/home/vernaym/workdir/ASSIMILATION/mask/alp', 'Estimated_ratio.nc'))
-cross = extract_cross_section(ratio, varname='ratio')
-plt.imshow(np.atleast_2d(cross), cmap=plt.get_cmap('RdBu_r'), extent=(0, 50, 0, 1))
+    cross = extract_cross_section(mnt)
+    plot_vertical_cross_section(cross)
 
-error = xr.open_dataset(os.path.join('/home/vernaym/workdir/ASSIMILATION/mask/alp', 'Observation_error.nc'))
-cross = extract_cross_section(error, varname='error')
+    ratio = xr.open_dataset(os.path.join('/home/vernaym/workdir/ASSIMILATION/mask/alp', 'Estimated_ratio.nc'))
+    cross = extract_cross_section(ratio, varname='ratio')
+    plt.imshow(np.atleast_2d(cross), cmap=plt.get_cmap('RdBu_r'), extent=(0, 50, 0, 1))
+
+    error = xr.open_dataset(os.path.join('/home/vernaym/workdir/ASSIMILATION/mask/alp', 'Observation_error.nc'))
+    cross = extract_cross_section(error, varname='error')
 #plt.imshow(np.atleast_2d(cross), cmap=plt.get_cmap('Reds'), extent=(0, 50, 0, 1))
-plt.imshow(np.atleast_2d(cross), cmap=plt.get_cmap('YlOrBr'), extent=(0, 50, 0, 1))
+    plt.imshow(np.atleast_2d(cross), cmap=plt.get_cmap('YlOrBr'), extent=(0, 50, 0, 1))
 
-import pdb
-pdb.set_trace()
-
-cumul = xr.open_dataset('/home/vernaym/These/DATA/./CUMUL_ANTILOPEH_alp_2021103000_2022060200.nc')
-cross = extract_cross_section(cumul, varname='rr_cumul')
-plt.imshow(np.atleast_2d(cross), cmap=plt.get_cmap('YlGnBu'), extent=(0, 50, 0, 1))
-
-
+    cumul = xr.open_dataset('/home/vernaym/These/DATA/./CUMUL_ANTILOPEH_alp_2021103000_2022060200.nc')
+    cross = extract_cross_section(cumul, varname='rr_cumul')
+    plt.imshow(np.atleast_2d(cross), cmap=plt.get_cmap('YlGnBu'), extent=(0, 50, 0, 1))
 
 #filename = os.path.join(savedir, f'ReliefAlpes_correlation{d0}.pdf')
 filename = os.path.join(savedir, f'ReliefAlpes_with_nivometeo.pdf')
 
 # Plot elevation
 #if not os.path.exists(filename):
-fig,ax = plt.subplots(figsize=(14,16))
+fig,ax = plt.subplots(figsize=(21,24))
 ax.set_frame_on(False)
 #https://discourse.holoviz.org/t/cannot-remove-grid-for-hv-quadmesh/2211/8
 #im = mnt.elevation.plot(ax=ax, cmap=plt.cm.terrain, subplot_kws={'frame_on':False}, linewidth=0, label='Elevation (m)', add_colorbar=False)
