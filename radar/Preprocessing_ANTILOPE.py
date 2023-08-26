@@ -165,7 +165,8 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
     #sd = (sd1+sd2)/2
     #sd = sd1/2+sd2
     #sd = sd2
-    sd = np.sqrt(sd1*sd2)  # --> Increase spread (overdispersif)
+    #sd = np.sqrt(sd1*sd2)  # --> Increase spread (overdispersif in cas_test, underdisspersif with real data...)
+    sd = sd1+sd2  # --> Increase spread (overdispersif)
     #sd = sd1
 
     #sd = sd * (1+np.abs(ratio))  # Allow to increase spread in case of underdispersion

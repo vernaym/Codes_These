@@ -251,9 +251,12 @@ algo = dict(
 #        KD33          = 'EnsembleKalmanFilter/XP33/EnKF_2021120106_2022050106_daily_alp.nc',
 #        RS04          = 'RandomSampling/XP04/Random_Sampling_2021120106_2022050106_daily_alp.nc'
         ####################
-        #PF30          = 'XP30/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
-        KD35          = 'EnsembleKalmanFilter/XP35/EnKF_2021120106_2022050106_daily_alp.nc',
-        RS07          = 'RandomSampling/XP07/Random_Sampling_2021120106_2022050106_daily_alp.nc'
+        #PF31          = 'XP31/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
+        #KD35          = 'EnsembleKalmanFilter/XP35/EnKF_2021120106_2022050106_daily_alp.nc',
+        #RS07          = 'RandomSampling/XP07/Random_Sampling_2021120106_2022050106_daily_alp.nc',
+        #RS08          = 'RandomSampling/XP08/Random_Sampling_2021120106_2022050106_daily_alp.nc',
+        RS09          = 'RandomSampling/XP09/Random_Sampling_2021120106_2022050106_daily_alp.nc',
+        RS10          = 'RandomSampling/XP10/Random_Sampling_2021120106_2022050106_daily_alp.nc',
     )
 
 
@@ -356,6 +359,7 @@ xpid_label = dict(
         KD35          = 'Ensemble Kalman Filter analysis',
         PF29          = 'Particle Filter analysis',
         PF30          = 'Particle Filter analysis',
+        PF31          = 'Particle Filter analysis',
         #LDM9D3        = 'PF, mask9=estimated_ratio, debiaisage3=0.1_2',
         LDM9D3        = 'PF, d0=0.1, c0=2',
         RS00          = 'Random Sampling',
@@ -364,7 +368,10 @@ xpid_label = dict(
         RS03          = 'Random Sampling with increased dynamic dispersion + static',
         RS04          = 'Random Sampling',
         RS05          = 'Random Sampling',
-        RS07          = 'Random Sampling',
+        RS07          = 'Random Sampling with dynamic correction only',
+        RS08          = 'Random Sampling with dynamic correaction and qq adjustment',
+        RS09          = 'Random Sampling with dynamic correaction only',
+        RS10          = 'Random Sampling with dynamic correaction only and sd=sd1+sd2',
     )
 
 def nearest(array, value):
@@ -385,7 +392,8 @@ class Evaluation(object):
         self.threshold = 10  # threshold to use as event detection in the Brier Score
         self.lpn = None
         self.obs_error = None
-        self.thresholds = [1, 2, 3, 4, 5, 10, 15, 20, 25, 30]
+        #self.thresholds = [1, 2, 3, 4, 5, 10, 15, 20, 25, 30]
+        self.thresholds = [x/10 for x in range(1,10)] + [x for x in range(1, 31)]
 
     def ensemble_attributes(self):
         disp = self.dispersion()
@@ -870,7 +878,8 @@ class Evaluation(object):
         for xpid,filename in experiments.items():
             tmp = self.read_simu(os.path.join(workdir, filename)).loc[{'time':dates}]
             print(xpid)
-            if xpid.startswith('RS'):
+            #if xpid.startswith('RS'):
+            if xpid == 'RS09':
                 antilopec = tmp.loc[{'member':0}]
                 antilopec = antilopec.loc[{'time':dates}]
             tmp = tmp.loc[{'member':range(1,17)}]
@@ -887,7 +896,7 @@ class Evaluation(object):
             antilopec = antilopec.loc[{'date':dates}]
 
 #        scores_list = ['reliability', 'resolution', 'uncertainty', 'rmse', 'bias', 'brier', 'error_frequency']
-        scores_list = ['rmse', 'bias'] + [f'brier_{threshold}' for threshold in self.thresholds] + ['CRPS']
+        scores_list = ['rmse', 'bias'] + [f'brier_{int(threshold*10)}' for threshold in self.thresholds] + ['CRPS']
         scores = dict()
 
         #dates = dates[:10]
@@ -962,7 +971,7 @@ class Evaluation(object):
                         scores[product] = {score:list() for score in scores_list}
                     for score_name, score in scores[product].items():
                         if score_name.startswith('brier'):
-                            threshold = float(score_name.split('_')[-1])
+                            threshold = float(score_name.split('_')[-1])/10.
                             if product == 'antilope':
                                 score.append(getattr(self, 'brier')(data[product][-1][~np.isnan(obs)], obs[~np.isnan(obs)], Ne=1, threshold=threshold))
                             #elif product in ['antiloped', 'antiloper']:
@@ -1071,11 +1080,13 @@ class Evaluation(object):
     def plot_scores(self):
         if self.scores is None:
             self.evaluate()
+        # TODO : do not plot individual brier scores
         for score in self.scores.score.data:
             fig,ax = plt.subplots(figsize=(22,18))
             if score.startswith('brier'):
-                threshold = int(score.split('_')[-1])
-                fig2,ax2 = plt.subplots(figsize=(22,18))
+                pass
+                #threshold = int(score.split('_')[-1])
+                #fig2,ax2 = plt.subplots(figsize=(22,18))
 
             pos = 1
             pos2 = 1
@@ -1102,20 +1113,22 @@ class Evaluation(object):
                 if score == 'bias':
                     ax.axhline(color='k')
                 if score.startswith('brier') and product not in ['antilope', 'antiloped', 'antilopec', 'raw']:
-                    ref = self.scores.loc[{'score':score}]['raw'].data
-                    bss = 1 - x / ref
-                    add_num_poste(ax2, pos2, bss)
-                    labels2.append(self.add_label(ax2.violinplot(bss[~np.isnan(bss)], showmeans=True, positions=[pos2]), xpid_label[product]))
-                    ax2.axhline(color='k')
-                    pos2 += 1
+                    pass
+#                    ref = self.scores.loc[{'score':score}]['raw'].data
+#                    bss = 1 - x / ref
+#                    add_num_poste(ax2, pos2, bss)
+#                    labels2.append(self.add_label(ax2.violinplot(bss[~np.isnan(bss)], showmeans=True, positions=[pos2]), xpid_label[product]))
+#                    ax2.axhline(color='k')
+#                    pos2 += 1
                 pos += 1
 
             if score.startswith('brier'):
-                ax.set_ylabel(f'{score}', fontsize=28)
-                ax2.set_ylabel('Brier Skill Score', fontsize=28)
-                ax2.set_xticklabels([''] + products[2:], fontsize=28)
-                ax2.set_xticks(range(len(products)))
-                ax2.legend(*zip(*labels2), fontsize=18)
+                pass
+                #ax.set_ylabel(f'{score}', fontsize=28)
+                #ax2.set_ylabel('Brier Skill Score', fontsize=28)
+                #ax2.set_xticklabels([''] + products[2:], fontsize=28)
+                #ax2.set_xticks(range(len(products)))
+                #ax2.legend(*zip(*labels2), fontsize=18)
             else:
                 ax.set_ylabel(f'{score} (mm)', fontsize=28)
 
@@ -1125,10 +1138,11 @@ class Evaluation(object):
             ax.legend(*zip(*labels), fontsize=18)
 
             if score.startswith('brier'):
+                pass
                 #fig.savefig(f'{savedir}/{score}.pdf', formatout='pdf',  bbox_inches='tight')
-                fig.savefig(f'{savedir}/{score}.pdf', format='pdf',  bbox_inches='tight')
+                #fig.savefig(f'{savedir}/{score}.pdf', format='pdf',  bbox_inches='tight')
                 #fig2.savefig(f'{savedir}/brier_skill_score_{threshold}.pdf', formatout='pdf',  bbox_inches='tight')
-                fig2.savefig(f'{savedir}/brier_skill_score_{threshold}.pdf', format='pdf',  bbox_inches='tight')
+                #fig2.savefig(f'{savedir}/brier_skill_score_{threshold}.pdf', format='pdf',  bbox_inches='tight')
             else:
                 #fig.savefig(f'{savedir}/{score}.pdf', formatout='pdf',  bbox_inches='tight')
                 fig.savefig(f'{savedir}/{score}.pdf', format='pdf',  bbox_inches='tight')
@@ -1142,9 +1156,10 @@ class Evaluation(object):
         for product in products:
             brier = np.array([])
             for threshold in self.thresholds:
-                brier = np.append(brier, np.mean(self.scores.loc[{'score':f'brier_{threshold}'}][product].data))
-            ax.plot(self.thresholds, brier, label=xpid_label[product], linewidth=3)
-        ax.legend(fontsize=40)
+                brier = np.append(brier, np.mean(self.scores.loc[{'score':f'brier_{int(threshold*10)}'}][product].data))
+            #ax.plot(self.thresholds, brier, label=xpid_label[product], linewidth=3)
+            ax.semilogx(self.thresholds, brier, label=xpid_label[product], linewidth=3)
+        ax.legend(fontsize=18)
         ax.set_ylabel('Brier Score', fontsize=28)
         ax.set_xlabel('Threshold (mm)', fontsize=24)
         #ax.set_xticklabels(self.thresholds, fontsize=18)
