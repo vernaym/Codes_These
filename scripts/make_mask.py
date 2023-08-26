@@ -88,7 +88,7 @@ onlypostes = [73306403]
 
 blacklist = [1373001, 1189001]
 
-d0 = 0.25  # Portée horizontale
+d0 = 0.15  # Portée horizontale
 #h0 = 2000  # Portée altitudinale
 h0 = None
 c0 = 2
@@ -769,7 +769,6 @@ def ratio_estimation(field, model=None, moving_window=25):
     ratio_dispersion = to_xarray(D, field, varname='dispersion')
     plot_and_save(ratio_dispersion, "Ratio spread", cmap=plt.cm.viridis, scores=scores, vmin=0, vmax=1)
 
-    #w1 = W
     # Decrease the weight for pixels with large ratio dispersion (more uncertainty !)
     # Ensure that estimated ratio for pixels with no information around (W=0) stay at 1
     # Rules :
@@ -779,19 +778,14 @@ def ratio_estimation(field, model=None, moving_window=25):
     # * D-->inf ==> w1-->0  (choix : D=1 ==> w1=1/2)
     # * W-->inf ==> w1-->1
     # w1 can be seen as a measure of the confidence in the method
-
-    #w1 = W / (1+D)
-    #w1 = W / (1+D)**2
-    #w1 = W / np.exp(D)
-    #w1 = W / np.exp(D**2)
-    #w1 = W / np.exp(1+D)  # First to have a real impact --> increase ratio correlation to >0.37 !
-    #K = W * (1 - D / (W * (D + 1)))
     X = 1/(2*W-1)  # Facteur pour assurer la condition D=1 ==> w1=1/2. WARNING : W=1/2 valeur singulière
+    #X = 1/(4*W-1)  # Facteur pour assurer la condition D=1 ==> w1=0.25 WARNING : W=0.25 valeur singulière
     K = W * (1 - D / (D + X))
     K[W==0.5] = 0.5  # W=1/2 valeur singulière de X
     K[W==0] = 0
     w1 = K / (1 + K)  # normalisation
     w1[np.isnan(w1)] = 0
+
     #relativeweight = W / np.exp((1+D)**2)
     tmp = to_xarray(w1, field, varname='mean_ratio')
     plot_and_save(tmp, "Relative_weight", cmap=plt.cm.viridis, scores=scores, vmin=0., vmax=1)
@@ -830,6 +824,7 @@ def ratio_estimation(field, model=None, moving_window=25):
     #mean_ratio = uniform_filter(estimated_ratio, size=moving_window)
     #estimated_ratio = estimated_ratio - mean_ratio
     ratio_field = to_xarray(estimated_ratio, field, varname='ratio')
+    mean_ratio = to_xarray(mean_ratio, field, varname='ratio')
     #ratio_field = ratio_field.rename('ratio')
     #observation_error = ((np.abs(ratio_field-1) + np.abs(diff))**2)*10
 
@@ -846,7 +841,9 @@ def ratio_estimation(field, model=None, moving_window=25):
     # the observation confidence as the inverse of the observation error.
     #observation_error = ratio_field.copy()
     #observation_error[np.where(observation_error<1)] = 1/observation_error[np.where(observation_error<1)]
+    #observation_error = ratio_field - 1
     observation_error = ratio_field - 1
+    #observation_error = mean_ratio - 1 + D
     neg = np.where(observation_error.data<0)
     pos= np.where(observation_error.data>=0)
     #observation_error.data[neg] = 21.391*observation_error.data[neg]  # r=0.5 ==> err=-10.7  # 2018/2019
@@ -868,10 +865,16 @@ def ratio_estimation(field, model=None, moving_window=25):
     #observation_error.data = uniform_filter(observation_error.data, size=3)
     ###################################################################################################################################
 
-    uncertainty = observation_error*(1+w1)  # Observation error > 1
-    uncertainty.data = uniform_filter(uncertainty.data, size=2)
-    #confidence = uncertainty.copy()
-    #confidence.data = 1/confidence.data
+    # Increase error with :
+    # - Increasing w1 (more confidence in the method)
+    # - Estimation dispersion (contradictory informations) for low observation errors
+    # TODO add term independent of observation error to increase errors where the method estimates a low error but with high uncertainty
+    uncertainty = 1 + observation_error*w1
+    #uncertainty = 1 + observation_error*w1+D/W
+    #uncertainty = 1 + w1*observation_error/(1+w1)
+    #uncertainty.data = uniform_filter(uncertainty.data, size=2)
+    confidence = uncertainty.copy()
+    confidence.data = 1/confidence.data
 
     # PLots
     #######
@@ -890,8 +893,8 @@ def ratio_estimation(field, model=None, moving_window=25):
         #plot_and_save(np.abs(observation_error), errorname, vmin=0, vmax=15, cmap=plt.cm.Reds, scores=scores)
         #plot_and_save(np.abs(observation_error), errorname, vmin=0, vmax=15, cmap=plt.cm.Greys, scores=scores)
         #plot_and_save(observation_error, errorname, vmin=1, vmax=15, cmap=plt.cm.YlOrBr, scores=scores)
-        #plot_and_save(observation_confidence, confidencename, vmin=0, vmax=1, cmap=plt.cm.Greens, scores=scores)
-        plot_and_save(uncertainty, uncertaintyname, vmin=1, vmax=20, cmap=plt.cm.YlOrBr, scores=scores)
+        plot_and_save(confidence, confidencename, vmin=0, vmax=1, cmap=plt.cm.Greens, scores=scores)
+        plot_and_save(uncertainty, uncertaintyname, vmin=1, vmax=8, cmap=plt.cm.YlOrBr, scores=scores)
     elif domain == 'GrandesRousses':
         plot_and_save(ratio_field, rationame, vmin=0.6, vmax=1.4, cmap=plt.cm.coolwarm, scores=scores)
         #plot_and_save(observation_error, errorname, vmin=-6, vmax=6, cmap=plt.cm.coolwarm, scores=scores)
