@@ -3017,7 +3017,7 @@ if __name__ == "__main__":
             outname = '_'.join([outname, f'mask{mask}'])
         if args.debiasing is not None:
             outname = '_'.join([outname, f'debiasing{args.debiasing}'])
-        localfields.to_netcdf(f"{outname}.nc")
+        localfields.to_netcdf(f"{outname}.nc".encode('utf-8'))
         #globalfields.to_netcdf(f"Assimilation_globale_{args.datebegin.strftime('%Y%m%d%H')}_{args.dateend.strftime('%Y%m%d%H')}_{args.frequency}.nc")
 
     elif args.assimilation == 'enkf':  # 2. Ensemble Kalman Filter
@@ -3031,7 +3031,7 @@ if __name__ == "__main__":
             enkf.run()
         out = enkf.output(localfields)
         outname = f"EnKF_{args.datebegin.strftime('%Y%m%d%H')}_{args.dateend.strftime('%Y%m%d%H')}_{args.frequency}_{args.domain}"
-        out.to_netcdf(f"{outname}.nc")
+        out.to_netcdf(f"{outname}.nc".encode('utf-8'))
 
     elif args.assimilation == 'rs':  # Random Sampling
 
@@ -3042,7 +3042,7 @@ if __name__ == "__main__":
             rs.save_corrected_field(extract_period, nivometeo.num_poste.data)
         out = rs.output(localfields)
         outname = f"Random_Sampling_{args.datebegin.strftime('%Y%m%d%H')}_{args.dateend.strftime('%Y%m%d%H')}_{args.frequency}_{args.domain}"
-        out.to_netcdf(f"{outname}.nc")
+        out.to_netcdf(f"{outname}.nc".encode('utf-8'))
 
     tfin = time.time()
     print(f'Total execution time : {(tfin-t0)/60.} minutes')

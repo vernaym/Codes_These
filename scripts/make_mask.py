@@ -842,8 +842,9 @@ def ratio_estimation(field, model=None, moving_window=25):
     #observation_error = ratio_field.copy()
     #observation_error[np.where(observation_error<1)] = 1/observation_error[np.where(observation_error<1)]
     #observation_error = ratio_field - 1
-    observation_error = ratio_field - 1
-    #observation_error = mean_ratio - 1 + D
+    #observation_error = ratio_field - 1
+    observation_error = mean_ratio - 1
+    #observation_error = mean_ratio - 1 + D  #TODO : gérer le problème de signe induit !
     neg = np.where(observation_error.data<0)
     pos= np.where(observation_error.data>=0)
     #observation_error.data[neg] = 21.391*observation_error.data[neg]  # r=0.5 ==> err=-10.7  # 2018/2019
@@ -869,10 +870,11 @@ def ratio_estimation(field, model=None, moving_window=25):
     # - Increasing w1 (more confidence in the method)
     # - Estimation dispersion (contradictory informations) for low observation errors
     # TODO add term independent of observation error to increase errors where the method estimates a low error but with high uncertainty
-    uncertainty = 1 + observation_error*w1
+    uncertainty = 1 + (1+w1) * observation_error
     #uncertainty = 1 + observation_error*w1+D/W
     #uncertainty = 1 + w1*observation_error/(1+w1)
-    #uncertainty.data = uniform_filter(uncertainty.data, size=2)
+    uncertainty.data = uniform_filter(uncertainty.data, size=2)
+    uncertainty.data[np.isnan(field.rr_cumul.data)] = np.nanmax(uncertainty.data)
     confidence = uncertainty.copy()
     confidence.data = 1/confidence.data
 
@@ -894,7 +896,7 @@ def ratio_estimation(field, model=None, moving_window=25):
         #plot_and_save(np.abs(observation_error), errorname, vmin=0, vmax=15, cmap=plt.cm.Greys, scores=scores)
         #plot_and_save(observation_error, errorname, vmin=1, vmax=15, cmap=plt.cm.YlOrBr, scores=scores)
         plot_and_save(confidence, confidencename, vmin=0, vmax=1, cmap=plt.cm.Greens, scores=scores)
-        plot_and_save(uncertainty, uncertaintyname, vmin=1, vmax=8, cmap=plt.cm.YlOrBr, scores=scores)
+        plot_and_save(uncertainty, uncertaintyname, vmin=1, vmax=15, cmap=plt.cm.YlOrBr, scores=scores)
     elif domain == 'GrandesRousses':
         plot_and_save(ratio_field, rationame, vmin=0.6, vmax=1.4, cmap=plt.cm.coolwarm, scores=scores)
         #plot_and_save(observation_error, errorname, vmin=-6, vmax=6, cmap=plt.cm.coolwarm, scores=scores)
