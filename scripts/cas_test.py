@@ -140,7 +140,8 @@ def perturbed_ratio(ratio):
     #perturb = uniform_filter(perturb, size=5)
     #fact = uniform_filter(ratio.data, size=5)
     #ratio.data = ratio.data + (1+np.exp(-np.abs(1-fact)**2/1))*perturb
-    tmp = fact + perturb
+    hidden_unidentified_positive_bias = 0.1
+    tmp = fact + perturb + hidden_unidentified_positive_bias
     tmp[tmp<=0] = -tmp[tmp<=0]+0.01
     #tmp = np.sqrt(tmp)
     ratio.data =  tmp
@@ -357,14 +358,32 @@ def plot_scatter(reference, model, savename):
 
 def ensemble_evaluation(observation, rawfield, smoothfield, correctedfield, dynamiccorrection, ensemble, smoothfield5=None, smoothfield10=None):
 
+    labels = dict(ens='Analysis ensemble', rw='Raw ANTILOPE', sm="Smoothed debiased ANTILOPE field", dy="Dynamic correction method alone", cr="Dynamic correction method with quantile-quantile adjustment")
+
+    products_map = dict(rw=rawfield, sm=smoothfield, dy=dynamiccorrection, cr=correctedfield, ens=ensemble)
+    #bias = dict(rw=list(), sm=list(), dy=list(), cr=list(), ens=list())
+    fig, ax = plt.subplots()
+    position = 0
+    for key in products_map.keys():
+        position = position + 1
+        if key == 'ens':
+            bias = ensemble.mean('member') - observation
+        else:
+            bias = products_map[key] - observation
+        scores.violinplot(ax, position, bias.mean('date').data.flatten(), labels[key])
+    ax.legend()
+    ax.set_ylabel('Bias (mm)')
+    ax.legend(fontsize=8)
+    plt.tight_layout()
+    fig.savefig(os.path.join(savedir, "Bias.pdf"), format='pdf')
+    plt.close(fig)
+
     obse = observation.stack(points=["date", "lat", "lon"]).data
     ens = ensemble.stack(points=["date", "lat", "lon"]).transpose().data
     rw = rawfield.stack(points=["date", "lat", "lon"]).data
     sm = smoothfield.stack(points=["date", "lat", "lon"]).data
     dy = dynamiccorrection.stack(points=["date", "lat", "lon"]).data
     cr = correctedfield.stack(points=["date", "lat", "lon"]).data
-
-    labels = dict(ens='Analysis ensemble', rw='Raw ANTILOPE', sm="Smoothed debiased ANTILOPE field", dy="Dynamic correction method alone", cr="Dynamic correction method with quantile-quantile adjustment")
 
     if smoothfield5 is not None:
         sm5 = smoothfield5.stack(points=["date", "lat", "lon"]).data
@@ -378,8 +397,8 @@ def ensemble_evaluation(observation, rawfield, smoothfield, correctedfield, dyna
         brier['sm5'] = list()
     if smoothfield10 is not None:
         brier['sm10'] = list()
-    #thresholds = [x/10 for x in range(1,10)] + [x for x in range(1, 51)]
-    thresholds = [x for x in range(1, 51)]  # Ignore small precipitation problems for now
+    thresholds = [x/10 for x in range(1,10)] + [x for x in range(1, 51)]
+    #thresholds = [x for x in range(1, 51)]  # Ignore small precipitation problems for now
     for threshold in thresholds:
         brier['rw'].append(scores.brier(rw, obse, threshold=threshold))
         brier['sm'].append(scores.brier(sm, obse, threshold=threshold))
@@ -394,10 +413,9 @@ def ensemble_evaluation(observation, rawfield, smoothfield, correctedfield, dyna
     fig, ax = plt.subplots()
     for key, value in brier.items():
         if len(value) > 0:
-            ax.plot(thresholds, value, label=labels[key])
-            #ax.semilogx(thresholds, value, label=labels[key])  # Ignore small precipitation problems for now
+            #ax.plot(thresholds, value, label=labels[key])
+            ax.semilogx(thresholds, value, label=labels[key])  # Ignore small precipitation problems for now
     ax.legend()
-    plt.tight_layout()
     ax.set_ylim(bottom=0, top=0.25)
     ax.set_xlabel('Threshold (mm)')
     ax.set_ylabel('Brier score')
@@ -410,8 +428,8 @@ def ensemble_evaluation(observation, rawfield, smoothfield, correctedfield, dyna
     next(ax._get_lines.prop_cycler)['color']  # Drop first color corresponding to raw product not show on the BSS
     for key, value in brier.items():
         if key != 'rw':
-            ax.plot(thresholds, 1 - np.array(brier[key])/np.array(brier['rw']), label=labels[key])
-            #ax.semilogx(thresholds, 1 - np.array(brier[key])/np.array(brier['rw']), label=labels[key])  # Ignore small precipitation problems for now
+            #ax.plot(thresholds, 1 - np.array(brier[key])/np.array(brier['rw']), label=labels[key])
+            ax.semilogx(thresholds, 1 - np.array(brier[key])/np.array(brier['rw']), label=labels[key])  # Ignore small precipitation problems for now
 #    ax.plot(range(1, 51), 1 - np.array(brier['sm'])/np.array(brier['rw']), label='smooth')
 #    ax.plot(range(1, 51), 1 - np.array(brier['cr'])/np.array(brier['rw']), label='correction')
 #    ax.plot(range(1, 51), 1 - np.array(brier['ens'])/np.array(brier['rw']), label='ensemble')
@@ -421,7 +439,7 @@ def ensemble_evaluation(observation, rawfield, smoothfield, correctedfield, dyna
 #        ax.plot(range(1, 51), 1 - np.array(brier['sm10'])/np.array(brier['rw']), label='smooth')
     ax.axhline(0, color='k')
     ax.legend()
-    ax.set_ylim(bottom=-1, top=1)
+    ax.set_ylim(bottom=-0.5, top=1)
     ax.set_xlabel('Threshold (mm)')
     ax.set_ylabel('Brier Skill Score')
     ax.legend(fontsize=8)
@@ -466,12 +484,12 @@ def ensemble_evaluation(observation, rawfield, smoothfield, correctedfield, dyna
     freq_error_smooth = list()
     freq_error_dyn = list()
     freq_error_correction = list()
-    for threshold in np.arange(0.1, 0.61, 0.1):
+    for threshold in np.arange(0.1, 1.01, 0.1):
         freq_error_raw.append(scores.error_frequency(rw, obse, threshold=threshold))
         #print('Raw error >20% frequency : ', freq_error_raw)
-        freq_error_smooth.append(scores.error_frequency(sm, obse, treshold=threshold))
+        freq_error_smooth.append(scores.error_frequency(sm, obse, threshold=threshold))
         #print('Smooth error >20% frequency : ', freq_error_smooth)
-        freq_error_dyn.append(scores.error_frequency(dy, obse, treshold=threshold))
+        freq_error_dyn.append(scores.error_frequency(dy, obse, threshold=threshold))
         freq_error_correction.append(scores.error_frequency(cr, obse, treshold=threshold))
         #print('Correction error >20% frequency : ', freq_error_correction)
     freq_error_ensemble = scores.error_frequency(ens, obse)

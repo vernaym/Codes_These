@@ -46,13 +46,13 @@ def bias(simu, obs, *args, **kw):
 
     return np.nanmean(bias)
 
-def error_frequency(simu, obs, treshold=0.2, *args, **kw):
+def error_frequency(simu, obs, threshold=0.2, *args, **kw):
 
     simu = simu[~np.isnan(obs)]
     obs = obs[~np.isnan(obs)]
 
     if np.shape(simu) == np.shape(obs):  # "Simulation" déterministe
-        error = np.where((simu>obs*(1+treshold)) | (simu<obs*(1-treshold)))
+        error = np.where((simu>obs*(1+threshold)) | (simu<obs*(1-threshold)))
     else:  # Simulation d'ensmble
         error = np.where( (np.max(simu, axis=1)<obs) | (np.min(simu, axis=1)>obs) )
 

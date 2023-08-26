@@ -13,6 +13,8 @@ import pandas as pd
 from scipy.stats import rankdata
 import CRPS.CRPS as pscore
 
+from These.scripts import scores
+
 import argparse
 
 import matplotlib as mpl
@@ -255,9 +257,10 @@ algo = dict(
         #KD35          = 'EnsembleKalmanFilter/XP35/EnKF_2021120106_2022050106_daily_alp.nc',
         #RS07          = 'RandomSampling/XP07/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         #RS08          = 'RandomSampling/XP08/Random_Sampling_2021120106_2022050106_daily_alp.nc',
-        RS09          = 'RandomSampling/XP09/Random_Sampling_2021120106_2022050106_daily_alp.nc',
-        RS10          = 'RandomSampling/XP10/Random_Sampling_2021120106_2022050106_daily_alp.nc',
+        #RS09          = 'RandomSampling/XP09/Random_Sampling_2021120106_2022050106_daily_alp.nc',
+        #RS10          = 'RandomSampling/XP10/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         RS11          = 'RandomSampling/XP11/Random_Sampling_2021120106_2022050106_daily_alp.nc',
+        RS12          = 'RandomSampling/XP12/Random_Sampling_2021120106_2022050106_daily_alp.nc',
     )
 
 
@@ -374,6 +377,7 @@ xpid_label = dict(
         RS09          = 'Random Sampling with dynamic correction only',
         RS10          = 'Random Sampling with dynamic correction only and sd=sd1+sd2',
         RS11          = 'Random Sampling with dynamic correction only and normal distribution',
+        RS12          = 'Random Sampling with dynamic correction, normal distribution and new observation error formulation',
     )
 
 def nearest(array, value):
@@ -893,7 +897,7 @@ class Evaluation(object):
             tmp = self.read_simu(os.path.join(workdir, filename)).loc[{'time':dates}]
             print(xpid)
             #if xpid.startswith('RS'):
-            if xpid == 'RS09':
+            if xpid == 'RS12':
             #if xpid == 'RS11':
                 antilopec = tmp.loc[{'member':0}]
                 antilopec = antilopec.loc[{'time':dates}]
@@ -912,7 +916,7 @@ class Evaluation(object):
 
 #        scores_list = ['reliability', 'resolution', 'uncertainty', 'rmse', 'bias', 'brier', 'error_frequency']
         scores_list = ['rmse', 'bias'] + [f'brier_{int(threshold*10)}' for threshold in self.thresholds] + ['CRPS']
-        scores = dict()
+        scores_dict = dict()
 
         #dates = dates[:10]
         liste_postes = np.array([])
@@ -982,9 +986,9 @@ class Evaluation(object):
 
                 #if not os.path.exists(os.path.join(datadir, 'scores.nc')):
                 for product in data.keys():
-                    if product not in scores.keys():
-                        scores[product] = {score:list() for score in scores_list}
-                    for score_name, score in scores[product].items():
+                    if product not in scores_dict.keys():
+                        scores_dict[product] = {score:list() for score in scores_list}
+                    for score_name, score in scores_dict[product].items():
                         if score_name.startswith('brier'):
                             threshold = float(score_name.split('_')[-1])/10.
                             if product == 'antilope':
@@ -1015,12 +1019,37 @@ class Evaluation(object):
         if 'antiloped' in data.keys():
             #self.data['antiloped'] = (('num_poste', 'date', 'pseudo_member'), data['antiloped'])
             self.data['antiloped'] = (('num_poste', 'date'), data['antiloped'])
+        if 'antilopec' in data.keys():
+            self.data['antilopec'] = (('num_poste', 'date'), data['antilopec'])
         if 'raw' in data.keys():
             self.data['raw'] = (('num_poste', 'date', 'member'), data['raw'])
         for xpid in experiments.keys():
             self.data[xpid] = (('num_poste', 'date', 'member'), data[xpid])
         t8 = time.time()
         #print(f'Filling self.data took {(t8-t7)*1000.}ms')
+
+        fig, ax = plt.subplots()
+        thresholds = np.arange(0.1, 1.01, 0.1)
+        obse = self.data.obs.data.flatten()
+        for product in data.keys():
+            if 'member' in self.data[product].coords:
+                simu = self.data[product].stack(points=["num_poste", "date"]).data.transpose()
+                freq_error = scores.error_frequency(simu, obse)
+                ax.axhline(freq_error, color=next(ax._get_lines.prop_cycler)['color'], label=xpid_label[product])
+                #ax.axhline(freq_error, label=xpid_label[product])
+            else:
+                simu = self.data[product].data.flatten()
+                freq_error = list()
+                for threshold in thresholds:
+                    freq_error.append(scores.error_frequency(simu, obse, threshold=threshold))
+                ax.plot(thresholds, np.array(freq_error), label=xpid_label[product], color=next(ax._get_lines.prop_cycler)['color'])
+        ax.set_xlabel('Error threshold (%)')
+        ax.set_ylabel('Frequency of error above threshold (%)\nFrequency of observation outside the ensemble (%)')
+        ax.set_ylim(bottom=0)
+        ax.legend(fontsize=8)
+        plt.tight_layout()
+        fig.savefig(os.path.join(savedir, "error_frequency.pdf"), format='pdf')
+        plt.close(fig)
 
         fig1,ax1 = plt.subplots()
         if 'raw' in data.keys():
@@ -1041,6 +1070,7 @@ class Evaluation(object):
         ax1.set_ylabel('Observed Frequency')
         ax1.legend(fontsize=20)
         fig1.savefig(f'{savedir}/reliability_diagram_{self.threshold}.pdf', format='pdf')
+        plt.close(fig1)
 
         for threshold in [0, 1, 10, 20]:
             fig,ax = plt.subplots()
@@ -1065,7 +1095,7 @@ class Evaluation(object):
         print(f'Ploting ROC curves took {(t9-t8)*1000.}ms')
 
         tmp = {"score":{"dims": ("score"), "data":scores_list}, "num_poste":{"dims": ("num_poste"), "data":liste_postes}}
-        tmp.update({key:{"dims": ("score", "num_poste"), "data":[value[score] for score in scores_list]} for key,value in scores.items()})
+        tmp.update({key:{"dims": ("score", "num_poste"), "data":[value[score] for score in scores_list]} for key,value in scores_dict.items()})
         self.scores = xr.Dataset.from_dict(tmp)
 #        self.scores.to_netcdf(os.path.join(datadir, f'scores_{xpid}.nc'))
         t10 = time.time()
