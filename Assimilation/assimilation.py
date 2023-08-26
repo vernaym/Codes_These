@@ -2507,8 +2507,8 @@ class ParticleFilter(Assimilation):
                     field[idy,idx,idd]  = new[member-1]  # fill new member
 
         if self.plot:
-            fig1,ax1 = plt.subplots(nrows=4, ncols=4, figsize=figsize[domain]['ensembleplot'])
-            fig2,ax2 = plt.subplots(nrows=4, ncols=4, figsize=figsize[domain]['ensembleplot'])
+            fig1,ax1 = plt.subplots(nrows=4, ncols=4, figsize=figsize[self.domain]['ensembleplot'])
+            fig2,ax2 = plt.subplots(nrows=4, ncols=4, figsize=figsize[self.domain]['ensembleplot'])
             i = 0
             j = 0
             raw = localized_period.sel({'time':date})
@@ -2695,8 +2695,8 @@ class ParticleFilter(Assimilation):
 
         if self.plot:
             # On profite de la loop sur les membres pour tracer les ensembles bruts avant et après interpolation
-            fig1, axes1 = plt.subplots(nrows=4, ncols=4, figsize=figsize[domain]['ensembleplot'])
-            fig2, axes2 = plt.subplots(nrows=4, ncols=4, figsize=figsize[domain]['ensembleplot'])
+            fig1, axes1 = plt.subplots(nrows=4, ncols=4, figsize=figsize[self.domain]['ensembleplot'])
+            fig2, axes2 = plt.subplots(nrows=4, ncols=4, figsize=figsize[self.domain]['ensembleplot'])
         i = 0
         j = 0
 
