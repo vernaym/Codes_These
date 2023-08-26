@@ -257,6 +257,7 @@ algo = dict(
         #RS08          = 'RandomSampling/XP08/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         RS09          = 'RandomSampling/XP09/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         RS10          = 'RandomSampling/XP10/Random_Sampling_2021120106_2022050106_daily_alp.nc',
+        RS11          = 'RandomSampling/XP11/Random_Sampling_2021120106_2022050106_daily_alp.nc',
     )
 
 
@@ -369,9 +370,10 @@ xpid_label = dict(
         RS04          = 'Random Sampling',
         RS05          = 'Random Sampling',
         RS07          = 'Random Sampling with dynamic correction only',
-        RS08          = 'Random Sampling with dynamic correaction and qq adjustment',
-        RS09          = 'Random Sampling with dynamic correaction only',
-        RS10          = 'Random Sampling with dynamic correaction only and sd=sd1+sd2',
+        RS08          = 'Random Sampling with dynamic correction and qq adjustment',
+        RS09          = 'Random Sampling with dynamic correction only',
+        RS10          = 'Random Sampling with dynamic correction only and sd=sd1+sd2',
+        RS11          = 'Random Sampling with dynamic correction only and normal distribution',
     )
 
 def nearest(array, value):
@@ -543,18 +545,18 @@ class Evaluation(object):
 
         return (false_alarm, succes_rate)
 
-    def rank_histogram(self, ensemble, obs, product, ax, *args):
+    def rank_histogram(self, ensemble, obs, product, ax, onlypos=False, *args):
         """
         Inspired from : https://github.com/oliverangelil/rankhistogram/blob/master/ranky.py
         When two or more forecasts have same value (most commonly 0), random selection is made for which bin receives the count.
         """
-#        maxsim = np.amax(simu, 1)
         # WARNING : la condition obs>0 réduit PLUS le nombre de cas.
         # Le choix de la condition est très important car il fait apparaitre ou disparaitre
         # une énorme majorité des situations où tout est à 0 sauf 1 membre (grand pic à gauche de l'histogramme)
-#        simu = simu[obs>0]
+#        maxsim = np.amax(ensemble, 1)
+#        ensemble = ensemble[obs>0]
 #        obs = obs[obs>0]
-#        simu = simu[(~np.isnan(obs)) & ((obs>0) | (maxsim>0))]
+#        ensemble = ensemble[(~np.isnan(obs)) & ((obs>0) | (maxsim>0))]
 #        obs = obs[(~np.isnan(obs)) & ((obs>0) | (maxsim>0))]
 #        position = np.array([])
 #        for idx, obs in enumerate(obs):
@@ -564,17 +566,29 @@ class Evaluation(object):
         ensemble = np.transpose(ensemble)  # Shape (Nmember, Ndates)
         ensemble = ensemble[:,~np.isnan(obs)]
         obs = obs[~np.isnan(obs)]
+
+        if onlypos:
+            # Filter out situations where everything is 0mm --> already managed with random positionning of the observation in the ensemble in this case
+            maxsim = np.amax(ensemble, 0)
+            #ensemble = ensemble[:,(~np.isnan(obs)) & ((obs>0) | (maxsim>0))]
+            #obs = obs[(~np.isnan(obs)) & ((obs>0) | (maxsim>0))]
+            # Filter out situations where 
+            ensemble = ensemble[:,(~np.isnan(obs)) & (obs>0)]
+            obs = obs[(~np.isnan(obs)) & (obs>0)]
+
+
         combined = np.vstack((obs[np.newaxis], ensemble))
 
         # Computing ranks
         ranks = np.apply_along_axis(lambda x: rankdata(x, method='min'), 0, combined)
 
-        # Computing ties')
+        # Computing ties'
         ties = np.sum(ranks[0]==ranks[1:], axis=0)
         ranks = ranks[0]
         tie = np.unique(ties)
 
         for i in range(1,len(tie)):
+            # Random positionning of "all 0s" cases
             index = ranks[ties==tie[i]]
             # print('randomizing tied ranks for ' + str(len(index)) + ' instances where there is ' + str(tie[i]) + ' tie/s. ' + str(len(tie)-i-1) + ' more to go')
             ranks[ties==tie[i]] = [np.random.randint(index[j], index[j]+tie[i]+1, tie[i])[0] for j in range(len(index))]
@@ -880,6 +894,7 @@ class Evaluation(object):
             print(xpid)
             #if xpid.startswith('RS'):
             if xpid == 'RS09':
+            #if xpid == 'RS11':
                 antilopec = tmp.loc[{'member':0}]
                 antilopec = antilopec.loc[{'time':dates}]
             tmp = tmp.loc[{'member':range(1,17)}]
@@ -1014,6 +1029,11 @@ class Evaluation(object):
                 fig2,ax2 = plt.subplots()
                 self.rank_histogram(self.data[product].data.reshape(-1, 16), self.data.obs.data.flatten(), product, ax2)
                 fig2.savefig(f'{savedir}/rank_histogram_{product}.pdf', format='pdf')
+                plt.close(fig2)
+                fig2,ax2 = plt.subplots()
+                self.rank_histogram(self.data[product].data.reshape(-1, 16), self.data.obs.data.flatten(), product, ax2, onlypos=True)
+                fig2.savefig(f'{savedir}/rank_histogram_onlypos_{product}.pdf', format='pdf')
+                plt.close(fig2)
         ax1.plot([0,1], [0,1], linestyle=':', color='k')
         ax1.set_xlim([0, 1])
         ax1.set_ylim([0, 1])

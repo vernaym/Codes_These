@@ -1837,7 +1837,8 @@ class RandomSampling(Assimilation):
             j = 0
 
         for member in analysis.member.data:
-            ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='gamma')
+            #ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='gamma')
+            ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='normal')
             analysis.loc[{'member':member}] = ana
 
             if self.plot and member>0:
@@ -1968,7 +1969,8 @@ class RandomSampling(Assimilation):
 
             # Fill other members with random draw arround the corrected observation
             for member in analysis.member.data:
-                ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='gamma')
+                #ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='gamma')
+                ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='normal')
                 analysis.loc[{'member':member}] = ana
 
                 self.newlocalfield[member][idp,idd] = analysis.sel({'lat':nearest_lat, 'lon':nearest_lon, 'member':member}).data
