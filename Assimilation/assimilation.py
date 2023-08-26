@@ -1247,6 +1247,7 @@ class Assimilation(object):
         pond = self.pond.dot(diags(1/std.flatten(), 0))
         obs = parameters.mu.data.flatten()  # De-biased observation
         newfield, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(obs, pond)
+        #newfield, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(obs, pond, qq_adjustment=True)  # qq adjustment add >0 bias !
         Rdyn = diags(sd, 0)
         R = dia_matrix(Rdyn)
         new_obs = xr.DataArray(

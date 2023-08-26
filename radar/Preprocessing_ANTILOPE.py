@@ -95,7 +95,7 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
     newfield = (initial_field * pixel_weight + mean * meanweight/pixel_weight) / (pixel_weight + meanweight/pixel_weight)  # Smoother fields --> underestimation of extreme values
     #newfield = (initial_field * pixel_weight + mean * meanweight/(meanweight+pixel_weight)) / (pixel_weight + meanweight/(meanweight+pixel_weight))
     #newfield = (initial_field * pixel_weight + mean * meanweight/(meanweight+pixel_weight)) / (pixel_weight + meanweight/(meanweight+pixel_weight))
-    newfield = np.round(newfield, 1)
+    #newfield = np.round(newfield, 1)
 
     if qq_adjustment:
         # Try to match extreme values with original field (quantile-quantile like method)
@@ -235,7 +235,7 @@ def random_draw(obs, sd, distribution='gamma'):
     ana[ana<0] = 0  # WARNING : "mass accumulation" in 0 (analysis distribution not normal anymore)
     #ana[np.where(sd<=1)] = obs[np.where(sd<=1)]+gauss*sd[np.where(sd<=1)]  # Gaussian perturbations around pixels with for small errors
     ana[obs==0] = obs[obs==0]+exp*sd[obs==0]  # Exponential perturbation arround 0. TODO : arround 0, use the density
-    ana = np.round(ana, 1)
+    #ana = np.round(ana, 1)
 
     return ana
 
