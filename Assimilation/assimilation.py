@@ -1510,7 +1510,8 @@ class Assimilation(object):
 
         i = 0
         j = 0
-        for m in range(1, self.Ne+1):
+        #for m in range(1, self.Ne+1):
+        for m in range(0, self.Ne+1):
             outfield.loc[{'member':m}] = self.newlocalfield[m]  # self.newlocalfield is a numpy array
 
         if self.plot:
@@ -1963,6 +1964,7 @@ class RandomSampling(Assimilation):
 
             # Fill first member with corrected observation
             analysis.loc[{'member':0}] = obs
+            self.newlocalfield[0][idp,idd] = analysis.sel({'lat':nearest_lat, 'lon':nearest_lon, 'member':0}).data
 
             sd = R.diagonal().reshape((len(analysis.lat), len(analysis.lon)))  # Get standard deviation field
             error = xr.DataArray(
@@ -1975,7 +1977,7 @@ class RandomSampling(Assimilation):
             self.error[idp, idd] = error.sel({'lat':nearest_lat, 'lon':nearest_lon})
 
             # Fill other members with random draw arround the corrected observation
-            for member in analysis.member.data:
+            for member in range(1, nmembers+1):
                 #ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='gamma')
                 ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='normal')
                 analysis.loc[{'member':member}] = ana
@@ -3045,8 +3047,8 @@ if __name__ == "__main__":
         rs = RandomSampling(extract_period, antilope, nivometeo, args.plot, args.frequency, args.gridded, args.localisation, args.mask, args.debiasing, args.domain, args.likelyhood)
         mask = rs.pdf_parameters()
         rs.run()
-        if not args.gridded:
-            rs.save_corrected_field(extract_period, nivometeo.num_poste.data)
+        #if not args.gridded:
+        #    rs.save_corrected_field(extract_period, nivometeo.num_poste.data)
         out = rs.output(localfields)
         outname = f"Random_Sampling_{args.datebegin.strftime('%Y%m%d%H')}_{args.dateend.strftime('%Y%m%d%H')}_{args.frequency}_{args.domain}"
         out.to_netcdf(f"{outname}.nc".encode('utf-8'))
