@@ -259,10 +259,12 @@ algo = dict(
         #RS08          = 'RandomSampling/XP08/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         #RS09          = 'RandomSampling/XP09/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         #RS10          = 'RandomSampling/XP10/Random_Sampling_2021120106_2022050106_daily_alp.nc',
-        RS11          = 'RandomSampling/XP11/Random_Sampling_2021120106_2022050106_daily_alp.nc',
+        #RS11          = 'RandomSampling/XP11/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         RS12          = 'RandomSampling/XP12/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         RS13          = 'RandomSampling/XP13/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         RS14          = 'RandomSampling/XP14/Random_Sampling_2021120106_2022050106_daily_alp.nc',
+        RS15          = 'RandomSampling/XP15/Random_Sampling_2021120106_2022050106_daily_alp.nc',
+        RS16          = 'RandomSampling/XP16/Random_Sampling_2021120106_2022050106_daily_alp.nc',
     )
 
 
@@ -383,6 +385,8 @@ xpid_label = dict(
         RS12          = 'Random Sampling with new observation uncertainty formulation',
         RS13          = 'Random Sampling RS12 + increased observation error',
         RS14          = 'Random Sampling RS13 + gamma distribution',
+        RS15          = 'Random Sampling RS13 + gamma distribution + IDW instead of exp',
+        RS16          = 'Random Sampling RS15 + gradient AROME',
     )
 
 def nearest(array, value):
@@ -606,6 +610,8 @@ class Evaluation(object):
         #return np.histogram(ranks, bins=np.linspace(0.5, combined.shape[0]+0.5, combined.shape[0]+1))
         #ax.hist(ranks, bins=range(np.shape(ensemble)[0]))
         ax.hist(ranks, bins=np.linspace(0.5, combined.shape[0]+0.5, combined.shape[0]+1))
+        ax.set_xlabel('Position of the observation in the ensemble')
+        ax.set_ylabel('Number of occurences')
 
     def reliability_diagram(self, simu, obs, product, ax, Ne=16):
         ndays = len(obs)
