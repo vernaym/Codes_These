@@ -108,6 +108,10 @@ if __name__ == "__main__":
     vmax = np.nanmax(field.data)
     field = field.rename('Precipitation (mm)')
 
+    smooth = field - uniform_filter(field.data, size=15)
+    vmax = np.max(smooth.data)
+    plot(smooth, 'field_minus_smooth', cmap='RdBu_r', vmin=-vmax, vmax=vmax)
+
     raw_index = granularity_index(field.data)
 
     # Extract correlation window
@@ -119,6 +123,13 @@ if __name__ == "__main__":
     error = xr.open_dataarray(fic_error)
     error = error.sel({'lat':np.intersect1d(extract_lat, error.lat), 'lon':np.intersect1d(extract_lon, error.lon)})
     confidence = 1 / error
+    pond = codist.dot(diags(1/error.data.flatten(), 0))
+
+    # Dynaic correction alone
+    new, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(field.data, pond)
+    dyn = make_mask.to_xarray(new.reshape((len(field.lat), len(field.lon))), field).rename('Precipitation (mm)')
+    dyn_index = granularity_index(dyn.data)
+
 
     # Debiasing
     fic_ratio = os.path.join('/home/vernaym/workdir/ASSIMILATION/mask/alp', f'Estimated_ratio_alp_0.15.nc')
@@ -136,12 +147,11 @@ if __name__ == "__main__":
     corr_index = granularity_index(correctedfield.data)
 
     # Add relief mean vertical gradient (Not implemented in experiments)
-    fic_gradient = os.path.join('/home/vernaym/workdir/ASSIMILATION/mask/alp', f'model_gradient.nc')
-    gradient = xr.open_dataarray(fic_gradient)
-    gradient = gradient.sel({'lat':np.intersect1d(extract_lat, gradient.lat), 'lon':np.intersect1d(extract_lon, gradient.lon)})
-    final_field = correctedfield * gradient.data
-
-    final_index = granularity_index(final_field.data)
+#    fic_gradient = os.path.join('/home/vernaym/workdir/ASSIMILATION/mask/alp', f'model_gradient.nc')
+#    gradient = xr.open_dataarray(fic_gradient)
+#    gradient = gradient.sel({'lat':np.intersect1d(extract_lat, gradient.lat), 'lon':np.intersect1d(extract_lon, gradient.lon)})
+#    final_field = correctedfield * gradient.data
+#    final_index = granularity_index(final_field.data)
 
     # smoothing
     smooth = field.copy()
@@ -152,8 +162,9 @@ if __name__ == "__main__":
 
     print('raw_index=', raw_index)
     print('deb_index=', deb_index)
+    print('dyn_index=', dyn_index)
     print('corr_index=', corr_index)
-    print('final_index=', final_index)
+#    print('final_index=', final_index)
     print('smooth_index=', smooth_index)
 
 

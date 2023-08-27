@@ -66,6 +66,12 @@ extract_lon = np.round(np.arange(domain_coords[domain]['lonmin'], domain_coords[
 # Coordonnées du Mont Blanc :
 lat = 45.83
 lon = 6.87
+#lat = 46.0
+#lon = 6.7
+#lat = 45.82
+#lon = 6.7
+lat = 45.79
+lon = 6.89
 
 def plot(field, name, cmap=plt.cm.YlGnBu, vmin=None, vmax=None, scores=None):
     if vmin is None:
@@ -73,10 +79,11 @@ def plot(field, name, cmap=plt.cm.YlGnBu, vmin=None, vmax=None, scores=None):
     if vmax is None:
         vmax = np.max(field)
     fig, ax = plt.subplots(figsize=figsize[domain])
+    #fig, ax = plt.subplots()
     make_mask.plot_field(fig, ax, field, cmap=cmap, vmin=vmin, vmax=vmax, scores=scores)
     circle = plt.Circle((lon, lat), 0.14, color='red', fill=False, linewidth=3)
     ax.plot(lon, lat, color='red', marker='+', markersize=10)
-    ax.add_artist(circle)
+    #ax.add_artist(circle)
     #plt.Circle((lon, lat), 0.15, color='k', fill=False, linewidth=2)
     plt.tight_layout()
     fig.savefig(os.path.join(savedir, f'{name}.pdf'), format='pdf')
@@ -98,8 +105,8 @@ def plot_super_ensemble(ensemble, weights, initial_obs, new_obs):
     plot_distribution(ax, mean, std, color='k', vmin=np.min(ensemble), vmax=np.max(ensemble), label='Theoretical neighborhood distribution')
     ax.plot(initial_obs, 0.0003, marker='v', color='red', label='Original value', linestyle='')
     ax.plot(new_obs, 0.0003, marker='v', color='blue', label='Corrected value', linestyle='')
-    ax.plot(np.mean(ensemble), 0.0003, marker='v', color='dimgrey', label='Non-weighted mean', linestyle='')
-    ax.plot(mean, 0.0003, marker='v', color='k', label='Weighted mean', linestyle='')
+    #ax.plot(np.mean(ensemble), 0.0003, marker='v', color='dimgrey', label='Non-weighted average', linestyle='')
+    ax.plot(mean, 0.0003, marker='v', color='k', label='Weighted average', linestyle='')
 
     ax.legend()
     ax.set_xlabel('Precipitation (mm)')
@@ -112,7 +119,7 @@ def plot_distribution(ax, mean, sd, vmin=0, vmax=1000, ensemble=None, label=None
         color = next(ax._get_lines.prop_cycler)['color']
 
     if distribution == 'norm':
-        ax.plot(x, norm.pdf(x, loc=mean, scale=np.sqrt(sd)), color=color, label=label, linestyle='--', linewidth=linewidth)
+        ax.plot(x, norm.pdf(x, loc=mean, scale=2*np.sqrt(sd)), color=color, label=label, linestyle='--', linewidth=linewidth)
         if ensemble is not None:
             #ax.bar(ensemble, norm.pdf(ensemble, loc=mean, scale=sd), 'r-', color=color, label='members', linewidth=linewidth)
             ax.bar(ensemble, norm.pdf(ensemble, loc=mean, scale=np.sqrt(sd)), width=0.1, color=color)
@@ -226,6 +233,15 @@ if __name__ == "__main__":
     new, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(field.data, pond)
     correctedfield = make_mask.to_xarray(new.reshape((len(field.lat), len(field.lon))), field).rename('Precipitation (mm)')
     plot(correctedfield, 'dynamic_correction_only', vmax=vmax)
+
+    #import pdb
+    #pdb.set_trace()
+    w0 = pond.diagonal().flatten()
+    w1 = np.array(pond.mean(axis=1).tolist()[0]) / pond.diagonal().flatten()
+    w1 = make_mask.to_xarray(w1.reshape((len(field.lat), len(field.lon))), field)
+    w1 = w1.rename('Coefficient toward mean')
+    plot(w1, 'w1', cmap='viridis')
+    #diags(weights.data/flatten, 0).dot(1/
 
     original = field.sel({'lat':lat, 'lon':lon}).data
     corrected = correctedfield.sel({'lat':lat, 'lon':lon}).data

@@ -288,10 +288,13 @@ if not os.path.exists(savedir):
     os.makedirs(savedir)
 
 xpid_label = dict(
-        antilope      = 'ANTILOPE',
+        #antilope      = 'ANTILOPE',
+        antilope      = 'Raw field',
         antiloper     = 'ANTILOPE + error',
-        antiloped     = 'ANTILOPE + error + debiaisage',
-        antilopec     = 'ANTILOPE + debiaisage + correction',
+        #antiloped     = 'ANTILOPE + error + debiaisage',
+        antiloped     = 'De-biasing',
+        #antilopec     = 'ANTILOPE + debiaisage + correction',
+        antilopec     = 'De-biasing + WMA',
         raw           = 'Raw PE-AROME ensemble',
         GD0           = 'Global daily analysis',
         LD0           = 'Daily analysis with PF',
@@ -745,15 +748,7 @@ class Evaluation(object):
     def read_corrected_antilope(self):
         filename = 'ANTILOPEQ_2021120106_2022050106_alp_corrected.nc'
         antilope = xr.open_dataset(os.path.join(datadir, filename))
-        if filename.startswith('ANTILOPEH'):
-            # Convert hourly precipitation into 24h precipitation between 6h J-1 and 6h J
-            # Problem : the xarray tools to do that allows only accumulations between
-            # 0h and 23h.
-            # solution : shift time serie by 7h, compute 24h accumulations and
-            # shift back !
-            antilope['time'] = antilope.time-np.timedelta64(7, 'h')
-            antilope = antilope.resample(time='1D').sum(dim='time')  # !!! VERY SLOW !!! WARNING : does not work with pandas>=2.0.0
-            antilope['time'] = antilope.time+np.timedelta64(30, 'h')
+        antilope = antilope.loc[{'member':0}]
 
         return antilope
 
@@ -865,7 +860,8 @@ class Evaluation(object):
         self.data = self.data.loc[{'date':dates}]
 
         ##data = dict(antilope=list(), antiloper=list(), antiloped=list(), raw=list())
-        data = dict(antilope=list(), raw=list(), antilopec=list())
+        data = dict(antilope=list(), antiloped=list(), antilopec=list())
+        #data = dict(antilope=list(), raw=list(), antilopec=list())
         #data = dict(antilopec=list())
         #data = dict(antilope=list(), antiloped=list(), antilopec=list())
         #data = dict(antilope=list(), antiloped=list())
@@ -905,14 +901,16 @@ class Evaluation(object):
         antiloper = antiloper.transpose('lat', 'lon', 'time', 'member')
 
         simus = dict()
+        antc = False
         for xpid,filename in experiments.items():
             tmp = self.read_simu(os.path.join(workdir, filename)).loc[{'time':dates}]
             print(xpid)
             #if xpid.startswith('RS'):
             #if xpid == 'RS12':
-            if xpid == 'RS14':
-                antilopec = tmp.loc[{'member':0}]
-                antilopec = antilopec.loc[{'time':dates}]
+#            if xpid == 'RS15':
+#                antilopec = tmp.loc[{'member':0}]
+#                antilopec = antilopec.loc[{'time':dates}]
+#                antc = True
             tmp = tmp.loc[{'member':range(1,17)}]
             simus[xpid] = tmp
 
@@ -921,10 +919,10 @@ class Evaluation(object):
             self.data['member'] = np.arange(1,17)
             self.data['pseudo_member'] = np.arange(1,4)
 
-
-        if 'antilopec' in data.keys() and len(data['antilopec'])==0:
+        if 'antilopec' in data.keys() and not antc:
             antilopec = self.read_corrected_antilope()
-            antilopec = antilopec.loc[{'date':dates}]
+            antilopec = antilopec.loc[{'time':dates}]
+            #antilopec = antilopec.loc[{'time':dates}]
 
 #        scores_list = ['reliability', 'resolution', 'uncertainty', 'rmse', 'bias', 'brier', 'error_frequency']
         scores_list = ['rmse', 'bias'] + [f'brier_{int(threshold*10)}' for threshold in self.thresholds] + ['CRPS']
@@ -963,6 +961,7 @@ class Evaluation(object):
                     data['antiloper'].append(antiloper.sel({'lat':nearest(antiloper.lat, lat), 'lon':nearest(antiloper.lon, lon)}).rr.data)
                 if 'antilopec' in data.keys():
                     data['antilopec'].append(antilopec.sel({'num_poste':num_poste}).rr.data)
+                    #data['antilopec'].append(antilopec.sel({'lat':nearest(antilopec.lat, lat), 'lon':nearest(antilopec.lon, lon)}).rr.data)
                 t3 = time.time()
                 print(f'Reading antilope informations took {(t3-t2)*1000.}ms')
                 if 'raw' in data.keys():
@@ -1194,10 +1193,10 @@ class Evaluation(object):
             else:
                 ax.set_ylabel(f'{score} (mm)', fontsize=28)
 
-            ax.set_xticklabels([''] + products, fontsize=28)
-            ax.set_xticks(range(len(products)+2))
+            #ax.set_xticklabels([''] + products, fontsize=28)
+            #ax.set_xticks(range(len(products)+2))
             ax.yaxis.set_tick_params(labelsize=28)
-            ax.legend(*zip(*labels), fontsize=18)
+            ax.legend(*zip(*labels), fontsize=28)
 
             if score.startswith('brier'):
                 pass
