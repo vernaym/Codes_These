@@ -262,6 +262,7 @@ algo = dict(
         RS11          = 'RandomSampling/XP11/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         RS12          = 'RandomSampling/XP12/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         RS13          = 'RandomSampling/XP13/Random_Sampling_2021120106_2022050106_daily_alp.nc',
+        RS14          = 'RandomSampling/XP14/Random_Sampling_2021120106_2022050106_daily_alp.nc',
     )
 
 
@@ -377,9 +378,11 @@ xpid_label = dict(
         RS08          = 'Random Sampling with dynamic correction and qq adjustment',
         RS09          = 'Random Sampling with dynamic correction only',
         RS10          = 'Random Sampling with dynamic correction only and sd=sd1+sd2',
-        RS11          = 'Random Sampling with dynamic correction only and normal distribution',
-        RS12          = 'Random Sampling with dynamic correction, normal distribution and new observation uncertainty formulation',
-        RS13          = 'Random Sampling with dynamic correction, normal distribution and new observation uncertainty formulation and increased observation error',
+        #RS11          = 'Random Sampling with dynamic correction only and normal distribution',
+        RS11          = 'Random Sampling ref (dyn corr + normal dist)',
+        RS12          = 'Random Sampling with new observation uncertainty formulation',
+        RS13          = 'Random Sampling RS12 + increased observation error',
+        RS14          = 'Random Sampling RS13 + gamma distribution',
     )
 
 def nearest(array, value):
@@ -578,10 +581,11 @@ class Evaluation(object):
             maxsim = np.amax(ensemble, 0)
             #ensemble = ensemble[:,(~np.isnan(obs)) & ((obs>0) | (maxsim>0))]
             #obs = obs[(~np.isnan(obs)) & ((obs>0) | (maxsim>0))]
-            # Filter out situations where 
+            # Filter out situations where observation is 0mm
             ensemble = ensemble[:,(~np.isnan(obs)) & (obs>0)]
             obs = obs[(~np.isnan(obs)) & (obs>0)]
-
+            #ensemble = ensemble[:,(~np.isnan(obs)) & (obs>1)]
+            #obs = obs[(~np.isnan(obs)) & (obs>1)]
 
         combined = np.vstack((obs[np.newaxis], ensemble))
 
@@ -899,8 +903,8 @@ class Evaluation(object):
             tmp = self.read_simu(os.path.join(workdir, filename)).loc[{'time':dates}]
             print(xpid)
             #if xpid.startswith('RS'):
-            if xpid == 'RS12':
-            #if xpid == 'RS11':
+            #if xpid == 'RS12':
+            if xpid == 'RS14':
                 antilopec = tmp.loc[{'member':0}]
                 antilopec = antilopec.loc[{'time':dates}]
             tmp = tmp.loc[{'member':range(1,17)}]

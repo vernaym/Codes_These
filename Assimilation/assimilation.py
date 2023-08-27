@@ -1837,8 +1837,8 @@ class RandomSampling(Assimilation):
             j = 0
 
         for member in analysis.member.data:
-            #ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='gamma')
-            ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='normal')
+            ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='gamma')
+            #ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='normal')
             analysis.loc[{'member':member}] = ana
 
             if self.plot and member>0:
