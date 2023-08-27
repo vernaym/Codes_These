@@ -222,7 +222,8 @@ def codistances(coords, ld=0.07):
     dist[dist.nonzero()] = dist[dist.nonzero()]/ld
     #dist[dist.nonzero()] = 1/dist[dist.nonzero()]
     #np.exp(-dist.data, out=dist.data )
-    np.exp(-dist.data**2/2, out=dist.data )
+    #np.exp(-dist.data**2/2, out=dist.data )
+    np.exp(1/(1+dist.data), out=dist.data )
 
     return dist
 

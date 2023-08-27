@@ -706,9 +706,10 @@ def ratio_estimation(field, model=None, moving_window=25):
             if h0 is not None:
                 w = np.exp(-(dist/d0))*np.exp(-(np.abs(elevation_dist)/h0))
             else:
-                w = np.round(np.exp(-(dist/d0)), 2)  # Propagates reference score further
-                #w = np.round(np.exp(-(dist**2/d0)), 2)
-                #w = np.round(np.exp(-(dist/d0)**2), 2)  # Sticks more to the reference
+                w = np.round(1/(1+dist), 3)
+                #w = np.round(np.exp(-(dist/d0)), 3)  # Propagates reference score further
+                #w = np.round(np.exp(-(dist**2/d0)), 3)
+                #w = np.round(np.exp(-(dist/d0)**2), 3)  # Sticks more to the reference
 
             weights.append(w)
             # To take into account the increasing difference of cumuls with the distance
