@@ -1707,7 +1707,7 @@ class RandomSampling(Assimilation):
             )
         outname = f"ANTILOPEQ_{args.datebegin.strftime('%Y%m%d%H')}_{args.dateend.strftime('%Y%m%d%H')}_{args.domain}_corrected"
         # WARNING : encode(utf-8) nécessaire si outname contient un entier formatté en string
-        out.to_netcdf(os.path.join('/home/vernaym/These/DATA', f"{outname}.nc").encode('utf-8'))
+        out.to_netcdf(f"{outname}.nc").encode('utf-8'))
         #out.to_netcdf(os.path.join('/home/vernaym/These/DATA', f"{outname}.nc"))
 
     @speedtest
