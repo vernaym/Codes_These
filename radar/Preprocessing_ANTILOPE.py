@@ -92,7 +92,7 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
     # for temporary failures as well as uncertainties due to the error estimation method
     #newfield = (initial_field * pixel_weight + mean * meanweight) / (pixel_weight + meanweight)  # Stay closer to the original value (spatial structures can still be visible)
     newfield = (initial_field * pixel_weight + mean * meanweight/pixel_weight) / (pixel_weight + meanweight/pixel_weight)  # Smoother fields --> underestimation of extreme values
-    #newfield = (initial_field * pixel_weight + mean * meanweight/(meanweight+pixel_weight)) / (pixel_weight + meanweight/(meanweight+pixel_weight))
+    #newfield = (initial_field * pixel_weight + mean * weight/pixel_weight) / (pixel_weight + weight/pixel_weight)  # Smoother fields --> underestimation of extreme values
     #newfield = (initial_field * pixel_weight + mean * meanweight/(meanweight+pixel_weight)) / (pixel_weight + meanweight/(meanweight+pixel_weight))
     #newfield = np.round(newfield, 1)
 
@@ -147,25 +147,34 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
 
     # TODO : there is still a probleme for low precipitation fields (artefacts)
 
+    sd3 = np.abs(mean-newfield)  # Difference between the new value and the mean value in the neigborhood
     # Plot correction coefficient
     if plot:
         import These.scripts.cas_test as ct
-        correction_coefficient = (meanweight/pixel_weight * 1 / (pixel_weight + meanweight/pixel_weight)).reshape(np.shape(field))
-        filename = 'Correction_weight.pdf'
-        ct.plot_field(correction_coefficient, filename, label='Correction coefficient', cmap=plt.cm.viridis, vmin=0, vmax=1, add_circle=True)
+#        correction_coefficient = (meanweight/pixel_weight * 1 / (pixel_weight + meanweight/pixel_weight)).reshape(np.shape(field))
+#        filename = 'Correction_weight.pdf'
+#        ct.plot_field(correction_coefficient, filename, label='Correction coefficient', cmap=plt.cm.viridis, vmin=0, vmax=1, add_circle=True)
+#
+#        # Plot original value coefficient
+#        original_value_coefficient = (pixel_weight / (pixel_weight + meanweight/pixel_weight)).reshape(np.shape(field))
+#        filename = 'Original_value_weight.pdf'
+#        ct.plot_field(original_value_coefficient, filename, label='Original value coefficient', cmap=plt.cm.viridis, vmin=0, vmax=1, add_circle=True)
 
-        # Plot original value coefficient
-        original_value_coefficient = (pixel_weight / (pixel_weight + meanweight/pixel_weight)).reshape(np.shape(field))
-        filename = 'Original_value_weight.pdf'
-        ct.plot_field(original_value_coefficient, filename, label='Original value coefficient', cmap=plt.cm.viridis, vmin=0, vmax=1, add_circle=True)
+        ct.plot_field(sd1.reshape(np.shape(field)), 'sd1', cmap=plt.cm.YlGnBu)
+        ct.plot_field(sd2.reshape(np.shape(field)), 'sd2', cmap=plt.cm.YlGnBu)
+        ct.plot_field(sd3.reshape(np.shape(field)), 'sd3', cmap=plt.cm.YlGnBu)
+        ct.plot_field(np.sqrt(sd3*sd2).reshape(np.shape(field)), 'sqrt(sd1_times_sd2)', cmap=plt.cm.YlGnBu)
+        ct.plot_field(np.sqrt(sd3*sd2).reshape(np.shape(field)), 'sqrt(sd3_times_sd2)', cmap=plt.cm.YlGnBu)
+        ct.plot_field((sd2*sd1/sd2).reshape(np.shape(field)), 'sqrt(sd2_times_sd1_over_sd2)', cmap=plt.cm.YlGnBu)
+        ct.plot_field((sd2+sd1/sd2).reshape(np.shape(field)), 'sqrt(sd2_plus_sd1_over_sd2)', cmap=plt.cm.YlGnBu)
 
-    #sd3 = np.abs(initial_field-newfield)  # Obs displacment  --> Apparition of spatial structures
     #sd = sd + 1  # Add 1 to ensure that the error is >1 (mm or mm^(1/2)). --> Dispersion too large
     #sd = (sd1+sd2)/2
     #sd = sd1/2+sd2
     #sd = sd2
-    sd = np.sqrt(sd1*sd2)  # --> Increase spread (overdispersif in cas_test)
-    #sd = sd2  # --> Increase spread (overdispersif in cas_test)
+    #sd = np.sqrt(sd1*sd2)  # --> Increase spread (overdispersif in cas_test)
+    #sd = sd2*sd1/sd2  # --> Increase spread (overdispersif in cas_test)
+    sd = np.sqrt(sd2*newfield)  # --> Increase spread (overdispersif in cas_test)
     #sd = sd1+sd2  # --> Increase spread (overdispersif in cas_test)
     #sd = sd1
 

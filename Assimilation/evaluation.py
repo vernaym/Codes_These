@@ -261,6 +261,7 @@ algo = dict(
         #RS10          = 'RandomSampling/XP10/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         RS11          = 'RandomSampling/XP11/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         RS12          = 'RandomSampling/XP12/Random_Sampling_2021120106_2022050106_daily_alp.nc',
+        RS13          = 'RandomSampling/XP13/Random_Sampling_2021120106_2022050106_daily_alp.nc',
     )
 
 
@@ -377,7 +378,8 @@ xpid_label = dict(
         RS09          = 'Random Sampling with dynamic correction only',
         RS10          = 'Random Sampling with dynamic correction only and sd=sd1+sd2',
         RS11          = 'Random Sampling with dynamic correction only and normal distribution',
-        RS12          = 'Random Sampling with dynamic correction, normal distribution and new observation error formulation',
+        RS12          = 'Random Sampling with dynamic correction, normal distribution and new observation uncertainty formulation',
+        RS13          = 'Random Sampling with dynamic correction, normal distribution and new observation uncertainty formulation and increased observation error',
     )
 
 def nearest(array, value):

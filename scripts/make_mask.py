@@ -638,7 +638,8 @@ def ratio_estimation(field, model=None, moving_window=25):
 
     if model is not None:
         ratio_modele = model.rr_cumul / uniform_filter(model.rr_cumul.data, int(d0*100))  # ~ gradient vertical modele
-        ratio_modele.data = uniform_filter(ratio_modele.data, int(d0*100))
+        #ratio_modele.data = uniform_filter(ratio_modele.data, 30)
+        ratio_modele.data = uniform_filter(ratio_modele.data, 15)
         plot_and_save(ratio_modele, 'model_gradient' , vmin=0.8, vmax=1.2, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap)
 
     # Mont-Blanc
@@ -896,7 +897,7 @@ def ratio_estimation(field, model=None, moving_window=25):
         #plot_and_save(np.abs(observation_error), errorname, vmin=0, vmax=15, cmap=plt.cm.Greys, scores=scores)
         #plot_and_save(observation_error, errorname, vmin=1, vmax=15, cmap=plt.cm.YlOrBr, scores=scores)
         plot_and_save(confidence, confidencename, vmin=0, vmax=1, cmap=plt.cm.Greens, scores=scores)
-        plot_and_save(uncertainty, uncertaintyname, vmin=1, vmax=15, cmap=plt.cm.YlOrBr, scores=scores)
+        plot_and_save(uncertainty, uncertaintyname, vmin=1, vmax=30, cmap=plt.cm.YlOrBr, scores=scores)
     elif domain == 'GrandesRousses':
         plot_and_save(ratio_field, rationame, vmin=0.6, vmax=1.4, cmap=plt.cm.coolwarm, scores=scores)
         #plot_and_save(observation_error, errorname, vmin=-6, vmax=6, cmap=plt.cm.coolwarm, scores=scores)
