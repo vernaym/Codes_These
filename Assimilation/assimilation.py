@@ -1246,7 +1246,14 @@ class Assimilation(object):
         #pond = self.pond.dot(diags(np.exp(-std).flatten(), 0))  # Pondération par la distance et l'erreur statique !! ATTENTION A L'ORDRE !!
         pond = self.pond.dot(diags(1/std.flatten(), 0))
         obs = parameters.mu.data.flatten()  # De-biased observation
-        newfield, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(obs, pond)
+
+        # read AROME mean vertical gradient (TEST !)
+        fic_gradient = os.path.join('/home/vernaym/workdir/ASSIMILATION/mask/alp', f'model_gradient.nc')
+        gradient = xr.open_dataarray(fic_gradient)
+        gradient = gradient.sel({'lat':np.intersect1d(parameters.lat, gradient.lat), 'lon':np.intersect1d(parameters.lon, gradient.lon)})
+
+        #newfield, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(obs, pond)
+        newfield, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(obs, pond, gradient=gradient.data.flatten())
         #newfield, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(obs, pond, qq_adjustment=True)  # qq adjustment add >0 bias !
         Rdyn = diags(sd, 0)
         R = dia_matrix(Rdyn)

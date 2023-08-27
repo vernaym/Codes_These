@@ -53,7 +53,7 @@ ld = 0.05
 max_dist = ld*3
 
 
-def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False, qq_adjustment=False):
+def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False, qq_adjustment=False, gradient=None):
     """
     * field          : 2D (n*k) array containing the field to modify
     * pond           : (nk*nk) sparse ponderation matrix (each line gives the correlation between the corresponding pixel
@@ -95,6 +95,9 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
     #newfield = (initial_field * pixel_weight + mean * weight/pixel_weight) / (pixel_weight + weight/pixel_weight)  # Smoother fields --> underestimation of extreme values
     #newfield = (initial_field * pixel_weight + mean * meanweight/(meanweight+pixel_weight)) / (pixel_weight + meanweight/(meanweight+pixel_weight))
     #newfield = np.round(newfield, 1)
+
+    if gradient is not None:
+        newfield = newfield * gradient
 
     if qq_adjustment:
         # Try to match extreme values with original field (quantile-quantile like method)
@@ -151,14 +154,14 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
     # Plot correction coefficient
     if plot:
         import These.scripts.cas_test as ct
-#        correction_coefficient = (meanweight/pixel_weight * 1 / (pixel_weight + meanweight/pixel_weight)).reshape(np.shape(field))
-#        filename = 'Correction_weight.pdf'
-#        ct.plot_field(correction_coefficient, filename, label='Correction coefficient', cmap=plt.cm.viridis, vmin=0, vmax=1, add_circle=True)
-#
-#        # Plot original value coefficient
-#        original_value_coefficient = (pixel_weight / (pixel_weight + meanweight/pixel_weight)).reshape(np.shape(field))
-#        filename = 'Original_value_weight.pdf'
-#        ct.plot_field(original_value_coefficient, filename, label='Original value coefficient', cmap=plt.cm.viridis, vmin=0, vmax=1, add_circle=True)
+        correction_coefficient = (meanweight/pixel_weight * 1 / (pixel_weight + meanweight/pixel_weight)).reshape(np.shape(field))
+        filename = 'Correction_weight.pdf'
+        ct.plot_field(correction_coefficient, filename, label='Correction coefficient', cmap=plt.cm.viridis, vmin=0, vmax=1, add_circle=True)
+
+        # Plot original value coefficient
+        original_value_coefficient = (pixel_weight / (pixel_weight + meanweight/pixel_weight)).reshape(np.shape(field))
+        filename = 'Original_value_weight.pdf'
+        ct.plot_field(original_value_coefficient, filename, label='Original value coefficient', cmap=plt.cm.viridis, vmin=0, vmax=1, add_circle=True)
 
         ct.plot_field(sd1.reshape(np.shape(field)), 'sd1', cmap=plt.cm.YlGnBu)
         ct.plot_field(sd2.reshape(np.shape(field)), 'sd2', cmap=plt.cm.YlGnBu)
