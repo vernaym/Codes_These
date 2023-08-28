@@ -773,7 +773,10 @@ class Assimilation(object):
             #mask = xr.open_dataset(os.path.join("/home/vernaym/These/DATA/mask", f"Estimated_ratio_{self.domain}_0.15_15.nc"))
             mask = xr.open_dataset(os.path.join(f"Estimated_ratio.nc"))
             #ratio = mask.rr
-            ratio = mask.ratio
+            try:
+                ratio = mask.Ratio
+            except AttributeError:
+                ratio = mask.ratio
         else:
             ratio = 1  # No debiasing
         parameters['mu'] = parameters['rr'] / ratio  # TODO : check if the ensemble after assimilation is not biased
@@ -817,7 +820,10 @@ class Assimilation(object):
                 mask = xr.open_dataset(os.path.join(f"Observation_error.nc"))
                 #parameters['sigma'] =  mask.rr  # Pas de valeur absolue pour le calcul des covariances !
                 #parameters['sigma'] =  mask.ratio  # Pas de valeur absolue pour le calcul des covariances !
-                parameters['sigma'] =  mask.error
+                try:
+                    parameters['sigma'] =  mask.Uncertainty
+                except AttributeError:
+                    parameters['sigma'] =  mask.error
                 #parameters['sigma'] =  (0.261 + 0.263 * parameters['rr'])*np.abs(mask.rr)  # PF
 
 #            except FileNotFoundError as e:
@@ -1244,8 +1250,12 @@ class Assimilation(object):
         std = np.abs(parameters.sigma.data)
         Rstat = diags(std.flatten())
         #pond = self.pond.dot(diags(np.exp(-std).flatten(), 0))  # Pondération par la distance et l'erreur statique !! ATTENTION A L'ORDRE !!
-        pond = self.pond.dot(diags(1/std.flatten(), 0))
+        pond = self.pond.dot(diags(1/std.flatten(), 0))  # std>1 par construction
         obs = parameters.mu.data.flatten()  # De-biased observation
+        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        # TODO : TMP (to see the perf of WMA correction only)
+        #obs = parameters.rr.data.flatten()
+        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
         # read AROME mean vertical gradient (TEST !)
         fic_gradient = os.path.join('/home/vernaym/workdir/ASSIMILATION/mask/alp', f'model_gradient.nc')
