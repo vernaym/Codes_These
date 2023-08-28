@@ -233,7 +233,7 @@ mnt = xr.open_dataset(os.path.join(datadir, "DEM_ALPES_WGS84_250m_bilinear.nc"))
 mnt=mnt.where((mnt['lat']>=latmin) & (mnt['lat']<=latmax) & (mnt['lon']>=lonmin) & (mnt['lon']<=lonmax), drop=True)
 mnt = mnt.rename({'Band1':'elevation'})
 
-crossection = False
+crossection = True
 if crossection:
 
     cross = extract_cross_section(mnt)
@@ -243,47 +243,55 @@ if crossection:
     cross = extract_cross_section(ratio, varname='ratio')
     plt.imshow(np.atleast_2d(cross), cmap=plt.get_cmap('RdBu_r'), extent=(0, 50, 0, 1))
 
+    import pdb
+    pdb.set_trace()
+
     error = xr.open_dataset(os.path.join('/home/vernaym/workdir/ASSIMILATION/mask/alp', 'Observation_error.nc'))
     cross = extract_cross_section(error, varname='error')
-#plt.imshow(np.atleast_2d(cross), cmap=plt.get_cmap('Reds'), extent=(0, 50, 0, 1))
+    #plt.imshow(np.atleast_2d(cross), cmap=plt.get_cmap('Reds'), extent=(0, 50, 0, 1))
     plt.imshow(np.atleast_2d(cross), cmap=plt.get_cmap('YlOrBr'), extent=(0, 50, 0, 1))
 
-    cumul = xr.open_dataset('/home/vernaym/These/DATA/./CUMUL_ANTILOPEH_alp_2021103000_2022060200.nc')
-    cross = extract_cross_section(cumul, varname='rr_cumul')
-    plt.imshow(np.atleast_2d(cross), cmap=plt.get_cmap('YlGnBu'), extent=(0, 50, 0, 1))
+    import pdb
+    pdb.set_trace()
 
-#filename = os.path.join(savedir, f'ReliefAlpes_correlation{d0}.pdf')
-filename = os.path.join(savedir, f'ReliefAlpes_with_nivometeo.pdf')
+    #cumul = xr.open_dataset('/home/vernaym/These/DATA/./CUMUL_ANTILOPEH_alp_2021103000_2022060200.nc')
+    #cross = extract_cross_section(cumul, varname='rr_cumul')
+    #plt.imshow(np.atleast_2d(cross), cmap=plt.get_cmap('YlGnBu'), extent=(0, 50, 0, 1))
 
-# Plot elevation
-#if not os.path.exists(filename):
-fig,ax = plt.subplots(figsize=(21,24))
-ax.set_frame_on(False)
-#https://discourse.holoviz.org/t/cannot-remove-grid-for-hv-quadmesh/2211/8
-#im = mnt.elevation.plot(ax=ax, cmap=plt.cm.terrain, subplot_kws={'frame_on':False}, linewidth=0, label='Elevation (m)', add_colorbar=False)
-im = mnt.elevation.plot(ax=ax, cmap=plt.cm.terrain, linewidth=0, label='Elevation (m)', add_colorbar=False)
+else:
 
-# Add optional features
-add_boundaries(ax)
-add_postes_nivometeo(ax)
-#add_radar_positions(ax)
+    #filename = os.path.join(savedir, f'ReliefAlpes_correlation{d0}.pdf')
+    filename = os.path.join(savedir, f'ReliefAlpes_with_nivometeo.pdf')
 
-ax.set_frame_on(False)
-#plot_correlation(ax, mnt)  # To add correlation area
-cb = fig.colorbar(im)
-cb.ax.tick_params(labelsize=20)
-cb.set_label('Elevation (m)', size=24)
-ax.set_xlabel(None)
-ax.set_ylabel(None)
-ax.tick_params(axis='both', which='major', labelsize=18)
-fig.savefig(filename, format='pdf')
+    # Plot elevation
+    #if not os.path.exists(filename):
+    fig,ax = plt.subplots(figsize=(21,24))
+    ax.set_frame_on(False)
+    #https://discourse.holoviz.org/t/cannot-remove-grid-for-hv-quadmesh/2211/8
+    #im = mnt.elevation.plot(ax=ax, cmap=plt.cm.terrain, subplot_kws={'frame_on':False}, linewidth=0, label='Elevation (m)', add_colorbar=False)
+    im = mnt.elevation.plot(ax=ax, cmap=plt.cm.terrain, linewidth=0, label='Elevation (m)', add_colorbar=False)
 
-# Plot elevation difference
-#filename = os.path.join(savedir, 'Elevation_diff.pdf')
-##if not os.path.exists(filename):
-#mnt['delta'] = np.abs(mnt['Band1']-1000)
-#fig,ax = plt.subplots(figsize=(14,16))
-#mnt.delta.plot(ax=ax)
-#fig.savefig(os.path.join(savedir, 'Elevation_diff.pdf'))
+    # Add optional features
+    add_boundaries(ax)
+    #add_postes_nivometeo(ax)
+    add_radar_positions(ax)
+
+    ax.set_frame_on(False)
+    #plot_correlation(ax, mnt)  # To add correlation area
+    cb = fig.colorbar(im)
+    cb.ax.tick_params(labelsize=20)
+    cb.set_label('Elevation (m)', size=24)
+    ax.set_xlabel(None)
+    ax.set_ylabel(None)
+    ax.tick_params(axis='both', which='major', labelsize=18)
+    fig.savefig(filename, format='pdf')
+
+    # Plot elevation difference
+    #filename = os.path.join(savedir, 'Elevation_diff.pdf')
+    ##if not os.path.exists(filename):
+    #mnt['delta'] = np.abs(mnt['Band1']-1000)
+    #fig,ax = plt.subplots(figsize=(14,16))
+    #mnt.delta.plot(ax=ax)
+    #fig.savefig(os.path.join(savedir, 'Elevation_diff.pdf'))
 
 

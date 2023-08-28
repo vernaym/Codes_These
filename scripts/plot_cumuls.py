@@ -399,9 +399,9 @@ def plot_deterministe(field, product, cmap=plt.cm.YlGnBu, vmin=None, vmax=None):
     if vmax is None:
         vmax = np.nanmax(field.rr_cumul.data)
     field.rr_cumul.plot(ax=ax, cbar_kwargs={"label":'Total precipitation between {0:s} and {1:s} (mm)'.format(args.datebegin.strftime('%Y%m%d'), args.dateend.strftime('%Y%m%d'))}, cmap=cmap, vmin=vmin, vmax=vmax)
-    add_landmarks(ax)
-    add_radar_positions(ax)
-    add_scores(ax)
+    #add_landmarks(ax)
+    #add_radar_positions(ax)
+    #add_scores(ax)
     fig.tight_layout()
     fig.savefig(os.path.join(savedir, f'CUMUL_{product}_{args.datebegin.strftime("%Y%m%d")}_{args.dateend.strftime("%Y%m%d")}.pdf'))
 
@@ -444,8 +444,8 @@ if __name__ == "__main__":
     mnt_proj = proj_mnt(mnt)
     #antilope = xr.open_dataset(os.path.join(datadir, 'CUMUL_ANTILOPEQ_GrandesRousses_{0:s}_{1:s}.nc'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))))
     #antilope = xr.open_dataset(os.path.join(datadir, 'CUMUL_ANTILOPEJP1Q_GrandesRousses_{0:s}_{1:s}.nc'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))))
-    filename = os.path.join(datadir, 'CUMUL_ANTILOPEH_alp_{0:s}_{1:s}.nc'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H')))
-    antilope = xr.open_dataset(filename)
+#    filename = os.path.join(datadir, 'CUMUL_ANTILOPEH_alp_{0:s}_{1:s}.nc'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H')))
+#    antilope = xr.open_dataset(filename)
 #    try :
 #        antilope = xr.open_dataset(filename)
 #    except:
@@ -524,7 +524,7 @@ if __name__ == "__main__":
 #    #plot_deterministe(antilope)
 #    compare_palettes(antilope, args)
 
-    plot_deterministe(antilope, 'ANTILOPE', vmin=200, vmax=1700)
+#    plot_deterministe(antilope, 'ANTILOPE', vmin=200, vmax=1700)
 
     #arome    = xr.open_dataset(os.path.join(datadir, 'arome_{0:s}_{1:s}_alp.nc'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))))
     arome    = xr.open_dataset(os.path.join(datadir, 'parome_2021073106_2023042306_alp.nc'))  # WARNING : changer la légende de la figure pour avoir la bonne période de cumul
@@ -534,15 +534,15 @@ if __name__ == "__main__":
 #    arome.to_netcdf(f"{datadir}/CUMUL_AROME.nc")
     plot_deterministe(arome, 'AROME', vmin=200, vmax=1700)
 
-    filename = os.path.join('/home/vernaym/workdir/ASSIMILATION/mask/alp', 'Estimated_ratio.nc')  # Mask test
-    ratio = xr.open_dataset(filename)
-    #ratio.lat.data = ratio.lat.data+0.005  # TODO : comprendre et resoudre le probleme de decallage des coordonnees
-    ratio = ratio.where((ratio.lon>=lonmin) & (ratio.lon<=lonmax) & (ratio.lat<=latmax) & (ratio.lat>latmin-0.01), drop=True)
-    antiloped = antilope / ratio.ratio
+#    filename = os.path.join('/home/vernaym/workdir/ASSIMILATION/mask/alp', 'Estimated_ratio.nc')  # Mask test
+#    ratio = xr.open_dataset(filename)
+#    #ratio.lat.data = ratio.lat.data+0.005  # TODO : comprendre et resoudre le probleme de decallage des coordonnees
+#    ratio = ratio.where((ratio.lon>=lonmin) & (ratio.lon<=lonmax) & (ratio.lat<=latmax) & (ratio.lat>latmin-0.01), drop=True)
+#    antiloped = antilope / ratio.ratio
 
-    plot_deterministe(antiloped/arome, 'DEBIAISAGE_vs_AROME', cmap=plt.cm.coolwarm, vmin=0.7, vmax=1.3)
-    plot_deterministe(antiloped/antilope, 'DEBIAISAGE_vs_ANTILOPE', cmap=plt.cm.coolwarm, vmin=0, vmax=2)
-    plot_deterministe(antiloped, 'DEBIAISAGE', vmin=200, vmax=1700)
+#    plot_deterministe(antiloped/arome, 'DEBIAISAGE_vs_AROME', cmap=plt.cm.coolwarm, vmin=0.7, vmax=1.3)
+#    plot_deterministe(antiloped/antilope, 'DEBIAISAGE_vs_ANTILOPE', cmap=plt.cm.coolwarm, vmin=0, vmax=2)
+#    plot_deterministe(antiloped, 'DEBIAISAGE', vmin=200, vmax=1700)
 
 #    for member in range(1,17):
 #        aspearome  = xr.open_dataset(os.path.join(datadir, f'aspearome_{member:03d}_2021102806_2022060206_alp_hourly.nc'))

@@ -249,8 +249,8 @@ algo = dict(
 #        RS02          = 'RandomSampling/XP02/Random_Sampling_2021120106_2022050106_daily_alp.nc',
 #        RS03          = 'RandomSampling/XP03/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         # IUGG experiments :
-#        PF29          = 'XP29_mask_relief_AROME/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
-#        KD33          = 'EnsembleKalmanFilter/XP33/EnKF_2021120106_2022050106_daily_alp.nc',
+        PF29          = 'XP29_mask_relief_AROME/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
+        KD33          = 'EnsembleKalmanFilter/XP33/EnKF_2021120106_2022050106_daily_alp.nc',
 #        RS04          = 'RandomSampling/XP04/Random_Sampling_2021120106_2022050106_daily_alp.nc'
         ####################
         #PF31          = 'XP31/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
@@ -260,11 +260,11 @@ algo = dict(
         #RS09          = 'RandomSampling/XP09/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         #RS10          = 'RandomSampling/XP10/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         #RS11          = 'RandomSampling/XP11/Random_Sampling_2021120106_2022050106_daily_alp.nc',
-        RS12          = 'RandomSampling/XP12/Random_Sampling_2021120106_2022050106_daily_alp.nc',
-        RS13          = 'RandomSampling/XP13/Random_Sampling_2021120106_2022050106_daily_alp.nc',
-        RS14          = 'RandomSampling/XP14/Random_Sampling_2021120106_2022050106_daily_alp.nc',
+        #RS12          = 'RandomSampling/XP12/Random_Sampling_2021120106_2022050106_daily_alp.nc',
+        #RS13          = 'RandomSampling/XP13/Random_Sampling_2021120106_2022050106_daily_alp.nc',
+        #RS14          = 'RandomSampling/XP14/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         RS15          = 'RandomSampling/XP15/Random_Sampling_2021120106_2022050106_daily_alp.nc',
-        RS16          = 'RandomSampling/XP16/Random_Sampling_2021120106_2022050106_daily_alp.nc',
+        #RS16          = 'RandomSampling/XP16/Random_Sampling_2021120106_2022050106_daily_alp.nc',  --> WMA reference experiment
     )
 
 
@@ -288,14 +288,16 @@ if not os.path.exists(savedir):
     os.makedirs(savedir)
 
 xpid_label = dict(
-        #antilope      = 'ANTILOPE',
-        antilope      = 'Raw field',
+        antilope      = 'ANTILOPE',
+        #antilope      = 'Raw field',
+        wma           = 'WMA',
         antiloper     = 'ANTILOPE + error',
         #antiloped     = 'ANTILOPE + error + debiaisage',
         antiloped     = 'De-biasing',
         #antilopec     = 'ANTILOPE + debiaisage + correction',
         antilopec     = 'De-biasing + WMA',
-        raw           = 'Raw PE-AROME ensemble',
+        #raw           = 'Raw PE-AROME ensemble',
+        raw           = 'PE-AROME',
         GD0           = 'Global daily analysis',
         LD0           = 'Daily analysis with PF',
         LD0G          = 'Daily analysis with gamma likelyhood and no option',
@@ -365,10 +367,12 @@ xpid_label = dict(
         KD29          = 'EnKF, debiaisage=0.2_2, Rstat from eval, Bstat',
         KD30          = 'Daily analysis with Ensemble Kalman Filter and debiaising',
         KD31          = 'Daily analysis with Ensemble Kalman Filter and no debiasing',  # Idem KD30 mais sans débiaisage
-        KD33          = 'Ensemble Kalman Filter analysis',
+        #KD33          = 'Ensemble Kalman Filter analysis',
+        KD33          = 'EnKF',
         KD34          = 'Ensemble Kalman Filter analysis',
         KD35          = 'Ensemble Kalman Filter analysis',
-        PF29          = 'Particle Filter analysis',
+        PF29          = 'PF',
+        #PF29          = 'Particle Filter analysis',
         PF30          = 'Particle Filter analysis',
         PF31          = 'Particle Filter analysis',
         #LDM9D3        = 'PF, mask9=estimated_ratio, debiaisage3=0.1_2',
@@ -388,8 +392,9 @@ xpid_label = dict(
         RS12          = 'Random Sampling with new observation uncertainty formulation',
         RS13          = 'Random Sampling RS12 + increased observation error',
         RS14          = 'Random Sampling RS13 + gamma distribution',
-        RS15          = 'Random Sampling RS13 + gamma distribution + IDW instead of exp',
-        RS16          = 'Random Sampling RS15 + gradient AROME',
+        #RS15          = 'Random Sampling RS13 + gamma distribution + IDW instead of exp',
+        RS15          = 'RS',
+        RS16          = 'Random Sampling with WMA only',  # reference for WMA method evaluation
     )
 
 def nearest(array, value):
@@ -859,8 +864,8 @@ class Evaluation(object):
         antilope = antilope.loc[{'time':dates}]
         self.data = self.data.loc[{'date':dates}]
 
-        ##data = dict(antilope=list(), antiloper=list(), antiloped=list(), raw=list())
-        data = dict(antilope=list(), antiloped=list(), antilopec=list())
+#        data = dict(antilope=list(), wma=list(), antiloped=list(), antilopec=list())
+        data = dict(antilope=list(), raw=list(), antilopec=list())
         #data = dict(antilope=list(), raw=list(), antilopec=list())
         #data = dict(antilopec=list())
         #data = dict(antilope=list(), antiloped=list(), antilopec=list())
@@ -924,6 +929,12 @@ class Evaluation(object):
             antilopec = antilopec.loc[{'time':dates}]
             #antilopec = antilopec.loc[{'time':dates}]
 
+        if 'wma' in data.keys():
+            filename = 'Random_Sampling_2021120106_2022050106_daily_alp.nc'
+            wma = xr.open_dataset(os.path.join('/home/vernaym/workdir/ASSIMILATION/RandomSampling/XP16', filename))
+            wma = wma.loc[{'member':0}]
+            wma = wma.loc[{'time':dates}]
+
 #        scores_list = ['reliability', 'resolution', 'uncertainty', 'rmse', 'bias', 'brier', 'error_frequency']
         scores_list = ['rmse', 'bias'] + [f'brier_{int(threshold*10)}' for threshold in self.thresholds] + ['CRPS']
         scores_dict = dict()
@@ -962,6 +973,8 @@ class Evaluation(object):
                 if 'antilopec' in data.keys():
                     data['antilopec'].append(antilopec.sel({'num_poste':num_poste}).rr.data)
                     #data['antilopec'].append(antilopec.sel({'lat':nearest(antilopec.lat, lat), 'lon':nearest(antilopec.lon, lon)}).rr.data)
+                if 'wma' in data.keys():
+                    data['wma'].append(wma.sel({'num_poste':num_poste}).rr.data)
                 t3 = time.time()
                 print(f'Reading antilope informations took {(t3-t2)*1000.}ms')
                 if 'raw' in data.keys():
@@ -1032,6 +1045,8 @@ class Evaluation(object):
             self.data['antiloped'] = (('num_poste', 'date'), data['antiloped'])
         if 'antilopec' in data.keys():
             self.data['antilopec'] = (('num_poste', 'date'), data['antilopec'])
+        if 'wma' in data.keys():
+            self.data['wma'] = (('num_poste', 'date'), data['wma'])
         if 'raw' in data.keys():
             self.data['raw'] = (('num_poste', 'date', 'member'), data['raw'])
         for xpid in experiments.keys():
@@ -1043,7 +1058,8 @@ class Evaluation(object):
         thresholds = np.arange(0.1, 1.01, 0.1)
         obse = self.data.obs.data.flatten()
         for product in data.keys():
-            if 'member' in self.data[product].coords:
+            #if 'member' in self.data[product].coords:
+            if 'member' in self.data[product].dims:
                 simu = self.data[product].stack(points=["num_poste", "date"]).data.transpose()
                 freq_error = scores.error_frequency(simu, obse)
                 ax.axhline(freq_error, color=next(ax._get_lines.prop_cycler)['color'], label=xpid_label[product])
@@ -1173,7 +1189,7 @@ class Evaluation(object):
                 labels.append(self.add_label(ax.violinplot(x[~np.isnan(x)], showmeans=True, positions=[pos]), xpid_label[product]))
                 if score == 'bias':
                     ax.axhline(color='k')
-                if score.startswith('brier') and product not in ['antilope', 'antiloped', 'antilopec', 'raw']:
+                if score.startswith('brier') and product not in ['antilope', 'antiloped', 'wma', 'antilopec', 'raw']:
                     pass
 #                    ref = self.scores.loc[{'score':score}]['raw'].data
 #                    bss = 1 - x / ref
