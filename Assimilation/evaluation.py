@@ -263,8 +263,9 @@ algo = dict(
         #RS12          = 'RandomSampling/XP12/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         #RS13          = 'RandomSampling/XP13/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         #RS14          = 'RandomSampling/XP14/Random_Sampling_2021120106_2022050106_daily_alp.nc',
-        RS15          = 'RandomSampling/XP15/Random_Sampling_2021120106_2022050106_daily_alp.nc',
+        #RS15          = 'RandomSampling/XP15/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         #RS16          = 'RandomSampling/XP16/Random_Sampling_2021120106_2022050106_daily_alp.nc',  --> WMA reference experiment
+        RS17          = 'RandomSampling/XP17/Random_Sampling_2021120106_2022050106_daily_alp.nc',
     )
 
 
@@ -395,6 +396,7 @@ xpid_label = dict(
         #RS15          = 'Random Sampling RS13 + gamma distribution + IDW instead of exp',
         RS15          = 'RS',
         RS16          = 'Random Sampling with WMA only',  # reference for WMA method evaluation
+        RS17          = 'RS',  # IdemRS 15 mais avec erreur obs=sd2 seulement (moins surdispersif et un peu moins biaisé)
     )
 
 def nearest(array, value):
@@ -442,6 +444,18 @@ class Evaluation(object):
             bias = self.mean_error(simu, obs)
 
         return np.nanmean(bias)
+
+    def ratio(self, simu, obs, *args, **kw):
+
+        simu = simu[np.where(obs>0)]
+        obs = obs[np.where(obs>0)]
+
+        if np.shape(simu) == np.shape(obs):  # "Simulation" déterministe
+            ratio = simu / obs
+        else:  # Simulation s'ensmble
+            ratio = simu.mean(axis=1) / obs
+
+        return np.nanmean(ratio)
 
     def error_frequency(self, simu, obs, treshold=0.2, *args, **kw):
 
@@ -594,10 +608,10 @@ class Evaluation(object):
             #ensemble = ensemble[:,(~np.isnan(obs)) & ((obs>0) | (maxsim>0))]
             #obs = obs[(~np.isnan(obs)) & ((obs>0) | (maxsim>0))]
             # Filter out situations where observation is 0mm
-            ensemble = ensemble[:,(~np.isnan(obs)) & (obs>0)]
-            obs = obs[(~np.isnan(obs)) & (obs>0)]
-            #ensemble = ensemble[:,(~np.isnan(obs)) & (obs>1)]
-            #obs = obs[(~np.isnan(obs)) & (obs>1)]
+            #ensemble = ensemble[:,(~np.isnan(obs)) & (obs>0)]
+            #obs = obs[(~np.isnan(obs)) & (obs>0)]
+            ensemble = ensemble[:,(~np.isnan(obs)) & (obs>5)]
+            obs = obs[(~np.isnan(obs)) & (obs>5)]
 
         combined = np.vstack((obs[np.newaxis], ensemble))
 
@@ -872,14 +886,14 @@ class Evaluation(object):
         #data = dict(antilope=list(), antiloped=list())
 
         #mask = xr.open_dataset(os.path.join(datadir, 'mask', f"Estimated_ratio.nc"))
-        self.ratio  = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask/alp", "Estimated_ratio.nc"))  # To test a new estimation
+        self.rat  = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask/alp", "Estimated_ratio.nc"))  # To test a new estimation
         self.obs_error = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask/alp", "Observation_error.nc"))  # To test a new estimation
         #self.obs_error = self.obs_error.rename({'Observation error (mm)':'error'})
-        ratio = self.ratio.ratio
+        rat = self.rat.Ratio
         #error = self.obs_error['Observation error (mm)']
-        error = self.obs_error.error
+        error = self.obs_error.Uncertainty
         def debiaise(ds):
-            return ds / ratio
+            return ds / rat
         def to_ensemble(ds):
             ds1 = ds + ds * error
             ds2 = ds - ds * error
@@ -936,7 +950,7 @@ class Evaluation(object):
             wma = wma.loc[{'time':dates}]
 
 #        scores_list = ['reliability', 'resolution', 'uncertainty', 'rmse', 'bias', 'brier', 'error_frequency']
-        scores_list = ['rmse', 'bias'] + [f'brier_{int(threshold*10)}' for threshold in self.thresholds] + ['CRPS']
+        scores_list = ['rmse', 'bias', 'ratio'] + [f'brier_{int(threshold*10)}' for threshold in self.thresholds] + ['CRPS']
         scores_dict = dict()
 
         #dates = dates[:10]
@@ -956,7 +970,7 @@ class Evaluation(object):
 #            if num_poste == 73015400:
 #                import pdb
 #                pdb.set_trace()
-#                toto = ratio.sel({'lat':nearest(ratio.lat, lat), 'lon':nearest(ratio.lon, lon)})
+#                toto = rat.sel({'lat':nearest(rat.lat, lat), 'lon':nearest(rat.lon, lon)})
             alti = tmp.alti.data.max()  # Altitude du poste
             lat = tmp.lat.data.max()  # Latitude du poste
             lon = tmp.lon.data.max()  # Longitude du poste
@@ -1262,7 +1276,7 @@ class Evaluation(object):
         self.obs_error = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask/alp", "Observation_error.nc"))  # To test a new estimation
 
     def read_ratio(self):
-        self.ratio = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask/alp", "Estimated_ratio.nc"))  # To test a new estimation
+        self.rat = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask/alp", "Estimated_ratio.nc"))  # To test a new estimation
 
     def temporal_plot(self, time, obs, num_poste, lat, lon, alti, raw=None, antilope=None, corrected=None, xpid=None, simu=None, simu2=None):
         # TODO : add flexibility in the number and oreder of simulations (use dict !)
@@ -1275,9 +1289,9 @@ class Evaluation(object):
         #error = self.obs_error.loc[{'num_poste':num_poste, 'time':time}].erreur_obs.data
         error = self.obs_error.sel({'lat':nearest(self.obs_error.lat, lat), 'lon':nearest(self.obs_error.lon, lon)}).error.data
 
-        if self.ratio is None:
-            self.read_ratio()
-        ratio = self.ratio.ratio.sel({'lat':nearest(self.ratio.lat, lat), 'lon':nearest(self.ratio.lon, lon)}).data
+        if self.rat is None:
+            self.read_rat()
+        rat = self.rat.Ratio.sel({'lat':nearest(self.rat.lat, lat), 'lon':nearest(self.rat.lon, lon)}).data
 
         lpn = self.lpn.loc[self.lpn['num_poste']==num_poste]
         diff_alti_lpn = lpn.LPNX - alti
@@ -1299,8 +1313,8 @@ class Evaluation(object):
             #antpe = plt.errorbar(positions, antilope, yerr=error+0.263*antilope, fmt="+", color='red', alpha=1)
             antpe = plt.errorbar(positions, antilope, yerr=antilope*error, fmt="+", color='red', alpha=1)
             self.labels.append((antpe, 'Antilope'))
-            #antped = plt.errorbar(positions, antilope/ratio, yerr=error+0.263*antilope/ratio, fmt="+", color='blue', alpha=0.5)
-            antped = plt.errorbar(positions, antilope/ratio, yerr=error*antilope/ratio, fmt="+", color='blue', alpha=0.5)
+            #antped = plt.errorbar(positions, antilope/rat, yerr=error+0.263*antilope/rat, fmt="+", color='blue', alpha=0.5)
+            antped = plt.errorbar(positions, antilope/rat, yerr=error*antilope/rat, fmt="+", color='blue', alpha=0.5)
             self.labels.append((antped, 'Antilope debiaisé'))
         if corrected is not None:
             antpec, = plt.plot(positions, corrected, marker='+', linestyle='', color='green')

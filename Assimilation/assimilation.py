@@ -1854,10 +1854,18 @@ class RandomSampling(Assimilation):
             i = 0
             j = 0
 
+        #std = np.abs(parameters.sigma.data)
+        #pond = self.pond.dot(diags(1/std.flatten(), 0))
+
         for member in analysis.member.data:
             ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='gamma')
             #ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='normal')
             analysis.loc[{'member':member}] = ana
+
+            #print('!!!! WARNING : TMP !!!!')
+            #ana, toto, tutu = Preprocessing_ANTILOPE.dynamic_correction(ana.flatten(), pond)
+            #analysis.loc[{'member':member}] = ana.reshape((len(parameters.lat), len(parameters.lon)))
+
 
             if self.plot and member>0:
                 # TODO : Add reference values

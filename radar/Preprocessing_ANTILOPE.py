@@ -174,10 +174,10 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
     #sd = sd + 1  # Add 1 to ensure that the error is >1 (mm or mm^(1/2)). --> Dispersion too large
     #sd = (sd1+sd2)/2
     #sd = sd1/2+sd2
-    #sd = sd2
+    sd = sd2
     #sd = np.sqrt(sd1*sd2)  # --> Increase spread (overdispersif in cas_test)
     #sd = sd2*sd1/sd2  # --> Increase spread (overdispersif in cas_test)
-    sd = np.sqrt(sd2*newfield)  # --> Increase spread (overdispersif in cas_test)
+    #sd = np.sqrt(sd2*newfield)  # --> Increase spread (overdispersif in cas_test)
     #sd = sd1+sd2  # --> Increase spread (overdispersif in cas_test)
     #sd = sd1
 
@@ -187,12 +187,17 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
 
 def get_std(data, mean, pond, weight=None, super_ensemble=None):
     """
+    Compute the weighted variance of the weighted ensemble :
+
+    sd = var(x) = np.sqrt(1/sum(weight)*sum((xi-xmean)²))
+
     INPUT
     -----
     * mean is the Nk*Nk matrix
     * pond is the Nk*Nk ponderation matrix (defined by the confidence of each pixel and the distance between the pixels)
     * weight is the Nk vector of the sum of the weights in the neighborhood of each pixel
-    * super_ensemble is the mask Nk*Nk matrix ("M") defining neighbor pixels to include in the computation
+    * super_ensemble is the mask Nk*Nk matrix ("M") defining neighbor pixels to include in the computation (1 if pixel in the
+      window, else 0)
 
     OUTPUT
     ------
@@ -235,6 +240,8 @@ def random_draw(obs, sd, distribution='gamma'):
         gauss = np.random.normal(loc=0.0, scale=1.0, size=1)[0]  # Draw random element from normal distribution
         ana = obs+gauss*sd  # Gaussian perturbation around >0 obs
     elif distribution == 'gamma':
+        # TODO : essayer de faire dependre k de l'obs
+        # PROBLEME : en tirant 1 valeur / pixel on perd la cohérence spatiale
         k = 2  # k>1
         theta = np.sqrt(1/2)  # Ensure a variance of 1 (var=k*theta^2)
         shift = (k-1)*theta  # shift = mode
