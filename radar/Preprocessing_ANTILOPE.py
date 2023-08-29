@@ -174,8 +174,8 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
     #sd = sd + 1  # Add 1 to ensure that the error is >1 (mm or mm^(1/2)). --> Dispersion too large
     #sd = (sd1+sd2)/2
     #sd = sd1/2+sd2
-    #sd = sd2
-    sd = sd2 + newfield*0.2  # Add a 20% error to ensure a minimum error
+    sd = sd2
+    #sd = sd2 + newfield*0.2  # Add a 20% error to ensure a minimum error
     #sd = np.sqrt(sd1*sd2)  # --> Increase spread (overdispersif in cas_test)
     #sd = sd2*sd1/sd2  # --> Increase spread (overdispersif in cas_test)
     #sd = np.sqrt(sd2*newfield)  # --> Increase spread (overdispersif in cas_test)
@@ -216,7 +216,7 @@ def get_std(data, mean, pond, weight=None, super_ensemble=None):
 
     return sd
 
-def codistances(coords, ld=0.07):
+def codistances(coords, ld=0.1):
     """
     Solution pour le calcul des inter-distances trouvée sur : https://stackoverflow.com/questions/35296935/python-calculate-lots-of-distances-quickly
     """
@@ -227,9 +227,9 @@ def codistances(coords, ld=0.07):
     tree = cKDTree(coords)
     dist = tree.sparse_distance_matrix(tree, max_distance=max_dist, p=2, output_type='coo_matrix')
     dist = csr_matrix(dist)
-    #TODO : utiliser une gaussienne plutot qu'une exponentielle décroissante ?
-    dist[dist.nonzero()] = dist[dist.nonzero()]/ld
-    dist[dist.nonzero()] = 1/(1+dist[dist.nonzero()])
+    dist.data=1/(1+dist.data)**2  # IDW
+    #dist.data=1/(1+dist.data)  # IDW
+    #dist[dist.nonzero()] = dist[dist.nonzero()]/ld
     #np.exp(-dist.data, out=dist.data )
     #np.exp(-dist.data**2/2, out=dist.data )
     #np.exp(1/(1+dist.data), out=dist.data )
@@ -237,28 +237,39 @@ def codistances(coords, ld=0.07):
     return dist
 
 def random_draw(obs, sd, distribution='gamma'):
+    gauss = np.random.normal(loc=0.0, scale=1.0, size=1)[0]  # Draw random element from normal distribution
     if distribution == 'normal':
-        gauss = np.random.normal(loc=0.0, scale=1.0, size=1)[0]  # Draw random element from normal distribution
         ana = obs+gauss*sd  # Gaussian perturbation around >0 obs
+        gauss = np.random.normal(loc=0.0, scale=1.0, size=1)[0]  # Draw random element from normal distribution
+        # Add a 2nd perturbation term:
+        ana= ana + obs*0.2*gauss
+
     elif distribution == 'gamma':
         # TODO : essayer de faire dependre k de l'obs
         # PROBLEME : en tirant 1 valeur / pixel on perd la cohérence spatiale
         #k = 3  # k must be >1. TODO : fixer k de façon automatique
         k = 2  # k must be >1. TODO : fixer k de façon automatique --> + forte asymétrie
         theta = np.sqrt(1/k)  # Ensure a variance of 1 (var=k*theta^2)
-        #shift = (k-1)*theta  # shift = mode
-        shift = k*theta  # shift = mean
+        shift = (k-1)*theta  # shift = mode  --> introduce a >0 bias of theta
+        #shift = k*theta  # shift = mean
         gamma = np.random.gamma(k, scale=theta)  # Draw random element from normal distribution (>0 only ==> shift necessary to convert into perturbations)
-        ana = obs+(gamma-shift)*sd  # Shift gamma distribution so that the mode ((k-1)*theta) is on 0
+
+        # Add 2 perturbations terms:
+        # - 1 gamma distributed proportionnal to the precipitation intensity
+        # - normal distributed around the estimated error --> especially important for error for small prexipitation values
+        # This 2 step perturbation reduces the dispersion but introduces spatial variability in the analysis fields
+        ana= obs + obs*0.2*(gamma-shift) + gauss*sd
+
     else:
         print('Error : unknown distribution')
         return None
-    exp = np.random.default_rng().exponential(scale=1)  # TODO : set scale parameter using the density of pixels at 0mm in the vicinity ?
+
+    #exp = np.random.default_rng().exponential(scale=1)  # TODO : set scale parameter using the density of pixels at 0mm in the vicinity ?
 
     #ana[ana<0] = exp*sd[ana<0]  # Avoid "mass accumulation" in 0. !! WARNING : the analysis distribution is not Normal anymore !!
     ana[ana<0] = 0  # WARNING : "mass accumulation" in 0 (analysis distribution not normal anymore)
     #ana[np.where(sd<=1)] = obs[np.where(sd<=1)]+gauss*sd[np.where(sd<=1)]  # Gaussian perturbations around pixels with for small errors
-    ana[obs==0] = obs[obs==0]+exp*sd[obs==0]  # Exponential perturbation arround 0. TODO : arround 0, use the density
+    #ana[obs==0] = obs[obs==0]+exp*sd[obs==0]  # Exponential perturbation arround 0. TODO : arround 0, use the density
     #ana = np.round(ana, 1)
 
     return ana

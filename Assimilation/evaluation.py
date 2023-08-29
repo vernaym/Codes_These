@@ -398,7 +398,7 @@ xpid_label = dict(
         RS15          = 'RS',  # --> Overdispersif
         RS16          = 'Random Sampling with WMA only',  # reference for WMA method evaluation
         RS17          = 'RS',  # Idem RS 15 mais avec erreur obs=sd2 seulement (moins surdispersif et un peu moins biaisé)
-        RS18          = 'TMP',  # Idem RS 17 mais avec loi gamma k=5  --> underdispersif
+        RS18          = 'RS18',  # random perturbations = gamma*0.2*obs + gamma*sd
     )
 
 def nearest(array, value):
@@ -637,8 +637,8 @@ class Evaluation(object):
             #ensemble = ensemble[:,(~np.isnan(obs)) & (obs>0)]
             #obs = obs[(~np.isnan(obs)) & (obs>0)]
             mean = ensemble.mean(axis=0)
-            #mask = np.where((obs>0) & (mean>0))
             mask = np.where((obs>1) & (mean>1))
+            #mask = np.where((obs>5) & (mean>5))
             #mask = np.where((obs>1))
             #mask = np.where((obs>0))
             ensemble = ensemble[:, mask]

@@ -312,11 +312,12 @@ def uncertainty(simu, obs, *args):
     print('Uncertainty=',uncertainty)
     return uncertainty
 
-def violinplot(ax, position, data, label, color=None):
+def violinplot(ax, position, data, label, color=None, addbar=False):
     """ Customize violinplot by adding a label"""
     import matplotlib.patches as mpatches
 
-    ax.plot([position]*len(data), data, linestyle='', marker='_', markersize='20', color='k')
+    if addbar:
+        ax.plot([position]*len(data), data, linestyle='', marker='_', markersize='20', color='k')
     violin = ax.violinplot(data, positions=[position], showmeans=True)
     ax.axhline(color='k')
     if color is None:
@@ -326,6 +327,7 @@ def violinplot(ax, position, data, label, color=None):
         violin["bodies"][0].set_edgecolor(color)
 
 
-    return (mpatches.Patch(color=color), label)
+    #return (mpatches.Patch(color=color), label)
+    return ax
 
 

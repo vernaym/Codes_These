@@ -330,7 +330,7 @@ def add_cities(latmin, latmax, lonmin, lonmax):
     for idx in tmp.index:
         plt.text(tmp.lng[idx], tmp.lat[idx], tmp.city[idx], alpha=0.5)
 
-def plot(antilope, datebegin, dateend, categories=True, biascorrection=False):
+def plot(antilope, datebegin, dateend, categories=True, biascorrection=False, scores=False):
 
     #if not os.path.exists(os.path.join(savedir, f'CUMUL_ANTILOPE_2021080106_2022070106_{domain}.pdf')):
 
@@ -387,13 +387,14 @@ def plot(antilope, datebegin, dateend, categories=True, biascorrection=False):
     add_massifs()
     add_boundaries()
     #add_cities(latmin, latmax, lonmin, lonmax)
-    scores = pd.read_csv(fic_score, sep=';')
-    sc = add_scores(scores, ax)
-    cb = fig.colorbar(sc)
-    cb.set_label(label='ANTILOPE / rain-gauges ratio', fontsize=22)
-    cb.ax.tick_params(labelsize=16)
-    #cb.set_label(label='Mean ANTILOPE / rain-gauges ratio', fontsize=22, weight='bold')
-    #cb.set_label(label='ANTILOPE / rain-gauges ratio', fontsize=14)
+    if scores:
+        scores = pd.read_csv(fic_score, sep=';')
+        sc = add_scores(scores, ax)
+        cb = fig.colorbar(sc)
+        #cb.set_label(label='ANTILOPE / rain-gauges ratio', fontsize=22)
+        cb.ax.tick_params(labelsize=16)
+        cb.set_label(label='Mean ANTILOPE / rain-gauges ratio', fontsize=22)
+        #cb.set_label(label='ANTILOPE / rain-gauges ratio', fontsize=14)
     cb2 = fig.colorbar(cml, extend='both')
     cb2.set_label(label=f'Total precipitation between \n {datebegin} and {dateend} (mm)', fontsize=22)
     #cb2.set_label(label=f'Total precipitation between \n {datebegin} and {dateend} (mm)', fontsize=14)
@@ -888,8 +889,8 @@ def ratio_estimation(field, model=None, moving_window=25):
     uncertainty = 1 + (1+w1) * observation_error
     #uncertainty = 1 + observation_error*w1+D/W
     #uncertainty = 1 + w1*observation_error/(1+w1)
-    uncertainty.data = uniform_filter(uncertainty.data, size=3)
     uncertainty.data[np.isnan(field.rr_cumul.data)] = np.nanmax(uncertainty.data)
+    uncertainty.data = uniform_filter(uncertainty.data, size=3)
     uncertainty = uncertainty.rename('Uncertainty')
     confidence = uncertainty.copy()
     confidence.data = 1/confidence.data
@@ -1068,23 +1069,29 @@ if __name__ == "__main__":
     # TODO : prendre un cumul sur la même période que ANTILOPE pour éviter de fausser la méthode avec des situations spécifiques
     model = model.where((model.lon>=lonmin) & (model.lon<=lonmax) & (model.lat<=latmax) & (model.lat>latmin-0.01), drop=True)
 
-#    plot(antilope, datebegin, dateend, categories=True, biascorrection=True)
-#    plot(antilope, datebegin, dateend, categories=False, biascorrection=True)
-#    plot(antilope, datebegin, dateend, categories=True)
-#    plot(antilope, datebegin, dateend, categories=False)
+    plot_antilope = False
 
-    # Estimation with automatic stations observations and AROME
-    savedir = rootdir
-    ratio_estimation(antilope, model=model)
-    # Estimation with automatic stations observations only
-    savedir = os.path.join(rootdir, 'sans_arome')
-    ratio_estimation(antilope)
-    # Estimation with nivometeo observations and AROME
-    savedir = os.path.join(rootdir, 'nivometeo')
-    fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_alp.csv')
-    ratio_estimation(antilope, model=model)
-    savedir = os.path.join(rootdir, 'nivometeo', 'sans_arome')
-    ratio_estimation(antilope)
+    if plot_antilope:
+        #plot(antilope, datebegin, dateend, categories=True, biascorrection=True)
+        plot(antilope, datebegin, dateend, categories=False, biascorrection=True)
+        #plot(antilope, datebegin, dateend, categories=True)
+        #plot(antilope, datebegin, dateend, categories=False)
+        #plot(antilope, datebegin, dateend, categories=False, scores=True)
+
+    else:
+
+        # Estimation with automatic stations observations and AROME
+        savedir = rootdir
+        ratio_estimation(antilope, model=model)
+        # Estimation with automatic stations observations only
+        savedir = os.path.join(rootdir, 'sans_arome')
+        ratio_estimation(antilope)
+        # Estimation with nivometeo observations and AROME
+        savedir = os.path.join(rootdir, 'nivometeo')
+        fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_alp.csv')
+        ratio_estimation(antilope, model=model)
+        savedir = os.path.join(rootdir, 'nivometeo', 'sans_arome')
+        ratio_estimation(antilope)
 
 #    ratio_estimation(antilope)
 #    KalmanFilter(antilope)
