@@ -174,7 +174,8 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
     #sd = sd + 1  # Add 1 to ensure that the error is >1 (mm or mm^(1/2)). --> Dispersion too large
     #sd = (sd1+sd2)/2
     #sd = sd1/2+sd2
-    sd = sd2
+    #sd = sd2
+    sd = sd2 + newfield*0.2  # Add a 20% error to ensure a minimum error
     #sd = np.sqrt(sd1*sd2)  # --> Increase spread (overdispersif in cas_test)
     #sd = sd2*sd1/sd2  # --> Increase spread (overdispersif in cas_test)
     #sd = np.sqrt(sd2*newfield)  # --> Increase spread (overdispersif in cas_test)
@@ -228,10 +229,10 @@ def codistances(coords, ld=0.07):
     dist = csr_matrix(dist)
     #TODO : utiliser une gaussienne plutot qu'une exponentielle décroissante ?
     dist[dist.nonzero()] = dist[dist.nonzero()]/ld
-    #dist[dist.nonzero()] = 1/dist[dist.nonzero()]
+    dist[dist.nonzero()] = 1/(1+dist[dist.nonzero()])
     #np.exp(-dist.data, out=dist.data )
     #np.exp(-dist.data**2/2, out=dist.data )
-    np.exp(1/(1+dist.data), out=dist.data )
+    #np.exp(1/(1+dist.data), out=dist.data )
 
     return dist
 
@@ -242,9 +243,11 @@ def random_draw(obs, sd, distribution='gamma'):
     elif distribution == 'gamma':
         # TODO : essayer de faire dependre k de l'obs
         # PROBLEME : en tirant 1 valeur / pixel on perd la cohérence spatiale
-        k = 2  # k>1
-        theta = np.sqrt(1/2)  # Ensure a variance of 1 (var=k*theta^2)
-        shift = (k-1)*theta  # shift = mode
+        #k = 3  # k must be >1. TODO : fixer k de façon automatique
+        k = 2  # k must be >1. TODO : fixer k de façon automatique --> + forte asymétrie
+        theta = np.sqrt(1/k)  # Ensure a variance of 1 (var=k*theta^2)
+        #shift = (k-1)*theta  # shift = mode
+        shift = k*theta  # shift = mean
         gamma = np.random.gamma(k, scale=theta)  # Draw random element from normal distribution (>0 only ==> shift necessary to convert into perturbations)
         ana = obs+(gamma-shift)*sd  # Shift gamma distribution so that the mode ((k-1)*theta) is on 0
     else:
