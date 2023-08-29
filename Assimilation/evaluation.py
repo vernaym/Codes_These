@@ -249,8 +249,8 @@ algo = dict(
 #        RS02          = 'RandomSampling/XP02/Random_Sampling_2021120106_2022050106_daily_alp.nc',
 #        RS03          = 'RandomSampling/XP03/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         # IUGG experiments :
-        PF29          = 'XP29_mask_relief_AROME/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
-        KD33          = 'EnsembleKalmanFilter/XP33/EnKF_2021120106_2022050106_daily_alp.nc',
+        #PF29          = 'XP29_mask_relief_AROME/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
+        #KD33          = 'EnsembleKalmanFilter/XP33/EnKF_2021120106_2022050106_daily_alp.nc',
 #        RS04          = 'RandomSampling/XP04/Random_Sampling_2021120106_2022050106_daily_alp.nc'
         ####################
         #PF31          = 'XP31/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
@@ -266,6 +266,7 @@ algo = dict(
         #RS15          = 'RandomSampling/XP15/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         #RS16          = 'RandomSampling/XP16/Random_Sampling_2021120106_2022050106_daily_alp.nc',  --> WMA reference experiment
         RS17          = 'RandomSampling/XP17/Random_Sampling_2021120106_2022050106_daily_alp.nc',
+        RS18          = 'RandomSampling/XP18/Random_Sampling_2021120106_2022050106_daily_alp.nc',
     )
 
 
@@ -394,9 +395,10 @@ xpid_label = dict(
         RS13          = 'Random Sampling RS12 + increased observation error',
         RS14          = 'Random Sampling RS13 + gamma distribution',
         #RS15          = 'Random Sampling RS13 + gamma distribution + IDW instead of exp',
-        RS15          = 'RS',
+        RS15          = 'RS',  # --> Overdispersif
         RS16          = 'Random Sampling with WMA only',  # reference for WMA method evaluation
-        RS17          = 'RS',  # IdemRS 15 mais avec erreur obs=sd2 seulement (moins surdispersif et un peu moins biaisé)
+        RS17          = 'RS',  # Idem RS 15 mais avec erreur obs=sd2 seulement (moins surdispersif et un peu moins biaisé)
+        RS18          = 'TMP',  # Idem RS 17 mais avec loi gamma k=5  --> underdispersif
     )
 
 def nearest(array, value):
@@ -635,7 +637,10 @@ class Evaluation(object):
             #ensemble = ensemble[:,(~np.isnan(obs)) & (obs>0)]
             #obs = obs[(~np.isnan(obs)) & (obs>0)]
             mean = ensemble.mean(axis=0)
+            #mask = np.where((obs>0) & (mean>0))
             mask = np.where((obs>1) & (mean>1))
+            #mask = np.where((obs>1))
+            #mask = np.where((obs>0))
             ensemble = ensemble[:, mask]
             ensemble = np.squeeze(ensemble, axis=1)  # TODO : comprendre pourquoi cette ligne est nécessaire
             obs = obs[mask]
@@ -1087,6 +1092,8 @@ class Evaluation(object):
                 spread = np.array(scores_dict[product]['spread'])
                 spreadvar = np.array(spreadvar)
                 tools.plot_scatter(rmse, spread, 'RMSE (mm)', 'Mean spread (mm)', f"spread_skill_{product}_by_station.pdf", savedir, addtext=liste_postes)
+                rr = np.nanmean(self.data.obs.data, axis=1)
+                tools.plot_scatter(rr, spread/rmse, 'Mean precipitation (mm)', 'Spread/RMSE', f"spread_skill_vs_rr_{product}_by_station.pdf", savedir, addtext=liste_postes)
             scores_dict[product].pop('spread')
         scores_list.remove('spread')
 
@@ -1167,6 +1174,14 @@ class Evaluation(object):
                 self.rank_histogram(self.data[product].data.reshape(-1, 16), self.data.obs.data.flatten(), product, ax2, onlypos=True)
                 fig2.savefig(f'{savedir}/rank_histogram_onlypos_{product}.pdf', format='pdf')
                 plt.close(fig2)
+                if product.startswith('RS'):
+                    for poste in self.data[product].num_poste.data:
+                        simu = self.data[product].loc[{'num_poste':poste}].data
+                        obs = self.data.obs.loc[{'num_poste':poste}].data
+                        fig, ax = plt.subplots()
+                        self.rank_histogram(simu, obs, product, ax, onlypos=True)
+                        fig.savefig(os.path.join(savedir, 'hists', f'rank_histogram_onlypos_{product}_{poste}.pdf'), format='pdf')
+                        plt.close(fig)
         ax1.plot([0,1], [0,1], linestyle=':', color='k')
         ax1.set_xlim([0, 1])
         ax1.set_ylim([0, 1])
