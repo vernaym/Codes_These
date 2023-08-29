@@ -357,7 +357,7 @@ def plot(antilope, datebegin, dateend, categories=True, biascorrection=False):
         ratio = xr.open_dataset(filename)
         #ratio.lat.data = ratio.lat.data+0.005  # TODO : comprendre et resoudre le probleme de decallage des coordonnees
         ratio = ratio.where((ratio.lon>=lonmin) & (ratio.lon<=lonmax) & (ratio.lat<=latmax) & (ratio.lat>latmin-0.01), drop=True)  # # >=44.1 ne fonctionne pas pour ANTILOPEQ (np.where(antilope.lat==44.1) renvoie une liste vide...)
-        antilope.rr_cumul.data = antilope.rr_cumul.data / ratio.ratio.data
+        antilope.rr_cumul.data = antilope.rr_cumul.data / ratio.Ratio.data
 
     cmap = plt.cm.YlGnBu
 
@@ -385,15 +385,15 @@ def plot(antilope, datebegin, dateend, categories=True, biascorrection=False):
     #add_landmarks(ax)
     add_radar_positions(ax)
     add_massifs()
+    add_boundaries()
+    #add_cities(latmin, latmax, lonmin, lonmax)
     scores = pd.read_csv(fic_score, sep=';')
     sc = add_scores(scores, ax)
-    add_boundaries()
-    add_cities(latmin, latmax, lonmin, lonmax)
     cb = fig.colorbar(sc)
-    #cb.set_label(label='Mean ANTILOPE / rain-gauges ratio', fontsize=22, weight='bold')
     cb.set_label(label='ANTILOPE / rain-gauges ratio', fontsize=22)
-    #cb.set_label(label='ANTILOPE / rain-gauges ratio', fontsize=14)
     cb.ax.tick_params(labelsize=16)
+    #cb.set_label(label='Mean ANTILOPE / rain-gauges ratio', fontsize=22, weight='bold')
+    #cb.set_label(label='ANTILOPE / rain-gauges ratio', fontsize=14)
     cb2 = fig.colorbar(cml, extend='both')
     cb2.set_label(label=f'Total precipitation between \n {datebegin} and {dateend} (mm)', fontsize=22)
     #cb2.set_label(label=f'Total precipitation between \n {datebegin} and {dateend} (mm)', fontsize=14)
@@ -402,7 +402,7 @@ def plot(antilope, datebegin, dateend, categories=True, biascorrection=False):
     ax.grid(False)  # Remove grid lines (does not work !)
     #fig.legend()
     #fig.tight_layout()
-    fig.savefig(os.path.join(savedir, f'CUMUL_ANTILOPE_{datebegin}_{dateend}_{domain}.pdf'), layout='tight')
+    fig.savefig(os.path.join(savedir, f'CUMUL_ANTILOPE_{datebegin}_{dateend}_{domain}.pdf'))
     #sys.exit()
 
 def nearest(array, value):
@@ -753,7 +753,9 @@ def ratio_estimation(field, model=None, moving_window=25):
 #    w0 = 1 - W
 #    estimated_ratio = 1*w0 + np.sum(tmp*sratios, axis=0)
 
+    N = len(used_scores)
     W = np.sum(weights, axis=0)  # =1 if enough info else <1
+    #W = np.mean(weights, axis=0)  # =1 if enough info else <1
     W[np.isnan(W)] = 0
     tmp = to_xarray(W, field, varname='mean_ratio')
     plot_and_save(tmp, "Total_weight", cmap=plt.cm.viridis, scores=scores, vmin=0.)
@@ -763,7 +765,7 @@ def ratio_estimation(field, model=None, moving_window=25):
     #mean_ratio = np.sum(weights*ratios, axis=0)/W
     #mean_ratio[W==0] = np.nan
     tmp = to_xarray(mean_ratio, field, varname='mean_ratio')
-    plot_and_save(tmp, "Mean_ratio", cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, scores=scores, vmin=0.2, vmax=1.8)
+    plot_and_save(tmp, "Mean_ratio", cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, scores=scores, vmin=0, vmax=2)
     D = np.sqrt(np.sum(weights*(ratios-mean_ratio)**2, axis=0)/W)
     D[W==0] = 0
     #D = np.sum(weights*(ratios-mean_ratio)**2, axis=0)/W
@@ -787,13 +789,24 @@ def ratio_estimation(field, model=None, moving_window=25):
     K[W==0] = 0
     w1 = K / (1 + K)  # normalisation
     w1[np.isnan(w1)] = 0
+    w0 = 1 - w1
 
-    #relativeweight = W / np.exp((1+D)**2)
-    tmp = to_xarray(w1, field, varname='mean_ratio')
-    plot_and_save(tmp, "Relative_weight", cmap=plt.cm.viridis, scores=scores, vmin=0., vmax=1)
+#    #w1 = W/(1+D)
+#    w1 = W/D
+#    #relativeweight = W / np.exp((1+D)**2)
+#    tmp = to_xarray(w1, field, varname='w1')
+#    plot_and_save(tmp, "Relative_weight", cmap=plt.cm.viridis, scores=scores, vmin=0., vmax=1)
+#    w0 = N/1+W
+#    w0[W==0] = 1
+#    w1[W==0] = 0
+#    w1 = w1/(w0+w1)
+#    w0 = w0/(w0+w1)
+
+    tmp = to_xarray(W/D, field, varname='w1')
+    plot_and_save(tmp, "W_over_D", cmap=plt.cm.viridis, scores=scores, vmin=0.)
     # TODO : include ratio dispersion in error estimation
     #w0 = 1-W  # Ensures that estimated ratio for pixels with no information around stay near 1
-    w0 = 1 - w1
+
     #w0[w0<0] = 0
     #w0 = (1+D) / relativeweight  # Ensures that estimated ratio for pixels with no information around stay near 1
     #w0[W==0] = 1  # Ensures that estimated ratio for pixels with no information around stay 1
@@ -825,8 +838,8 @@ def ratio_estimation(field, model=None, moving_window=25):
     #TODO : TMP
     #mean_ratio = uniform_filter(estimated_ratio, size=moving_window)
     #estimated_ratio = estimated_ratio - mean_ratio
-    ratio_field = to_xarray(estimated_ratio, field, varname='ratio')
-    mean_ratio = to_xarray(mean_ratio, field, varname='ratio')
+    ratio_field = to_xarray(estimated_ratio, field, varname='Ratio')
+    mean_ratio = to_xarray(mean_ratio, field, varname='Ratio')
     #ratio_field = ratio_field.rename('ratio')
     #observation_error = ((np.abs(ratio_field-1) + np.abs(diff))**2)*10
 
@@ -877,8 +890,10 @@ def ratio_estimation(field, model=None, moving_window=25):
     #uncertainty = 1 + w1*observation_error/(1+w1)
     uncertainty.data = uniform_filter(uncertainty.data, size=2)
     uncertainty.data[np.isnan(field.rr_cumul.data)] = np.nanmax(uncertainty.data)
+    uncertainty = uncertainty.rename('Uncertainty')
     confidence = uncertainty.copy()
     confidence.data = 1/confidence.data
+    confidence = confidence.rename('Confidence')
 
     # PLots
     #######
@@ -891,14 +906,14 @@ def ratio_estimation(field, model=None, moving_window=25):
     if domain == 'alp':
         # From https://qiita.com/tsukada_cs/items/d282f27f4024d00d7022 :
         #plot_and_save(ratio_field, rationame, vmin=0.2, vmax=1.8, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, scores=scores)  # Albane's choice !
-        plot_and_save(ratio_field, rationame, vmin=0.4, vmax=1.6, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, scores=scores)  # Albane's choice !
+        plot_and_save(ratio_field, rationame, vmin=0.4, vmax=1.6, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap)  # Albane's choice !
         #plot_and_save(ratio_field, rationame + '_free_scale', vmin=0, vmax=2, cmap=plt.cm.coolwarm, scores=scores)
         #plot_and_save(np.abs(observation_error), errorname, vmin=0, vmax=12, cmap=plt.cm.viridis, scores=scores)
         #plot_and_save(np.abs(observation_error), errorname, vmin=0, vmax=15, cmap=plt.cm.Reds, scores=scores)
         #plot_and_save(np.abs(observation_error), errorname, vmin=0, vmax=15, cmap=plt.cm.Greys, scores=scores)
         #plot_and_save(observation_error, errorname, vmin=1, vmax=15, cmap=plt.cm.YlOrBr, scores=scores)
-        plot_and_save(confidence, confidencename, vmin=0, vmax=1, cmap=plt.cm.Greens, scores=scores)
-        plot_and_save(uncertainty, uncertaintyname, vmin=1, vmax=30, cmap=plt.cm.YlOrBr, scores=scores)
+        plot_and_save(confidence, confidencename, vmin=0, cmap=plt.cm.Greens)
+        plot_and_save(uncertainty, uncertaintyname, vmin=1, vmax=30, cmap=plt.cm.YlOrBr)
     elif domain == 'GrandesRousses':
         plot_and_save(ratio_field, rationame, vmin=0.6, vmax=1.4, cmap=plt.cm.coolwarm, scores=scores)
         #plot_and_save(observation_error, errorname, vmin=-6, vmax=6, cmap=plt.cm.coolwarm, scores=scores)

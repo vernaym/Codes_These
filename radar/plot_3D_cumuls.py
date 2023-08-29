@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
 from matplotlib import cm
 from mpl_toolkits.mplot3d import Axes3D  # F401 unused import --> to ignore !
+from matplotlib import animation
 
 #import hvplot
 #import hvplot.xarray
@@ -25,7 +26,10 @@ print('USAGE : plot_radar_cumuls.py inputfile')
 datadir = '/home/vernaym/These/DATA'
 savedir = '/home/vernaym/These/figures'
 
-filename = sys.argv[1]
+#filename = sys.argv[1]
+#filename = 'CUMUL_ANTILOPEH_alp_2021103000_2022060200.nc'
+#filename = 'CUMUL_ANTILOPEQ_2021110106_2022043006_alp.nc'
+filename = 'CUMUL_ANTILOPEQ_GrandesRousses_2021080106_2022070106.nc'
 
 datebegin = filename.split('.')[0].split('_')[-2]
 dateend   = filename.split('.')[0].split('_')[-1]
@@ -40,17 +44,23 @@ extract_dom = dict(
     lonmin = 6.010,
     lonmax = 6.490,
 )
+# Mont Blanc
+#extract_dom = dict(lonmin=6.45, lonmax=7.1, latmin=45.65, latmax=46.1)
 
 outProj = Proj(init='epsg:4326')
 inProj = Proj(init='epsg:2154')
 
-norm = plt.Normalize(vmin=300, vmax=1200)
+#norm = plt.Normalize(vmin=300, vmax=1200)
+norm = plt.Normalize(vmin=300, vmax=1300)
 #norm = plt.Normalize()
 
 if not os.path.isfile(filename):
     print(f'WARNING : no such file or directory {filename}')
     print(f'lookink for the file under {datadir}')
     filename = os.path.join(datadir, filename)
+
+def rotate(angle):
+    ax.view_init(azim=angle)
 
 if 'PANTHERE' in filename:
 
@@ -168,6 +178,9 @@ ax.set_zlim(0., 3500.)
 #fig.colorbar(colorbar=colors, shrink=0.5, aspect=5)
 fig.colorbar(cm.ScalarMappable(norm=norm, cmap=plt.cm.YlGnBu), ax=ax, shrink=0.75, aspect=8, label=f'{product} cumulated precipitation \n between {datebegin} and {dateend} (mm)')
 #plt.show()
-plt.tight_layout()
-plt.savefig(f'{savedir}/CUMUL3D_{product}_{datebegin}_{dateend}.pdf', format='pdf')
+rot_animation = animation.FuncAnimation(fig, rotate, frames=np.arange(0,362,2),interval=100)
+rot_animation.save(f'{savedir}/CUMUL3D_{product}_{datebegin}_{dateend}.gif', dpi=80, writer='imagemagick')
+
+#plt.tight_layout()
+#plt.savefig(f'{savedir}/CUMUL3D_{product}_{datebegin}_{dateend}.pdf', format='pdf')
 
