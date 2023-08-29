@@ -13,7 +13,7 @@ import pandas as pd
 from scipy.stats import rankdata
 import CRPS.CRPS as pscore
 
-from These.scripts import scores
+from These.scripts import scores, tools
 
 import argparse
 
@@ -447,13 +447,18 @@ class Evaluation(object):
 
     def ratio(self, simu, obs, *args, **kw):
 
-        simu = simu[np.where(obs>0)]
-        obs = obs[np.where(obs>0)]
+        if np.shape(simu) == np.shape(obs):  # "Simulation" déterministe
+            mean = simu
+        else:
+            mean = simu.mean(axis=1)
+        mask = np.where((mean>1) & (obs>1))
+        simu = simu[mask]
+        obs = obs[mask]
 
         if np.shape(simu) == np.shape(obs):  # "Simulation" déterministe
             ratio = simu / obs
         else:  # Simulation s'ensmble
-            ratio = simu.mean(axis=1) / obs
+            ratio =  simu.mean(axis=1)/ obs
 
         return np.nanmean(ratio)
 
@@ -473,15 +478,34 @@ class Evaluation(object):
 
         return freq_error
 
-    def dispersion(self):
+    def spread(self, ensemble):
         """
-        Spread over all dates.
+        Mean spread over dates.
         Spread = sqrt(1/(N-1)*sum(X-M)**2)
         """
-        disp = np.sqrt(np.sum([np.nanmean((self.ensemble.loc[{'member':m}].rr.data-self.mean)**2) for m in self.ensemble.member.data])/(len(self.ensemble.member)-1))
-        print('Dispersion = ', disp)
+        #ensemble = ensemble[np.where(ensemble.mean(axis=1))>1]  # Only for dates
+        ensemble = ensemble.transpose()
+        spread = np.sqrt(np.mean(np.square(ensemble-np.mean(ensemble, axis=0)), axis=0))
+        mean = np.mean(spread)
+        var = np.sqrt(np.mean((spread-mean)**2))
 
-        return disp
+        return mean, var
+
+    def spread_skill(self, simu, obs, by_station=False, *args, **kw):
+
+        simu = simu[~np.isnan(obs)]
+        obs = obs[~np.isnan(obs)]
+        mean = simu.mean(axis=1)
+        mask = np.where((mean>1) & (obs>1))
+        simu = simu[mask].transpose()
+        obs = obs[mask]
+        spread = np.sqrt(np.mean(np.square(simu-np.mean(simu, axis=0)), axis=0))
+        error = np.abs(np.mean(simu, axis=0)-obs)
+        if by_station:
+            spread = np.mean(spread)
+            error = np.sqrt(np.mean(np.square(error)))
+
+        return spread, error, obs
 
     def rmse(self, simu, obs, *args, **kw):
 
@@ -610,8 +634,11 @@ class Evaluation(object):
             # Filter out situations where observation is 0mm
             #ensemble = ensemble[:,(~np.isnan(obs)) & (obs>0)]
             #obs = obs[(~np.isnan(obs)) & (obs>0)]
-            ensemble = ensemble[:,(~np.isnan(obs)) & (obs>5)]
-            obs = obs[(~np.isnan(obs)) & (obs>5)]
+            mean = ensemble.mean(axis=0)
+            mask = np.where((obs>1) & (mean>1))
+            ensemble = ensemble[:, mask]
+            ensemble = np.squeeze(ensemble, axis=1)  # TODO : comprendre pourquoi cette ligne est nécessaire
+            obs = obs[mask]
 
         combined = np.vstack((obs[np.newaxis], ensemble))
 
@@ -950,8 +977,10 @@ class Evaluation(object):
             wma = wma.loc[{'time':dates}]
 
 #        scores_list = ['reliability', 'resolution', 'uncertainty', 'rmse', 'bias', 'brier', 'error_frequency']
-        scores_list = ['rmse', 'bias', 'ratio'] + [f'brier_{int(threshold*10)}' for threshold in self.thresholds] + ['CRPS']
+        scores_list = ['rmse', 'bias', 'ratio', 'spread'] + [f'brier_{int(threshold*10)}' for threshold in self.thresholds] + ['CRPS']
         scores_dict = dict()
+
+        spreadvar = list()  # list of spread variances
 
         #dates = dates[:10]
         liste_postes = np.array([])
@@ -1023,6 +1052,8 @@ class Evaluation(object):
 #                    antilope.sel({'lat':nearest(antilope.lat, lat), 'lon':nearest(antilope.lon, lon)}).loc[{'time':np.datetime64("2022-02-17T06:00")}].rr.data
 
                 #if not os.path.exists(os.path.join(datadir, 'scores.nc')):
+                # Spread skill
+                ensemble_products = ['raw'] + [xpid for xpid in experiments.keys()]
                 for product in data.keys():
                     if product not in scores_dict.keys():
                         scores_dict[product] = {score:list() for score in scores_list}
@@ -1036,6 +1067,11 @@ class Evaluation(object):
                                 score.append(getattr(self, 'brier')(data[product][-1][~np.isnan(obs)], obs[~np.isnan(obs)], Ne=3, threshold=threshold))
                             else:
                                 score.append(getattr(self, 'brier')(data[product][-1][~np.isnan(obs)], obs[~np.isnan(obs)], threshold=threshold))
+                        elif score_name == 'spread':
+                            if product in ensemble_products:
+                                spread, var = getattr(self, 'spread')(data[product][-1][np.where((~np.isnan(obs))&(obs>1))])
+                                score.append(spread)
+                                spreadvar.append(var)
                         else:
                             print(score_name, product)
                             score.append(getattr(self, score_name)(data[product][-1][~np.isnan(obs)], obs[~np.isnan(obs)]))
@@ -1044,6 +1080,15 @@ class Evaluation(object):
                 t7 = time.time()
             else:
                 self.data = self.data.where(self.data.num_poste!=num_poste, drop=True)  # Drop station
+
+        for product in data.keys():
+            if product in ensemble_products:
+                rmse = np.array(scores_dict[product]['rmse'])
+                spread = np.array(scores_dict[product]['spread'])
+                spreadvar = np.array(spreadvar)
+                tools.plot_scatter(rmse, spread, 'RMSE (mm)', 'Mean spread (mm)', f"spread_skill_{product}_by_station.pdf", savedir, addtext=liste_postes)
+            scores_dict[product].pop('spread')
+        scores_list.remove('spread')
 
 #        if os.path.exists(os.path.join(datadir, 'scores.nc')):
 #            self.scores = xr.open_dataset(os.path.join(datadir, 'scores.nc'))
@@ -1091,6 +1136,24 @@ class Evaluation(object):
         plt.tight_layout()
         fig.savefig(os.path.join(savedir, "error_frequency.pdf"), format='pdf')
         plt.close(fig)
+
+        # Spread skill
+        products = [xpid for xpid in experiments.keys()]
+        if 'raw' in data.keys(): products = products + ['raw']
+        for product in products:  # Only for ensemble simulations
+            spread, error, rr = self.spread_skill(self.data[product].data.reshape(-1, 16), self.data.obs.data.flatten())
+            tools.plot_scatter(error, spread, 'Error (mm)', 'Spread (mm)', f"spread_skill_{product}.pdf", savedir, color=rr)
+            tools.plot_scatter(rr, error, 'Precipitation (mm)', 'Error (mm)', f"error_vs_intensity_{product}.pdf", savedir)
+            tools.plot_scatter(rr, spread, 'Precipitation (mm)', 'Spread (mm)', f"spread_vs_intensity_{product}.pdf", savedir)
+            tools.plot_scatter(rr, spread/error, 'Precipitation (mm)', 'Spread / Error', f"spread_over_error_vs_intensity_{product}.pdf", savedir)
+            tools.plot_scatter(error, spread/error, 'Error (mm)', 'Spread / Error', f"spread_over_error_vs_error_{product}.pdf", savedir)
+#            fig, ax = plt.subplots()
+#            ax.scatter(error, spread)
+#            vmax = max(np.max(spread), np.max(error))
+#            ax.set_ylim(top=vmax)
+#            ax.set_xlim(top=vmax)
+#            fig.savefig(os.path.join(savedir, f"spread_skill_{product}.pdf"), format='pdf')
+#            plt.close(fig)
 
         fig1,ax1 = plt.subplots()
         if 'raw' in data.keys():
@@ -1190,9 +1253,9 @@ class Evaluation(object):
                     if not np.isnan(liste_score[idx]):
                         if not np.isnan(liste_score[idx]):
                             # Plot station numbers :
-                            #axis.text(pos, liste_score[idx], str(int(poste)), fontsize=6)
+                            axis.text(pos, liste_score[idx], str(int(poste)), fontsize=6)
                             # Plot only horizontal lines :
-                            axis.plot(pos, liste_score[idx], linestyle='', marker='_', markersize='20', color='k')
+                            #axis.plot(pos, liste_score[idx], linestyle='', marker='_', markersize='20', color='k')
                     else:
                         print(f'{score} of product {product} not available for poste {str(int(poste))}')
 
@@ -1203,6 +1266,8 @@ class Evaluation(object):
                 labels.append(self.add_label(ax.violinplot(x[~np.isnan(x)], showmeans=True, positions=[pos]), xpid_label[product]))
                 if score == 'bias':
                     ax.axhline(color='k')
+                if score == 'ratio':
+                    ax.axhline(1, color='k')
                 if score.startswith('brier') and product not in ['antilope', 'antiloped', 'wma', 'antilopec', 'raw']:
                     pass
 #                    ref = self.scores.loc[{'score':score}]['raw'].data

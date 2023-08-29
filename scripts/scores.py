@@ -46,6 +46,23 @@ def bias(simu, obs, *args, **kw):
 
     return np.nanmean(bias)
 
+def ratio(self, simu, obs, *args, **kw):
+
+    if np.shape(simu) == np.shape(obs):  # "Simulation" déterministe
+        mean = simu
+    else:
+        mean = simu.mean(axis=1)
+    mask = np.where((mean>1) & (obs>1))
+    simu = simu[mask]
+    obs = obs[mask]
+
+    if np.shape(simu) == np.shape(obs):  # "Simulation" déterministe
+        ratio = simu / obs
+    else:  # Simulation s'ensmble
+        ratio =  simu.mean(axis=1)/ obs
+
+    return np.nanmean(ratio)
+
 def error_frequency(simu, obs, threshold=0.2, *args, **kw):
 
     simu = simu[~np.isnan(obs)]
@@ -71,6 +88,24 @@ def dispersion(ensemble):
     print('Dispersion = ', disp)
 
     return disp
+
+def spread_skill(simu, obs, *args, **kw):
+
+    simu = simu[~np.isnan(obs)]
+    obs = obs[~np.isnan(obs)]
+    if np.shape(simu) == np.shape(obs):  # "Simulation" déterministe
+        mean = simu
+    else:
+        mean = simu.mean(axis=1)
+    mask = np.where((mean>1) & (obs>1))
+    simu = simu[mask]
+    obs = obs[mask]
+    spread = dispersion(simu)
+    error = np.abs(simu-obs)
+
+    fig, ax = plt.subplots()
+    ax.plot(error, spread)
+    fig.savefig(os.path.join(savedir, "spread_skill.pdf"), format='pdf')
 
 def rmse(simu, obs, *args, **kw):
 
