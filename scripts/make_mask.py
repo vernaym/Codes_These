@@ -760,20 +760,20 @@ def ratio_estimation(field, model=None, moving_window=25):
     #W = np.mean(weights, axis=0)  # =1 if enough info else <1
     W[np.isnan(W)] = 0
     tmp = to_xarray(W, field, varname='mean_ratio')
-    plot_and_save(tmp, "Total_weight", cmap=plt.cm.viridis, scores=scores, vmin=0.)
+    plot_and_save(tmp, "Total_weight", cmap=plt.cm.viridis, vmin=0.)
     mean_ratio = np.divide(np.sum(weights*ratios, axis=0), W)
     mean_ratio[np.isinf(mean_ratio)] = np.nan
     # Equivalent aux 2 lignes précédentes
     #mean_ratio = np.sum(weights*ratios, axis=0)/W
     #mean_ratio[W==0] = np.nan
     tmp = to_xarray(mean_ratio, field, varname='mean_ratio')
-    plot_and_save(tmp, "Mean_ratio", cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, scores=scores, vmin=0, vmax=2)
+    plot_and_save(tmp, "Mean_ratio", cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=0, vmax=2)
     D = np.sqrt(np.sum(weights*(ratios-mean_ratio)**2, axis=0)/W)
     D[W==0] = 0
     #D = np.sum(weights*(ratios-mean_ratio)**2, axis=0)/W
     #D = np.sqrt(np.sum(weights*(np.abs(1-ratios)-np.abs(1-mean_ratio))**2, axis=0)/W)
     ratio_dispersion = to_xarray(D, field, varname='dispersion')
-    plot_and_save(ratio_dispersion, "Ratio spread", cmap=plt.cm.viridis, scores=scores, vmin=0, vmax=1)
+    plot_and_save(ratio_dispersion, "Ratio spread", cmap=plt.cm.viridis, vmin=0)
 
     # Decrease the weight for pixels with large ratio dispersion (more uncertainty !)
     # Ensure that estimated ratio for pixels with no information around (W=0) stay at 1
@@ -793,19 +793,26 @@ def ratio_estimation(field, model=None, moving_window=25):
     w1[np.isnan(w1)] = 0
     w0 = 1 - w1
 
-#    #w1 = W/(1+D)
-#    w1 = W/D
-#    #relativeweight = W / np.exp((1+D)**2)
-#    tmp = to_xarray(w1, field, varname='w1')
-#    plot_and_save(tmp, "Relative_weight", cmap=plt.cm.viridis, scores=scores, vmin=0., vmax=1)
-#    w0 = N/1+W
-#    w0[W==0] = 1
-#    w1[W==0] = 0
-#    w1 = w1/(w0+w1)
-#    w0 = w0/(w0+w1)
+    #w1 = W/(1+D) --> doesn't work
+    X = W/D  # Identifies ridges !
+    w1 = X / np.nanmean(X)
+    X = 1/D
+    #w1 = X/np.nanmax(X)  # Ratio only over ridges
+    w1 = X/np.nanmean(X)
+    #w1 = X
+    w1[D==0] = 1
+    #w1 = w1 / (np.nanmax(w1)-np.nanmin(w1))
+    tmp = to_xarray(w1, field, varname='w1')
+    plot_and_save(tmp, "Relative_weight", cmap=plt.cm.viridis)
+    w1 = w1/(1+w1)
+    #w0 = N/W  # = 1/np.mean(W)
+    #w1 = w1/(w0+w1)
+    w0 = 1 - w1
+    w0[W==0] = 1
+    #w1 = 1 - w0
 
     tmp = to_xarray(W/D, field, varname='w1')
-    plot_and_save(tmp, "W_over_D", cmap=plt.cm.viridis, scores=scores, vmin=0.)
+    plot_and_save(tmp, "W_over_D", cmap=plt.cm.viridis)
     # TODO : include ratio dispersion in error estimation
     #w0 = 1-W  # Ensures that estimated ratio for pixels with no information around stay near 1
 
@@ -814,9 +821,9 @@ def ratio_estimation(field, model=None, moving_window=25):
     #w0[W==0] = 1  # Ensures that estimated ratio for pixels with no information around stay 1
     #w0[np.isnan(w1)] = 1
     tmp = to_xarray(w0/(w0+w1), field, varname='mean_ratio')
-    plot_and_save(tmp, "W0", cmap=plt.cm.viridis, scores=scores, vmin=0, vmax=1)
+    plot_and_save(tmp, "W0", cmap=plt.cm.viridis, vmin=0, vmax=1)
     tmp = to_xarray(w1/(w0+w1), field, varname='mean_ratio')
-    plot_and_save(tmp, "W1", cmap=plt.cm.viridis, scores=scores, vmin=0, vmax=1)
+    plot_and_save(tmp, "W1", cmap=plt.cm.viridis, vmin=0, vmax=1)
     estimated_ratio = (1*w0 + w1*mean_ratio) / (w0+w1)
     estimated_ratio[np.isnan(estimated_ratio)] = 1
     #estimated_ratio = (1*w0 + W*mean_ratio) / (w0+W)
@@ -901,10 +908,14 @@ def ratio_estimation(field, model=None, moving_window=25):
     #######
     scores = scores.loc[(scores.lats>=latmin) & (scores.lats<=latmax) & (scores.lons>=lonmin) & (scores.lons<=lonmax)]
     #scores = scores.loc[used_scores]  # TODO : voir pourquoi ca ne marche plus après update de la version de pandas
-    rationame = f'Estimated_ratio_{domain}_{d0}_{h0}' if h0 is not None else f'Estimated_ratio_{domain}_{d0}'
-    errorname = f'Observation_error_{d0}_{h0}_{domain}' if h0 is not None else f'Observation_error_{d0}_{domain}'
-    uncertaintyname = f'Observation_uncertainty_{d0}_{h0}_{domain}' if h0 is not None else f'Observation_uncertainty_{d0}_{domain}'
-    confidencename = f'Observation_confidence_{d0}_{h0}_{domain}' if h0 is not None else f'Observation_confidence_{d0}_{domain}'
+#    rationame = f'estimated_ratio_{domain}_{d0}_{h0}' if h0 is not none else f'estimated_ratio_{domain}_{d0}'
+#    errorname = f'observation_error_{d0}_{h0}_{domain}' if h0 is not none else f'observation_error_{d0}_{domain}'
+#    uncertaintyname = f'observation_uncertainty_{d0}_{h0}_{domain}' if h0 is not none else f'observation_uncertainty_{d0}_{domain}'
+#    confidencename = f'observation_confidence_{d0}_{h0}_{domain}' if h0 is not none else f'observation_confidence_{d0}_{domain}'
+    rationame = f'Estimated_ratio_{domain}'
+    errorname = f'Observation_error'
+    uncertaintyname = f'Observation_uncertainty'
+    confidencename = f'Observation_confidence'
     if domain == 'alp':
         # From https://qiita.com/tsukada_cs/items/d282f27f4024d00d7022 :
         #plot_and_save(ratio_field, rationame, vmin=0.2, vmax=1.8, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, scores=scores)  # Albane's choice !

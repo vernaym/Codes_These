@@ -267,6 +267,7 @@ algo = dict(
         RS17          = 'RandomSampling/XP17/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         RS18          = 'RandomSampling/XP18/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         RS19          = 'RandomSampling/XP19/Random_Sampling_2021120106_2022050106_daily_alp.nc',
+        RS20          = 'RandomSampling/XP20/Random_Sampling_2021120106_2022050106_daily_alp.nc',
     )
 
 
@@ -399,7 +400,8 @@ xpid_label = dict(
         RS16          = 'Random Sampling with WMA only',  # reference for WMA method evaluation
         RS17          = 'RS',  # Idem RS 15 mais avec erreur obs=sd2 seulement (moins surdispersif et un peu moins biaisé)
         RS18          = 'RS18',  # random perturbations = gamma*0.2*obs + gamma*sd
-        RS19          = 'TMP',  # random perturbations = gamma*0.2*obs + gamma*sd
+        RS19          = 'RS19',  # random perturbations = gamma*obs*0.4 (ou 0.3 ?) + gamma*sd
+        RS20          = 'RS20',  # Estimated ratio only on mountain ridges
     )
 
 def nearest(array, value):

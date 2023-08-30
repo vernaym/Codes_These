@@ -258,7 +258,7 @@ def random_draw(obs, sd, distribution='gamma'):
         # - 1 gamma distributed proportionnal to the precipitation intensity
         # - normal distributed around the estimated error --> especially important for error for small prexipitation values
         # This 2 step perturbation reduces the dispersion but introduces spatial variability in the analysis fields
-        ana = obs + obs*0.40*(gamma-shift) + gauss*sd
+        ana = obs + obs*0.30*(gamma-shift) + gauss*sd
 
     else:
         print('Error : unknown distribution')
