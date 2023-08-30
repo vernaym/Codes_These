@@ -104,7 +104,8 @@ if domain == 'pyr':
 else:
     #fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_alp.csv')
     #fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_alpes_10_obs_auto.csv')
-    fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_alpes_obs_auto.csv')
+    #fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_alpes_obs_auto.csv')
+    fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_alpes_obs_nivometeo_antilope_debiaise.csv')
 
 
 landmarks = {
@@ -262,8 +263,8 @@ def add_scores(scores, ax, mycmap=None, vmin=None, vmax=None):
         onlypostes = [poste for poste in info.index if poste not in blacklist]
         info = info[info.index.isin(onlypostes)]
         if mycmap is None:
-            #sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=450, edgecolors='black', linewidth=3, alpha=1)
-            sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=50, edgecolors='black', alpha=0.5)
+            sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=450, edgecolors='black', linewidth=3, alpha=1)
+            #sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=50, edgecolors='black', alpha=0.5)
             #sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=300, edgecolors='black', alpha=1)
         else:
             #sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, vmin=vmin, vmax=vmax, marker=marker, s=300, edgecolors='black', alpha=1)
@@ -368,7 +369,7 @@ def plot(antilope, datebegin, dateend, categories=True, biascorrection=False, sc
         # define the bins and normalize
         bounds = np.arange(200, 1300, 100)
         #norm = matplotlib.colors.BoundaryNorm(bounds, cmap.N)
-        norm = matplotlib.colors.BoundaryNorm(bounds, len(bounds)-2)
+        norm = matplotlib.colors.BoundaryNorm(bounds, len(bounds)-1)
         cml = antilope.rr_cumul.plot.pcolormesh(ax=ax, cmap=cmap, norm=norm, add_colorbar=False)
 
         #cml = antilope.rr_cumul.plot(ax=ax, cmap=cmap, norm=norm, add_colorbar=False)
@@ -969,13 +970,12 @@ def plot_ratio_estime_vs_ratio_reel(ratio, erreur):
     r2 = reg.score(x, y)
     plot(scores.ratio.values, ratio_estimation.data, x, z, f'Estimated_ratio_vs_real_ratio_{domain}_{d0}.pdf')
     # Regression linéaire pour l'erreur
-    #x = scores.rmse.values.reshape((-1,1))
-    #y = error_estimation.data
-    #reg = LinearRegression().fit(x, y)
-    #z = reg.predict(x)
+    x = scores.rmse.values.reshape((-1,1))
+    y = error_estimation.data
+    reg = LinearRegression().fit(x, y)
+    z = reg.predict(x)
     #r2 = reg.score(x, y)
-    #plot(scores.rmse.values, error_estimation.data, x, z, f'Estimated_error_vs_real_error_{domain}_{d0}.pdf')
-
+    plot(scores.rmse.values, error_estimation.data, x, z, f'Estimated_error_vs_real_error_{domain}_{d0}.pdf')
 
 def animation_mask(field):
 
@@ -1073,7 +1073,8 @@ if __name__ == "__main__":
 
     if plot_antilope:
         #plot(antilope, datebegin, dateend, categories=True, biascorrection=True)
-        plot(antilope, datebegin, dateend, categories=False, biascorrection=True)
+        #plot(antilope, datebegin, dateend, categories=False, biascorrection=True)
+        plot(antilope, datebegin, dateend, categories=True, biascorrection=True, scores=True)
         #plot(antilope, datebegin, dateend, categories=True)
         #plot(antilope, datebegin, dateend, categories=False)
         #plot(antilope, datebegin, dateend, categories=False, scores=True)

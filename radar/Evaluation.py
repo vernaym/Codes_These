@@ -37,7 +37,8 @@ map_massifs = dict(
     corse = [40, 41],
 )
 
-nb_obs_min = 60
+#nb_obs_min = 60
+nb_obs_min = 50
 
 coords = dict(
     #alp = ['46875', '43125', '4500', '8500'],
@@ -470,7 +471,8 @@ def plot_massif(mydf, massif=None, subdomain=None, error=0.2, threshold=None, **
     mydf['diff'] = np.square(mydf[f'rr_{kw["product"]}'] - mydf['rr_ref'])
     tmp['nb_days'] = mydf.groupby(['num_poste']).date.count()
     if args.threshold is None:
-        tmp = tmp[tmp['nb_days']>100]
+        #tmp = tmp[tmp['nb_days']>100]
+        tmp = tmp[tmp['nb_days']>30]
     else:
         tmp = tmp[tmp['nb_days']>10]
     #tmp = tmp[tmp['rr_ref']>0]
@@ -943,7 +945,8 @@ def read_nivometeo():
 #            dtype={'H.num_poste':int, 'poste_nivo.nom_usuel':str, 'poste_nivo.alti':int, 'poste_nivo.lat_dg':float, 'poste_nivo.lon_dg':float, 'H.rr1':float,
 #                'poste_nivo.massif_nivo':int, 'hist_reseau_poste.reseau_poste':int})
     # Renomage de certaines colonnes (pour le merge des DF et pour faciliter la manipulation)
-    nivometeo['date'] = nivometeo['Q.dat'].dt.date + pd.Timedelta("1d")  # Changement de type + matching dates with radar data (BDClim extraction
+    #nivometeo['date'] = nivometeo['Q.dat'].dt.date + pd.Timedelta("1d")  # Changement de type + matching dates with radar data (BDClim extraction
+    nivometeo['date'] = nivometeo['Q.dat'] + pd.Timedelta("1d") + pd.Timedelta("6h")  # Changement de type + matching dates with radar data (BDClim extraction
         # for date ymd is the observation from ymd6h to ym(d+1)6h )
     nivometeo = nivometeo.rename(columns={'Q.num_poste':'num_poste', 'poste_nivo.lat_dg':'lat', 'poste_nivo.lon_dg':'lon',
         'poste_nivo.nom_usuel':'name', 'poste_nivo.massif_nivo':'massif_number', 'poste_nivo.alti':'elevation', 'Q.rr':'rr_ref'})  # facultatif
@@ -955,17 +958,15 @@ if __name__ == "__main__":
 
     extract_period = date_range(args.datebegin, args.dateend)
 
-    #reference = read_nivometeo()
+    reference = read_nivometeo()
     #reference = read_obs_clim()
-    reference = read_obs_auto()
+    #reference = read_obs_auto()
     reference.lon = np.round(reference.lon, 2)
     reference.lat = np.round(reference.lat, 2)
     ref_lon = reference.groupby('num_poste').lon.mean().to_xarray()
     ref_lat = reference.groupby('num_poste').lat.mean().to_xarray()
 
-
     #TODO : Extraire les valeurs ANTILOPE sur les points de reference
-
 
     if args.product == 'antilope':
         # TODO : read ANNTILOPEH and extract data from 7h UTC to 7h UTC before march 20th and from 8h UTC to 8h UTC after
@@ -998,6 +999,13 @@ if __name__ == "__main__":
         #antilope['time'] = antilope.time-np.timedelta64(8, 'h')  # Pour les obs nivometeo
         antilope = antilope.resample(time='1D').sum(dim='time')  # !!! VERY SLOW !!! WARNING : does not work with pandas>=2.0.0
         antilope['time'] = antilope.time+np.timedelta64(30, 'h')
+
+        # De-biaisage
+        filename = os.path.join('/home/vernaym/workdir/ASSIMILATION/mask/alp', 'Estimated_ratio.nc')  # Mask test
+        ratio = xr.open_dataset(filename)
+        #ratio = ratio.where((ratio.lon>=lonmin) & (ratio.lon<=lonmax) & (ratio.lat<=latmax) & (ratio.lat>latmin-0.01), drop=True)  # # >=44.1 ne fonctionne pas pour ANTILOPEQ (np.where(antilope.lat==44.1) renvoie une liste vide...)
+        antilope.rr.data = antilope.rr.data / ratio.Ratio.data
+
         # Extraction des valeurs sur les points de reference
         antilope = antilope.sel(lat=ref_lat, lon=ref_lon, method = 'nearest')
         # conversion en DF
@@ -1072,11 +1080,13 @@ if __name__ == "__main__":
     num_poste = df.groupby(['num_poste']).num_poste.mean()
 #    workdict = {'elevation':elevations, 'rr_ref':rr_ref, f'rr_{args.product}':rr_antilope, 'ndays':nb_values, 'massif_number':massif_number,
 #            'lats':lats, 'lons':lons, 'num_poste':num_poste}
+
     if 'massif_number' in df.columns:
         workdict = {'elevation':elevations, 'rr_ref':rr_ref, f'rr_{args.product}':rr_antilope, 'ndays':nb_values, 'massif_number':massif_number,
                 'lats':lats, 'lons':lons}
     else:
         workdict = {'elevation':elevations, 'rr_ref':rr_ref, f'rr_{args.product}':rr_antilope, 'ndays':nb_values, 'lats':lats, 'lons':lons}
+#    workdict = {'elevation':elevations, 'rr_ref':rr_ref, f'rr_{args.product}':rr_antilope, 'ndays':nb_values, 'lats':lats, 'lons':lons}
     #workdict = {'elevation':elevations, 'rr_ref':rr_ref, f'rr_{args.product}':rr_antilope, 'ndays':nb_values, 'massif_number':massif_number, 'lats':lats, 'lons':lons}
     df_stat   = pd.DataFrame(workdict)
     #workdf = workdf.loc[workdf['ndays']>nb_obs_min] # Consider only points with at least 100 observations
