@@ -250,15 +250,15 @@ def random_draw(obs, sd, distribution='gamma'):
         #k = 3  # k must be >1. TODO : fixer k de façon automatique
         k = 2  # k must be >1. TODO : fixer k de façon automatique --> + forte asymétrie
         theta = np.sqrt(1/k)  # Ensure a variance of 1 (var=k*theta^2)
-        shift = (k-1)*theta  # shift = mode  --> introduce a >0 bias of theta
-        #shift = k*theta  # shift = mean
+        #shift = (k-1)*theta  # shift = mode  --> introduce a >0 bias of theta
+        shift = k*theta  # shift = mean
         gamma = np.random.gamma(k, scale=theta)  # Draw random element from normal distribution (>0 only ==> shift necessary to convert into perturbations)
 
         # Add 2 perturbations terms:
         # - 1 gamma distributed proportionnal to the precipitation intensity
         # - normal distributed around the estimated error --> especially important for error for small prexipitation values
         # This 2 step perturbation reduces the dispersion but introduces spatial variability in the analysis fields
-        ana= obs + obs*0.2*(gamma-shift) + gauss*sd
+        ana = obs + obs*0.40*(gamma-shift) + gauss*sd
 
     else:
         print('Error : unknown distribution')

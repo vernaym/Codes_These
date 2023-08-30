@@ -65,7 +65,6 @@ indep = [74286400, 74063405, 74191406, 74014402, 731223402, 73132400, 73054401, 
         73307400, 73322401, 38191400, 38020400, 38527400, 38375400, 38186400, 5079400, 5085403, 5101400,
         5110400, 5061400, 5098402, 4073400, 4006400, 6073405]
 
-
 datadir = '/home/vernaym/These/DATA'
 workdir = '/home/vernaym/workdir/ASSIMILATION/'
 
@@ -267,6 +266,7 @@ algo = dict(
         #RS16          = 'RandomSampling/XP16/Random_Sampling_2021120106_2022050106_daily_alp.nc',  --> WMA reference experiment
         RS17          = 'RandomSampling/XP17/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         RS18          = 'RandomSampling/XP18/Random_Sampling_2021120106_2022050106_daily_alp.nc',
+        RS19          = 'RandomSampling/XP19/Random_Sampling_2021120106_2022050106_daily_alp.nc',
     )
 
 
@@ -290,12 +290,12 @@ if not os.path.exists(savedir):
     os.makedirs(savedir)
 
 xpid_label = dict(
-        antilope      = 'ANTILOPE',
+        antilope      = 'Raw ANTILOPE',
         #antilope      = 'Raw field',
         wma           = 'WMA',
-        antiloper     = 'ANTILOPE + error',
+        antiloper     = 'De-biased ANTILOPE + error',
         #antiloped     = 'ANTILOPE + error + debiaisage',
-        antiloped     = 'De-biasing',
+        antiloped     = 'De-biased ANTILOPE',
         #antilopec     = 'ANTILOPE + debiaisage + correction',
         antilopec     = 'De-biasing + WMA',
         #raw           = 'Raw PE-AROME ensemble',
@@ -399,6 +399,7 @@ xpid_label = dict(
         RS16          = 'Random Sampling with WMA only',  # reference for WMA method evaluation
         RS17          = 'RS',  # Idem RS 15 mais avec erreur obs=sd2 seulement (moins surdispersif et un peu moins biaisé)
         RS18          = 'RS18',  # random perturbations = gamma*0.2*obs + gamma*sd
+        RS19          = 'TMP',  # random perturbations = gamma*0.2*obs + gamma*sd
     )
 
 def nearest(array, value):
@@ -637,10 +638,12 @@ class Evaluation(object):
             #ensemble = ensemble[:,(~np.isnan(obs)) & (obs>0)]
             #obs = obs[(~np.isnan(obs)) & (obs>0)]
             mean = ensemble.mean(axis=0)
-            mask = np.where((obs>1) & (mean>1))
+            #mask = np.where((obs>1) & (mean>1))
+            #mask = np.where((obs>1) & (mean>1))
             #mask = np.where((obs>5) & (mean>5))
-            #mask = np.where((obs>1))
-            #mask = np.where((obs>0))
+            #mask = np.where((mean>1))
+            #mask = np.where((obs>5))
+            mask = np.where((obs>0))
             ensemble = ensemble[:, mask]
             ensemble = np.squeeze(ensemble, axis=1)  # TODO : comprendre pourquoi cette ligne est nécessaire
             obs = obs[mask]
@@ -912,6 +915,7 @@ class Evaluation(object):
 
 #        data = dict(antilope=list(), wma=list(), antiloped=list(), antilopec=list())
         data = dict(antilope=list(), raw=list(), antilopec=list())
+#        data = dict(antilope=list(), antiloped=list(), antiloper=list())
         #data = dict(antilope=list(), raw=list(), antilopec=list())
         #data = dict(antilopec=list())
         #data = dict(antilope=list(), antiloped=list(), antilopec=list())
@@ -946,7 +950,7 @@ class Evaluation(object):
 #        antiloped = antiloped.transpose('lat', 'lon', 'time', 'member')
 
         # ANTILOPE + error
-        antiloper = antilope.expand_dims('member')
+        antiloper = antiloped.expand_dims('member')
         antiloper = antiloper.apply(to_ensemble)
         antiloper = antiloper.clip(0)
         antiloper = antiloper.transpose('lat', 'lon', 'time', 'member')
@@ -1124,8 +1128,10 @@ class Evaluation(object):
         thresholds = np.arange(0.1, 1.01, 0.1)
         obse = self.data.obs.data.flatten()
         for product in data.keys():
-            #if 'member' in self.data[product].coords:
-            if 'member' in self.data[product].dims:
+#            if product == 'antiloper':
+#                import pdb
+#                pdb.set_trace()
+            if 'member' in self.data[product].dims or 'pseudo_member' in self.data[product].dims:
                 simu = self.data[product].stack(points=["num_poste", "date"]).data.transpose()
                 freq_error = scores.error_frequency(simu, obse)
                 ax.axhline(freq_error, color=next(ax._get_lines.prop_cycler)['color'], label=xpid_label[product])
@@ -1251,7 +1257,11 @@ class Evaluation(object):
             self.evaluate()
         # TODO : do not plot individual brier scores
         for score in self.scores.score.data:
-            fig,ax = plt.subplots(figsize=(22,18))
+            products = [var for var in self.scores.data_vars]
+            if len(products) <=2:
+                fig,ax = plt.subplots(figsize=(12,13))
+            else:
+                fig,ax = plt.subplots(figsize=(22,18))
             if score.startswith('brier'):
                 pass
                 #threshold = int(score.split('_')[-1])
@@ -1259,7 +1269,6 @@ class Evaluation(object):
 
             pos = 1
             pos2 = 1
-            products = [var for var in self.scores.data_vars]
             labels = []
             labels2 = []
 
@@ -1268,9 +1277,9 @@ class Evaluation(object):
                     if not np.isnan(liste_score[idx]):
                         if not np.isnan(liste_score[idx]):
                             # Plot station numbers :
-                            axis.text(pos, liste_score[idx], str(int(poste)), fontsize=6)
+                            #axis.text(pos, liste_score[idx], str(int(poste)), fontsize=6)
                             # Plot only horizontal lines :
-                            #axis.plot(pos, liste_score[idx], linestyle='', marker='_', markersize='20', color='k')
+                            axis.plot(pos, liste_score[idx], linestyle='', marker='_', markersize='20', color='k')
                     else:
                         print(f'{score} of product {product} not available for poste {str(int(poste))}')
 
@@ -1291,7 +1300,10 @@ class Evaluation(object):
 #                    labels2.append(self.add_label(ax2.violinplot(bss[~np.isnan(bss)], showmeans=True, positions=[pos2]), xpid_label[product]))
 #                    ax2.axhline(color='k')
 #                    pos2 += 1
-                pos += 1
+                if len(products) <= 2:
+                    pos +=0.5
+                else:
+                    pos += 1
 
             if score.startswith('brier'):
                 pass
