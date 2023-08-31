@@ -210,7 +210,7 @@ def plot_distribution(ax, mean, sd, label=None, color='k', distribution='norm', 
     elif distribution == 'gamma':
         #k = mean**2/sd
         #theta = sd/mean
-        #on veut que mu soit le mode de la distribution gamma (< à la moyenne)
+        #on veut que mu soit la moyenne de la distribution gamma (> au mode) pour ne pas introduire de biais
         theta = (np.sqrt(mean**2+4*sd)-mean)/2
         k     = 4*sd/(np.sqrt(mean**2+4*sd)-mean)**2
         ax.plot(x, gamma.pdf(x, k, scale=theta), 'r-', color=color, label=label, linestyle='--', linewidth=0.5)
@@ -275,13 +275,20 @@ def plot(mu, std, N, obs, obs_std, vmin, vmax, distribution='norm', background=T
         #drawbackground = np.array([ensemble[(ensemble>10)&(ensemble<11)][0], ensemble[(ensemble>29)&(ensemble<30)][0]])
         #ax1.plot(drawbackground, [2]*len(drawbackground), linestyle='', marker='.', color='k', markersize=10)
 
-    # 2. Draw observation
+    # 2. Random Sampling
     #ax0,ax1 = plot_distribution(ax0, ax1, obs, obs_std, data=[obs], color='red', marker='.', vmin=vmin, vmax=vmax, label='Observation distribution')
     #ax0,ax1 = plot_distribution(ax0, ax1, obs, obs_std, data=[obs], color='red', marker='.', vmin=vmin, vmax=vmax, label='Observation distribution')
     #ax0 = plot_normal_distribution(ax0, obs, obs_std, f'Observation (Y={obs}mm, std={obs_std}mm)', color='red')
+
+    k = 2
+    theta = 1/np.sqrt(k)
+    shift = k*theta  # mean
+    gm = gamma.pdf(x+shift, k, scale=theta)
+    gs = norm.pdf(x)
+
     ax0 = plot_distribution(ax0, obs, obs_std, f'Observation', color='red', distribution='norm', linewidth=1)
     if distribution == 'gamma':
-        ax0 = plot_distribution(ax0, obs, obs_std, color='red', distribution='gamma', linewidth=1)
+        ax0 = plot_distribution(ax0, obs, , color='red', distribution='gamma', linewidth=1)
     ax1.plot(obs, [3], color='red', marker='|', markersize=100)
     ax1.plot([obs-obs_std, obs+obs_std], [1.5, 1.5], marker='|', markersize=10, color='red', linewidth=1, linestyle='--')
 
@@ -395,15 +402,15 @@ N = 1000000  # Ensemble size
 #pdb.set_trace()
 
 
-mu  = 20  # ensemble mean
+mu  = 30  # ensemble mean
 #mu  = 10  # ensemble mean
-std = 10  # ensemble dispersion / std
+std = 20  # ensemble dispersion / std
 #std = 8  # ensemble dispersion / std
 #std = 5  # ensemble dispersion / std
-obs = 25
-obs_std = 5
+obs = 50
+obs_std = 10
 vmin = 0
-vmax = 50
+vmax = 80
 plot(mu, std, N, obs, obs_std, vmin, vmax, background=False, pf=False, enkf=False)
 #plot(mu, std, N, obs, obs_std, vmin, vmax, distribution='gamma', pf=True, enkf=False)
 #plot(mu, std, N, obs, obs_std, vmin, vmax, distribution='gamma')

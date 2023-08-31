@@ -60,6 +60,7 @@ figsize = dict(
 )
 
 savedir = '/home/vernaym/These/figures/illustration/methode_correction'
+datadir = '/home/vernaym/These/DATA'
 
 extract_lat = np.round(np.arange(domain_coords[domain]['latmin'], domain_coords[domain]['latmax'], 0.01, dtype=float), 2)
 extract_lon = np.round(np.arange(domain_coords[domain]['lonmin'], domain_coords[domain]['lonmax'], 0.01, dtype=float), 2)
@@ -70,10 +71,12 @@ lon = 6.87
 #lon = 6.7
 #lat = 45.82
 #lon = 6.7
-lat = 45.79
-lon = 6.89
+#lat = 45.79
+#lon = 6.89
 
 def plot(field, name, cmap=plt.cm.YlGnBu, vmin=None, vmax=None, scores=None):
+    # Extract plot domain
+    field = field.sel({'lat':np.intersect1d(extract_lat, field.lat), 'lon':np.intersect1d(extract_lon, field.lon)})
     if vmin is None:
         vmin = np.min(field)
     if vmax is None:
@@ -81,9 +84,9 @@ def plot(field, name, cmap=plt.cm.YlGnBu, vmin=None, vmax=None, scores=None):
     fig, ax = plt.subplots(figsize=figsize[domain])
     #fig, ax = plt.subplots()
     make_mask.plot_field(fig, ax, field, cmap=cmap, vmin=vmin, vmax=vmax, scores=scores)
-    circle = plt.Circle((lon, lat), 0.14, color='red', fill=False, linewidth=3)
+    circle = plt.Circle((lon, lat), 0.18, color='red', fill=False, linewidth=3)
     ax.plot(lon, lat, color='red', marker='+', markersize=10)
-    #ax.add_artist(circle)
+    ax.add_artist(circle)
     #plt.Circle((lon, lat), 0.15, color='k', fill=False, linewidth=2)
     plt.tight_layout()
     fig.savefig(os.path.join(savedir, f'{name}.pdf'), format='pdf')
@@ -177,43 +180,54 @@ def plot_distribution(ax, mean, sd, vmin=0, vmax=1000, ensemble=None, label=None
 if __name__ == "__main__":
 
     # Extract and plot initial field
-    filename = f'CUMUL_ANTILOPE_{domain}.nc'
-    if os.path.exists(os.path.join(savedir, filename)):
-        field = xr.open_dataarray(os.path.join(savedir, filename))
-    else:
-        tmp = '/home/vernaym/These/DATA/CUMUL_ANTILOPEH_alp_2021103000_2022060200.nc'
-        field = xr.open_dataarray(tmp)
-        field = field.sel({'lat':np.intersect1d(extract_lat, field.lat), 'lon':np.intersect1d(extract_lon, field.lon)})
-        field.to_netcdf(os.path.join(savedir, filename))
-    vmax = np.nanmax(field.data)
+    # ANTILOPE accumulation
+#    filename = f'CUMUL_ANTILOPE_{domain}.nc'
+#    if os.path.exists(os.path.join(savedir, filename)):
+#        field = xr.open_dataarray(os.path.join(savedir, filename))
+#    else:
+#        tmp = '/home/vernaym/These/DATA/CUMUL_ANTILOPEH_alp_2021103000_2022060200.nc'
+#        field = xr.open_dataarray(tmp)
+#        field = field.sel({'lat':np.intersect1d(extract_lat, field.lat), 'lon':np.intersect1d(extract_lon, field.lon)})
+#        field.to_netcdf(os.path.join(savedir, filename))
+    # Raw ANTILOPE field
+    filename = os.path.join(datadir, f'ANTILOPEQ_2021103000_2022060200_alp.nc')
+    field = xr.open_dataarray(filename)
+    # Extract domain and date
+    #date=np.datetime64('2022-04-08T06:00')  # TODO : Check artefacts in observation error (--> increase correlation length)
+    date=np.datetime64('2022-04-09T06:00')
+    #field = field.sel({'lat':np.intersect1d(extract_lat, field.lat), 'lon':np.intersect1d(extract_lon, field.lon), 'time':date})
+    field = field.sel({'time':date})
+
+    vmax = np.nanmax(field.data)*1.1
     field = field.rename('Precipitation (mm)')
     plot(field, 'initial_field', vmax=vmax)
 
     # Extract correlation window
     coords=[(lon,lat) for lat in field.lat.data for lon in field.lon.data]
-    codist = Preprocessing_ANTILOPE.codistances(coords)
+    correlations = Preprocessing_ANTILOPE.codistances(coords)
     lons, lats = np.meshgrid(field.lon, field.lat)
     point = np.where((lons.flatten()==lon) & (lats.flatten()==lat))[0][0]
-    correlations = codist.getrow(point).toarray()[0].reshape((len(field.lat), len(field.lon)))
-    local = correlations.copy()
+    local_correlations = correlations.getrow(point).toarray()[0].reshape((len(field.lat), len(field.lon)))
+    local = local_correlations.copy()
     local[local>0] = 1
-    correlations = make_mask.to_xarray(correlations, field)
-    correlations = correlations.rename('Inverse Distance Weighting')
-    plot(correlations, 'correlations', cmap=plt.cm.Greys)
+    local_correlations = make_mask.to_xarray(local_correlations, field)
+    local_correlations = local_correlations.rename('Inverse Distance Weighting')
+    plot(local_correlations, 'correlations', cmap=plt.cm.Greys, vmin=0.7)
     window = field.copy()
     window.data = window.data * local
     plot(window, 'window', vmax=vmax)
 
     # Extract observation uncertainty / confidence
-    fic_error = os.path.join('/home/vernaym/workdir/ASSIMILATION/mask/alp', f'Observation_uncertainty_0.15_alp.nc')
+    fic_error = os.path.join('/home/vernaym/workdir/ASSIMILATION/mask/alp', f'Observation_uncertainty.nc')
     error = xr.open_dataarray(fic_error)
-    error = error.sel({'lat':np.intersect1d(extract_lat, error.lat), 'lon':np.intersect1d(extract_lon, error.lon)})
+    #error = error.sel({'lat':np.intersect1d(extract_lat, error.lat), 'lon':np.intersect1d(extract_lon, error.lon)})
     plot(error, 'error_field', cmap=plt.cm.YlOrBr, vmin=1, vmax=30)
     local_error = error.copy()
     local_error.data = local * local_error.data
     local_error = local_error.rename('Estimated uncertainty')
-    plot(local_error, 'local_error', cmap=plt.cm.YlOrBr)
+    plot(local_error, 'local_uncertainty', cmap=plt.cm.YlOrBr)
 
+    # Plot local confidence
     confidence = 1 / error
     local_confidence = confidence.copy()
     local_confidence.data = local_confidence.data * local
@@ -221,15 +235,15 @@ if __name__ == "__main__":
     plot(local_confidence, 'confidence', cmap=plt.cm.Greens)
 
     # Compute weights
-    weights = correlations * confidence
-    weights = weights.rename('Weight')
-    plot(weights, 'weights', cmap=plt.cm.Blues)
+    local_weights = local_correlations * local_confidence
+    local_weights = local_weights.rename('Weight')
+    plot(local_weights, 'weights', cmap=plt.cm.Blues)
 
     # Field correction
-    pond = codist.dot(diags(1/error.data.flatten(), 0))
-    #tmp = pond.getrow(point).toarray()[0].reshape((len(field.lat), len(field.lon)))
-    #tmp = make_mask.to_xarray(tmp.reshape((len(field.lat), len(field.lon))), field)
-    #plot(tmp,'tmp')
+    pond = correlations.dot(diags(1/error.data.flatten(), 0))
+    tmp = pond.getrow(point).toarray()[0].reshape((len(field.lat), len(field.lon)))
+    tmp = make_mask.to_xarray(tmp.reshape((len(field.lat), len(field.lon))), field)
+    plot(tmp,'tmp', cmap='Greys')
     new, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(field.data, pond)
     correctedfield = make_mask.to_xarray(new.reshape((len(field.lat), len(field.lon))), field).rename('Precipitation (mm)')
     plot(correctedfield, 'dynamic_correction_only', vmax=vmax)
@@ -246,12 +260,12 @@ if __name__ == "__main__":
     original = field.sel({'lat':lat, 'lon':lon}).data
     corrected = correctedfield.sel({'lat':lat, 'lon':lon}).data
     # The distribution from the raw field is more interesting for method understanding
-    plot_super_ensemble(window.data, weights.data, original, corrected)
+    plot_super_ensemble(window.data, local_weights.data, original, corrected)
 
     # Extract observation uncertainty / confidence
-    fic_ratio = os.path.join('/home/vernaym/workdir/ASSIMILATION/mask/alp', f'Estimated_ratio_alp_0.15.nc')
+    fic_ratio = os.path.join('/home/vernaym/workdir/ASSIMILATION/mask/alp', f'Estimated_ratio.nc')
     ratio = xr.open_dataarray(fic_ratio)
-    ratio = ratio.sel({'lat':np.intersect1d(extract_lat, ratio.lat), 'lon':np.intersect1d(extract_lon, ratio.lon)})
+    #ratio = ratio.sel({'lat':np.intersect1d(extract_lat, ratio.lat), 'lon':np.intersect1d(extract_lon, ratio.lon)})
     plot(ratio, 'ratio_field', cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap)
     #local_ratio = ratio.copy()
     #local_error.data = local * local_error.data
@@ -271,6 +285,9 @@ if __name__ == "__main__":
     correctedfield = make_mask.to_xarray(new.reshape((len(field.lat), len(field.lon))), field).rename('Precipitation (mm)')
     plot(correctedfield, 'debiasing+dynamic_correction', vmax=vmax)
 
+    observation_error = make_mask.to_xarray(sd.reshape((len(field.lat), len(field.lon))), field).rename('Error (mm)')
+    plot(observation_error, 'observation_error', cmap='Reds')
+
     # smoothing
     smooth = field.copy()
     smooth.data = uniform_filter(deb, size=15)
@@ -284,7 +301,7 @@ if __name__ == "__main__":
     # Add relief mean vertical gradient (Not implemented in experiments)
     fic_gradient = os.path.join('/home/vernaym/workdir/ASSIMILATION/mask/alp', f'model_gradient.nc')
     gradient = xr.open_dataarray(fic_gradient)
-    gradient = gradient.sel({'lat':np.intersect1d(extract_lat, gradient.lat), 'lon':np.intersect1d(extract_lon, gradient.lon)})
+    #gradient = gradient.sel({'lat':np.intersect1d(extract_lat, gradient.lat), 'lon':np.intersect1d(extract_lon, gradient.lon)})
     final_field = correctedfield * gradient.data
     plot(final_field, 'debiasing+dynamic_correction+model_gradient', vmax=vmax)
 
