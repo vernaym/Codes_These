@@ -216,7 +216,7 @@ def get_std(data, mean, pond, weight=None, super_ensemble=None):
 
     return sd
 
-def codistances(coords, ld=0.1):
+def codistances(coords, ld=0.1):  # TMP for illustration. TODO : test different correlation distances
     """
     Solution pour le calcul des inter-distances trouvée sur : https://stackoverflow.com/questions/35296935/python-calculate-lots-of-distances-quickly
     """
@@ -242,7 +242,7 @@ def random_draw(obs, sd, distribution='gamma'):
         ana = obs+gauss*sd  # Gaussian perturbation around >0 obs
         gauss = np.random.normal(loc=0.0, scale=1.0, size=1)[0]  # Draw random element from normal distribution
         # Add a 2nd perturbation term:
-        ana= ana + obs*0.2*gauss
+        ana= ana + obs*0.3*gauss
 
     elif distribution == 'gamma':
         # TODO : essayer de faire dependre k de l'obs

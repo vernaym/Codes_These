@@ -1103,8 +1103,8 @@ class Assimilation(object):
             # The final weight of a pixel is the product of distance weight and the likelyhood
 
             # Computation of the likelyhood of each pixel of the super-ensemble
-            O = super_ensemble.dot(diags(obs.data.flatten()))
-            M = super_ensemble.dot(diags(member.flatten()))
+            O = super_ensemble.dot(diags(obs.data.flatten()))  # Observation
+            M = super_ensemble.dot(diags(X))  # Backgound member
             S = super_ensemble.dot(diags(1/stdobs.diagonal()))
             A = (M-O).multiply(S)
             likelyhood = -A.multiply(A)
@@ -1120,7 +1120,9 @@ class Assimilation(object):
             # TODO : remplacer la valeur initial de chaque pixel par la valeur du super-ensemble avec le poids (~likelyhood) le plus élevé
             #replacement_strategy = 'mean'  # !! TODO : TMP !!
             #replacement_strategy = 'toward_mean'!! TMP !!
-            mean, std[mb] = self.get_parameters(member, pond, weight=weight, super_ensemble=super_ensemble, replacement_strategy=replacement_strategy)
+            #mean, std[mb] = self.get_parameters(member, pond, weight=weight, super_ensemble=super_ensemble, replacement_strategy=replacement_strategy)
+            #mean, std[mb] = self.get_parameters(member, pond, weight=weight, super_ensemble=super_ensemble, replacement_strategy='mean')  # Standard WMA --> modify backgound
+            mean, std[mb] = self.get_parameters(member, pond, weight=weight, super_ensemble=super_ensemble, replacement_strategy='keep')  # Do not modify Background !
 
             # To avoid to smooth member but allow precipitation on pixels originaly without precipitation
             # --> Now useless since it is considered in the mean computation in the 'get_parameters' method
@@ -1169,7 +1171,8 @@ class Assimilation(object):
         #
         # c) Somme des dispersions individuelles (moyenne des dispersions)
 
-        ensemble_mean = new_ensemble.mean('member').data.flatten()
+        ensemble_mean = new_ensemble.mean('member').data.flatten()  # mean of the modified ensemble
+        initial_mean = ensemble.mean('member').rr.data.flatten()  # Mean of the original ensemble
 
         B = np.zeros(len(ensemble.lat)*len(ensemble.lon))
         B = diags(B, 0)
@@ -1181,12 +1184,13 @@ class Assimilation(object):
 
             # TODO : il faut quand même diviser par la somme des poids à la fin avec les méthodes a1 et a2 !!
             # Methode a.1
-            sd = self.get_std(initial_data, ensemble.mean('member').rr.data.flatten(), pond, weight=weight, super_ensemble=super_ensemble)
+            #sd = self.get_std(initial_data, ensemble.mean('member').rr.data.flatten(), pond, weight=weight, super_ensemble=super_ensemble)
             # Methode a.2
             #sd = self.get_std(initial_data, ensemble_mean, pond, weight=weight, super_ensemble=super_ensemble)
 
             # Methode b.1
             #sd = (member.flatten() - ensemble_mean)**2
+            sd = (initial_member.flatten() - initial_mean)**2
             # Methode b.2  TODO : implémenter la pondération par la dispersion locale de chaque memebre
             #sd = (data - ensemble_mean)**2
 
@@ -1200,7 +1204,7 @@ class Assimilation(object):
 #            X = super_ensemble.dot(diags(member.flatten(), 0))-se_mean   # M.diag(x)-diag(e).M
 #            B = B + X.multiply(X).multiply(pond).sum(axis=1).getA1()  # X*XT.Pond  (Attention à l'ordre des opérations !)
 
-        B = B / 16
+        B = np.sqrt(B/16)
         #B.data = np.nan_to_num(B.data, copy=False)
 #        B = np.nan_to_num(B)
 #        B = diags(B, 0)
@@ -1374,6 +1378,7 @@ class Assimilation(object):
         X = super_ensemble.dot(data)-se_mean  # # M.diag(obs)-diag(e).M
         sd = X.multiply(X).multiply(pond).sum(axis=1).getA1()
         sd = sd / weight
+        sd = np.sqrt(sd)
         sd = np.nan_to_num(sd)
 
         return sd
@@ -2131,6 +2136,7 @@ class EnsembleKalmanFilter(Assimilation):
 
             R, Rstat, Rdyn, updated_obs = self.observation_ECM_new(parameters_loc, date)
             Y = updated_obs.data  # Observation vector. WARNING : Use mu to take debiasing into account !
+            R = R + diags(Y.flatten(), 0)*0.3  # Increase observation error by 30% of the observation value to match RS
             parameters_loc = parameters_loc.update({'obs':updated_obs})
             B, updated_ensemble = self.background_error_covariance_new(ensemble_loc, updated_obs, R)  # Background error covariance matrix
             ensemble_loc = updated_ensemble
@@ -2174,6 +2180,7 @@ class EnsembleKalmanFilter(Assimilation):
 
         R, Rstat, Rdyn, updated_obs = self.observation_ECM_new(parameters, date)
         Y = updated_obs.data  # Observation vector. WARNING : Use mu to take debiasing into account !
+        R = R + diags(Y.flatten(), 0)*0.3  # Increase observation error by 30% of the observation value to match RS
         parameters = parameters.update({'obs':updated_obs})
         B, updated_ensemble = self.background_error_covariance_new(ensemble, updated_obs, R)  # Background error covariance matrix
         if self.localisation is not None:
@@ -2240,7 +2247,6 @@ class EnsembleKalmanFilter(Assimilation):
             #analysis.loc[{'member':member}] = np.square(obs+random*sd/5)
             ##############################  END  ###############################
 
-
             raw = ensemble.sel({'member':member}).raw  # TODO : pas défini sans localisation
             background = ensemble.sel({'member':member}).rr
             X = background.data.flatten()  # Ensemble member vector
@@ -2299,14 +2305,14 @@ class EnsembleKalmanFilter(Assimilation):
         if self.plot:
 
             # Plot analysis distribution
-            ens = np.sqrt(analysis.isel(lat=point[0], lon=point[1]).data.flatten())  # TODO :
+            ens = analysis.isel(lat=point[0], lon=point[1]).data.flatten()
             mu = np.mean(ens)
-            std = np.sum((ens-mu)**2)/16
+            std = np.sqrt(np.sum((ens-mu)**2)/16)
             ax = plot_distribution(ax, mu, std, ensemble=ens, label='Analysis', color='blue')
             ax.legend()
             ax.set_xlim(right=10)
             ax.set_ylim(top=1)
-            ax.set_xlabel('R^1/2 (mm^1/2)')
+            ax.set_xlabel('Precipitation (mm)')
             if not os.path.exists(f'{self.date_str}/distributions'):
                 os.makedirs(f'{self.date_str}/distributions')
             fig.savefig(f'{self.date_str}/distributions/DISTRIBUTION_ANALYSE.pdf')
@@ -2324,14 +2330,13 @@ class EnsembleKalmanFilter(Assimilation):
             # Plot matrices
             self.plot_matrix(K, parameters.rr, 'Kalman_Gain', f'{self.date_str}/Kalman_Gain_{domain}.pdf', cmap=plt.cm.coolwarm, vmin=0, vmax=1)
             ECM_max = max(np.nanmax(R.diagonal()), np.nanmax(B.diagonal()))
-            ECM_max = 3.
             self.plot_matrix(B, parameters.rr, 'Background_ECM', f'{self.date_str}/Background_ECM_{domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.viridis)
             #self.plot_matrix(B, parameters.rr, 'Background_ECM', f'{self.date_str}/Background_ECM_{domain}.pdf', vmin=0, cmap=plt.cm.viridis)
             self.plot_matrix(R, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_ECM_{domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.viridis)
             #self.plot_matrix(R, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_ECM_{domain}.pdf', vmin=0, cmap=plt.cm.viridis)
-            self.plot_matrix(Rdyn, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_dyn_ECM_{domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.viridis)
+            #self.plot_matrix(Rdyn, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_dyn_ECM_{domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.viridis)
             #self.plot_matrix(Rdyn, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_dyn_ECM_{domain}.pdf', vmin=0, cmap=plt.cm.viridis)
-            self.plot_matrix(Rstat, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_stat_ECM_{domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.viridis)
+            #self.plot_matrix(Rstat, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_stat_ECM_{domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.viridis)
             #self.plot_matrix(Rstat, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_stat_ECM_{domain}.pdf', vmin=0, cmap=plt.cm.viridis)
 
             ensemble.rr.data = ensemble.rr.data
