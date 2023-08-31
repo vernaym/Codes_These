@@ -26,8 +26,7 @@ from scipy.ndimage import uniform_filter
 from sklearn.linear_model import LinearRegression
 
 from These.radar import Preprocessing_ANTILOPE
-import make_mask
-import scores
+from These.scripts import make_mask, scores
 
 plot = False
 if len(sys.argv) > 1:
@@ -35,7 +34,8 @@ if len(sys.argv) > 1:
     if len(sys.argv)>2:
         plot = True
 else:
-    domain = 'MontBlanc'
+    #domain = 'MontBlanc'
+    domain = 'alp'
 
 d0 = 0.15
 d0 = 0.25
@@ -57,6 +57,10 @@ datadir = f'/home/vernaym/workdir/ASSIMILATION/mask/{domain}'
 Np = 31  # Domain size
 ld = 0.07  # Correlation length
 #ld = 0.05  # Correlation length
+
+# Read ratio/error fields to evaluate
+estimated_ratio = np.flip(xr.open_dataarray(os.path.join(datadir, f'Estimated_ratio_{domain}_{d0}.nc')), axis=0)  # Ratio estimated with automatic observations that we want to evaluate
+error = np.flip(xr.open_dataarray(os.path.join(datadir, f'Observation_error_{d0}_{domain}.nc')).data, axis=0)
 
 def diagonal_field():
     """Generation of an idealised precipitation field"""
@@ -123,16 +127,19 @@ def perturbed_ratio(ratio):
     pile_ou_face = 1
 
     #fact = ratio.data ** 2
-    fact = ratio.data
+    tmp = ratio.copy()
 
     if pile_ou_face == 1:
         #ratio.data[(ratio.data>0.8) & (ratio.data<1.2)] = 1
-        fact[(fact>0.7) & (fact<1.3)] = 1  # Filter out areas that the method almost certainly identify as bad
+        tmp.data[(tmp.data>0.7) & (tmp.data<1.3)] = 1  # Filter out areas that the method almost certainly identify as bad
+    plot_field(tmp, 'filtered_ratio.pdf', label='Ratio', cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=0.4, vmax=1.6, add_circle=False)
+
 
     increase = np.random.normal(30, scale=20)  # Draw random percentage of increase in bad areas
     #increase = 30  #  increase error in bad areas of 50%
     k = 100 / increase
-    fact = fact - (1-fact) / k  # Increase error in bad areas
+    tmp.data = tmp.data - (1-tmp.data) / k  # Increase error in bad areas
+    plot_field(tmp, 'perturb_large_errors.pdf', label='Ratio', cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=0.4, vmax=1.6, add_circle=False)
 
     perturb = np.random.randint(0, 20, size=np.shape(ratio.data))/10. - 1  # generation of perturbations between -1 and 1
     perturb = uniform_filter(perturb, size=5)  # Do not perturb the structure of the ratio field too much
@@ -140,9 +147,10 @@ def perturbed_ratio(ratio):
     #perturb = uniform_filter(perturb, size=5)
     #fact = uniform_filter(ratio.data, size=5)
     #ratio.data = ratio.data + (1+np.exp(-np.abs(1-fact)**2/1))*perturb
-    hidden_unidentified_positive_bias = 0.1
-    tmp = fact + perturb + hidden_unidentified_positive_bias
-    tmp[tmp<=0] = -tmp[tmp<=0]+0.01
+    #hidden_unidentified_bias = - 0.02
+    #tmp.data = tmp.data + perturb + hidden_unidentified_bias
+    tmp.data = tmp.data + perturb
+    tmp.data[np.where(tmp.data<=0)] = -tmp.data[np.where(tmp.data<=0)]+0.01
     #tmp = np.sqrt(tmp)
     ratio.data =  tmp
     plot_field(ratio, 'real_ratio.pdf', label='Ratio', cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=0.4, vmax=1.6, add_circle=False)
@@ -167,7 +175,7 @@ def perturb_field(field, ratio):
         plot_field(perturb, 'perturb.pdf', label='Ratio', cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=-1, vmax=1, add_circle=False)
 
     noise = np.random.randint(0, 10, size=np.shape(field))/10. - 0.5  # noise between -0.5 and 0.5
-    noise = uniform_filter(noise, size=10)
+    noise = uniform_filter(noise, size=15)
     #new_ratio = ratio + (1+np.abs(1-ratio))*perturb + noise
     new_ratio = ratio * (1+perturb) + noise
     #new_ratio = ratio + np.abs(1-ratio)*perturb + noise
@@ -183,6 +191,8 @@ def perturb_field(field, ratio):
         plot_field(new_ratio, 'daily_ratio.pdf', label='ratio', cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=0.4, vmax=1.6, add_circle=False)
 
     perturbed_field =field*new_ratio
+    hidden_unidentified_bias = - 0.05
+    perturbed_field = perturbed_field + hidden_unidentified_bias
     #noise = np.random.randint(0, 10, size=np.shape(field)) - 5  # Add noise between -5mm and 5 mm
     #noise = uniform_filter(noise, size=5)
     #perturbed_field = perturbed_field + noise
@@ -257,7 +267,7 @@ def plot_field(field, filename, label='Precipitation (mm)', cmap='YlGnBu', vmin=
 
     #if isinstance(field, np.ndarray):
     if not isinstance(field, xr.core.dataarray.DataArray):
-        field = make_mask.to_xarray(field, real_ratio)
+        field = make_mask.to_xarray(field, estimated_ratio)
     nlat = len(field.lat)
     nlon = len(field.lon)
     fig, ax = plt.subplots(figsize=figsize[domain])
@@ -321,7 +331,9 @@ def compare(reference, model):
 
     return r2, diff, ratio, slope
 
-def plot_scatter(reference, model, savename):
+def plot_scatter(reference, model, savename, save_dir=None):
+    if save_dir is None:
+        save_dir = savedir
     ref = reference.flatten()
     mod = model.flatten()
     bias = np.round(np.mean(mod - ref),3)
@@ -353,14 +365,16 @@ def plot_scatter(reference, model, savename):
     ax.set_xlabel('Real value')
     ax.legend(fontsize=10)
     plt.tight_layout()
-    fig.savefig(os.path.join(savedir, savename), format='pdf')
+    fig.savefig(os.path.join(save_dir, savename), format='pdf')
     plt.close(fig)
 
-def ensemble_evaluation(observation, rawfield, smoothfield, correctedfield, dynamiccorrection, ensemble, smoothfield5=None, smoothfield10=None):
+def ensemble_evaluation(observation, rawfield, smoothfield, correctedfield, dynamiccorrection, ensemble, debiasing, smoothfield5=None, smoothfield10=None):
 
-    labels = dict(ens='Analysis ensemble', rw='Raw ANTILOPE', sm="Smoothed debiased ANTILOPE field", dy="Dynamic correction method alone", cr="Dynamic correction method with quantile-quantile adjustment")
+    #labels = dict(ens='Analysis ensemble', rw='Raw ANTILOPE', sm="Smoothed debiased ANTILOPE field", dy="Dynamic correction method alone", cr="Dynamic correction method with quantile-quantile adjustment",
+    labels = dict(ens='Analysis ensemble', rw='Raw ANTILOPE', sm="Smoothed debiased ANTILOPE field", dy="Dynamic correction method alone", db='De-biasing', cr="De-biasing + WMA")
 
-    products_map = dict(rw=rawfield, sm=smoothfield, dy=dynamiccorrection, cr=correctedfield, ens=ensemble)
+    #products_map = dict(rw=rawfield, sm=smoothfield, dy=dynamiccorrection, cr=correctedfield, ens=ensemble)
+    products_map = dict(rw=rawfield, db=debiasing, cr=correctedfield)
     #bias = dict(rw=list(), sm=list(), dy=list(), cr=list(), ens=list())
     fig, ax = plt.subplots()
     position = 0
@@ -370,7 +384,9 @@ def ensemble_evaluation(observation, rawfield, smoothfield, correctedfield, dyna
             bias = ensemble.mean('member') - observation
         else:
             bias = products_map[key] - observation
-        scores.violinplot(ax, position, bias.mean('date').data.flatten(), labels[key])
+        #ax = scores.violinplot(ax, position, bias.mean('date').data.flatten(), labels[key], addbar=False)
+        scores.add_label(plt.violinplot(bias.mean('date').data.flatten(), positions=[position], showmeans=True), labels[key])
+        ax.axhline(color='k')
     ax.legend()
     ax.set_ylabel('Bias (mm)')
     ax.legend(fontsize=8)
@@ -484,7 +500,9 @@ def ensemble_evaluation(observation, rawfield, smoothfield, correctedfield, dyna
     freq_error_smooth = list()
     freq_error_dyn = list()
     freq_error_correction = list()
-    for threshold in np.arange(0.1, 1.01, 0.1):
+    thresholds = np.arange(10, 61, 10)
+    thresholds = np.arange(0.1, 1.01, 0.1)
+    for threshold in thresholds:
         freq_error_raw.append(scores.error_frequency(rw, obse, threshold=threshold))
         #print('Raw error >20% frequency : ', freq_error_raw)
         freq_error_smooth.append(scores.error_frequency(sm, obse, threshold=threshold))
@@ -494,10 +512,10 @@ def ensemble_evaluation(observation, rawfield, smoothfield, correctedfield, dyna
         #print('Correction error >20% frequency : ', freq_error_correction)
     freq_error_ensemble = scores.error_frequency(ens, obse)
     fig, ax = plt.subplots()
-    ax.plot(np.arange(10, 61, 10), np.array(freq_error_raw), label=labels['rw'])
-    ax.plot(np.arange(10, 61, 10), np.array(freq_error_smooth), label=labels['sm'])
-    ax.plot(np.arange(10, 61, 10), np.array(freq_error_dyn), label=labels['dy'])
-    ax.plot(np.arange(10, 61, 10), np.array(freq_error_correction), label=labels['cr'])
+    ax.plot(thresholds, np.array(freq_error_raw), label=labels['rw'])
+    ax.plot(thresholds, np.array(freq_error_smooth), label=labels['sm'])
+    ax.plot(thresholds, np.array(freq_error_dyn), label=labels['dy'])
+    ax.plot(thresholds, np.array(freq_error_correction), label=labels['cr'])
     #ax.axhline(freq_error_ensemble, color='k', label=labels['ens'])
     ax.axhline(freq_error_ensemble, color=next(ax._get_lines.prop_cycler)['color'], label=labels['ens'])
     ax.set_xlabel('Error threshold (%)')
@@ -551,9 +569,6 @@ if __name__ == "__main__":
     #cd     = codist.toarray()
     #plot_field(codist.getrow(Np**2//2).toarray()[0].reshape((Np,Np)), "codist.pdf", label='Codistances', vmin=0, vmax=1, cmap='Greens', add_circle=True)  # Weights for central pixel correction
 
-    # Read ratio/error fields to evaluate
-    estimated_ratio = np.flip(xr.open_dataarray(os.path.join(datadir, f'Estimated_ratio_{domain}_{d0}.nc')), axis=0)  # Ratio estimated with automatic observations that we want to evaluate
-    error = np.flip(xr.open_dataarray(os.path.join(datadir, f'Observation_error_{d0}_{domain}.nc')).data, axis=0)
 
     plot_scatter(real_ratio.data, estimated_ratio.data, f"ratios_scatterplot.pdf")
     r1 = real_ratio.data.flatten()
@@ -612,14 +627,16 @@ if __name__ == "__main__":
         smootherr = db - smooth15
 
         # De-biasing + Dynamic correction only
-        dyn, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(db, pond)
+        dyn, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(perturbed_field, pond)
+        #dyn, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(db, pond)
         dyn = dyn.reshape((nlat, nlon))
         cor2.data[date] = dyn
         sd1 = sd.reshape((nlat, nlon))
         #plot_field(np.sqrt(sd.reshape((nlat, nlon))), f'dynamic_error_without_debiasing.pdf', label='Error (mm)', cmap=plt.cm.Reds)
 
         # De-biasing + Dynamic correction + qq adjustment
-        dd, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(db, pond, qq_adjustment=True)
+        #dd, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(db, pond, qq_adjustment=True)
+        dd, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(db, pond)
         dd = dd.reshape((nlat, nlon))
         cor.data[date] = dd
         sd2 = sd.reshape((nlat, nlon))
@@ -768,7 +785,7 @@ if __name__ == "__main__":
 
     if not plot:
         #ensemble_evaluation(obs, raw, smo15, cor, analysis, smo5, smo10)
-        ensemble_evaluation(obs, raw, smo15, cor, cor2, analysis)
+        ensemble_evaluation(obs, raw, smo15, cor, cor2, analysis, db)
 
         #bias = dict(raw=list(), debiasing=list(), smoothing5=list(), smoothing10=list(), smoothing15=list(), dyn=list(), full=list())
         #rmse = dict(raw=list(), debiasing=list(), smoothing=list(), smoothing10=list(), smoothing15=list(), dyn=list(), full=list())

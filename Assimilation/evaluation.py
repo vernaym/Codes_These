@@ -248,8 +248,8 @@ algo = dict(
 #        RS02          = 'RandomSampling/XP02/Random_Sampling_2021120106_2022050106_daily_alp.nc',
 #        RS03          = 'RandomSampling/XP03/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         # IUGG experiments :
-        #PF29          = 'XP29_mask_relief_AROME/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
-        #KD33          = 'EnsembleKalmanFilter/XP33/EnKF_2021120106_2022050106_daily_alp.nc',
+        PF29          = 'XP29_mask_relief_AROME/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
+        KD33          = 'EnsembleKalmanFilter/XP33/EnKF_2021120106_2022050106_daily_alp.nc',
 #        RS04          = 'RandomSampling/XP04/Random_Sampling_2021120106_2022050106_daily_alp.nc'
         ####################
         #PF31          = 'XP31/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
@@ -262,12 +262,12 @@ algo = dict(
         #RS12          = 'RandomSampling/XP12/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         #RS13          = 'RandomSampling/XP13/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         #RS14          = 'RandomSampling/XP14/Random_Sampling_2021120106_2022050106_daily_alp.nc',
-        #RS15          = 'RandomSampling/XP15/Random_Sampling_2021120106_2022050106_daily_alp.nc',
+        RS15          = 'RandomSampling/XP15/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         #RS16          = 'RandomSampling/XP16/Random_Sampling_2021120106_2022050106_daily_alp.nc',  --> WMA reference experiment
-        RS17          = 'RandomSampling/XP17/Random_Sampling_2021120106_2022050106_daily_alp.nc',
-        RS18          = 'RandomSampling/XP18/Random_Sampling_2021120106_2022050106_daily_alp.nc',
-        RS19          = 'RandomSampling/XP19/Random_Sampling_2021120106_2022050106_daily_alp.nc',
-        RS20          = 'RandomSampling/XP20/Random_Sampling_2021120106_2022050106_daily_alp.nc',
+        #RS17          = 'RandomSampling/XP17/Random_Sampling_2021120106_2022050106_daily_alp.nc',
+        #RS18          = 'RandomSampling/XP18/Random_Sampling_2021120106_2022050106_daily_alp.nc',
+        #RS19          = 'RandomSampling/XP19/Random_Sampling_2021120106_2022050106_daily_alp.nc',
+        #RS20          = 'RandomSampling/XP20/Random_Sampling_2021120106_2022050106_daily_alp.nc',
     )
 
 
@@ -298,7 +298,8 @@ xpid_label = dict(
         #antiloped     = 'ANTILOPE + error + debiaisage',
         antiloped     = 'De-biased ANTILOPE',
         #antilopec     = 'ANTILOPE + debiaisage + correction',
-        antilopec     = 'De-biasing + WMA',
+        #antilopec     = 'De-biasing + WMA',
+        antilopec     = 'Pre-processed ANTILOPE',
         #raw           = 'Raw PE-AROME ensemble',
         raw           = 'PE-AROME',
         GD0           = 'Global daily analysis',
@@ -422,8 +423,8 @@ class Evaluation(object):
         self.threshold = 10  # threshold to use as event detection in the Brier Score
         self.lpn = None
         self.obs_error = None
-        #self.thresholds = [1, 2, 3, 4, 5, 10, 15, 20, 25, 30]
-        self.thresholds = [x/10 for x in range(1,10)] + [x for x in range(1, 31)]
+        self.thresholds = [0.5] + [x for x in range(1, 31)]
+        #self.thresholds = [x/10 for x in range(1,10)] + [x for x in range(1, 31)]
 
     def ensemble_attributes(self):
         disp = self.dispersion()
@@ -916,7 +917,8 @@ class Evaluation(object):
         self.data = self.data.loc[{'date':dates}]
 
 #        data = dict(antilope=list(), wma=list(), antiloped=list(), antilopec=list())
-        data = dict(antilope=list(), raw=list(), antilopec=list())
+        #data = dict(antilope=list(), raw=list(), antilopec=list())
+        data = dict(antilopec=list(), raw=list())
 #        data = dict(antilope=list(), antiloped=list(), antiloper=list())
         #data = dict(antilope=list(), raw=list(), antilopec=list())
         #data = dict(antilopec=list())
@@ -1019,7 +1021,8 @@ class Evaluation(object):
             if len(obs[~np.isnan(obs)]) >= 100:  # Filter stations with too few observations
                 liste_postes = np.append(liste_postes, num_poste)
                 #obs = obs[:10]
-                data['antilope'].append(antilope.sel({'lat':nearest(antilope.lat, lat), 'lon':nearest(antilope.lon, lon)}).rr.data)
+                if 'antilope' in data.keys():
+                    data['antilope'].append(antilope.sel({'lat':nearest(antilope.lat, lat), 'lon':nearest(antilope.lon, lon)}).rr.data)
                 if 'antiloped' in data.keys():
                     data['antiloped'].append(antiloped.sel({'lat':nearest(antiloped.lat, lat), 'lon':nearest(antiloped.lon, lon)}).rr.data)
                 if 'antiloper' in data.keys():
@@ -1109,7 +1112,8 @@ class Evaluation(object):
 
         # TODO : optimiser le calcul des scores !
 
-        self.data['antilope'] = (('num_poste', 'date'), data['antilope'])
+        if 'antilope' in data.keys():
+            self.data['antilope'] = (('num_poste', 'date'), data['antilope'])
         if 'antiloper' in data.keys():
             self.data['antiloper'] = (('num_poste', 'date', 'pseudo_member'), data['antiloper'])
         if 'antiloped' in data.keys():
@@ -1143,7 +1147,7 @@ class Evaluation(object):
                 freq_error = list()
                 for threshold in thresholds:
                     freq_error.append(scores.error_frequency(simu, obse, threshold=threshold))
-                ax.plot(thresholds, np.array(freq_error), label=xpid_label[product], color=next(ax._get_lines.prop_cycler)['color'])
+                ax.plot(thresholds*100, np.array(freq_error), label=xpid_label[product], color=next(ax._get_lines.prop_cycler)['color'])
         ax.set_xlabel('Error threshold (%)')
         ax.set_ylabel('Frequency of error above threshold (%)\nFrequency of observation outside the ensemble (%)')
         ax.set_ylim(bottom=0)
@@ -1176,10 +1180,12 @@ class Evaluation(object):
                 self.reliability_diagram(self.data[product].data.reshape(-1, 16), self.data.obs.data.flatten(), product, ax1)
                 fig2,ax2 = plt.subplots()
                 self.rank_histogram(self.data[product].data.reshape(-1, 16), self.data.obs.data.flatten(), product, ax2)
+                ax2.set_ylim(top=1100)
                 fig2.savefig(f'{savedir}/rank_histogram_{product}.pdf', format='pdf')
                 plt.close(fig2)
                 fig2,ax2 = plt.subplots()
                 self.rank_histogram(self.data[product].data.reshape(-1, 16), self.data.obs.data.flatten(), product, ax2, onlypos=True)
+                #ax2.set_ylim(top=1100)
                 fig2.savefig(f'{savedir}/rank_histogram_onlypos_{product}.pdf', format='pdf')
                 plt.close(fig2)
                 if product.startswith('RS'):
@@ -1206,7 +1212,8 @@ class Evaluation(object):
                 for product in ['raw'] + [xpid for xpid in experiments.keys()]:
                     # TODO : vérifier les données (virer les dates où obs=nan,...)
                     self.ROC(self.data[product].data.reshape(-1, 16), self.data.obs.data.flatten(), product, ax, threshold=threshold)
-            self.ROC(self.data['antilope'].data.flatten(), self.data.obs.data.flatten(), 'antilope', ax, threshold=threshold)
+            if 'antilope' in data.keys():
+                self.ROC(self.data['antilope'].data.flatten(), self.data.obs.data.flatten(), 'antilope', ax, threshold=threshold)
             if 'antiloper' in data.keys():
                 self.ROC(self.data['antiloper'].data.reshape(-1, 3), self.data.obs.data.flatten(), 'antiloper', ax, Ne=3, threshold=threshold)
             if 'antiloped' in data.keys():
@@ -1342,8 +1349,8 @@ class Evaluation(object):
             brier = np.array([])
             for threshold in self.thresholds:
                 brier = np.append(brier, np.mean(self.scores.loc[{'score':f'brier_{int(threshold*10)}'}][product].data))
-            #ax.plot(self.thresholds, brier, label=xpid_label[product], linewidth=3)
-            ax.semilogx(self.thresholds, brier, label=xpid_label[product], linewidth=3)
+            ax.plot(self.thresholds, brier, label=xpid_label[product], linewidth=3)
+            #ax.semilogx(self.thresholds, brier, label=xpid_label[product], linewidth=3)
         ax.legend(fontsize=18)
         ax.set_ylabel('Brier Score', fontsize=28)
         ax.set_xlabel('Threshold (mm)', fontsize=24)
@@ -1353,7 +1360,6 @@ class Evaluation(object):
         #ax.set_yticks(fontsize=18)
 
         fig.savefig(f'{savedir}/brier_evolution.pdf', format='pdf', bbox_inches='tight')
-
 
     def add_label(self, violin, label, color=None):
         """ Customize violinplot by adding a label"""

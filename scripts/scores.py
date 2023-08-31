@@ -318,16 +318,20 @@ def violinplot(ax, position, data, label, color=None, addbar=False):
 
     if addbar:
         ax.plot([position]*len(data), data, linestyle='', marker='_', markersize='20', color='k')
-    violin = ax.violinplot(data, positions=[position], showmeans=True)
+    add_label(ax.violinplot(data, positions=[position], showmeans=True), label)
     ax.axhline(color='k')
+
+    return ax
+
+def add_label(violin, label, color=None):
+    """ Customize violinplot by adding a label"""
+    import matplotlib.patches as mpatches
     if color is None:
         color = violin["bodies"][0].get_facecolor().flatten()
     else:
         violin["bodies"][0].set_facecolor(color)
         violin["bodies"][0].set_edgecolor(color)
 
-
-    #return (mpatches.Patch(color=color), label)
-    return ax
+    return (mpatches.Patch(color=color), label)
 
 

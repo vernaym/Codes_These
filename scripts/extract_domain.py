@@ -104,8 +104,8 @@ if __name__ == "__main__":
         if not os.path.exists(os.path.join(savedir, subdir)):
             os.makedirs(os.path.join(savedir, subdir))
         #fic_error = os.path.join(datadir, subdir, f'Observation_error_{d0}_alp.nc')
-        fic_error = os.path.join(datadir, subdir, f'Observation_uncertainty_{d0}_alp.nc')
-        fic_ratio = os.path.join(datadir, subdir, f'Estimated_ratio_alp_{d0}.nc')
+        fic_error = os.path.join(datadir, subdir, f'Observation_uncertainty.nc')
+        fic_ratio = os.path.join(datadir, subdir, f'Estimated_ratio.nc')
         error = xr.open_dataarray(fic_error)
         ratio = xr.open_dataarray(fic_ratio)
         reduced_error = error.sel({'lat':np.intersect1d(extract_lat, error.lat), 'lon':np.intersect1d(extract_lon, error.lon)})
