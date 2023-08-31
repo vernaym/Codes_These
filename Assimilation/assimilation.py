@@ -486,28 +486,16 @@ def finalize_fig(figure, imm, label, outname):
 
 @speedtest
 def read_obs(args):
-    filename = f'ANTILOPE{suffix[args.frequency]}_{args.datebegin.strftime("%Y%m%d%H")}_{args.dateend.strftime("%Y%m%d%H")}_alp.nc'
+    #filename = f'ANTILOPE{suffix[args.frequency]}_{args.datebegin.strftime("%Y%m%d%H")}_{args.dateend.strftime("%Y%m%d%H")}_alp.nc'
+    filename = f'ANTILOPEQ_2021102900_2022060200_alp.nc'
     if not os.path.exists(filename):
         print(f'WARNING : file {filename} does not exist, looking for it under {datadir}')
         filename = os.path.join(datadir, filename)
     if not os.path.exists(filename):
-        if args.domain == 'GrandesRousses':
-            print(f'WARNING : no file named {filename} under {datadir}, using default file ANTILOPEQ_2021080106_2022070106_GrandesRousses.nc')
-            filename = os.path.join(datadir, f'ANTILOPE{suffix[args.frequency]}_2021073106_2022070106_GrandesRousses.nc')
-        else:
-            print(f'WARNING : no file named {filename} under {datadir}, using default file ANTILOPEH_2021103000_2022060200_alp.nc')
-            filename = os.path.join(datadir, f'ANTILOPEH_2021103000_2022060200_alp.nc')
+        print(f'WARNING : no file named {filename} under {datadir}, using default file ANTILOPEH_2021103000_2022060200_alp.nc')
         filename = os.path.join(datadir, f'ANTILOPEH_2021103000_2022060200_alp.nc')
 
-    if os.path.exists(filename):
         antilope = xr.open_dataset(filename, chunks={'time': 24})  # WARNING : works with xarray-2022.3.0 but not xarray-2023.1.0
-        latmax = domain_coords[args.domain]['latmax']
-        latmin = domain_coords[args.domain]['latmin']
-        lonmin = domain_coords[args.domain]['lonmin']
-        lonmax = domain_coords[args.domain]['lonmax']
-        sel_lat = np.round(np.arange(latmin-max_dist, latmax+max_dist, 0.01), 2)
-        sel_lon = np.round(np.arange(lonmin-max_dist, lonmax+max_dist, 0.01), 2)
-        antilope = antilope.sel({'lat':np.intersect1d(sel_lat, antilope.lat.data), 'lon':np.intersect1d(sel_lon, antilope.lon.data)})
         #antilope = antilope.where((antilope.lon>=lonmin) & (antilope.lon<=lonmax) & (antilope.lat>=latmin) & (antilope.lat<=latmax), drop=True)
         # Pour une assimilation quotidienne, sommer les cumuls horaires
         if args.frequency == 'daily' and  'ANTILOPEH' in filename:
@@ -521,8 +509,17 @@ def read_obs(args):
             antilope = antilope.resample(time='D').sum(dim='time')  # !!! VERY SLOW !!!
             antilope['time'] = antilope.time+np.timedelta64(30, 'h')
     else:
-        print(f'ERROR : file {filename} does not exist')
-        sys.exit(1)
+        antilope = xr.open_dataset(filename)
+
+    # Extract sub-domain
+    latmax = domain_coords[args.domain]['latmax']
+    latmin = domain_coords[args.domain]['latmin']
+    lonmin = domain_coords[args.domain]['lonmin']
+    lonmax = domain_coords[args.domain]['lonmax']
+    sel_lat = np.round(np.arange(latmin-max_dist, latmax+max_dist, 0.01), 2)
+    sel_lon = np.round(np.arange(lonmin-max_dist, lonmax+max_dist, 0.01), 2)
+    antilope = antilope.sel({'lat':np.intersect1d(sel_lat, antilope.lat.data), 'lon':np.intersect1d(sel_lon, antilope.lon.data)})
+
     return antilope
 
 
