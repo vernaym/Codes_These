@@ -248,11 +248,10 @@ algo = dict(
 #        RS02          = 'RandomSampling/XP02/Random_Sampling_2021120106_2022050106_daily_alp.nc',
 #        RS03          = 'RandomSampling/XP03/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         # IUGG experiments :
-        PF29          = 'XP29_mask_relief_AROME/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
-        KD33          = 'EnsembleKalmanFilter/XP33/EnKF_2021120106_2022050106_daily_alp.nc',
+        #PF29          = 'XP29_mask_relief_AROME/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
+        #KD33          = 'EnsembleKalmanFilter/XP33/EnKF_2021120106_2022050106_daily_alp.nc',
 #        RS04          = 'RandomSampling/XP04/Random_Sampling_2021120106_2022050106_daily_alp.nc'
         ####################
-        #PF31          = 'XP31/Assimilation_locale_2021120106_2022050106_daily_alp.nc',
         #KD35          = 'EnsembleKalmanFilter/XP35/EnKF_2021120106_2022050106_daily_alp.nc',
         #RS07          = 'RandomSampling/XP07/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         #RS08          = 'RandomSampling/XP08/Random_Sampling_2021120106_2022050106_daily_alp.nc',
@@ -262,12 +261,16 @@ algo = dict(
         #RS12          = 'RandomSampling/XP12/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         #RS13          = 'RandomSampling/XP13/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         #RS14          = 'RandomSampling/XP14/Random_Sampling_2021120106_2022050106_daily_alp.nc',
-        RS15          = 'RandomSampling/XP15/Random_Sampling_2021120106_2022050106_daily_alp.nc',
+        #RS15          = 'RandomSampling/XP15/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         #RS16          = 'RandomSampling/XP16/Random_Sampling_2021120106_2022050106_daily_alp.nc',  --> WMA reference experiment
         #RS17          = 'RandomSampling/XP17/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         #RS18          = 'RandomSampling/XP18/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         #RS19          = 'RandomSampling/XP19/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         #RS20          = 'RandomSampling/XP20/Random_Sampling_2021120106_2022050106_daily_alp.nc',
+        # PHD committee :
+        PF31          = 'XP31/Assimilation_locale_2021120106_2022050106_daily_alp_mask9_debiasing3.nc',
+        #KD35          = 'EnsembleKalmanFilter/XP35/EnKF_2021120106_2022050106_daily_alp.nc',
+        RS21          = 'RandomSampling/XP21/Random_Sampling_2021120106_2022050106_daily_alp.nc',
     )
 
 
@@ -378,7 +381,7 @@ xpid_label = dict(
         PF29          = 'PF',
         #PF29          = 'Particle Filter analysis',
         PF30          = 'Particle Filter analysis',
-        PF31          = 'Particle Filter analysis',
+        PF31          = 'PF',
         #LDM9D3        = 'PF, mask9=estimated_ratio, debiaisage3=0.1_2',
         LDM9D3        = 'PF, d0=0.1, c0=2',
         RS00          = 'Random Sampling',
@@ -403,6 +406,7 @@ xpid_label = dict(
         RS18          = 'RS18',  # random perturbations = gamma*0.2*obs + gamma*sd
         RS19          = 'RS19',  # random perturbations = gamma*obs*0.4 (ou 0.3 ?) + gamma*sd
         RS20          = 'RS20',  # Estimated ratio only on mountain ridges
+        RS21          = 'RS',  # PHD committee
     )
 
 def nearest(array, value):
@@ -645,7 +649,7 @@ class Evaluation(object):
             #mask = np.where((obs>1) & (mean>1))
             #mask = np.where((obs>5) & (mean>5))
             #mask = np.where((mean>1))
-            #mask = np.where((obs>5))
+            #mask = np.where((obs>3))
             mask = np.where((obs>0))
             ensemble = ensemble[:, mask]
             ensemble = np.squeeze(ensemble, axis=1)  # TODO : comprendre pourquoi cette ligne est nécessaire
@@ -1180,12 +1184,12 @@ class Evaluation(object):
                 self.reliability_diagram(self.data[product].data.reshape(-1, 16), self.data.obs.data.flatten(), product, ax1)
                 fig2,ax2 = plt.subplots()
                 self.rank_histogram(self.data[product].data.reshape(-1, 16), self.data.obs.data.flatten(), product, ax2)
-                ax2.set_ylim(top=1100)
+                ax2.set_ylim(top=800)
                 fig2.savefig(f'{savedir}/rank_histogram_{product}.pdf', format='pdf')
                 plt.close(fig2)
                 fig2,ax2 = plt.subplots()
                 self.rank_histogram(self.data[product].data.reshape(-1, 16), self.data.obs.data.flatten(), product, ax2, onlypos=True)
-                #ax2.set_ylim(top=1100)
+                ax2.set_ylim(top=400)
                 fig2.savefig(f'{savedir}/rank_histogram_onlypos_{product}.pdf', format='pdf')
                 plt.close(fig2)
                 if product.startswith('RS'):
@@ -1211,9 +1215,11 @@ class Evaluation(object):
             if 'raw' in data.keys():
                 for product in ['raw'] + [xpid for xpid in experiments.keys()]:
                     # TODO : vérifier les données (virer les dates où obs=nan,...)
-                    self.ROC(self.data[product].data.reshape(-1, 16), self.data.obs.data.flatten(), product, ax, threshold=threshold)
+                    self.ROC(self.data[product].data.reshape(-1, 16), self.data.obs.data.flatten(), xpid_label[product], ax, threshold=threshold)
             if 'antilope' in data.keys():
                 self.ROC(self.data['antilope'].data.flatten(), self.data.obs.data.flatten(), 'antilope', ax, threshold=threshold)
+            if 'antilopec' in data.keys():
+                self.ROC(self.data['antilopec'].data.flatten(), self.data.obs.data.flatten(), 'Pre-processed ANTILOPE', ax, threshold=threshold)
             if 'antiloper' in data.keys():
                 self.ROC(self.data['antiloper'].data.reshape(-1, 3), self.data.obs.data.flatten(), 'antiloper', ax, Ne=3, threshold=threshold)
             if 'antiloped' in data.keys():
@@ -1223,7 +1229,7 @@ class Evaluation(object):
             ax.set_ylim([0.5, 1])
             ax.set_xlabel('False alarm rate')
             ax.set_ylabel('Sucess rate')
-            ax.legend(fontsize=20)
+            ax.legend(fontsize=14)
             fig.savefig(f'{savedir}/ROC_threshold_{threshold}mm.pdf', format='pdf')
         t9 = time.time()
         print(f'Ploting ROC curves took {(t9-t8)*1000.}ms')
@@ -1270,7 +1276,7 @@ class Evaluation(object):
             if len(products) <=2:
                 fig,ax = plt.subplots(figsize=(12,13))
             else:
-                fig,ax = plt.subplots(figsize=(22,18))
+                fig,ax = plt.subplots(figsize=(12,10))
             if score.startswith('brier'):
                 pass
                 #threshold = int(score.split('_')[-1])
@@ -1322,12 +1328,12 @@ class Evaluation(object):
                 #ax2.set_xticks(range(len(products)))
                 #ax2.legend(*zip(*labels2), fontsize=18)
             else:
-                ax.set_ylabel(f'{score} (mm)', fontsize=28)
+                ax.set_ylabel(f'{score} (mm)', fontsize=16)
 
             #ax.set_xticklabels([''] + products, fontsize=28)
             #ax.set_xticks(range(len(products)+2))
-            ax.yaxis.set_tick_params(labelsize=28)
-            ax.legend(*zip(*labels), fontsize=28)
+            ax.yaxis.set_tick_params(labelsize=16)
+            ax.legend(*zip(*labels), fontsize=16)
 
             if score.startswith('brier'):
                 pass
@@ -1343,7 +1349,7 @@ class Evaluation(object):
         self.plot_brier_evolution()
 
     def plot_brier_evolution(self):
-        fig,ax = plt.subplots(figsize=(22,18))
+        fig,ax = plt.subplots(figsize=(12,10))
         products = [var for var in self.scores.data_vars]
         for product in products:
             brier = np.array([])
@@ -1352,11 +1358,11 @@ class Evaluation(object):
             ax.plot(self.thresholds, brier, label=xpid_label[product], linewidth=3)
             #ax.semilogx(self.thresholds, brier, label=xpid_label[product], linewidth=3)
         ax.legend(fontsize=18)
-        ax.set_ylabel('Brier Score', fontsize=28)
-        ax.set_xlabel('Threshold (mm)', fontsize=24)
+        ax.set_ylabel('Brier Score', fontsize=16)
+        ax.set_xlabel('Threshold (mm)', fontsize=16)
         #ax.set_xticklabels(self.thresholds, fontsize=18)
-        ax.xaxis.set_tick_params(labelsize=22)
-        ax.yaxis.set_tick_params(labelsize=22)
+        ax.xaxis.set_tick_params(labelsize=14)
+        ax.yaxis.set_tick_params(labelsize=14)
         #ax.set_yticks(fontsize=18)
 
         fig.savefig(f'{savedir}/brier_evolution.pdf', format='pdf', bbox_inches='tight')
