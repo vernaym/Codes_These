@@ -2055,7 +2055,8 @@ class EnsembleKalmanFilter(Assimilation):
 #            else:
 #                self.pond = scipy.sparse.load_npz(codistances)
             coords=[(lon,lat) for lat in actual_parameters.lat.data for lon in actual_parameters.lon.data]
-            self.pond = self.codistances(coords)
+            #self.pond = self.codistances(coords)
+            self.pond = Preprocessing_ANTILOPE.codistances(coords)
         else:
             self.pond = scipy.sparse.eye(len(actual_parameters.lat)*len(actual_parameters.lon))
 
@@ -2114,6 +2115,13 @@ class EnsembleKalmanFilter(Assimilation):
 
     @speedtest
     def ponctual_analysis(self, date, idd, ensemble, parameters, covariance=False, nmembers=16):
+        R, Rstat, Rdyn, updated_obs = self.observation_ECM_new(parameters_loc, date)  # WARNING : prameters loc est un point unique !
+        Y = updated_obs.data  # Observation vector. WARNING : Use mu to take debiasing into account !
+        R = R + diags(Y.flatten(), 0)*0.3  # Increase observation error by 30% of the observation value to match RS
+        parameters_loc = parameters_loc.update({'obs':updated_obs})
+        B, updated_ensemble = self.background_error_covariance_new(ensemble_loc, updated_obs, R)  # Background error covariance matrix
+        ensemble_loc = updated_ensemble
+
         evaluation_points = zip(self.nivometeo.num_poste.data, np.nanmax(self.nivometeo.lat, axis=1).data, np.nanmax(self.nivometeo.lon, axis=1).data)
         for idp, (num_poste, lat, lon) in enumerate(evaluation_points):
             print(num_poste, idp)
@@ -2128,18 +2136,12 @@ class EnsembleKalmanFilter(Assimilation):
                 parameters_loc = parameters.sel({'lat':np.intersect1d(sel_lat, parameters.lat), 'lon':np.intersect1d(sel_lon, parameters.lon)})
                 # Compute inter-distances
                 coords=[(lon,lat) for lat in parameters_loc.lat for lon in parameters_loc.lon]
-                self.pond = self.codistances(coords)
+                #self.pond = self.codistances(coords)
+                self.pond = Preprocessing_ANTILOPE.codistances(coords)
             else:  # Verrue !
                 ensemble_loc = ensemble.sel({'lat':np.round([nearest_lat], 2), 'lon':np.round([nearest_lon], 2)})
                 parameters_loc = parameters.sel({'lat':np.round([nearest_lat], 2), 'lon':np.round([nearest_lon], 2)})
                 self.pond = scipy.sparse.eye(1)
-
-            R, Rstat, Rdyn, updated_obs = self.observation_ECM_new(parameters_loc, date)
-            Y = updated_obs.data  # Observation vector. WARNING : Use mu to take debiasing into account !
-            R = R + diags(Y.flatten(), 0)*0.3  # Increase observation error by 30% of the observation value to match RS
-            parameters_loc = parameters_loc.update({'obs':updated_obs})
-            B, updated_ensemble = self.background_error_covariance_new(ensemble_loc, updated_obs, R)  # Background error covariance matrix
-            ensemble_loc = updated_ensemble
 
             # TODO Ajouter une étape de comparaison des distribution d'ébauche et d'obs (augmentation de l'erreur d'ébauche
             # si distribution disjointes : on fait plus confiance à l'obs dans ce cas)
@@ -2183,6 +2185,7 @@ class EnsembleKalmanFilter(Assimilation):
         R = R + diags(Y.flatten(), 0)*0.3  # Increase observation error by 30% of the observation value to match RS
         parameters = parameters.update({'obs':updated_obs})
         B, updated_ensemble = self.background_error_covariance_new(ensemble, updated_obs, R)  # Background error covariance matrix
+
         if self.localisation is not None:
             point = np.where(Y==np.nanmax(Y))  # max observation (plot only)
             #point = np.where(Y==np.nanmin(Y))  # min observation (plot only)
@@ -2380,6 +2383,14 @@ class EnsembleKalmanFilter(Assimilation):
 
 class ParticleFilter(Assimilation):
 
+    def __init__(self, period, obs, ensemble, nivometeo, plot, frequency, gridded, localisation, mask, debiasing, domain, likelyhood):
+
+        super(ParticleFilter, self).__init__(period, obs, ensemble, nivometeo, plot, frequency, gridded, localisation, mask, debiasing, domain, likelyhood)
+
+        # Parameters to compute Euclidian distance between all points in the domain
+        self.ld = ld
+        self.max_dist = max_dist
+
 #    @speedtest
     def resample(self, weights, Ne):
         """ Ne is the number of members to draw for the new enesmble """
@@ -2477,6 +2488,22 @@ class ParticleFilter(Assimilation):
 
         assim_lat = self.radar.lat.data
         assim_lon = self.radar.lon.data
+
+        R, Rstat, Rdyn, updated_obs = self.observation_ECM_new(parameters_date, date)
+        Y = updated_obs.data  # Observation vector. WARNING : Use mu to take debiasing into account !
+        parameters_date = parameters_date.update({'obs':updated_obs})
+        R = R + diags(Y.flatten(), 0)*0.3  # Increase observation error by 30% of the observation value to match RS
+        sigma = xr.DataArray(
+            data   = R.diagonal().reshape((len(parameters_date.lat), len(parameters_date.lon))),
+            name   = 'obs_error',
+            dims   = ["lat", "lon"],
+            coords = dict(lon=parameters_date.lon, lat=parameters_date.lat)
+        )
+        parameters_date = parameters_date.update({'obs_error':sigma})
+
+        #B, updated_ensemble = self.background_error_covariance_new(ensemble, updated_obs, R)  # Background error covariance matrix unsued in PF
+
+
         for idx,lon in enumerate(assim_lon):
             parameters_lon = parameters_date.sel(lon=lon)
             if self.localisation is not None:
@@ -2579,6 +2606,18 @@ class ParticleFilter(Assimilation):
     def ponctual_assimilation(self, date, idd, localized_period, parameters_date):
         stop = False
 
+        R, Rstat, Rdyn, updated_obs = self.observation_ECM_new(parameters_date, date)
+        Y = updated_obs.data  # Observation vector. WARNING : Use mu to take debiasing into account !
+        parameters_date = parameters_date.update({'obs':updated_obs})
+        R = R + diags(Y.flatten(), 0)*0.3  # Increase observation error by 30% of the observation value to match RS
+        sigma = xr.DataArray(
+            data   = R.diagonal().reshape((len(parameters_date.lat), len(parameters_date.lon))),
+            name   = 'obs_error',
+            dims   = ["lat", "lon"],
+            coords = dict(lon=parameters_date.lon, lat=parameters_date.lat)
+        )
+        parameters_date = parameters_date.update({'obs_error':sigma})
+
         assimilation_points = zip(self.nivometeo.num_poste.data, np.max(self.nivometeo.lat, axis=1).data, np.max(self.nivometeo.lon, axis=1).data)
         for idp, (num_poste, lat, lon) in enumerate(assimilation_points):
             print(num_poste)
@@ -2633,10 +2672,11 @@ class ParticleFilter(Assimilation):
 #    @speedtest
     def assimilation(self, date, raw, raw_localized, parameters, lat, lon, idx, idy, num_poste=None):
 
+        sigma = parameters.obs_error.data
+        initial_obs = parameters.rr.data
+        assimilated_obs = parameters.obs.data
+
         nb_new_member = 0
-        sigma = float(parameters.sigma.data)/2.
-        obs = parameters.rr.data.compute()
-        mu = parameters.mu.data.compute()
 
         inflation = 0
         # TODO : avec la loi gamma, si mu>0 et max(raw/raw_localized)=0 ==> ne pas entrer dans la boucle (inutile, ce cas spécifique est traité à part)
@@ -2655,7 +2695,7 @@ class ParticleFilter(Assimilation):
             #-------------
             #weights = self.weighting(raw_localized, parameters.mu.data, sigma, plot_distribution=True)
             #weights = self.weighting(raw_localized, mu, sigma, obs, plot_distribution=True)
-            weights = self.weighting(raw_localized, mu, sigma, obs)
+            weights = self.weighting(raw_localized, assimilated_obs, sigma, initial_obs)
             weights = weights / np.sum(weights)
 
             t2 = time.time()
@@ -2749,6 +2789,22 @@ class ParticleFilter(Assimilation):
         time_selection_unique = 0
         time_selection_sequentielle = 0
         time_localisation = 3  # TODO : à passer en paramètre
+
+        actual_parameters = self.parameters
+        if self.localisation is not None:
+            codistances = os.path.join('/home/vernaym/These/DATA', f'codistance_max_dist_{self.max_dist}_alp.npz')
+#            if not os.path.exists(codistances):
+#                # Compute inter-distances
+#                coords=[(lon,lat) for lat in actual_parameters.lat.data for lon in actual_parameters.lon.data]
+#                self.pond = self.codistances(coords)
+#            else:
+#                self.pond = scipy.sparse.load_npz(codistances)
+            coords=[(lon,lat) for lat in actual_parameters.lat.data for lon in actual_parameters.lon.data]
+            #self.pond = self.codistances(coords)
+            self.pond = Preprocessing_ANTILOPE.codistances(coords)
+        else:
+            self.pond = scipy.sparse.eye(len(actual_parameters.lat)*len(actual_parameters.lon))
+
         for idd,date in enumerate(self.period):
             print(date)
             t1 = time.time()
