@@ -105,9 +105,9 @@ landmarks = {
     }
 
 # Parameters to compute Euclidian distance between all points in the domain
-ld = 0.05 # correlation lenght. WARNING : ne pas trop augmenter la distance de correlation (analyse trop proche de l'obs ==> perte de dispersion)
+ld = 0.1 # correlation lenght. WARNING : ne pas trop augmenter la distance de correlation (analyse trop proche de l'obs ==> perte de dispersion)
 # ld = 0.02 marche plutot bien (sous dispersion), ld=0.03 pas du tout !!!
-max_dist = ld*3
+max_dist = ld*2
 #max_dist = 0.5  # Memory limit reached at 0.2 for domain Alp. WARNING : very high analysis sensibility to this parameter !!
 
 def parse_command_line():
@@ -2115,12 +2115,6 @@ class EnsembleKalmanFilter(Assimilation):
 
     @speedtest
     def ponctual_analysis(self, date, idd, ensemble, parameters, covariance=False, nmembers=16):
-        R, Rstat, Rdyn, updated_obs = self.observation_ECM_new(parameters_loc, date)  # WARNING : prameters loc est un point unique !
-        Y = updated_obs.data  # Observation vector. WARNING : Use mu to take debiasing into account !
-        R = R + diags(Y.flatten(), 0)*0.3  # Increase observation error by 30% of the observation value to match RS
-        parameters_loc = parameters_loc.update({'obs':updated_obs})
-        B, updated_ensemble = self.background_error_covariance_new(ensemble_loc, updated_obs, R)  # Background error covariance matrix
-        ensemble_loc = updated_ensemble
 
         evaluation_points = zip(self.nivometeo.num_poste.data, np.nanmax(self.nivometeo.lat, axis=1).data, np.nanmax(self.nivometeo.lon, axis=1).data)
         for idp, (num_poste, lat, lon) in enumerate(evaluation_points):
@@ -2142,6 +2136,13 @@ class EnsembleKalmanFilter(Assimilation):
                 ensemble_loc = ensemble.sel({'lat':np.round([nearest_lat], 2), 'lon':np.round([nearest_lon], 2)})
                 parameters_loc = parameters.sel({'lat':np.round([nearest_lat], 2), 'lon':np.round([nearest_lon], 2)})
                 self.pond = scipy.sparse.eye(1)
+
+            R, Rstat, Rdyn, updated_obs = self.observation_ECM_new(parameters_loc, date)  # WARNING : prameters loc est un point unique !
+            Y = updated_obs.data  # Observation vector. WARNING : Use mu to take debiasing into account !
+            R = R + diags(Y.flatten(), 0)*0.3  # Increase observation error by 30% of the observation value to match RS
+            parameters_loc = parameters_loc.update({'obs':updated_obs})
+            B, updated_ensemble = self.background_error_covariance_new(ensemble_loc, updated_obs, R)  # Background error covariance matrix
+            ensemble_loc = updated_ensemble
 
             # TODO Ajouter une étape de comparaison des distribution d'ébauche et d'obs (augmentation de l'erreur d'ébauche
             # si distribution disjointes : on fait plus confiance à l'obs dans ce cas)
