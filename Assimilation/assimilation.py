@@ -1264,7 +1264,7 @@ class Assimilation(object):
         gradient = gradient.sel({'lat':np.intersect1d(parameters.lat, gradient.lat), 'lon':np.intersect1d(parameters.lon, gradient.lon)})
 
         newfield, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(obs, pond)
-        #newfield, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(obs, pond, gradient=gradient.data.flatten())
+        #newfield, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(obs, pond, gradient=gradient.data.flatten())  # Use AROME mean vertical gradient
         #newfield, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(obs, pond, qq_adjustment=True)  # qq adjustment add >0 bias !
         Rdyn = diags(sd, 0)
         R = dia_matrix(Rdyn)
@@ -2040,7 +2040,7 @@ class EnsembleKalmanFilter(Assimilation):
             # Extract evalution points
 
         null[:] = np.nan
-        self.newlocalfield = {m:null.copy() for m in range(1, self.Ne+1)}  # Used only for ponctual assimilation
+        self.newlocalfield = {m:null.copy() for m in range(self.Ne+1)}  # Used only for ponctual assimilation
         #self.newlocalfield = {m:dict() for m in range(1, self.Ne+1)}  # Used only for ponctual assimilation
 
         actual_ensemble = self.ensemble
@@ -2141,7 +2141,7 @@ class EnsembleKalmanFilter(Assimilation):
             Y = updated_obs.data  # Observation vector. WARNING : Use mu to take debiasing into account !
             R = R + diags(Y.flatten(), 0)*0.3  # Increase observation error by 30% of the observation value to match RS
             parameters_loc = parameters_loc.update({'obs':updated_obs})
-            B, updated_ensemble = self.background_error_covariance_new(ensemble_loc, updated_obs, R)  # Background error covariance matrix
+            B, updated_ensemble = self.background_error_covariance_new(ensemble_loc, updated_obs, R)  # Localisation
             ensemble_loc = updated_ensemble
 
             # TODO Ajouter une étape de comparaison des distribution d'ébauche et d'obs (augmentation de l'erreur d'ébauche
@@ -2154,6 +2154,9 @@ class EnsembleKalmanFilter(Assimilation):
                 dims   = ["member", "lat", "lon"],
                 coords = dict(lon=parameters_loc.lon, lat=parameters_loc.lat, member=range(nmembers+1)),
             )
+
+            analysis.loc[{'member':0}] = Y.reshape((len(parameters_loc.lat), len(parameters_loc.lon)))
+            self.newlocalfield[0][idp,idd] = analysis.sel({'lat':nearest_lat, 'lon':nearest_lon, 'member':0}).data
 
             for member in ensemble_loc.member.data:
                 raw = ensemble_loc.sel({'member':member}).rr

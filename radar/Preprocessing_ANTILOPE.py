@@ -146,7 +146,7 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
 #        if np.max(newfield) == np.min(newfield) : slope = 1
 #        intersect = np.min(initial_field) - slope * np.min(newfield)
 #        newfield = slope*newfield+intersect  # --> can lean to large errors !
-#        sd2 = sd2 * slope
+#        sd2 = sd2 * (1+slope)
 
     # TODO : there is still a probleme for low precipitation fields (artefacts)
 
