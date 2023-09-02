@@ -59,8 +59,8 @@ ld = 0.07  # Correlation length
 #ld = 0.05  # Correlation length
 
 # Read ratio/error fields to evaluate
-estimated_ratio = np.flip(xr.open_dataarray(os.path.join(datadir, f'Estimated_ratio_{domain}_{d0}.nc')), axis=0)  # Ratio estimated with automatic observations that we want to evaluate
-error = np.flip(xr.open_dataarray(os.path.join(datadir, f'Observation_error_{d0}_{domain}.nc')).data, axis=0)
+estimated_ratio = np.flip(xr.open_dataarray(os.path.join(datadir, f'Estimated_ratio.nc')), axis=0)  # Ratio estimated with automatic observations that we want to evaluate
+error = np.flip(xr.open_dataarray(os.path.join(datadir, f'Observation_uncertainty.nc')).data, axis=0)
 
 def diagonal_field():
     """Generation of an idealised precipitation field"""
@@ -559,7 +559,8 @@ if __name__ == "__main__":
 
     # TODO : loop over realities
 
-    real_ratio = np.flip(xr.open_dataarray(os.path.join(datadir, 'nivometeo', f'Estimated_ratio_{domain}_{d0}.nc')), axis=0)  # Reference ratio estimated with nivometeo observations only
+    #real_ratio = np.flip(xr.open_dataarray(os.path.join(datadir, 'nivometeo', f'Estimated_ratio_{domain}_{d0}.nc')), axis=0)  # Reference ratio estimated with nivometeo observations only
+    real_ratio = np.flip(xr.open_dataarray(os.path.join(datadir, 'nivometeo', f'Estimated_ratio.nc')), axis=0)  # Reference ratio estimated with nivometeo observations only
     real_ratio = perturbed_ratio(real_ratio)  # Climatological perturbations of the ratio field to account for the ratio estimation method's errros
 
     # Compute spatial correlations
@@ -614,7 +615,7 @@ if __name__ == "__main__":
         # TODO : reporter la formulation retenue dans l'expérience avec données réelles
         #pond = codist.dot(diags(np.exp(-(error-1)).flatten(), 0))  # error is in [1, inf[.
         #pond = codist.dot(diags(np.exp(-error)).flatten(), 0))  # error is in [1, inf[.
-        pond = codist.dot(diags(1/error.flatten(), 0))  # error is in [1, inf[.  # Best formulation with new observation error formula
+        pond = codist.dot(diags(1/(1+error.flatten()), 0))  # error is in [1, inf[.  # Best formulation with new observation error formula
 
         # De-biasing only
         db = perturbed_field / estimated_ratio.data
@@ -626,17 +627,19 @@ if __name__ == "__main__":
         smo15.data[date] = smooth15
         smootherr = db - smooth15
 
-        # De-biasing + Dynamic correction only
-        dyn, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(perturbed_field, pond)
-        #dyn, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(db, pond)
+        # Dynamic correction only
+        #dyn, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(perturbed_field, pond)
+        # De-biasing + Dynamic correction
+        dyn, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(db, pond)
         dyn = dyn.reshape((nlat, nlon))
         cor2.data[date] = dyn
         sd1 = sd.reshape((nlat, nlon))
         #plot_field(np.sqrt(sd.reshape((nlat, nlon))), f'dynamic_error_without_debiasing.pdf', label='Error (mm)', cmap=plt.cm.Reds)
 
+        # De-biasing + Dynamic correction
+        #dd, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(db, pond)
         # De-biasing + Dynamic correction + qq adjustment
-        #dd, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(db, pond, qq_adjustment=True)
-        dd, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(db, pond)
+        dd, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(db, pond, qq_adjustment=True)
         dd = dd.reshape((nlat, nlon))
         cor.data[date] = dd
         sd2 = sd.reshape((nlat, nlon))

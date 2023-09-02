@@ -267,10 +267,13 @@ algo = dict(
         #RS18          = 'RandomSampling/XP18/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         #RS19          = 'RandomSampling/XP19/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         #RS20          = 'RandomSampling/XP20/Random_Sampling_2021120106_2022050106_daily_alp.nc',
+        #RS22          = 'RandomSampling/XP22/Random_Sampling_2021120106_2022050106_daily_alp.nc',
+        ################################################################################################
         # PHD committee :
         PF31          = 'XP31/Assimilation_locale_2021120106_2022050106_daily_alp_mask9_debiasing3.nc',
-        #KD35          = 'EnsembleKalmanFilter/XP35/EnKF_2021120106_2022050106_daily_alp.nc',
+        KD35          = 'EnsembleKalmanFilter/XP35/EnKF_2021120106_2022050106_daily_alp.nc',
         RS21          = 'RandomSampling/XP21/Random_Sampling_2021120106_2022050106_daily_alp.nc',
+        ################################################################################################
     )
 
 
@@ -377,7 +380,7 @@ xpid_label = dict(
         #KD33          = 'Ensemble Kalman Filter analysis',
         KD33          = 'EnKF',
         KD34          = 'Ensemble Kalman Filter analysis',
-        KD35          = 'Ensemble Kalman Filter analysis',
+        KD35          = 'EnKF',
         PF29          = 'PF',
         #PF29          = 'Particle Filter analysis',
         PF30          = 'Particle Filter analysis',
@@ -407,6 +410,7 @@ xpid_label = dict(
         RS19          = 'RS19',  # random perturbations = gamma*obs*0.4 (ou 0.3 ?) + gamma*sd
         RS20          = 'RS20',  # Estimated ratio only on mountain ridges
         RS21          = 'RS',  # PHD committee
+        RS22          = 'RS22',  # Test qq adjustment
     )
 
 def nearest(array, value):
@@ -427,7 +431,8 @@ class Evaluation(object):
         self.threshold = 10  # threshold to use as event detection in the Brier Score
         self.lpn = None
         self.obs_error = None
-        self.thresholds = [0.5] + [x for x in range(1, 31)]
+        self.thresholds = [x for x in range(1, 31)]
+        #self.thresholds = [0.5] + [x for x in range(1, 31)]
         #self.thresholds = [x/10 for x in range(1,10)] + [x for x in range(1, 31)]
 
     def ensemble_attributes(self):
@@ -447,6 +452,8 @@ class Evaluation(object):
 
         simu = simu[~np.isnan(obs)]
         obs = obs[~np.isnan(obs)]
+        #simu = simu[obs>1]  # TODO : TMP !!!!!
+        #obs=obs[obs>1]  # TODO : TMP !!!!!
 
         if np.shape(simu) == np.shape(obs):  # "Simulation" déterministe
             bias = simu - obs
@@ -848,7 +855,7 @@ class Evaluation(object):
 #            print(f'WARNING : file {filename} does not exist, looking for it under {workdir}')
 #            filename = os.path.join(workdir, filename)
 
-        print('DBUG debut lecture simu')
+        print(f'DBUG debut lecture simu {filename}')
 
         if os.path.exists(filename):
             simulation =  xr.open_dataset(filename)
@@ -1184,7 +1191,7 @@ class Evaluation(object):
                 self.reliability_diagram(self.data[product].data.reshape(-1, 16), self.data.obs.data.flatten(), product, ax1)
                 fig2,ax2 = plt.subplots()
                 self.rank_histogram(self.data[product].data.reshape(-1, 16), self.data.obs.data.flatten(), product, ax2)
-                ax2.set_ylim(top=800)
+                ax2.set_ylim(top=1200)
                 fig2.savefig(f'{savedir}/rank_histogram_{product}.pdf', format='pdf')
                 plt.close(fig2)
                 fig2,ax2 = plt.subplots()
@@ -1355,7 +1362,7 @@ class Evaluation(object):
             brier = np.array([])
             for threshold in self.thresholds:
                 brier = np.append(brier, np.mean(self.scores.loc[{'score':f'brier_{int(threshold*10)}'}][product].data))
-            ax.plot(self.thresholds, brier, label=xpid_label[product], linewidth=3)
+            ax.plot(self.thresholds, brier, label=xpid_label[product], linewidth=2)
             #ax.semilogx(self.thresholds, brier, label=xpid_label[product], linewidth=3)
         ax.legend(fontsize=18)
         ax.set_ylabel('Brier Score', fontsize=16)
