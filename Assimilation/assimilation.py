@@ -2059,6 +2059,7 @@ class EnsembleKalmanFilter(Assimilation):
             self.pond = Preprocessing_ANTILOPE.codistances(coords)
         else:
             self.pond = scipy.sparse.eye(len(actual_parameters.lat)*len(actual_parameters.lon))
+            self.pond = csr_matrix(self.pond)
 
 #        print('DBUG0')
 #        tmp=0.0000001*scipy.sparse.identity(np.shape(self.pond)[0])
@@ -2139,8 +2140,8 @@ class EnsembleKalmanFilter(Assimilation):
 
             R, Rstat, Rdyn, updated_obs = self.observation_ECM_new(parameters_loc, date)  # WARNING : prameters loc est un point unique !
             Y = updated_obs.data  # Observation vector. WARNING : Use mu to take debiasing into account !
-            R = R + diags(Y.flatten(), 0)*0.3  # Increase observation error by 30% of the observation value to match RS
-            parameters_loc = parameters_loc.update({'obs':updated_obs})
+            #R = R + diags(Y.flatten(), 0)*0.3  # Increase observation error by 30% of the observation value to match RS
+            R = R + diags((Y+0.1).flatten(), 0)*0.3  # Increase observation error by 30% of the observation value to match RS + avoid singular matrix
             B, updated_ensemble = self.background_error_covariance_new(ensemble_loc, updated_obs, R)  # Localisation
             ensemble_loc = updated_ensemble
 
@@ -2186,15 +2187,16 @@ class EnsembleKalmanFilter(Assimilation):
 
         R, Rstat, Rdyn, updated_obs = self.observation_ECM_new(parameters, date)
         Y = updated_obs.data  # Observation vector. WARNING : Use mu to take debiasing into account !
-        R = R + diags(Y.flatten(), 0)*0.3  # Increase observation error by 30% of the observation value to match RS
+        #R = R + diags(Y.flatten(), 0)*0.3  # Increase observation error by 30% of the observation value to match RS
+        R = R + diags((Y+0.1).flatten(), 0)*0.3  # Increase observation error by 30% of the observation value to match RS + avoid singular matrix
         parameters = parameters.update({'obs':updated_obs})
         B, updated_ensemble = self.background_error_covariance_new(ensemble, updated_obs, R)  # Background error covariance matrix
+        ensemble = updated_ensemble
 
-        if self.localisation is not None:
+        if self.plot:
             point = np.where(Y==np.nanmax(Y))  # max observation (plot only)
             #point = np.where(Y==np.nanmin(Y))  # min observation (plot only)
             original_ens = ensemble.isel(lat=point[0], lon=point[1]).rr.data.flatten()  # (plot only)
-            ensemble = updated_ensemble
 
             # plot distributions
             fig, ax = plt.subplots()
@@ -2253,7 +2255,7 @@ class EnsembleKalmanFilter(Assimilation):
             #analysis.loc[{'member':member}] = np.square(obs+random*sd/5)
             ##############################  END  ###############################
 
-            raw = ensemble.sel({'member':member}).raw  # TODO : pas défini sans localisation
+            raw = ensemble.sel({'member':member}).raw
             background = ensemble.sel({'member':member}).rr
             X = background.data.flatten()  # Ensemble member vector
 
