@@ -27,9 +27,9 @@ datadir = '/home/vernaym/These/DATA'
 savedir = '/home/vernaym/These/figures'
 
 #filename = sys.argv[1]
-#filename = 'CUMUL_ANTILOPEH_alp_2021103000_2022060200.nc'
+filename = 'CUMUL_ANTILOPEH_alp_2021103000_2022060200.nc'
 #filename = 'CUMUL_ANTILOPEQ_2021110106_2022043006_alp.nc'
-filename = 'CUMUL_ANTILOPEQ_GrandesRousses_2021080106_2022070106.nc'
+#filename = 'CUMUL_ANTILOPEQ_GrandesRousses_2021080106_2022070106.nc'
 
 datebegin = filename.split('.')[0].split('_')[-2]
 dateend   = filename.split('.')[0].split('_')[-1]
@@ -38,6 +38,7 @@ print(f'Dateend={dateend}')
 
 
 # Domaine des Grandes Rousses
+domain = "GrandesRousse"
 extract_dom = dict(
     latmax = 45.240,
     latmin = 44.990,
@@ -45,13 +46,15 @@ extract_dom = dict(
     lonmax = 6.490,
 )
 # Mont Blanc
-#extract_dom = dict(lonmin=6.45, lonmax=7.1, latmin=45.65, latmax=46.1)
+domain = 'MontBlanc'
+extract_dom = dict(lonmin=6.7, lonmax=6.95, latmin=45.75, latmax=46.0)
 
 outProj = Proj(init='epsg:4326')
 inProj = Proj(init='epsg:2154')
 
 #norm = plt.Normalize(vmin=300, vmax=1200)
-norm = plt.Normalize(vmin=300, vmax=1300)
+#norm = plt.Normalize(vmin=300, vmax=1300)
+norm = plt.Normalize(vmin=150, vmax=1000)
 #norm = plt.Normalize()
 
 if not os.path.isfile(filename):
@@ -160,27 +163,33 @@ else:
     colors = plt.cm.YlGnBu(norm(np.nan_to_num(radar.values)))
 
 fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
-ax.view_init(elev=50., azim=135)  # Set point of view
+#ax.view_init(elev=50., azim=135)  # POV NW
+ax.view_init(elev=50., azim=245)
 surf = ax.plot_surface(X=X, Y=Y, Z=Z, linewidth=0, antialiased=False, facecolors=colors)
 ax.xaxis.pane.fill = False
 ax.xaxis.pane.set_edgecolor('white')
 ax.yaxis.pane.fill = False
 ax.yaxis.pane.set_edgecolor('white')
-ax.zaxis.pane.fill = False
-ax.zaxis.pane.set_edgecolor('white')
+#ax.zaxis.pane.fill = False
+#ax.zaxis.pane.set_edgecolor('white')
 ax.grid(False)
 ax.set_xlabel('Longitude', labelpad=20)
 ax.set_ylabel('Latitude', labelpad=20)
 ax.set_zlabel('Elevation (m)')
-#ax.set_zlim(0., np.max(Z))
-ax.set_zlim(0., 3500.)
+ax.set_zlim(0., np.max(Z))
+#ax.set_zlim(0., 3500.)
+ax.set_zlim(1000., 4800.)
 #fig.colorbar(surf, shrink=0.5, aspect=5)
 #fig.colorbar(colorbar=colors, shrink=0.5, aspect=5)
 fig.colorbar(cm.ScalarMappable(norm=norm, cmap=plt.cm.YlGnBu), ax=ax, shrink=0.75, aspect=8, label=f'{product} cumulated precipitation \n between {datebegin} and {dateend} (mm)')
 #plt.show()
-rot_animation = animation.FuncAnimation(fig, rotate, frames=np.arange(0,362,2),interval=100)
-rot_animation.save(f'{savedir}/CUMUL3D_{product}_{datebegin}_{dateend}.gif', dpi=80, writer='imagemagick')
 
+# Static image
 #plt.tight_layout()
-#plt.savefig(f'{savedir}/CUMUL3D_{product}_{datebegin}_{dateend}.pdf', format='pdf')
+#plt.savefig(f'{savedir}/CUMUL3D_{product}_{datebegin}_{dateend}_{domain}.pdf', format='pdf')
+
+# For an animation
+rot_animation = animation.FuncAnimation(fig, rotate, frames=np.arange(0,361,5),interval=100)
+rot_animation.save(f'{savedir}/CUMUL3D_{product}_{datebegin}_{dateend}.gif', dpi=100, writer='imagemagick')
+
 

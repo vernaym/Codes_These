@@ -27,7 +27,10 @@ plt.rcParams["figure.autolayout"] = True
 ##############################################################################################
 ##############################################################################################
 
-domain = sys.argv[1]
+if len(sys.argv) > 1:
+    domain = sys.argv[1]
+else:
+    domain = 'alp'
 
 datadir = '/home/vernaym/QGIS/MNT'
 savedir = '/home/vernaym/These/figures'
@@ -39,6 +42,7 @@ domain_coords = dict(
         CentralAlps    = dict(lonmin=5.6, lonmax=7.0, latmin=45.0, latmax=45.6),
         SouthernAlps   = dict(lonmin=5.7, lonmax=7.0, latmin=44.2, latmax=45.0),
         HauteSavoie    = dict(lonmin=6.45, lonmax=6.95, latmin=45.67, latmax=46.35),
+        MontBlanc      = dict(lonmin=6.45, lonmax=7.1, latmin=45.65, latmax=46.1),
         Savoie         = dict(lonmin=6.06, lonmax=7.06, latmin=45.15, latmax=45.65),
         Isere          = dict(lonmin=5.54, lonmax=6.19, latmin=44.89, latmax=45.16),
         Brianconnais   = dict(lonmin=6.48, lonmax=6.95, latmin=44.67, latmax=44.95),
@@ -50,6 +54,16 @@ latmin = domain_coords[domain]['latmin']
 latmax = domain_coords[domain]['latmax']
 lonmin = domain_coords[domain]['lonmin']
 lonmax = domain_coords[domain]['lonmax']
+
+figsize = dict(
+        alp            = (14,16),
+        GrandesRousses = (15,7),
+        HauteSavoie    = (12,12),
+        HautesAlpes    = (16,10),
+        MontBlanc      = (15,10),
+        Savoie         = (16,8),
+        Isere          = (16,8),
+)
 
 d0 = 0.08
 max_dist = d0*3
@@ -129,12 +143,30 @@ def add_scores(ax):
 #        for idx, label in enumerate(labels):
 #            txt = ax.text(info['lons'].data[idx], info['lats'].data[idx], label)
 
-def add_postes_nivometeo(ax):
-    fic_score = os.path.join('/home/vernaym/These/DATA', 'postes_nivometeo.csv')
-    scores = pd.read_csv(fic_score, sep=';')
+def add_postes(ax, type_poste='nivometeo'):
+    postdir = '/home/vernaym/These/DATA'
+    if type_poste == 'nivometeo':
+        fic_postes = os.path.join(postdir, f'scores_2021110106_2022043006_alp.csv')
+        marker = '*'
+        color  = 'red'
+        label  = 'Nivometeo station'
+    else:
+        fic_postes = os.path.join(postdir, f'scores_2021110106_2022043006_alpes_obs_auto.csv')
+        marker = 'v'
+        color  = 'k'
+        label  = 'Automatic station'
+    #fic_score = os.path.join('/home/vernaym/These/DATA', 'postes_nivometeo.csv')
+    #scores = pd.read_csv(fic_score, sep=';')
+
+    postes = pd.read_csv(fic_postes, sep=';')
+    postes_domain = postes.loc[(postes.lons>=lonmin) & (postes.lons<=lonmax) & (postes.lats<=latmax) & (postes.lats>=latmin)]
+    lons = postes['lons']
+    lats = postes['lats']
+
 
     #sc = ax.scatter(scores['poste_nivo.lon_dg'], scores['poste_nivo.lat_dg'], c=scores['poste_nivo.alti'],  marker='^', s=300)
-    sc = ax.scatter(scores['poste_nivo.lon_dg'], scores['poste_nivo.lat_dg'],  marker='^', s=450, color='k')
+    #sc = ax.scatter(scores['poste_nivo.lon_dg'], scores['poste_nivo.lat_dg'],  marker='^', s=450, color='k')
+    sc = ax.scatter(lons, lats,  marker=marker, s=300, color=color, label=label)
 
 def add_radar_positions(ax):
     radars = dict(
@@ -199,14 +231,16 @@ def extract_cross_section(field, varname='elevation'):
     """
     # Definition of the cross section coordinates :
     #start = (45.14776, 5.63933)  # Radar Moucherotte
-    start = (45.14776, 5.635)  # Radar Moucherotte
+    #start = (45.14776, 5.635)  # Radar Moucherotte
     #start = (46.42572, 6.10032)  # Radar La Dole
     #start = (46.02947300021354, 7.1429769396152825)  # Orsières (Suisse)
+    start  = (45.93, 6.86)  # Chamonix
     #end   = (45.13761, 6.21261)
     #end   = (45.12142, 6.21189)  # Passe par le Pic Blanc : 45 km
-    end   = (45.11872, 6.27540)  # Passe par le Pic Blanc : 50 km
+    #end   = (45.11872, 6.27540)  # Passe par le Pic Blanc : 50 km
     #end   = (45.750494, 6.9680)  # From La Dole : passe par le Mont Blanc (100 km)
     #end   = (45.70184, 6.676548)  # Depuis Orsières : traverse le Mont-Blanc  (50 km)
+    end    = (45.82, 6.864)  # Mont Blanc
 
     field = field.metpy.parse_cf(varname=varname).squeeze()
     cross = cross_section(field, start, end)
@@ -214,16 +248,18 @@ def extract_cross_section(field, varname='elevation'):
     return cross
 
 def plot_vertical_cross_section(cross):
-    x = np.linspace(0, 50, len(cross.data))
+    #x = np.linspace(0, 50, len(cross.data))
+    x = np.linspace(0, 12, len(cross.data))
     #x = np.linspace(0, 100, len(cross.data))
     y = cross.data + 250
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=(14, 10))
     ax.fill_between(x, y, color='k')
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
-    ax.tick_params(axis='both', which='major', labelsize=20)
-    ax.set_xlabel('Distance to the radar (km)', fontsize=26)
-    ax.set_ylabel('Elevation (m)', fontsize=26)
+    ax.tick_params(axis='both', which='major', labelsize=14)
+    #ax.set_xlabel('Distance to the radar (km)', fontsize=26)
+    ax.set_xlabel('Distance (km)', fontsize=16)
+    ax.set_ylabel('Elevation (m)', fontsize=16)
     #plt.show()
     fig.savefig(os.path.join(savedir, 'Vertical_cross_section.pdf'), format='pdf')
     plt.close()
@@ -233,11 +269,13 @@ mnt = xr.open_dataset(os.path.join(datadir, "DEM_ALPES_WGS84_250m_bilinear.nc"))
 mnt=mnt.where((mnt['lat']>=latmin) & (mnt['lat']<=latmax) & (mnt['lon']>=lonmin) & (mnt['lon']<=lonmax), drop=True)
 mnt = mnt.rename({'Band1':'elevation'})
 
-crossection = True
+crossection = False
 if crossection:
 
     cross = extract_cross_section(mnt)
     plot_vertical_cross_section(cross)
+
+    sys.exit()
 
     ratio = xr.open_dataset(os.path.join('/home/vernaym/workdir/ASSIMILATION/mask/alp', 'Estimated_ratio.nc'))
     cross = extract_cross_section(ratio, varname='ratio')
@@ -261,11 +299,11 @@ if crossection:
 else:
 
     #filename = os.path.join(savedir, f'ReliefAlpes_correlation{d0}.pdf')
-    filename = os.path.join(savedir, f'ReliefAlpes_with_nivometeo.pdf')
+    filename = os.path.join(savedir, f'Relief_{domain}_with_nivometeo.pdf')
 
     # Plot elevation
     #if not os.path.exists(filename):
-    fig,ax = plt.subplots(figsize=(21,24))
+    fig,ax = plt.subplots(figsize=figsize[domain])
     ax.set_frame_on(False)
     #https://discourse.holoviz.org/t/cannot-remove-grid-for-hv-quadmesh/2211/8
     #im = mnt.elevation.plot(ax=ax, cmap=plt.cm.terrain, subplot_kws={'frame_on':False}, linewidth=0, label='Elevation (m)', add_colorbar=False)
@@ -273,17 +311,19 @@ else:
 
     # Add optional features
     add_boundaries(ax)
-    #add_postes_nivometeo(ax)
+    add_postes(ax, type_poste='auto')
+    add_postes(ax, type_poste='nivometeo')
     add_radar_positions(ax)
 
     ax.set_frame_on(False)
+    ax.legend(fontsize=20, loc=4)  # loc=4 --> bottom-right
     #plot_correlation(ax, mnt)  # To add correlation area
     cb = fig.colorbar(im)
     cb.ax.tick_params(labelsize=20)
     cb.set_label('Elevation (m)', size=24)
     ax.set_xlabel(None)
     ax.set_ylabel(None)
-    ax.tick_params(axis='both', which='major', labelsize=18)
+    ax.tick_params(axis='both', which='major', labelsize=14)
     fig.savefig(filename, format='pdf')
 
     # Plot elevation difference
