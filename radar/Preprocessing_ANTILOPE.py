@@ -49,8 +49,8 @@ datadir = '/home/vernaym/extraction_obs'  # On sxcen
 workdir = '.'  # On sxcen
 
 domain = 'alp'
-ld = 0.05
-max_dist = ld*3
+ld = 0.1
+max_dist = ld*2
 
 
 def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False, qq_adjustment=False, gradient=None):
@@ -236,7 +236,7 @@ def codistances(coords, ld=0.1):  # TMP for illustration. TODO : test different 
 
     return dist
 
-def random_draw(obs, sd, distribution='gamma'):
+def random_draw(obs, sd, ratio=None, sd2=None, distribution='gamma'):
     gauss = np.random.normal(loc=0.0, scale=1.0, size=1)[0]  # Draw random element from normal distribution
     if distribution == 'normal':
         ana = obs+gauss*sd  # Gaussian perturbation around >0 obs
@@ -251,14 +251,22 @@ def random_draw(obs, sd, distribution='gamma'):
         k = 2  # k must be >1. TODO : fixer k de façon automatique --> + forte asymétrie
         theta = np.sqrt(1/k)  # Ensure a variance of 1 (var=k*theta^2)
         #shift = (k-1)*theta  # shift = mode  --> introduce a >0 bias of theta
-        shift = k*theta  # shift = mean
+        shift = k*theta  # shift = mean  --> no bias introduction
         gamma = np.random.gamma(k, scale=theta)  # Draw random element from normal distribution (>0 only ==> shift necessary to convert into perturbations)
 
         # Add 2 perturbations terms:
         # - 1 gamma distributed proportionnal to the precipitation intensity
         # - normal distributed around the estimated error --> especially important for error for small prexipitation values
         # This 2 step perturbation reduces the dispersion but introduces spatial variability in the analysis fields
-        ana = obs + obs*0.30*(gamma-shift) + gauss*sd
+        if ratio is not None:
+            ana = obs + obs*(0.3+np.abs(1-np.sqrt(ratio)))*(gamma-shift) + gauss*sd
+        else:
+            ana = obs + obs*0.30*(gamma-shift) + gauss*sd
+
+        if sd2 is not None:
+            gamma = np.random.gamma(k, scale=theta)  # Draw random element from normal distribution (>0 only ==> shift necessary to convert into perturbations)
+            ana = ana + sd2*(gamma-shift)
+
 
     else:
         print('Error : unknown distribution')
