@@ -2509,7 +2509,6 @@ class ParticleFilter(Assimilation):
 
         #B, updated_ensemble = self.background_error_covariance_new(ensemble, updated_obs, R)  # Background error covariance matrix unsued in PF
 
-
         for idx,lon in enumerate(assim_lon):
             parameters_lon = parameters_date.sel(lon=lon)
             if self.localisation is not None:
@@ -2576,11 +2575,21 @@ class ParticleFilter(Assimilation):
             i = 0
             j = 0
             raw = localized_period.sel({'time':date})
-            self.rrmin = 0.
-            self.rrmax = max(
-                    np.nanmax(raw.rr.data),
-                    np.nanmax(parameters_date.rr.data)
+            rrmin = 0.
+            rrmax = max(
+                    #np.nanmax(raw.rr.data),
+                    np.nanmax(parameters_date.rr.data),
+                    np.nanmax(parameters_date.mu.data),
+                    np.nanmax(parameters_date.obs.data),
                     )
+            fig, ax = plt.subplots(figsize=figsize[self.domain]['singleplot'])
+            im = plot_field(parameters_date.rr, ax, rrmin, rrmax, self.domain)
+            finalize_fig(fig, im, label='24-hour precipitation (mm)', outname=f'{self.date_str}/RAW_observation_{self.date_str}.pdf')
+
+            fig, ax = plt.subplots(figsize=figsize[self.domain]['singleplot'])
+            im = plot_field(parameters_date.obs, ax, rrmin, rrmax, self.domain)
+            finalize_fig(fig, im, label='24-hour precipitation (mm)', outname=f'{self.date_str}/ASSIMILATED_observation_{self.date_str}.pdf')
+
             #self.rrmax = np.nanmax(parameters_date.rr.data)
             for member in range(1,17):
                 assim = xr.DataArray(
@@ -2591,9 +2600,9 @@ class ParticleFilter(Assimilation):
                 )
                 #raw.sel({'member':member}).rr.plot(ax=ax1[i,j], cmap=plt.cm.YlGnBu)
                 #im1 = plot_field(raw, ax1[i,j], self.rrmin, self.rrmax, title=f'Member {self.selection_globale[m-1]:03d}')
-                im1 = plot_field(raw.sel({'member':member}).rr, ax1[i,j], self.rrmin, self.rrmax, self.domain)
+                im1 = plot_field(raw.sel({'member':member}).rr, ax1[i,j], rrmin, rrmax, self.domain)
                 #assim.plot(ax=ax2[i,j], cmap=plt.cm.YlGnBu)
-                im2 = plot_field(assim, ax2[i,j], self.rrmin, self.rrmax, self.domain)
+                im2 = plot_field(assim, ax2[i,j], rrmin, rrmax, self.domain)
                 ax1[i,j].set_title(None)
                 ax2[i,j].set_title(None)
                 j = j + 1
