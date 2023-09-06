@@ -268,11 +268,12 @@ algo = dict(
         #RS19          = 'RandomSampling/XP19/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         #RS20          = 'RandomSampling/XP20/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         #RS22          = 'RandomSampling/XP22/Random_Sampling_2021120106_2022050106_daily_alp.nc',
+        #RS23          = 'RandomSampling/XP23/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         ################################################################################################
         # PHD committee :
+        RS21          = 'RandomSampling/XP21/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         PF31          = 'XP31/Assimilation_locale_2021120106_2022050106_daily_alp_mask9_debiasing3.nc',
         KD35          = 'EnsembleKalmanFilter/XP35/EnKF_2021120106_2022050106_daily_alp.nc',
-        RS21          = 'RandomSampling/XP21/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         ################################################################################################
     )
 
@@ -411,7 +412,16 @@ xpid_label = dict(
         RS20          = 'RS20',  # Estimated ratio only on mountain ridges
         RS21          = 'RS',  # PHD committee
         RS22          = 'RS22',  # Test qq adjustment
+        RS23          = 'RS23',  # Test qq adjustment
     )
+
+colors = dict(
+    raw       = 'Grey',
+    antilopec = 'orange',
+    RS21      = 'red',
+    PF31      = 'green',
+    KD35      = 'blue',
+)
 
 def nearest(array, value):
     """ Find element of "array" the closer to 'value' """
@@ -452,8 +462,8 @@ class Evaluation(object):
 
         simu = simu[~np.isnan(obs)]
         obs = obs[~np.isnan(obs)]
-        #simu = simu[obs>1]  # TODO : TMP !!!!!
-        #obs=obs[obs>1]  # TODO : TMP !!!!!
+        simu = simu[obs>1]  # TODO : TMP !!!!!
+        obs=obs[obs>1]  # TODO : TMP !!!!!
 
         if np.shape(simu) == np.shape(obs):  # "Simulation" déterministe
             bias = simu - obs
@@ -1173,10 +1183,10 @@ class Evaluation(object):
         for product in products:  # Only for ensemble simulations
             spread, error, rr = self.spread_skill(self.data[product].data.reshape(-1, 16), self.data.obs.data.flatten())
             tools.plot_scatter(error, spread, 'Error (mm)', 'Spread (mm)', f"spread_skill_{product}.pdf", savedir, color=rr)
-            tools.plot_scatter(rr, error, 'Precipitation (mm)', 'Error (mm)', f"error_vs_intensity_{product}.pdf", savedir)
-            tools.plot_scatter(rr, spread, 'Precipitation (mm)', 'Spread (mm)', f"spread_vs_intensity_{product}.pdf", savedir)
-            tools.plot_scatter(rr, spread/error, 'Precipitation (mm)', 'Spread / Error', f"spread_over_error_vs_intensity_{product}.pdf", savedir)
-            tools.plot_scatter(error, spread/error, 'Error (mm)', 'Spread / Error', f"spread_over_error_vs_error_{product}.pdf", savedir)
+            #tools.plot_scatter(rr, error, 'Precipitation (mm)', 'Error (mm)', f"error_vs_intensity_{product}.pdf", savedir)
+            #tools.plot_scatter(rr, spread, 'Precipitation (mm)', 'Spread (mm)', f"spread_vs_intensity_{product}.pdf", savedir)
+            #tools.plot_scatter(rr, spread/error, 'Precipitation (mm)', 'Spread / Error', f"spread_over_error_vs_intensity_{product}.pdf", savedir)
+            #tools.plot_scatter(error, spread/error, 'Error (mm)', 'Spread / Error', f"spread_over_error_vs_error_{product}.pdf", savedir)
 #            fig, ax = plt.subplots()
 #            ax.scatter(error, spread)
 #            vmax = max(np.max(spread), np.max(error))
@@ -1309,7 +1319,7 @@ class Evaluation(object):
                 x = self.scores.loc[{'score':score}][product].data
                 add_num_poste(ax, pos, x)
                 print(score, product)
-                labels.append(self.add_label(ax.violinplot(x[~np.isnan(x)], showmeans=True, positions=[pos]), xpid_label[product]))
+                labels.append(self.add_label(ax.violinplot(x[~np.isnan(x)], showmeans=True, positions=[pos]), xpid_label[product], color=colors[product]))
                 if score == 'bias':
                     ax.axhline(color='k')
                 if score == 'ratio':
@@ -1362,7 +1372,7 @@ class Evaluation(object):
             brier = np.array([])
             for threshold in self.thresholds:
                 brier = np.append(brier, np.mean(self.scores.loc[{'score':f'brier_{int(threshold*10)}'}][product].data))
-            ax.plot(self.thresholds, brier, label=xpid_label[product], linewidth=2)
+            ax.plot(self.thresholds, brier, label=xpid_label[product], linewidth=2, color=colors[product])
             #ax.semilogx(self.thresholds, brier, label=xpid_label[product], linewidth=3)
         ax.legend(fontsize=18)
         ax.set_ylabel('Brier Score', fontsize=16)
@@ -1380,8 +1390,17 @@ class Evaluation(object):
         if color is None:
             color = violin["bodies"][0].get_facecolor().flatten()
         else:
-            violin["bodies"][0].set_facecolor(color)
-            violin["bodies"][0].set_edgecolor(color)
+            violin["bodies"][0].set_color(color)
+            violin['cmeans'].set_color(color)
+            violin['cmaxes'].set_color(color)
+            violin['cmins'].set_color(color)
+            violin['cbars'].set_color(color)
+            #for item in violin.keys():
+            #    item.set_color(color)
+            #violin["bodies"][0].set_facecolors(color)
+            #violin["bodies"][0].set_facecolor(color)
+            #violin["bodies"][0].set_edgecolors(color)
+            #violin["bodies"][0].set_edgecolor(color)
 
         return (mpatches.Patch(color=color), label)
 
