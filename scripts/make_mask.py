@@ -102,10 +102,10 @@ max_dist = 0.5
 if domain == 'pyr':
     fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_{domain}.csv')
 else:
-    #fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_alp.csv')
+    fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_alp.csv')
     #fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_alpes_10_obs_auto.csv')
     #fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_alpes_obs_auto.csv')
-    fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_alpes_obs_nivometeo_antilope_debiaise.csv')
+    #fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_alpes_obs_nivometeo_antilope_debiaise.csv')
 
 
 landmarks = {
@@ -344,6 +344,8 @@ def plot(antilope, datebegin, dateend, categories=True, biascorrection=False, sc
         fig, ax = plt.subplots(figsize=(19,8))
     elif domain == 'HautesAlpes':
         fig, ax = plt.subplots(figsize=(14,7))
+    elif domain == 'MontBlanc':
+        fig, ax = plt.subplots(figsize=(20,10))
     else:
         fig, ax = plt.subplots()
 
@@ -639,10 +641,11 @@ def ratio_estimation(field, model=None, moving_window=25):
     used_scores = []
 
     if model is not None:
-        ratio_modele = model.rr_cumul / uniform_filter(model.rr_cumul.data, int(d0*100))  # ~ gradient vertical modele
+        ratio_arome = model.rr_cumul / uniform_filter(model.rr_cumul.data, int(d0*100))  # ~ gradient vertical modele
         #ratio_modele.data = uniform_filter(ratio_modele.data, 30)
-        ratio_modele.data = uniform_filter(ratio_modele.data, 15)
-        plot_and_save(ratio_modele, 'model_gradient' , vmin=0.8, vmax=1.2, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap)
+        #ratio_modele.data = uniform_filter(ratio_modele.data, 15)
+        ratio_arome.data = uniform_filter(ratio_arome.data, 15)
+        plot_and_save(ratio_arome, 'arome_gradient' , vmin=0.8, vmax=1.2, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap)
 
     # Mont-Blanc
 #    xx = np.where(field.lon==6.82)[0][0]
@@ -708,7 +711,7 @@ def ratio_estimation(field, model=None, moving_window=25):
             if h0 is not None:
                 w = np.exp(-(dist/d0))*np.exp(-(np.abs(elevation_dist)/h0))
             else:
-                w = np.round(1/(1+dist), 3)
+                w = np.round(1/(1+dist)**2, 3)
                 #w = np.round(np.exp(-(dist/d0)), 3)  # Propagates reference score further
                 #w = np.round(np.exp(-(dist**2/d0)), 3)
                 #w = np.round(np.exp(-(dist/d0)**2), 3)  # Sticks more to the reference
@@ -762,6 +765,11 @@ def ratio_estimation(field, model=None, moving_window=25):
     tmp = to_xarray(W, field, varname='mean_ratio')
     plot_and_save(tmp, "Total_weight", cmap=plt.cm.viridis, vmin=0.)
     mean_ratio = np.divide(np.sum(weights*ratios, axis=0), W)
+
+
+    #mean_ratio = mean_ratio / ratio_arome.data  # TODO : TMP !!!!
+
+
     mean_ratio[np.isinf(mean_ratio)] = np.nan
     # Equivalent aux 2 lignes précédentes
     #mean_ratio = np.sum(weights*ratios, axis=0)/W
@@ -791,38 +799,41 @@ def ratio_estimation(field, model=None, moving_window=25):
     K[W==0] = 0
     # Plot
     tmp = to_xarray(K, field, varname='K')
-    plot_and_save(tmp, "K", cmap=plt.cm.viridis)
-    w1 = K / (1 + K)  # normalisation
-    w1[np.isnan(w1)] = 0
+    plot_and_save(tmp, "K", cmap=plt.cm.viridis, vmin=1)
+    w1 = np.exp(-1/K)
+    #w1 = K / (1 + K)  # normalisation
+    #w1[np.isnan(w1)] = 0
     w0 = 1 - w1
 
-#    #w1 = W/(1+D) --> doesn't work
+    #w1 = W/(1+D) --> doesn't work
 #    X = W/D  # Identifies ridges !
-#    w1 = X / np.nanmean(X)
 #    X = 1/D
-#    #w1 = X/np.nanmax(X)  # Ratio only over ridges
-#    w1 = X/np.nanmean(X)
+#    X = np.mean(weights, axis=0)/D  # Identifies ridges !
+#    w1 = X
+#    w1 = X / np.nanmean(X)
+#    w1 = np.exp(-(D+D/W))
 #    #w1 = X
-#    w1[D==0] = 1
+#    #w1[D==0] = 1
 #    #w1 = w1 / (np.nanmax(w1)-np.nanmin(w1))
 #    tmp = to_xarray(w1, field, varname='w1')
 #    plot_and_save(tmp, "Relative_weight", cmap=plt.cm.viridis)
-#    w1 = w1/(1+w1)
+#    #w1 = w1/(1+w1)
 #    #w0 = N/W  # = 1/np.mean(W)
 #    #w1 = w1/(w0+w1)
 #    w0 = 1 - w1
 #    w0[W==0] = 1
 #    #w1 = 1 - w0
-#
-#    tmp = to_xarray(W/D, field, varname='w1')
-#    plot_and_save(tmp, "W_over_D", cmap=plt.cm.viridis)
-#    # TODO : include ratio dispersion in error estimation
-#    #w0 = 1-W  # Ensures that estimated ratio for pixels with no information around stay near 1
-#
-#    #w0[w0<0] = 0
-#    #w0 = (1+D) / relativeweight  # Ensures that estimated ratio for pixels with no information around stay near 1
-#    #w0[W==0] = 1  # Ensures that estimated ratio for pixels with no information around stay 1
-#    #w0[np.isnan(w1)] = 1
+
+    #tmp = to_xarray(W/D, field, varname='w1')
+    tmp = to_xarray(D/W, field, varname='w1')
+    plot_and_save(tmp, "D_over_W", cmap=plt.cm.viridis)
+    # TODO : include ratio dispersion in error estimation
+    #w0 = 1-W  # Ensures that estimated ratio for pixels with no information around stay near 1
+
+    #w0[w0<0] = 0
+    #w0 = (1+D) / relativeweight  # Ensures that estimated ratio for pixels with no information around stay near 1
+    #w0[W==0] = 1  # Ensures that estimated ratio for pixels with no information around stay 1
+    #w0[np.isnan(w1)] = 1
 
     tmp = to_xarray(w0/(w0+w1), field, varname='W0')
     plot_and_save(tmp, "W0", cmap=plt.cm.viridis, vmin=0, vmax=1)
@@ -872,9 +883,8 @@ def ratio_estimation(field, model=None, moving_window=25):
     #observation_error = ratio_field.copy()
     #observation_error[np.where(observation_error<1)] = 1/observation_error[np.where(observation_error<1)]
     #observation_error = ratio_field - 1
-    #observation_error = ratio_field - 1
-    observation_error = mean_ratio - 1
-    #observation_error = mean_ratio - 1 + D  #TODO : gérer le problème de signe induit !
+    observation_error = ratio_field - 1
+    #observation_error = mean_ratio - 1
     neg = np.where(observation_error.data<0)
     pos= np.where(observation_error.data>=0)
     #observation_error.data[neg] = 21.391*observation_error.data[neg]  # r=0.5 ==> err=-10.7  # 2018/2019
@@ -900,11 +910,11 @@ def ratio_estimation(field, model=None, moving_window=25):
     # - Increasing w1 (more confidence in the method)
     # - Estimation dispersion (contradictory informations) for low observation errors
     # TODO add term independent of observation error to increase errors where the method estimates a low error but with high uncertainty
-    uncertainty = 1 + (1+w1) * observation_error
+    uncertainty = (1+w1) * observation_error + (1+D) * (np.abs(mean_ratio - 1) + np.exp(-np.abs(mean_ratio - 1)))
     #uncertainty = 1 + observation_error*w1+D/W
     #uncertainty = 1 + w1*observation_error/(1+w1)
     uncertainty.data[np.isnan(field.rr_cumul.data)] = np.nanmax(uncertainty.data)
-    uncertainty.data = uniform_filter(uncertainty.data, size=3)
+    #uncertainty.data = uniform_filter(uncertainty.data, size=5)
     uncertainty = uncertainty.rename('Uncertainty')
     confidence = uncertainty.copy()
     confidence.data = 1/confidence.data
@@ -932,7 +942,7 @@ def ratio_estimation(field, model=None, moving_window=25):
         #plot_and_save(np.abs(observation_error), errorname, vmin=0, vmax=15, cmap=plt.cm.Greys, scores=scores)
         #plot_and_save(observation_error, errorname, vmin=1, vmax=15, cmap=plt.cm.YlOrBr, scores=scores)
         plot_and_save(confidence, confidencename, vmin=0, cmap=plt.cm.Greens)
-        plot_and_save(uncertainty, uncertaintyname, vmin=1, vmax=30, cmap=plt.cm.YlOrBr)
+        plot_and_save(uncertainty, uncertaintyname, vmin=1, vmax=20, cmap=plt.cm.YlOrBr)
     elif domain == 'GrandesRousses':
         plot_and_save(ratio_field, rationame, vmin=0.6, vmax=1.4, cmap=plt.cm.coolwarm, scores=scores)
         #plot_and_save(observation_error, errorname, vmin=-6, vmax=6, cmap=plt.cm.coolwarm, scores=scores)
