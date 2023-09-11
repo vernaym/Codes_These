@@ -261,19 +261,19 @@ def plot(mu, std, N, obs, obs_std, vmin, vmax, distribution='norm', background=T
     # 1. Plot background
     if background:
         #ax0.plot(ensemble, norm.pdf(ensemble, loc=mu, scale=std), label=f'Background (mean={mu}mm, std={std}mm)', color='k')
-        ax0 = plot_distribution(ax0, mu, std, color='k', distribution='norm', linewidth=0.5)  # Plot background distribution
+        #ax0 = plot_distribution(ax0, mu, std, color='k', distribution='norm', linewidth=0.5)  # Plot background distribution
         weights = norm.pdf(ensemble, loc=obs, scale=obs_std)
         if distribution == 'norm':
             #ax0.plot(ensemble, norm.pdf(ensemble, loc=mu, scale=std), color='k')
             #ax0.bar(ensemble, norm.pdf(ensemble, loc=mu, scale=std), color='k', width=0.1)  # To plot bars the size of the background distribution
-            #ax0.bar(ensemble, norm.pdf(obs, loc=obs, scale=obs_std), color='k', width=0.1)  # To plot bar of the same size than the one of the observation
+            ax0.bar(ensemble, norm.pdf(obs, loc=obs, scale=obs_std), color='k', width=0.1)  # To plot bar of the same size than the one of the observation
             #ax0.bar(ensemble, weights, color='k', width=0.1)  # To plot bar with a size proportionnal to likelyhood
-            ax0.plot([], [], color='k', linestyle='-', label='Background', linewidth=1)  # Add background label
+            #ax0.plot([], [], color='k', linestyle='-', label='Background', linewidth=1)  # Add background label
         elif distribution == 'gamma':
             ax0.plot(ensemble, gamma.pdf(ensemble, k, scale=theta), color='k', linestyle='--', label='Gamma', linewidth=0.5)
             ax0.plot(np.NaN, np.NaN, color='k', label='Norm', linewidth=1)  # To add a legend entry without plotting anything
-        ax1.plot(mu, [3], color='k', marker='|', markersize=100)  # Plot ensemble mean on axis bellow
-        ax1.plot([mu-std, mu+std], [1.5, 1.5], marker='|', markersize=10, color='k', linewidth=1, linestyle='--')  # Plot background error on axis bellow
+        #ax1.plot(mu, [3], color='k', marker='|', markersize=100)  # Plot ensemble mean on axis bellow
+        #ax1.plot([mu-std, mu+std], [1.5, 1.5], marker='|', markersize=10, color='k', linewidth=1, linestyle='--')  # Plot background error on axis bellow
 
         #ax0.hist(ensemble,density=True,bins=100, color='k', alpha=0.4, label='Background')
         # Draw values to illustrate members displacements
@@ -311,9 +311,9 @@ def plot(mu, std, N, obs, obs_std, vmin, vmax, distribution='norm', background=T
         for member in range(16):
             gauss = np.random.normal(loc=obs, scale=obs_std, size=1)[0]
             ax0.bar(gauss, norm.pdf(gauss, loc=obs, scale=obs_std), color='red', width=0.05)
-    ax1.plot(obs, [3], color='red', marker='|', markersize=100)  # Plot obs on axis bellow
+    #ax1.plot(obs, [3], color='red', marker='|', markersize=100)  # Plot obs on axis bellow
     #ax1.plot([obs-obs_std, obs+obs_std], [1, 1], marker='|', markersize=10, color='red', linewidth=1, linestyle='--')  # PLot obs error on axis bellow
-    ax1.plot([obs-obs_std, obs+obs_std], [1.5, 1.5], marker='|', markersize=10, color='red', linewidth=1, linestyle='--')  # PLot obs error on axis bellow
+    #ax1.plot([obs-obs_std, obs+obs_std], [1.5, 1.5], marker='|', markersize=10, color='red', linewidth=1, linestyle='--')  # PLot obs error on axis bellow
     #ax1.plot([obs-obs_std, obs+obs_std], [2, 2], marker='|', markersize=10, color='red', linewidth=1, linestyle='--')
 
     # 3. EnKF analysis
@@ -374,8 +374,8 @@ def plot(mu, std, N, obs, obs_std, vmin, vmax, distribution='norm', background=T
 
     # Plot displacment arrows
     #if background or pf:
-    for i in range(len(drawbackground)):  # Plot only 2 members for displacment illustration
-    #for i in range(len(ensemble)):  # Plot all members (weighting step illustration)
+    #for i in range(len(drawbackground)):  # Plot only 2 members for displacment illustration
+    for i in range(len(ensemble)):  # Plot all members (weighting step illustration)
         #ax1.arrow(drawbackground[i], 1, drawenkf[i]-drawbackground[i], 0, head_width=0.05, head_length=0.1, fc='k', ec='k', linewidth=0.5)
         if enkf:
             ax1.scatter(drawbackground, [1]*len(drawbackground), s=50, facecolors='none', edgecolors='k')
@@ -385,10 +385,8 @@ def plot(mu, std, N, obs, obs_std, vmin, vmax, distribution='norm', background=T
             #ax1.scatter(drawbackground[i], 2, s=weights[i]*400, facecolors='none', edgecolors='k')  # Circel size proportionnal to weight
             ax1.arrow(drawbackground[i], 2, drawpf[i]-drawbackground[i], 0, head_width=0.5, head_length=1, linewidth=0.5, linestyle=':', length_includes_head=True, color='k')
         if background:
-            #ax1.scatter(ensemble[i], 2, s=weights[i]*1500, facecolors='none', edgecolors='k')
+            ax1.scatter(ensemble[i], 2, s=weights[i]*1500, facecolors='none', edgecolors='k')
             pass
-
-
 
     ax0.get_xaxis().set_visible(False)
     ax0.spines['top'].set_visible(False)
@@ -397,7 +395,8 @@ def plot(mu, std, N, obs, obs_std, vmin, vmax, distribution='norm', background=T
     ax0.set_xlim(left=vmin, right=vmax)
 #    ax0.set_ylim(top=min(0.7, max(?))  TODO : définir l'échelle dynamiquement
     #ax0.set_ylim(top=0.12)
-    ax0.set_ylim(top=0.30)
+    ax0.set_ylim(top=0.10)
+    #ax0.set_ylim(top=0.30)
     ax0.legend(fontsize=10)
 
     ax1.get_yaxis().set_visible(False)
@@ -437,15 +436,15 @@ N = 16  # Ensemble size
 #pdb.set_trace()
 
 
-mu  = 40  # ensemble mean
+mu  = 35  # ensemble mean
 #mu  = 10  # ensemble mean
-std = 8  # ensemble dispersion / std
+std = 12  # ensemble dispersion / std
 #std = 8  # ensemble dispersion / std
 #std = 5  # ensemble dispersion / std
-obs = 15
-obs_std = 3
+obs = 25
+obs_std = 5
 vmin = 0
 vmax = 60
-plot(mu, std, N, obs, obs_std, vmin, vmax, background=True, rs=False, pf=True, enkf=False)
+plot(mu, std, N, obs, obs_std, vmin, vmax, background=True, rs=False, pf=False, enkf=False)
 #plot(mu, std, N, obs, obs_std, vmin, vmax, distribution='gamma', pf=True, enkf=False)
 #plot(mu, std, N, obs, obs_std, vmin, vmax, distribution='gamma')
