@@ -302,7 +302,7 @@ class AntilopePreprocessing(object):
 
         if 'analysis' in antilope.variables.keys():
             antilope = antilope.rename({'analysis':'analysis_save'})  # !!!!! TODO : TMP !!!!!!!
-            antilope = antilope.rename({'rr':'analysis'})
+            #antilope = antilope.rename({'rr':'analysis'})
 
         if 'analysis' not in antilope.variables.keys():  # File already pre-processed
             if 'time' in antilope.coords:
@@ -312,11 +312,11 @@ class AntilopePreprocessing(object):
             # TODO : commencer par la correction dynamique puis appliquer le débiaisage (facteur à modifier pour prendre en compte le biais moyen après correction ?)
 
             # 1. Static de-biasing :
-            antilope = self.debiasing(antilope)
+            #antilope = self.debiasing(antilope)
             mask = xr.open_dataset(os.path.join(workdir, f"Estimated_ratio.nc"))
             #mask = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask/alp", f"Estimated_ratio.nc"))  # !!!!! TODO : TMP !!!!!
 
-            antilope["ratio"] = mask.ratio  # Fill missing point with NaNs
+            antilope["ratio"] = mask.Ratio  # Fill missing point with NaNs
             antilope["rr_debiaise"] = (antilope.rr/antilope.ratio).fillna(antilope.rr)  # Fill NaN values with the original ANTILOPE value
 
             # 2. Dynamic correction (localisation)
@@ -336,7 +336,7 @@ class AntilopePreprocessing(object):
             pond = pond.dot(diags(np.exp(-(std-1)).flatten(), 0))  # std is in [1, inf[
             obs = antilope.rr_debiaise.sel(({'lat':np.intersect1d(error.lat.data, antilope.lat.data), 'lon':np.intersect1d(error.lon.data, antilope.lon.data)})).data.flatten()
 
-            new = dynamic_correction(obs, pond)  # Update obs
+            new, mean, sd = dynamic_correction(obs, pond)  # Update obs
             antilope['obs'] = xr.DataArray(
                     data   = new.reshape((len(mask.lat), len(mask.lon))),
                     dims   = ["lat", "lon"],
@@ -345,9 +345,10 @@ class AntilopePreprocessing(object):
             antilope['obs'] = antilope['obs'].fillna(antilope.rr)
 
 #            antilope = antilope.rename({'rr_debiaise':'analysis'})
+            antilope = antilope.rename({'obs':'analysis'})
 
             # 3. Nivometeo Assimilation
-            antilope = self.nivometeo_assimilation(antilope, pond)
+            #antilope = self.nivometeo_assimilation(antilope, pond)
 
 
             #antilope.to_netcdf(self.filename)  # WARNING : overwrite the initial file !!  TMP !
