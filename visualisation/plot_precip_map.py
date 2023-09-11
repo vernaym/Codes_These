@@ -51,11 +51,12 @@ from scipy.spatial import cKDTree
 #    usage()
 #    raise e
 
-ld = 0.05
-max_dist = ld*3
+ld = 0.1
+max_dist = ld*2
 #datadir = '/home/vernaym/workdir/visualisation'
 rootdir = '/d0/intra-cen/ANTILOPE'  # On sxcen
-rootdir = '.'  # TODO : TMP !
+if not os.path.exists(rootdir):
+    rootdir = '.'
 datadir = '.'
 token = open("/home/vernaym/.mapbox/token").read() # Token from mapbox account
 
@@ -82,21 +83,21 @@ class PrecipitationAnalysis(object):
         https://stackoverflow.com/questions/71780189/how-to-show-only-boundaries-no-fill-of-a-shapefile-in-python-plotly-express
         """
 
-        # 1. ANTILOPE
-        if self.antilope is not None:
-            self.plot_antilope()
-
-        # 2. Nivométéo observations
-        self.add_ponctual_obs(self.nivometeo, color='red', name='Nivometeo')
-
-        # 3. Automatic observations
-        self.add_ponctual_obs(self.auto, color='black', name='Automatic stations')
-
-        # 4. SAFRAN
+        # 1. SAFRAN (plot first to be bellox other layers)
         if self.safran is not None:
             self.plot_safran()
         else:
             self.read_safran_massifs()
+
+        # 2. ANTILOPE
+        if self.antilope is not None:
+            self.plot_antilope()
+
+        # 3. Nivométéo observations
+        self.add_ponctual_obs(self.nivometeo, color='red', name='Nivometeo')
+
+        # 4. Automatic observations
+        self.add_ponctual_obs(self.auto, color='black', name='Automatic stations')
 
         self.update_figure()
 
@@ -105,7 +106,11 @@ class PrecipitationAnalysis(object):
 
     def save(self):
         #fig.write_json('test.json')
-        self.fig.write_html(os.path.join(rootdir, self.domain, f"precipitation_{self.date.strftime('%Y%m%d')}.html"))
+        if self.var == 'analysis':
+            self.fig.write_html(os.path.join(rootdir, self.domain, f"precipitation_{self.date.strftime('%Y%m%d')}.html"))
+        else:
+            self.fig.write_html(os.path.join(rootdir, self.domain, f"precipitation_{self.var}_{self.date.strftime('%Y%m%d')}.html"))
+
 
     def plot_antilope(self):
         """
@@ -123,15 +128,8 @@ class PrecipitationAnalysis(object):
         y = y.flatten()
         rr = self.antilope[self.var].data.flatten()  # Corrected obs
         error = self.antilope['error'].data.flatten()
-        #    # normalisation de l'erreur entre low and high
-        # TODO : revoir la méthode pour convertir l'erreur en une dimension de marker plotly
-        low  = 5
-        high = 30
-        def nan_ptp(a):
-            return np.ptp(a[np.isfinite(a)])
-        error = np.abs(error)
-        error = low + (error - np.nanmin(error))/(nan_ptp(error)/high)
-        error = low + high/error
+
+        # TODO : Add plot of raw ANTILOPE field
 
         alti = self.antilope['elevation'].data.flatten()
         df = pd.DataFrame(
@@ -140,29 +138,44 @@ class PrecipitationAnalysis(object):
                 index   = range(len(rr)),
             )
         select = dict()
-        for i,elevation in enumerate(range(0, 2500, 1000)):
-        # TODO : Avoid plot data multiple time (use button ?) --> ABSOLUTE PRIORITY !!
+        visible ='legendonly'  # Does not work as intended : https://community.plotly.com/t/legendonly-doesnt-work-anymore-in-scattermapbox/72822
+        visible = True
+        elevation_range = [0, 500, 1000, 1500, 2000, 2500, 3000]
+        for i,elevation in enumerate(elevation_range):
+        # Avoid to plot data multiple time --> plot by elevation bands
         # Plotting the full 1-km ANTILOPE domain takes about 12M memory...
         # https://plotly.com/python/v3/selection-events/
             if elevation == 0:
-                # Make all data visible by default
-                visible = True
-                name = 'ANTILOPE'
-                select[i] = np.where((rr>0.1) & (~np.isnan(error)))
                 showscale = True
             else:
-                select[i]  = np.where((rr>0.1) & (alti>elevation) & (~np.isnan(error)))
-                visible ='legendonly'  # Does not work as intended : https://community.plotly.com/t/legendonly-doesnt-work-anymore-in-scattermapbox/72822
-                visible = True
-                name    = f'ANTILOPE>{elevation:d}m'
                 showscale = False
+            z0 = elevation_range[i]
+            if i+1 < len(elevation_range):
+                z1 = elevation_range[i+1]
+                mask  = np.where((rr>0.05) & (alti>=z0) & (alti<z1) & (~np.isnan(error)))
+            else:
+                mask  = np.where((rr>0.05) & (alti>=z0) & (~np.isnan(error)))
+            name    = f'ANTILOPE>{z0:d}m'
 
-            self.fig.add_trace(self.add_antilope_scatter(df, name, select[i], showscale=showscale, uncertainty=True))
+            self.fig.add_trace(self.add_antilope_scatter(df, name, mask, showscale=showscale, uncertainty=True))
             #if i == 0:
                 # TODO : useless (same data ==> use a button !)
             #    self.fig = self.fig.add_trace(self.add_antilope_scatter(df, name, select[i], uncertainty=False))
 
     def add_antilope_scatter(self, df, name, mask, showscale=False,  uncertainty=True, visible=True):
+        # Normalisation de l'erreur entre low and high
+        # Linear decrease between high and low marker size values
+        low  = 5
+        high = 15
+        def nan_ptp(a):
+            return np.ptp(a[np.isfinite(a)])
+        rr = df.rr.values[mask]
+        error = df.error.values[mask]
+        errorsize = high - (high-low)*error/rr
+        errorsize[errorsize<0] = 5
+        #error = low + (error - np.nanmin(error))/(nan_ptp(error)/high)
+        #error = low + high/error
+
         return go.Scattermapbox(
                     lon  = df.lon.values[mask],
                     lat  = df.lat.values[mask],
@@ -176,17 +189,16 @@ class PrecipitationAnalysis(object):
                     #selected = go.scattermapbox.Selected(marker={"size":50}),
                     customdata = np.stack((df.alti.values[mask], df.rr.values[mask], df.error.values[mask]), axis=-1),
                     hovertemplate =
-                        '<b>Altitude</b>: %{customdata[0]:d}m<br>'+
-                        '<b>Precipitation</b>: %{customdata[1]:f}<br>'+
-                        '<b>Incertitude</b>: %{customdata[2]:f}<br>',
+                        '<b>Altitude (m)</b>: %{customdata[0]:d}m<br>'+
+                        '<b>Precipitation (mm)</b>: %{customdata[1]:.2f}mm<br>'+
+                        '<b>Incertitude (mm)</b>: %{customdata[2]:.2f}mm<br>',
                     marker = dict(
                         #color = antilope.rr.data.flatten(),
                         color = df.rr.values[mask],
                         cmin  = 0,
                         #cmax  = np.nanmax(self.antilope.rr.data.flatten()),
                         cmax  = np.nanmax(self.antilope.analysis.data.flatten()),
-                        # TODO : revoir la conversion erreur --> taille + ajouter une fourchette dans le text flottan (genre "10mm d'incertitude")
-                        size  = np.nan_to_num(df.error.values[mask], nan=5) if uncertainty else 10,
+                        size  = np.nan_to_num(errorsize, nan=5) if uncertainty else 10,
                         #opacity=0.5,
                         #colorscale = 'YlGnBu',
                         colorscale = 'dense',

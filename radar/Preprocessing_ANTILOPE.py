@@ -267,7 +267,6 @@ def random_draw(obs, sd, ratio=None, sd2=None, distribution='gamma'):
             gamma = np.random.gamma(k, scale=theta)  # Draw random element from normal distribution (>0 only ==> shift necessary to convert into perturbations)
             ana = ana + sd2*(gamma-shift)
 
-
     else:
         print('Error : unknown distribution')
         return None
@@ -324,7 +323,6 @@ class AntilopePreprocessing(object):
             error = xr.open_dataarray(os.path.join(workdir, 'Observation_error.nc'))
             #error = xr.open_dataarray(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask/alp", 'Observation_error.nc'))
             std = error.data
-            antilope['error'] = np.abs(error)
             codist = os.path.join(workdir, f'codistance_max_dist_{max_dist:.2f}_{domain}.npz')
             if not os.path.exists(codist):
                 # Compute inter-distances
@@ -333,16 +331,28 @@ class AntilopePreprocessing(object):
                 scipy.sparse.save_npz(codist, pond, compressed=False)  # TODO comprendre pourquoi ca ne marche pas pour éviter de recalculer les codistances à chaque fois
             else:
                 pond = scipy.sparse.load_npz(codist)
-            pond = pond.dot(diags(np.exp(-(std-1)).flatten(), 0))  # std is in [1, inf[
+            #pond = pond.dot(diags(np.exp(-(std-1)).flatten(), 0))  # std is in [1, inf[
+            pond = pond.dot(diags(1/std.flatten(), 0))  # std is in [1, inf[
             obs = antilope.rr_debiaise.sel(({'lat':np.intersect1d(error.lat.data, antilope.lat.data), 'lon':np.intersect1d(error.lon.data, antilope.lon.data)})).data.flatten()
 
-            new, mean, sd = dynamic_correction(obs, pond)  # Update obs
+            new, mean, sd = dynamic_correction(obs, pond)  # Update obs (new) and get observation error (sd)
             antilope['obs'] = xr.DataArray(
                     data   = new.reshape((len(mask.lat), len(mask.lon))),
                     dims   = ["lat", "lon"],
                     coords = dict(lon=mask.lon, lat=mask.lat)
                 )
-            antilope['obs'] = antilope['obs'].fillna(antilope.rr)
+            # Observation error = WMA spread (+30% of the precipitation field ?)
+            antilope['error'] = xr.DataArray(
+                    data   = sd.reshape((len(mask.lat), len(mask.lon))),
+                    #data   = sd.reshape((len(mask.lat), len(mask.lon))) + 0.3 * new.reshape((len(mask.lat), len(mask.lon))),
+                    dims   = ["lat", "lon"],
+                    coords = dict(lon=mask.lon, lat=mask.lat)
+                )
+            #antilope['error'] = sd.reshape((len(mask.lat), len(mask.lon))) + 0.3 * antilope['obs']
+
+            # Fill potential missing data with nan
+            #antilope['obs'] = antilope['obs'].fillna(antilope.rr)
+            #antilope['error'] = antilope['error'].fillna(antilope.rr)
 
 #            antilope = antilope.rename({'rr_debiaise':'analysis'})
             antilope = antilope.rename({'obs':'analysis'})
@@ -350,9 +360,7 @@ class AntilopePreprocessing(object):
             # 3. Nivometeo Assimilation
             #antilope = self.nivometeo_assimilation(antilope, pond)
 
-
             #antilope.to_netcdf(self.filename)  # WARNING : overwrite the initial file !!  TMP !
-
 
         return antilope
 

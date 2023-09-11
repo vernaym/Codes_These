@@ -37,8 +37,8 @@ except Exception as e:
 datebegin = date.replace(hour=6)
 dateend   = datebegin + Period(hours=24)
 
-datadir = '/home/vernaym/workdir/visualisation'
-#datadir = '/home/vernaym/extraction_obs'  # On sxcen
+#datadir = '/home/vernaym/workdir/visualisation'
+datadir = '/home/vernaym/extraction_obs'  # On sxcen
 
 domain = 'alp'
 
@@ -71,11 +71,12 @@ def get_antilope():
     return antilope
 
 def get_nivometeo():
-    fic_score = os.path.join(datadir, f'obs_nivometeo_daily_RR_{datebegin.ymd}_{dateend.ymd}.csv')
+    fic_score = os.path.join(datadir, f'obs_nivometeo_daily_RR_{datebegin.ymd}_{datebegin.ymd}.csv')
     if os.path.exists(fic_score):
         nivometeo = pd.read_csv(fic_score, sep=';', parse_dates=['date'],
                 dtype={'num_poste':int, 'nom':str, 'alti':int, 'lat':float, 'lon':float, 'massif':int, 'rr': float, 'reseau_poste': int}, na_values=['--'])
-        nivometeo = nivometeo.loc[nivometeo["date"]==np.datetime64(date)]
+        #nivometeo = nivometeo.loc[nivometeo["date"]==np.datetime64(date)+np.timedelta64(1,'D')]  # Useless in real time
+        nivometeo = nivometeo.loc[nivometeo["date"]==np.datetime64(date)]  # Useless in real time
         if len(nivometeo)>0:
             return nivometeo
         else:
@@ -123,22 +124,24 @@ def get_safran():
         namespace      = 'vortex.multi.fr',
     ),
 
-
-    safran = xr.open_dataset(filename)
-    #safran = safran.where(safran.ZS==1500., drop=True)
-    safran['rr'] = (safran['Rainf']+safran['Snowf'])*3600.
-    dates = pd.date_range(datebegin+Period(hours=1), dateend, freq='1H')
-    safran = safran.loc[{'time':dates}]
-    #safran['rr'] = safran.where((safran.time>np.datetime64(datebegin)) & (safran.time<=np.datetime64(dateend)), drop=True)  # This adds time dimension to ZS variable
-    safran['rr'] = safran['rr'].sum('time')
-    return safran
+    if os.path.exists(filename):
+        safran = xr.open_dataset(filename)
+        #safran = safran.where(safran.ZS==1500., drop=True)
+        safran['rr'] = (safran['Rainf']+safran['Snowf'])*3600.
+        dates = pd.date_range(datebegin+Period(hours=1), dateend, freq='1H')
+        safran = safran.loc[{'time':dates}]
+        #safran['rr'] = safran.where((safran.time>np.datetime64(datebegin)) & (safran.time<=np.datetime64(dateend)), drop=True)  # This adds time dimension to ZS variable
+        safran['rr'] = safran['rr'].sum('time')
+        return safran
+    else:
+        return None
 
 # 1. Récupération de ANTILOPE depuis sotrtm35-sidev
 antilope = get_antilope()
 
 # 2. Récupération de l'analyse SAFRAN oper de 9h
-#safran = get_safran()
-safran = None
+safran = get_safran()
+#safran = None
 
 # 3. Read nivometeo observations
 nivometeo = get_nivometeo()
@@ -146,9 +149,10 @@ nivometeo = get_nivometeo()
 # 4. Read automatic observations
 auto = get_obs_auto()
 
-myplot = PrecipitationAnalysis(date, 'alp', antilope=antilope, nivometeo=nivometeo, auto=auto, safran=safran, var='analysis')
+myplot = PrecipitationAnalysis(date, 'alp', antilope=antilope, nivometeo=nivometeo, auto=auto, safran=safran, var='analysis')  # Plot corrected field
 myplot.plot()
 myplot.save()
-
-# TODO : enregistrer le html au bon endroit sur sxcen
+myplot = PrecipitationAnalysis(date, 'alp', antilope=antilope, nivometeo=nivometeo, auto=auto, safran=safran, var='rr')  # Plot raw ANTILOPE field
+myplot.plot()
+myplot.save()
 

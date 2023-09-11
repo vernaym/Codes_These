@@ -106,8 +106,8 @@ function remplissageSelectDate(){
   var today=new Date();
 
   today.setDate(today.getDate());
-  //On parcourt les 30 jours précédents
-  for (var i=0;i<30;i++){
+  //On parcourt les 365 jours précédents
+  for (var i=0;i<365;i++){
     def=false;
     if(i==0){
 	def=true;
