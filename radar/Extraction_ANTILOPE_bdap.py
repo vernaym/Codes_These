@@ -48,7 +48,8 @@ coords = dict(
     pyr = ['43500', '42000', '-2000', '3500'],
     cor = ['43000', '41000', '8000', '10500'],
     GrandesRousses = ['45250', '44750', '6000', '6500'],
-    ange = ['45240', '44990', '6010', '6490']
+    #ange = ['45240', '44990', '6010', '6490']
+    ange = ['45440', '44990', '5810', '6690']
 )
 
 # Pas en lat/lon de la grille
@@ -65,7 +66,9 @@ def parse_command_line():
 #    parser.add_argument('-o', '--output', help='Output name of generated files')
     parser.add_argument('-m', '--model', help='Model from which the data must be extracted',
             choices=['ANTILOPEQ', 'ANTILOPEJP1Q', 'ANTILOPEH', 'ANTILOPEJP1H'], default='ANTILOPEJP1Q')
-    parser.add_argument('-g', '--grid', help='BDAP grid name from which to extract data', default='FRANXL1S100')
+    # ANTILOPEQ disponible depuis le 2006070206 (grille FRAN0012)
+    parser.add_argument('-g', '--grid', help='BDAP grid name from which to extract data', default='FRANXL1S100', choices=['FRAN0012', 'FRANXL1S100'])
+    # La grille ANTILOPE FRANXL1S100 est disponible depuis le 23/11/2017
     parser.add_argument('-p', '--parameter', help='Parameter to extract', default='PRECIP')
     parser.add_argument('-l', '--level', help='Level to extract', default='SOL')
     parser.add_argument('-v', '--vortex', action='store_true', help='Store generated files on a vortex archive store')
@@ -193,7 +196,15 @@ class ExtractGrib(object):
         else:
             self.extract(parameter, level, ech)
             if os.path.isfile(self.gribname):
-                return True
+                if os.stat(self.gribname).st_size > 0:
+                    return True
+                else:
+                    self.grid = 'FRAN0012'
+                    self.extract(parameter, level, ech)
+                    if os.stat(self.gribname).st_size > 0:
+                        return True
+                    else:
+                        return False
             else:
                 return False
 
@@ -224,6 +235,7 @@ if __name__ == "__main__":
             for date in extract_period:
                 print(date.strftime('%Y%m%d%H'))
                 #if date.month in [1,2,3,4,11,12]:  # Consider only month with nivometeo observations
+                print('{0:s}_{1:s}.grib'.format(args.model, date.strftime('%Y%m%d%H')))
                 if not os.path.exists('{0:s}_{1:s}.grib'.format(args.model, date.strftime('%Y%m%d%H'))):
                     print(os.getcwd())
                     print(f'File {args.model}_{date.strftime("%Y%m%d%H")}.grib does not exist')
@@ -234,31 +246,44 @@ if __name__ == "__main__":
                     result = True
                     gribname = '{0:s}_{1:s}.grib'.format(args.model, date.strftime('%Y%m%d%H'))
                 if result:
-                    data = epygram.formats.resource(gribname, openmode='r', fmt='GRIB')
-                    #rr_field = data.readfield({'indicatorOfTypeOfLevel':1, 'paramId': 0, 'indicatorOfParameter': 61}, getdata= True)
-                    rr_field = data.readfield({'indicatorOfTypeOfLevel':1, 'paramId': 85029, 'indicatorOfParameter': 61}, getdata= True)
-                    metadata = data.get_message_at_position(0).asfield(getdata=False)
-                    geometry = metadata.geometry
-                    lon = geometry.get_lonlat_grid()[0]
-                    lat = geometry.get_lonlat_grid()[1]
-                    if rr24 is None:
-                        rr24 = np.array([rr_field.data.data,])
-                        shape = np.shape(rr_field.data.data)  # Save the data shape to fill missing dates with nan values
-                    else:
-                        rr24 = np.append(rr24, np.array([rr_field.data.data]), axis=0)
+                    try:
+                        data = epygram.formats.resource(gribname, openmode='r', fmt='GRIB')
+                        #rr_field = data.readfield({'indicatorOfTypeOfLevel':1, 'paramId': 0, 'indicatorOfParameter': 61}, getdata= True)
+                        rr_field = data.readfield({'indicatorOfTypeOfLevel':1, 'paramId': 85029, 'indicatorOfParameter': 61}, getdata= True)
+                        metadata = data.get_message_at_position(0).asfield(getdata=False)
+                        geometry = metadata.geometry
+                        lon = geometry.get_lonlat_grid()[0]
+                        lat = geometry.get_lonlat_grid()[1]
+                        if rr24 is None:
+                            rr24 = np.array([rr_field.data.data,])
+                            shape = np.shape(rr_field.data.data)  # Save the data shape to fill missing dates with nan values
+                        else:
+                            rr24 = np.append(rr24, np.array([rr_field.data.data]), axis=0)
 
-                    # To Extract specific values where evaluation data (obs nivometeo) is available
-#                for num_poste, (lat, lon) in nivometeo.iteritems():  # python2 (guppy)
-#                    nearest = geometry.nearest_points(lon, lat, {'n':'1'})  # returns indices of the point in "data"
-#                    antilope = antilope.append({
-#                        'date':date,
-#                        'num_poste':int(num_poste),
-#                        'rr_antilope': rr_field.data[nearest[1]][nearest[0]]
-#                    }, ignore_index=True)
-                    if cumul is None:
-                        cumul = rr_field
-                    else:
-                        cumul += rr_field
+                        if cumul is None:
+                            cumul = rr_field
+                        else:
+                            cumul += rr_field
+
+#                        # To Extract specific values where evaluation data (obs nivometeo) is available
+#                        for num_poste, (lat, lon) in nivometeo.iteritems():  # python2 (guppy)
+#                            nearest = geometry.nearest_points(lon, lat, {'n':'1'})  # returns indices of the point in "data"
+#                            antilope = antilope.append({
+#                                'date':date,
+#                                'num_poste':int(num_poste),
+#                                'rr_antilope': rr_field.data[nearest[1]][nearest[0]]
+#                            }, ignore_index=True)
+
+                    except IOError:
+                        print('La grille ANTILOPE FRANXL1S100 est disponible depuis le 23/11/2017')
+                        print('Missing date {0:s}'.format(date.strftime("%Y%m%d%H")))
+                        # Fill missing day with nan values
+                        # WARNING : this only works if the first date of the period have valid data
+                        if nan is None:
+                            nan = np.empty(shape)
+                            nan[:] = np.NaN
+                        rr24 = np.append(rr24, np.array([nan]), axis=0)
+
                 else:
                     print('Missing date {0:s}'.format(date.strftime("%Y%m%d%H")))
                     # Fill missing day with nan values
@@ -279,14 +304,15 @@ if __name__ == "__main__":
             )
             rr.to_netcdf(filename)
 
-            xcumul = xr.DataArray(
-                data = cumul.data,
-                name = 'rr_cumul',
-                dims=["lat", "lon"],
-                coords=dict(lon=lon[0], lat=lat[:,0]),
-                attrs=dict(description="Total precipitation", units="mm"),
-            )
-            xcumul.to_netcdf('CUMUL_{0:s}_{1:s}_{2:s}_{3:s}.nc'.format(args.model, domain, args.datebegin.strftime("%Y%m%d%H"), args.dateend.strftime("%Y%m%d%H")))
+            # Precipitation accumulation over time
+#            xcumul = xr.DataArray(
+#                data = cumul.data,
+#                name = 'rr_cumul',
+#                dims=["lat", "lon"],
+#                coords=dict(lon=lon[0], lat=lat[:,0]),
+#                attrs=dict(description="Total precipitation", units="mm"),
+#            )
+#            xcumul.to_netcdf('CUMUL_{0:s}_{1:s}_{2:s}_{3:s}.nc'.format(args.model, domain, args.datebegin.strftime("%Y%m%d%H"), args.dateend.strftime("%Y%m%d%H")))
 
         antilope = xr.open_dataset(filename)
         # Extract specific values where evaluation data (obs nivometeo) is available
