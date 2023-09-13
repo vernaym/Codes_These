@@ -268,12 +268,12 @@ algo = dict(
         #RS19          = 'RandomSampling/XP19/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         #RS20          = 'RandomSampling/XP20/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         #RS22          = 'RandomSampling/XP22/Random_Sampling_2021120106_2022050106_daily_alp.nc',
-        #RS23          = 'RandomSampling/XP23/Random_Sampling_2021120106_2022050106_daily_alp.nc',
+        RS23          = 'RandomSampling/XP23/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         ################################################################################################
         # PHD committee :
         RS21          = 'RandomSampling/XP21/Random_Sampling_2021120106_2022050106_daily_alp.nc',
-        PF31          = 'XP31/Assimilation_locale_2021120106_2022050106_daily_alp_mask9_debiasing3.nc',
-        KD35          = 'EnsembleKalmanFilter/XP35/EnKF_2021120106_2022050106_daily_alp.nc',
+        #PF31          = 'XP31/Assimilation_locale_2021120106_2022050106_daily_alp_mask9_debiasing3.nc',
+        #KD35          = 'EnsembleKalmanFilter/XP35/EnKF_2021120106_2022050106_daily_alp.nc',
         ################################################################################################
     )
 
@@ -412,7 +412,7 @@ xpid_label = dict(
         RS20          = 'RS20',  # Estimated ratio only on mountain ridges
         RS21          = 'RS',  # PHD committee
         RS22          = 'RS22',  # Test qq adjustment
-        RS23          = 'RS23',  # Test qq adjustment
+        RS23          = 'RS - dynamic error/ratio estimation',  # Test dynamic ratio/error estimation
     )
 
 colors = dict(

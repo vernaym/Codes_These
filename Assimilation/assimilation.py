@@ -36,6 +36,7 @@ from mpl_toolkits.mplot3d import Axes3D  # F401 unused import --> to ignore !
 from matplotlib.text import Annotation
 from matplotlib import offsetbox
 import seaborn as sns
+import palettable
 
 import plotly.express as px
 
@@ -47,6 +48,7 @@ from mpl_toolkits.mplot3d.proj3d import proj_transform
 import time
 
 from These.radar import Preprocessing_ANTILOPE
+from These.scripts import make_mask
 
 ##############################################################################################
 # TODO : Save number of selected members for each pixel
@@ -644,7 +646,9 @@ class Assimilation(object):
         if var == 'rr':
             savename = f'{self.date_str}/OBS_{self.date_str}_{domain}.pdf'
         elif var == 'mu':
-            savename = f'{self.date_str}/DEBIASED_OBS_{self.date_str}_{domain}.pdf'
+            savename = f'{self.date_str}/CLIM_DEBIASED_OBS_{self.date_str}_{domain}.pdf'
+        elif var == 'db':
+            savename = f'{self.date_str}/DYN_DEBIASED_OBS_{self.date_str}_{domain}.pdf'
         elif var == 'obs':
             savename = f'{self.date_str}/ASSIMILATED_OBS_{self.date_str}_{domain}.pdf'
         elif var == 'diff':
@@ -1251,8 +1255,10 @@ class Assimilation(object):
         std = np.abs(parameters.sigma.data)
         Rstat = diags(std.flatten())
         #pond = self.pond.dot(diags(np.exp(-std).flatten(), 0))  # Pondération par la distance et l'erreur statique !! ATTENTION A L'ORDRE !!
-        pond = self.pond.dot(diags(1/std.flatten(), 0))  # std>1 par construction
-        obs = parameters.mu.data.flatten()  # De-biased observation
+        #pond = self.pond.dot(diags(1/std.flatten(), 0))  # std>1 par construction
+        pond = self.pond.dot(diags(1/(std.flatten()+parameters.error.data.flatten()), 0))  # WARNING : error NOT >1 par construction
+        #obs = parameters.mu.data.flatten()  # Climatological de-biasing
+        obs = parameters.db.data.flatten()  # Dynamic de-biasing
         # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         # TODO : TMP (to see the perf of WMA correction only)
         #obs = parameters.rr.data.flatten()
@@ -1555,6 +1561,7 @@ class RandomSampling(Assimilation):
         self.ld = ld
         self.max_dist = max_dist
 
+        self.arome_clim = None
         self.read_obs_auto()
 
     def read_obs_auto(self):
@@ -1567,46 +1574,85 @@ class RandomSampling(Assimilation):
 
         self.obs_auto = obs_auto
 
-    def dynamic_error_estimation(self, antilope, obs_auto):
+    def dynamic_error_estimation(self, parameters, obs_auto):
         """
         """
-        lons, lats = np.meshgrid(antilope.lon.data, antilope.lat.data)
-        initial_ratio = self.ratio.sel(lat=antilope.lat, lon=antilope.lon)
-        initial_error = antilope.sigma
+
+        # 1. Select automatic stations
+        latmax = np.max(parameters.lat.data)
+        latmin = np.min(parameters.lat.data)
+        lonmax = np.max(parameters.lon.data)
+        lonmin = np.min(parameters.lon.data)
+        obs_auto = obs_auto[(obs_auto.lat>=latmin) & (obs_auto.lat<=latmax) & (obs_auto.lon>=lonmin) & (obs_auto.lon<=lonmax)]
+        # Columns 'lats'/'lons' used by method make_mask.plot_field
+        # columns 'lat'/'lon' used for concatenation with nivometeo observations before kriging in 'gridded_random_draw"
+        obs_auto['lats'] = obs_auto['lat']
+        obs_auto['lons'] = obs_auto['lon']
+        #obs_auto = obs_auto.rename(columns={'lat':'lats', 'lon':'lons'})  # Implicte names in make_mask.plot_field method
+        # Remove unreliable EDF obervations :
+        mask = obs_auto['nom'].str.contains('EDF')
+        obs_auto = obs_auto[~mask]
+        # Extract corresponding antilope values :
+        obs_auto["rr_antilope"] = parameters.mu.sel(lat=xr.DataArray(obs_auto.lats.values, dims='poste'), lon=xr.DataArray(obs_auto.lons.values, dims='poste'), method='nearest').data
+        #obs_auto["rr_antilope"] = parameters.rr.sel(lat=xr.DataArray(obs_auto.lats.values, dims='poste'), lon=xr.DataArray(obs_auto.lons.values, dims='poste'), method='nearest').data
+        # Compute ratio and error :
+        obs_auto["ratio"] = (obs_auto["rr_antilope"]+0.1) / (obs_auto["rr"]+0.1)  # Add 0.1 to avoid division by 0 issues
+        obs_auto["error"] = obs_auto["rr_antilope"] - obs_auto["rr"]
+        # Remove observations with unrealistic ratios :
+        mask = (obs_auto['ratio']<1.2) & (obs_auto['ratio']>0.8)
+        #mask = (obs_auto['ratio']<2) & (obs_auto['ratio']>0.1)
+        obs_auto = obs_auto[mask]
+
+        lons, lats = np.meshgrid(parameters.lon.data, parameters.lat.data)
+        initial_ratio = self.ratio.sel(lat=parameters.lat, lon=parameters.lon)
+        initial_error = parameters.sigma
         weights = list()
         ratios  = list()
         errors  = list()
+
+        if self.arome_clim is None:
+            arome_clim = xr.open_dataset(os.path.join(datadir, 'CUMUL_AROME.nc'))
+            self.arome_clim = arome_clim.sel(lat=parameters.lat, lon=parameters.lon)
+
         for i,poste in enumerate(obs_auto.index):
             tmp = obs_auto.loc[poste]
-            rr_antilope = antilope.sel(lat=tmp.lat, lon=tmp.lon, method='nearest')  # TODO : remove obs outside the antilope domain
-            dist = np.sqrt((lats-tmp.lat)**2+(lons-tmp.lon)**2)  # Euclidian horizontal distance
-            w = np.exp(-(dist/self.ld)**2)  # Distance weighting
+            #rr_antilope = parameters.sel(lat=tmp.lats, lon=tmp.lons, method='nearest').rr.data
+            rr_antilope = parameters.sel(lat=tmp.lats, lon=tmp.lons, method='nearest').mu.data
+            arome_cumul = self.arome_clim.sel(lat=tmp.lats, lon=tmp.lons, method='nearest')
+            ratio_arome = self.arome_clim.rr_cumul.data / arome_cumul.rr_cumul.data
 
-            ratio = rr_antilope.rr.data/tmp.rr  # WARNING : division by 0
-            error = rr_antilope.rr.data - tmp.rr
-            if not np.isnan(error):
-                weights.append(w)
-                ratios.append(ratio*initial_ratio)
-                errors.append(error*w)
+            dist = np.sqrt((lats-tmp.lats)**2+(lons-tmp.lons)**2)  # Euclidian horizontal distance
+            w = np.exp(-dist/0.1)  # Distance weighting
+            #w = np.exp(-(dist/self.ld)**2)  # Distance weighting
+            #w = np.round(1/(1+dist)**2, 1)  # Distance weighting
+
+            #ratio = (rr_antilope.rr.data+0.1) / (tmp.rr+0.1)  # WARNING : division by 0
+            #error = rr_antilope.rr.data - tmp.rr
+            ratio = tmp.ratio
+            weights.append(w)
+            ratios.append(ratio*initial_ratio/ratio_arome)
 
         weights = np.array(weights)
+        W = np.sum(weights, axis=0)
+        mean_ratio = np.divide(np.sum(weights*ratios, axis=0), W)
         ratios = np.array(ratios)
         ratios[np.isnan(ratios)] = 1  # Security
         ratios[np.isinf(ratios)] = 1  # No precipitation in reference
-        ratios[ratios==0] = 1  # No precipitation in antilope
-        #errors = np.array(errors)
+        #ratios[ratios==0] = 1  # No precipitation in antilope --> add 0.1 in ratio comutation to avoid this
 
-        totalweight = np.sum(weights, axis=0)
-        #w0 = 1-totalweight
-        #w0[w0<0] = 0
-        #estimated_ratio = (1*w0 + np.sum(weights*ratios, axis=0)) / (w0+totalweight)
-        new_ratio = (initial_ratio+np.sum(weights*ratios, axis=0)) / (1+totalweight)
-        #new_error = (initial_error+np.sum(weights*errors, axis=0)) / (1+totalweight)
-        new_error = (initial_error+np.sum(errors, axis=0)) / (1+totalweight)
-        self.plot_array(new_ratio, antilope, 'New ratio', 'ratio.pdf', cmap=plt.cm.RdBu)
-        self.plot_array(new_error, antilope, 'New error', 'error.pdf', cmap=plt.cm.YlOrBr)
+        # Compute estimated ratio by weighting between 1 and the mean estimated ratio
+        w1 = W / (1 + W)
+        w0 = 1 - w1
+        new_ratio = 1 * w0 + w1 * mean_ratio
+        #estimated_ratio[np.isnan(estimated_ratio)] = 1
+        new_error = parameters.mu.data / new_ratio - parameters.mu.data
+        #new_error = parameters.rr.data / new_ratio - parameters.rr.data
 
-        return new_error
+        # Conversion to xarray
+        new_ratio = make_mask.to_xarray(new_ratio, parameters, varname='Ratio')
+        new_error = make_mask.to_xarray(np.abs(new_error), parameters, varname='Error (mm)')
+
+        return new_ratio, new_error, obs_auto
 
     @speedtest
     def run(self):
@@ -1653,17 +1699,21 @@ class RandomSampling(Assimilation):
             parameters = actual_parameters.sel({'time':date}).compute()
 
             obs_auto = self.obs_auto[self.obs_auto.date==date]  # Select date
-#            latmax = np.max(parameters.lat.data) + self.max_dist
-#            latmin = np.min(parameters.lat.data) - self.max_dist
-#            lonmax = np.max(parameters.lon.data) + self.max_dist
-#            lonmin = np.min(parameters.lon.data) - self.max_dist
-            latmax = np.max(parameters.lat.data)
-            latmin = np.min(parameters.lat.data)
-            lonmax = np.max(parameters.lon.data)
-            lonmin = np.min(parameters.lon.data)
-            obs_auto = obs_auto[(obs_auto.lat>=latmin) & (obs_auto.lat<=latmax) & (obs_auto.lon>=lonmin) & (obs_auto.lon<=lonmax)]
 
-            #parameters["error"] = self.dynamic_error_estimation(parameters, obs_auto)
+            rat, err, obs_auto = self.dynamic_error_estimation(parameters, obs_auto)
+
+            if self.plot:
+                fig, ax = plt.subplots(figsize=figsize[self.domain]['singleplot'])
+                im = make_mask.plot_field(fig, ax, rat, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=0.5, vmax=1.5, scores=obs_auto)
+                fig.savefig(f'{self.date_str}/Ratio.pdf', format='pdf')
+                fig, ax = plt.subplots(figsize=figsize[self.domain]['singleplot'])
+                im = make_mask.plot_field(fig, ax, err, cmap=plt.cm.YlOrBr, scores=obs_auto)
+                fig.savefig(f'{self.date_str}/Error.pdf', format='pdf')
+
+            # Fill parameters Dataset with dynamic fields
+            parameters['error'] = err
+            parameters['ratio'] = rat
+            parameters['db'] = parameters['mu'] / parameters['ratio']
 
             ####################  TMP  #####################
             # Plot distributions before / after conversion
@@ -1933,6 +1983,11 @@ class RandomSampling(Assimilation):
                 text = zip(bias.lon.data, bias.lat.data, bias.data)
                 #text = zip(ratio.lon.data, ratio.lat.data, ratio.data)
                 self.plot_obs(parameters, var='mu', domain=domain, text1=text)
+                evaluation_points = parameters.db.sel(lat=xr.DataArray(nivometeo.lat.data, dims="poste"), lon=xr.DataArray(nivometeo.lon.data, dims="poste"), method='nearest')
+                bias = evaluation_points - nivometeo.obs.data  # De-biased observation error
+                ratio = evaluation_points[nivometeo.obs.data>0] / nivometeo.obs.data[nivometeo.obs.data>0]  # de_biased observation ratio
+                text = zip(bias.lon.data, bias.lat.data, bias.data)
+                self.plot_obs(parameters, var='db', domain=domain, text1=text)
                 #self.plot_obs(parameters, var='obs', domain=domain)
                 #parameters['diff'] = parameters.obs-parameters.mu
                 #parameters['diff'] = parameters.obs-parameters.rr  # !! TODO : TMP !!
