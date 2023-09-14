@@ -1257,6 +1257,14 @@ class Assimilation(object):
         #pond = self.pond.dot(diags(np.exp(-std).flatten(), 0))  # Pondération par la distance et l'erreur statique !! ATTENTION A L'ORDRE !!
         #pond = self.pond.dot(diags(1/std.flatten(), 0))  # std>1 par construction
         pond = self.pond.dot(diags(1/(std.flatten()+parameters.error.data.flatten()), 0))  # WARNING : error NOT >1 par construction
+        #pond = self.pond.dot(diags(np.exp(-parameters.error.data).flatten(), 0))  # WARNING : error NOT >1 par construction
+        #pond = self.pond.dot(diags(1/(1+parameters.error.data.flatten()), 0))  # WARNING : error NOT >1 par construction
+
+        # Add elevation difference ponderation
+        #dZ = scipy.sparse.load_npz('/home/vernaym/These/DATA/elevation_codistance_alp.npz')
+        #np.exp(-dZ.data/1000, out=dZ.data)
+        #pond = pond.dot(dZ)
+
         #obs = parameters.mu.data.flatten()  # Climatological de-biasing
         obs = parameters.db.data.flatten()  # Dynamic de-biasing
         # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -1616,24 +1624,31 @@ class RandomSampling(Assimilation):
 
         for i,poste in enumerate(obs_auto.index):
             tmp = obs_auto.loc[poste]
-            #rr_antilope = parameters.sel(lat=tmp.lats, lon=tmp.lons, method='nearest').rr.data
             rr_antilope = parameters.sel(lat=tmp.lats, lon=tmp.lons, method='nearest').mu.data
+            antilope_ratio = (parameters.mu.data+0.1) / (rr_antilope+0.1)
+            #rr_antilope = parameters.sel(lat=tmp.lats, lon=tmp.lons, method='nearest').rr.data
+            #antilope_ratio = (parameters.rr.data+0.01) / (rr_antilope+0.01)
             arome_cumul = self.arome_clim.sel(lat=tmp.lats, lon=tmp.lons, method='nearest')
-            ratio_arome = self.arome_clim.rr_cumul.data / arome_cumul.rr_cumul.data
+            ratio_arome = self.arome_clim.rr_cumul.data / arome_cumul.rr_cumul.data  # TODO : avoid to use this ratio when there is no precipitation
 
             dist = np.sqrt((lats-tmp.lats)**2+(lons-tmp.lons)**2)  # Euclidian horizontal distance
-            w = np.exp(-dist/0.1)  # Distance weighting
+            #w = np.exp(-(dist/0.1)**2)  # Distance weighting --> Do not propagate information too far away
+            #w = np.exp(-dist/0.1)  # Distance weighting
             #w = np.exp(-(dist/self.ld)**2)  # Distance weighting
-            #w = np.round(1/(1+dist)**2, 1)  # Distance weighting
+            w = np.round(1/(1+dist)**2, 1)  # Distance weighting
 
             #ratio = (rr_antilope.rr.data+0.1) / (tmp.rr+0.1)  # WARNING : division by 0
             #error = rr_antilope.rr.data - tmp.rr
-            ratio = tmp.ratio
+            ratio = tmp.ratio  # ratio is well defined (+0.1)
             weights.append(w)
-            ratios.append(ratio*initial_ratio/ratio_arome)
+            ratios.append(ratio*antilope_ratio/ratio_arome)
+            #ratios.append(ratio*initial_ratio/ratio_arome)
 
         weights = np.array(weights)
         W = np.sum(weights, axis=0)
+        mean_ratio = np.divide(np.sum(weights*ratios, axis=0), W)
+        D = np.sqrt(np.sum(weights*(ratios-mean_ratio)**2, axis=0)/W)
+        D[W==0] = 0
         mean_ratio = np.divide(np.sum(weights*ratios, axis=0), W)
         ratios = np.array(ratios)
         ratios[np.isnan(ratios)] = 1  # Security
@@ -1641,12 +1656,28 @@ class RandomSampling(Assimilation):
         #ratios[ratios==0] = 1  # No precipitation in antilope --> add 0.1 in ratio comutation to avoid this
 
         # Compute estimated ratio by weighting between 1 and the mean estimated ratio
-        w1 = W / (1 + W)
+        # Decrease the weight for pixels with large ratio dispersion (more uncertainty !)
+        # Ensure that estimated ratio for pixels with no information around (W=0) stay at 1
+        # Rules :
+        # * w0+w1=1  (Keep ratio ODG)
+        # * W=0 ==> w1=0  (Ensure that estimated ratio for pixels with no information around (W=0) stay at 1)
+        # * D=0 ==> w1=W/(W+1)
+        # * D-->inf ==> w1-->0  (choix : D=1 ==> w1=1/2)
+        # * W-->inf ==> w1-->1
+        # w1 can be seen as a measure of the confidence in the method
+        X = 1/(2*W-1)  # Facteur pour assurer la condition D=1 ==> w1=1/2. WARNING : W=1/2 valeur singulière
+        K = W * (1 - D / (D + X))
+        K[W==0.5] = 0.5  # W=1/2 valeur singulière de X
+        K[W==0] = 0
+        w1 = np.exp(-1/K)
         w0 = 1 - w1
+        #w1 = W / (1 + W)
+        #w0 = 1 - w1
+        #new_ratio = initial_ratio * w0 + w1 * mean_ratio
         new_ratio = 1 * w0 + w1 * mean_ratio
         #estimated_ratio[np.isnan(estimated_ratio)] = 1
-        new_error = parameters.mu.data / new_ratio - parameters.mu.data
-        #new_error = parameters.rr.data / new_ratio - parameters.rr.data
+        new_error = (parameters.mu.data+0.01) / new_ratio - (parameters.mu.data+0.01)  # Add 0.01mm to avoid problems with no precipitation pixels
+        #new_error = (parameters.rr.data+0.01) / new_ratio - 0.01  - parameters.rr.data  # Add 0.01mm to avoid problems with no precipitation pixels
 
         # Conversion to xarray
         new_ratio = make_mask.to_xarray(new_ratio, parameters, varname='Ratio')
@@ -1705,15 +1736,16 @@ class RandomSampling(Assimilation):
             if self.plot:
                 fig, ax = plt.subplots(figsize=figsize[self.domain]['singleplot'])
                 im = make_mask.plot_field(fig, ax, rat, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=0.5, vmax=1.5, scores=obs_auto)
-                fig.savefig(f'{self.date_str}/Ratio.pdf', format='pdf')
+                fig.savefig(f'{self.date_str}/Ratio_{self.domain}.pdf', format='pdf')
                 fig, ax = plt.subplots(figsize=figsize[self.domain]['singleplot'])
                 im = make_mask.plot_field(fig, ax, err, cmap=plt.cm.YlOrBr, scores=obs_auto)
-                fig.savefig(f'{self.date_str}/Error.pdf', format='pdf')
+                fig.savefig(f'{self.date_str}/Error_{self.domain}.pdf', format='pdf')
 
             # Fill parameters Dataset with dynamic fields
             parameters['error'] = err
             parameters['ratio'] = rat
-            parameters['db'] = parameters['mu'] / parameters['ratio']
+            parameters['db'] = (parameters['mu']+0.01) / parameters['ratio'] - 0.01  # Add 0.01 to introduce precipitation in "missed precipitation" pixels
+            #parameters['db'] = (parameters['rr']+0.01) / parameters['ratio'] - 0.01  # Add 0.01 to introduce precipitation in "missed precipitation" pixels
 
             ####################  TMP  #####################
             # Plot distributions before / after conversion
@@ -1804,15 +1836,16 @@ class RandomSampling(Assimilation):
 
         # Extract reference points and corresponding values
         nivometeo = self.nivometeo.sel({'date':date}).dropna(dim='num_poste').drop('date')
-        # Get data over evaluation points and compute errors
-        evaluation_points = analysis.sel(member=0, lat=xr.DataArray(nivometeo.lat.data, dims="poste"), lon=xr.DataArray(nivometeo.lon.data, dims="poste"), method='nearest')
-        bias  = evaluation_points - nivometeo.obs.data
-        ratio = evaluation_points[nivometeo.obs.data>0] / nivometeo.obs.data[nivometeo.obs.data>0]
 
         df = nivometeo.to_dataframe().rename(columns={'nom':'poste', 'obs':'rr'})
         obs_auto.drop(columns=['date', 'reseau_poste'], inplace=True)
         allobs = pd.concat([obs_auto, df])
         allobs = allobs[~np.isnan(allobs.rr)]
+
+        # Get data over evaluation points and compute errors
+        evaluation_points = analysis.sel(member=0, lat=xr.DataArray(allobs.lat.data, dims="poste"), lon=xr.DataArray(allobs.lon.data, dims="poste"), method='nearest')
+        bias  = evaluation_points - allobs.rr.data
+        ratio = (evaluation_points+0.01) / (allobs.rr.data+0.01)
         # Kriging of reference values to get a reference field
         kriging = False
         #if len(nivometeo.num_poste) > 1:

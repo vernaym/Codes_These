@@ -268,7 +268,8 @@ algo = dict(
         #RS19          = 'RandomSampling/XP19/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         #RS20          = 'RandomSampling/XP20/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         #RS22          = 'RandomSampling/XP22/Random_Sampling_2021120106_2022050106_daily_alp.nc',
-        RS23          = 'RandomSampling/XP23/Random_Sampling_2021120106_2022050106_daily_alp.nc',
+        #RS23          = 'RandomSampling/XP23/Random_Sampling_2021120106_2022050106_daily_alp.nc',  # commit f0d6615fe98865a0c87c88dca4dda7e70a1725a1
+        RS23          = 'RandomSampling/XP23/Random_Sampling_2021120106_2022043006_daily_alp.nc',  # commit 
         ################################################################################################
         # PHD committee :
         RS21          = 'RandomSampling/XP21/Random_Sampling_2021120106_2022050106_daily_alp.nc',
@@ -419,6 +420,7 @@ colors = dict(
     raw       = 'Grey',
     antilopec = 'orange',
     RS21      = 'red',
+    RS23      = 'k',
     PF31      = 'green',
     KD35      = 'blue',
 )
@@ -462,8 +464,8 @@ class Evaluation(object):
 
         simu = simu[~np.isnan(obs)]
         obs = obs[~np.isnan(obs)]
-        simu = simu[obs>1]  # TODO : TMP !!!!!
-        obs=obs[obs>1]  # TODO : TMP !!!!!
+        #simu = simu[obs>1]  # TODO : TMP !!!!!
+        #obs=obs[obs>1]  # TODO : TMP !!!!!
 
         if np.shape(simu) == np.shape(obs):  # "Simulation" déterministe
             bias = simu - obs
@@ -850,11 +852,11 @@ class Evaluation(object):
             #raw = raw.compute().clip(0)  # TODO : try without computing (seems towork !)
             raw = raw.clip(0)  # TODO : try without computing (seems towork !)
             raw = raw.transpose('lat', 'lon', 'time', 'member')  # transpose data to put dimension in the same order as assimilated fields
-            raw = raw.loc[{'time':dates}]
             raw = raw.compute()
             raw.to_netcdf(os.path.join(datadir, filename))
         else:
             raw = xr.open_dataset(os.path.join(datadir, filename))
+        raw = raw.loc[{'time':dates}]
         print('DBUG fin lecture ensemble')
 
         return raw
@@ -933,7 +935,7 @@ class Evaluation(object):
 
         antilope = self.read_antilope(dates_obs)
         dates_antilope = antilope.time.data
-        dates = np.intersect1d(dates_obs, antilope.time.data)
+        dates = np.intersect1d(dates_obs[:-1], antilope.time.data)
         antilope = antilope.loc[{'time':dates}]
         self.data = self.data.loc[{'date':dates}]
 

@@ -23,7 +23,6 @@ from pyproj import Proj, transform
 import matplotlib
 import matplotlib.pyplot as plt
 
-
 import scipy
 from scipy.sparse import csr_matrix, csc_matrix, diags
 from scipy.spatial.distance import cdist
@@ -47,6 +46,7 @@ from bronx.stdtypes.date import Date, Period
 #datadir = '/home/vernaym/workdir/visualisation'
 datadir = '/home/vernaym/extraction_obs'  # On sxcen
 workdir = '.'  # On sxcen
+datadir = '/home/vernaym/These/DATA'
 
 domain = 'alp'
 ld = 0.1
@@ -227,8 +227,8 @@ def codistances(coords, ld=0.1):  # TMP for illustration. TODO : test different 
     tree = cKDTree(coords)
     dist = tree.sparse_distance_matrix(tree, max_distance=max_dist, p=2, output_type='coo_matrix')
     dist = csr_matrix(dist)
-    dist.data=1/(1+dist.data)**2  # IDW
-    #dist.data=1/(1+dist.data)  # IDW
+    #dist.data=1/(1+dist.data)**2  # IDW
+    dist.data=1/(1+dist.data)  # IDW
     #dist[dist.nonzero()] = dist[dist.nonzero()]/ld
     #np.exp(-dist.data, out=dist.data )
     #np.exp(-dist.data**2/2, out=dist.data )
@@ -323,7 +323,7 @@ class AntilopePreprocessing(object):
             error = xr.open_dataarray(os.path.join(workdir, 'Observation_error.nc'))
             #error = xr.open_dataarray(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask/alp", 'Observation_error.nc'))
             std = error.data
-            codist = os.path.join(workdir, f'codistance_max_dist_{max_dist:.2f}_{domain}.npz')
+            codist = os.path.join(datadir, f'codistance_max_dist_{max_dist:.2f}_{domain}.npz')
             if not os.path.exists(codist):
                 # Compute inter-distances
                 coords=[(lon,lat) for lat in error.lat.data for lon in error.lon.data]
