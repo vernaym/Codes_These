@@ -36,6 +36,9 @@ def hourly_to_daily(data):
 def plot_scatter(reference, model, xlabel, ylabel, savename, savedir, color=None, addtext=None):
     ref = reference.flatten()
     mod = model.flatten()
+    mask = np.where(~np.isnan(ref) & ~np.isnan(mod))
+    #ref = ref[mask]
+    #mod = mod[mask]
     bias = np.round(np.mean(mod - ref),3)
     rmse = np.round(np.sqrt(np.mean((mod-ref)**2)), 3)
     x = ref.reshape((-1,1))
@@ -57,6 +60,7 @@ def plot_scatter(reference, model, xlabel, ylabel, savename, savedir, color=None
     ax.plot(x, z, color='blue', linewidth=1, label=f'Slope={reg.coef_[0]:.3f}, Intercept={reg.intercept_:.3f}\nR²={r2:.4}, bias={bias}, rmse={rmse}')  # plot linear regression line
 
     if addtext is not None:
+        addtext = addtext[mask]
         for idx,text in enumerate(addtext):
             ax.text(ref[idx], mod[idx], int(text))
 

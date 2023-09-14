@@ -1257,13 +1257,9 @@ class Assimilation(object):
         #pond = self.pond.dot(diags(np.exp(-std).flatten(), 0))  # Pondération par la distance et l'erreur statique !! ATTENTION A L'ORDRE !!
         #pond = self.pond.dot(diags(1/std.flatten(), 0))  # std>1 par construction
         pond = self.pond.dot(diags(1/(std.flatten()+parameters.error.data.flatten()), 0))  # WARNING : error NOT >1 par construction
+        #pond = self.pond.dot(diags(1/(std.flatten()*(1+parameters.error.data.flatten())), 0))  # WARNING : error NOT >1 par construction
         #pond = self.pond.dot(diags(np.exp(-parameters.error.data).flatten(), 0))  # WARNING : error NOT >1 par construction
         #pond = self.pond.dot(diags(1/(1+parameters.error.data.flatten()), 0))  # WARNING : error NOT >1 par construction
-
-        # Add elevation difference ponderation
-        #dZ = scipy.sparse.load_npz('/home/vernaym/These/DATA/elevation_codistance_alp.npz')
-        #np.exp(-dZ.data/1000, out=dZ.data)
-        #pond = pond.dot(dZ)
 
         #obs = parameters.mu.data.flatten()  # Climatological de-biasing
         obs = parameters.db.data.flatten()  # Dynamic de-biasing
@@ -1280,14 +1276,21 @@ class Assimilation(object):
         newfield, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(obs, pond)
         #newfield, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(obs, pond, gradient=gradient.data.flatten())  # Use AROME mean vertical gradient
         #newfield, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(obs, pond, qq_adjustment=True)  # qq adjustment add >0 bias !
-        Rdyn = diags(sd, 0)
-        R = dia_matrix(Rdyn)
+
+        #Rdyn = diags(sd, 0)
         new_obs = xr.DataArray(
             data   = newfield.reshape((len(parameters.lat), len(parameters.lon))),
             name   = 'obs',
             dims   = ["lat", "lon"],
             coords = dict(lon=parameters.lon, lat=parameters.lat)
         )
+
+        Rstat = diags(sd, 0)  # WARNING : variable name not adapted anymore
+        #Rdyn = diags(sd, 0)
+        #Rdyn = diags(np.sqrt(sd*np.abs(new_obs.data - parameters.db.data).flatten()), 0)
+        Rdyn = diags(np.abs(new_obs.data - parameters.db.data).flatten(), 0)
+        R = dia_matrix(Rdyn+Rstat)
+        #R = dia_matrix(Rdyn)
 
         # Plot data
         if plot is not None:
@@ -1635,17 +1638,19 @@ class RandomSampling(Assimilation):
             #w = np.exp(-(dist/0.1)**2)  # Distance weighting --> Do not propagate information too far away
             #w = np.exp(-dist/0.1)  # Distance weighting
             #w = np.exp(-(dist/self.ld)**2)  # Distance weighting
-            w = np.round(1/(1+dist)**2, 1)  # Distance weighting
+            w = 1/(0.01+dist)**2  # Distance weighting  --> adding 0.01 instead of 1 ensures that the value at the reference point is preserved
 
             #ratio = (rr_antilope.rr.data+0.1) / (tmp.rr+0.1)  # WARNING : division by 0
             #error = rr_antilope.rr.data - tmp.rr
             ratio = tmp.ratio  # ratio is well defined (+0.1)
             weights.append(w)
+            #ratios.append(ratio*antilope_ratio)
             ratios.append(ratio*antilope_ratio/ratio_arome)
-            #ratios.append(ratio*initial_ratio/ratio_arome)
 
         weights = np.array(weights)
         W = np.sum(weights, axis=0)
+        Wm = np.mean(W, axis=0)
+        Wd = np.sqrt(np.mean((weights-Wm)**2))
         mean_ratio = np.divide(np.sum(weights*ratios, axis=0), W)
         D = np.sqrt(np.sum(weights*(ratios-mean_ratio)**2, axis=0)/W)
         D[W==0] = 0
@@ -1676,8 +1681,10 @@ class RandomSampling(Assimilation):
         #new_ratio = initial_ratio * w0 + w1 * mean_ratio
         new_ratio = 1 * w0 + w1 * mean_ratio
         #estimated_ratio[np.isnan(estimated_ratio)] = 1
-        new_error = (parameters.mu.data+0.01) / new_ratio - (parameters.mu.data+0.01)  # Add 0.01mm to avoid problems with no precipitation pixels
-        #new_error = (parameters.rr.data+0.01) / new_ratio - 0.01  - parameters.rr.data  # Add 0.01mm to avoid problems with no precipitation pixels
+        new_error = (parameters.mu.data+0.1) / new_ratio - (parameters.mu.data+0.1)  # Absolute error (Add 0.1mm to avoid problems with no precipitation pixels)
+        new_error = np.abs(new_error) + np.abs(new_ratio-1) * (parameters.mu.data+0.1) / new_ratio  # Add modification
+        #new_error = np.abs(new_ratio-1) * (parameters.mu.data+0.1) / new_ratio  # Add modification
+        #new_error = (parameters.rr.data+0.1) / new_ratio - 0.1  - parameters.rr.data  # Add 0.1mm to avoid problems with no precipitation pixels
 
         # Conversion to xarray
         new_ratio = make_mask.to_xarray(new_ratio, parameters, varname='Ratio')
@@ -1734,17 +1741,27 @@ class RandomSampling(Assimilation):
             rat, err, obs_auto = self.dynamic_error_estimation(parameters, obs_auto)
 
             if self.plot:
+                # Reduce the data to the actual domain (remove the potential correlation length edge)
+                latmin = domain_coords[domain]['latmin']
+                latmax = domain_coords[domain]['latmax']
+                lonmin = domain_coords[domain]['lonmin']
+                lonmax = domain_coords[domain]['lonmax']
+                sel_lat = np.round(np.arange(latmin, latmax, 0.01), 2)
+                sel_lon = np.round(np.arange(lonmin, lonmax, 0.01), 2)
+
                 fig, ax = plt.subplots(figsize=figsize[self.domain]['singleplot'])
-                im = make_mask.plot_field(fig, ax, rat, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=0.5, vmax=1.5, scores=obs_auto)
+                tmp = rat.sel({'lat':np.intersect1d(sel_lat, rat.lat.data), 'lon':np.intersect1d(sel_lon, rat.lon.data)})
+                im = make_mask.plot_field(fig, ax, tmp, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=0.5, vmax=1.5, scores=obs_auto)
                 fig.savefig(f'{self.date_str}/Ratio_{self.domain}.pdf', format='pdf')
                 fig, ax = plt.subplots(figsize=figsize[self.domain]['singleplot'])
-                im = make_mask.plot_field(fig, ax, err, cmap=plt.cm.YlOrBr, scores=obs_auto)
+                tmp = err.sel({'lat':np.intersect1d(sel_lat, err.lat.data), 'lon':np.intersect1d(sel_lon, err.lon.data)})
+                im = make_mask.plot_field(fig, ax, tmp, cmap=plt.cm.YlOrBr, scores=obs_auto)
                 fig.savefig(f'{self.date_str}/Error_{self.domain}.pdf', format='pdf')
 
             # Fill parameters Dataset with dynamic fields
             parameters['error'] = err
             parameters['ratio'] = rat
-            parameters['db'] = (parameters['mu']+0.01) / parameters['ratio'] - 0.01  # Add 0.01 to introduce precipitation in "missed precipitation" pixels
+            parameters['db'] = (parameters['mu']+0.1) / parameters['ratio'] - 0.1  # Add 0.01 to introduce precipitation in "missed precipitation" pixels
             #parameters['db'] = (parameters['rr']+0.01) / parameters['ratio'] - 0.01  # Add 0.01 to introduce precipitation in "missed precipitation" pixels
 
             ####################  TMP  #####################
@@ -1828,7 +1845,7 @@ class RandomSampling(Assimilation):
             coords = dict(lon=parameters.lon, lat=parameters.lat, member=range(0, nmembers+1)),
         )
         obs = Y.reshape((len(parameters.lat), len(parameters.lon)))  # Get observation field
-        #obs = np.round(obs, 1)  # Round precipitation <0.1 at 0 (different distribution used in this case) TODO : convertir dans l'espace r^1/2
+        obs = np.round(obs, 1)  # Round precipitation <0.1 at 0 (different distribution used in this case) TODO : convertir dans l'espace r^1/2
 
         # Fill first member with corrected observation
         analysis.loc[{'member':0}] = obs
@@ -1843,9 +1860,9 @@ class RandomSampling(Assimilation):
         allobs = allobs[~np.isnan(allobs.rr)]
 
         # Get data over evaluation points and compute errors
-        evaluation_points = analysis.sel(member=0, lat=xr.DataArray(allobs.lat.data, dims="poste"), lon=xr.DataArray(allobs.lon.data, dims="poste"), method='nearest')
-        bias  = evaluation_points - allobs.rr.data
-        ratio = (evaluation_points+0.01) / (allobs.rr.data+0.01)
+        evaluation_points = analysis.sel(member=0, lat=xr.DataArray(allobs.lat.values, dims="poste"), lon=xr.DataArray(allobs.lon.values, dims="poste"), method='nearest')
+        bias  = evaluation_points - allobs.rr.values
+        ratio = (evaluation_points+0.01) / (allobs.rr.values+0.01)
         # Kriging of reference values to get a reference field
         kriging = False
         #if len(nivometeo.num_poste) > 1:
@@ -1863,8 +1880,11 @@ class RandomSampling(Assimilation):
                 coords = dict(lon=parameters.lon, lat=parameters.lat),
             )
 
-        #sd = Rdyn.diagonal().reshape((len(parameters.lat), len(parameters.lon)))  # Get standard deviation field
-        sd = R.diagonal().reshape((len(parameters.lat), len(parameters.lon)))  # Get standard deviation field
+        sd1 = Rdyn.diagonal().reshape((len(parameters.lat), len(parameters.lon)))  # Get standard deviation field
+        sd1 = uniform_filter(sd1, 3)
+        sd2 = Rstat.diagonal().reshape((len(parameters.lat), len(parameters.lon)))
+        #sd = R.diagonal().reshape((len(parameters.lat), len(parameters.lon)))  # Get standard deviation field
+        sd = sd1 + sd2
 
         error = xr.DataArray(
             name   = 'error',
@@ -1875,7 +1895,7 @@ class RandomSampling(Assimilation):
         )
 
         if self.plot:
-            text = zip(bias.lon.data, bias.lat.data, bias.data)
+            text = zip(bias.lon.values, bias.lat.values, bias.values)
             #text = zip(ratio.lon.data, ratio.lat.data, ratio.data)
             self.plot_array(analysis.sel(member=0), parameters.rr, 'Corrected field', f'{self.date_str}/Corrected_field_{self.date_str}_{self.domain}.pdf', vmin=0, vmax=self.rrmax, cmap=plt.cm.YlGnBu, text1=text)
             self.plot_array(error, parameters.rr, 'Error (mm)', f'{self.date_str}/ERROR_{self.domain}.pdf', vmin=0, vmax=np.max(error), cmap=plt.cm.Reds, text1=text)
@@ -1943,7 +1963,8 @@ class RandomSampling(Assimilation):
         #pond = self.pond.dot(diags(1/std.flatten(), 0))
 
         for member in analysis.member.data:
-            ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='gamma')
+            #ana = Preprocessing_ANTILOPE.random_draw(obs, sd1, distribution='gamma')
+            ana = Preprocessing_ANTILOPE.random_draw(obs, sd1, sd2=sd2, distribution='gamma')
             #ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='normal')
             analysis.loc[{'member':member}] = ana
 
@@ -2001,24 +2022,21 @@ class RandomSampling(Assimilation):
             #parameters.mu.data = np.square(parameters.mu.data)
             #parameters.rr.data = np.square(parameters.rr.data)
 
-            evaluation_points = parameters.rr.sel(lat=xr.DataArray(nivometeo.lat.data, dims="poste"), lon=xr.DataArray(nivometeo.lon.data, dims="poste"), method='nearest')
-            bias = evaluation_points - nivometeo.obs.data  # Raw observation error
-            ratio = evaluation_points[nivometeo.obs.data>0] / nivometeo.obs.data[nivometeo.obs.data>0]  # Raw observation ratio
+            evaluation_points = parameters.rr.sel(lat=xr.DataArray(allobs.lat.values, dims="poste"), lon=xr.DataArray(allobs.lon.values, dims="poste"), method='nearest')
+            bias  = evaluation_points - allobs.rr.values
             text = zip(bias.lon.data, bias.lat.data, bias.data)  # Raw observation error
             #text = zip(ratio.lon.data, ratio.lat.data, ratio.data)  # Raw observation ratio
             self.plot_obs(parameters, domain=domain, text1=text)
 
             if self.debiasing:
                 # Compute error against debiased field
-                evaluation_points = parameters.mu.sel(lat=xr.DataArray(nivometeo.lat.data, dims="poste"), lon=xr.DataArray(nivometeo.lon.data, dims="poste"), method='nearest')
-                bias = evaluation_points - nivometeo.obs.data  # De-biased observation error
-                ratio = evaluation_points[nivometeo.obs.data>0] / nivometeo.obs.data[nivometeo.obs.data>0]  # de_biased observation ratio
+                evaluation_points = parameters.mu.sel(lat=xr.DataArray(allobs.lat.values, dims="poste"), lon=xr.DataArray(allobs.lon.values, dims="poste"), method='nearest')
+                bias  = evaluation_points - allobs.rr.values
                 text = zip(bias.lon.data, bias.lat.data, bias.data)
                 #text = zip(ratio.lon.data, ratio.lat.data, ratio.data)
                 self.plot_obs(parameters, var='mu', domain=domain, text1=text)
-                evaluation_points = parameters.db.sel(lat=xr.DataArray(nivometeo.lat.data, dims="poste"), lon=xr.DataArray(nivometeo.lon.data, dims="poste"), method='nearest')
-                bias = evaluation_points - nivometeo.obs.data  # De-biased observation error
-                ratio = evaluation_points[nivometeo.obs.data>0] / nivometeo.obs.data[nivometeo.obs.data>0]  # de_biased observation ratio
+                evaluation_points = parameters.db.sel(lat=xr.DataArray(allobs.lat.values, dims="poste"), lon=xr.DataArray(allobs.lon.values, dims="poste"), method='nearest')
+                bias  = evaluation_points - allobs.rr.values
                 text = zip(bias.lon.data, bias.lat.data, bias.data)
                 self.plot_obs(parameters, var='db', domain=domain, text1=text)
                 #self.plot_obs(parameters, var='obs', domain=domain)
@@ -2030,7 +2048,16 @@ class RandomSampling(Assimilation):
             self.plot_array(mean, parameters.rr, 'Mean precipitation (mm)', f'{self.date_str}/Analysis_mean_{self.domain}.pdf', cmap=plt.cm.YlGnBu, vmin=self.rrmin, vmax=self.rrmax)
 
             disp = self.ensemble_dispersion(analysis)
-            self.plot_array(disp, parameters.rr, 'Dispersion (mm)', f'{self.date_str}/Analysis_dispersion_{self.domain}.pdf', vmin=0, vmax=np.nanmax(disp), cmap=plt.cm.YlGnBu)
+            disp = xr.DataArray(
+                name   = 'spread',
+                #data   = np.square(sd),
+                data   = disp,
+                dims   = ["lat", "lon"],
+                coords = dict(lon=parameters.lon, lat=parameters.lat),
+            )
+            evaluation_points = disp.sel(lat=xr.DataArray(allobs.lat.values, dims="poste"), lon=xr.DataArray(allobs.lon.values, dims="poste"), method='nearest')
+            text = zip(evaluation_points.lon.data, evaluation_points.lat.data, evaluation_points.data)
+            self.plot_array(disp, parameters.rr, 'Dispersion (mm)', f'{self.date_str}/Analysis_dispersion_{self.domain}.pdf', vmin=0, vmax=np.nanmax(disp), cmap=plt.cm.YlGnBu, text1=text)
 
             finalize_fig(fig1, im1, label='24-hour precipitation (mm)', outname=f'{self.date_str}/ANALYSIS_{self.date_str}_{self.domain}.pdf')
 
@@ -2061,7 +2088,7 @@ class RandomSampling(Assimilation):
                 R, Rstat, Rdyn, updated_obs = self.observation_ECM_new(parameters_loc, date)
             Y = updated_obs.data  # Observation vector
             obs = Y.reshape((len(parameters_loc.lat), len(parameters_loc.lon)))  # Get observation field
-            #obs = np.round(obs, 1)  # Round precipitation <0.1 at 0 (different distribution used in this case)
+            obs = np.round(obs, 1)  # Round precipitation <0.1 at 0 (different distribution used in this case)
 
             # Initialisation of ensemble output field
             analysis = xr.DataArray(
@@ -2074,7 +2101,12 @@ class RandomSampling(Assimilation):
             analysis.loc[{'member':0}] = obs
             self.newlocalfield[0][idp,idd] = analysis.sel({'lat':nearest_lat, 'lon':nearest_lon, 'member':0}).data
 
-            sd = R.diagonal().reshape((len(analysis.lat), len(analysis.lon)))  # Get standard deviation field
+            sd1 = Rdyn.diagonal().reshape((len(parameters_loc.lat), len(parameters_loc.lon)))  # Get standard deviation field
+            sd1 = uniform_filter(sd1, 3)
+            sd2 = Rstat.diagonal().reshape((len(parameters_loc.lat), len(parameters_loc.lon)))
+            #sd = R.diagonal().reshape((len(parameters_loc.lat), len(parameters_loc.lon)))  # Get standard deviation field
+            sd = sd1 + sd2
+
             error = xr.DataArray(
                 name   = 'error',
                 #data   = np.square(sd),
@@ -2086,7 +2118,8 @@ class RandomSampling(Assimilation):
 
             # Fill other members with random draw arround the corrected observation
             for member in range(1, nmembers+1):
-                ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='gamma')
+                #ana = Preprocessing_ANTILOPE.random_draw(obs, sd1, distribution='gamma')
+                ana = Preprocessing_ANTILOPE.random_draw(obs, sd1, sd2=sd2, distribution='gamma')
                 #ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='normal')
                 analysis.loc[{'member':member}] = ana
 

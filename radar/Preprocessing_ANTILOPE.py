@@ -221,6 +221,7 @@ def codistances(coords, ld=0.1):  # TMP for illustration. TODO : test different 
     Solution pour le calcul des inter-distances trouvée sur : https://stackoverflow.com/questions/35296935/python-calculate-lots-of-distances-quickly
     """
 
+    # 1. Horizontal inter-dtances
     #max_dist = ld*3  # exp(-2)=0.14, exp(-3)=0.05 ==> facteur 3 pour ignorer les pixels avec un poid < 5%
     max_dist = ld*2  # exp(-2^2)=0.018 ==> facteur 2 pour ignorer les pixels avec un poid < 2%
     #max_dist = ld
@@ -234,6 +235,20 @@ def codistances(coords, ld=0.1):  # TMP for illustration. TODO : test different 
     #np.exp(-dist.data**2/2, out=dist.data )
     #np.exp(1/(1+dist.data), out=dist.data )
 
+    # 2. Elevation inter-distance
+#    mnt1km = xr.open_dataset('/home/vernaym/These/DATA/DEM_ALPESFR_WGS84_1km.nc')  # Open 1km DEM
+#    lons = np.unique([coord[0] for coord in coords])
+#    lats = np.unique([coord[1] for coord in coords])
+#    mnt1km = mnt1km.sel({'lat':np.intersect1d(lats, mnt1km.lat), 'lon':np.intersect1d(lons, mnt1km.lon)})
+#    Z = mnt1km.elevation.data.flatten()
+#    Z=diags(Z, 0)
+#    tmppond = dist.copy()
+#    tmppond[tmppond.nonzero()] = 1
+#    dZ = tmppond.dot(Z) - Z.dot(tmppond)  # Compute elevation inter-distance
+#    dZ = np.abs(dZ)
+#    np.exp(-dZ.data/1000, out=dZ.data)
+#    dist = dist.dot(dZ)
+
     return dist
 
 def random_draw(obs, sd, ratio=None, sd2=None, distribution='gamma'):
@@ -242,7 +257,7 @@ def random_draw(obs, sd, ratio=None, sd2=None, distribution='gamma'):
         ana = obs+gauss*sd  # Gaussian perturbation around >0 obs
         gauss = np.random.normal(loc=0.0, scale=1.0, size=1)[0]  # Draw random element from normal distribution
         # Add a 2nd perturbation term:
-        ana= ana + obs*0.3*gauss
+        ana= ana + obs*0.1*gauss
 
     elif distribution == 'gamma':
         # TODO : essayer de faire dependre k de l'obs
@@ -259,9 +274,9 @@ def random_draw(obs, sd, ratio=None, sd2=None, distribution='gamma'):
         # - normal distributed around the estimated error --> especially important for error for small prexipitation values
         # This 2 step perturbation reduces the dispersion but introduces spatial variability in the analysis fields
         if ratio is not None:
-            ana = obs + obs*(0.3+np.abs(1-np.sqrt(ratio)))*(gamma-shift) + gauss*sd
+            ana = obs + obs*(0.1+np.abs(1-np.sqrt(ratio)))*(gamma-shift) + gauss*sd
         else:
-            ana = obs + obs*0.30*(gamma-shift) + gauss*sd
+            ana = obs + obs*0.1*(gamma-shift) + gauss*sd
 
         if sd2 is not None:
             gamma = np.random.gamma(k, scale=theta)  # Draw random element from normal distribution (>0 only ==> shift necessary to convert into perturbations)

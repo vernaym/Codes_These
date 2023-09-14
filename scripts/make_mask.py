@@ -88,7 +88,7 @@ onlypostes = [73306403]
 
 blacklist = [1373001, 1189001]
 
-d0 = 0.15  # Portée horizontale
+d0 = 0.1  # Portée horizontale
 #h0 = 2000  # Portée altitudinale
 h0 = None
 c0 = 2
@@ -102,9 +102,9 @@ max_dist = 0.5
 if domain == 'pyr':
     fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_{domain}.csv')
 else:
-    fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_alp.csv')
+    #fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_alp.csv')
     #fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_alpes_10_obs_auto.csv')
-    #fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_alpes_obs_auto.csv')
+    fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_alpes_obs_auto.csv')
     #fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_alpes_obs_nivometeo_antilope_debiaise.csv')
 
 
@@ -245,6 +245,7 @@ def add_scores(scores, ax, mycmap=None, vmin=None, vmax=None):
         norm = matplotlib.colors.BoundaryNorm(thresholds, cmap.N)
     else:
         cmap = mycmap
+        norm = matplotlib.colors.Normalize(vmin=vmin, vmax=vmax)
 
     scores_domain = scores.loc[(scores.lons>=lonmin) & (scores.lons<=lonmax) & (scores.lats<=latmax) & (scores.lats>=latmin)]
 
@@ -263,8 +264,8 @@ def add_scores(scores, ax, mycmap=None, vmin=None, vmax=None):
         onlypostes = [poste for poste in info.index if poste not in blacklist]
         info = info[info.index.isin(onlypostes)]
         if mycmap is None:
-            sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=450, edgecolors='black', linewidth=3, alpha=1)
-            #sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=50, edgecolors='black', alpha=0.5)
+            #sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=450, edgecolors='black', linewidth=3, alpha=1)
+            sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=30, edgecolors='black', alpha=0.3)
             #sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=300, edgecolors='black', alpha=1)
         else:
             #sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, vmin=vmin, vmax=vmax, marker=marker, s=300, edgecolors='black', alpha=1)
@@ -392,7 +393,8 @@ def plot(antilope, datebegin, dateend, categories=True, biascorrection=False, sc
     #add_cities(latmin, latmax, lonmin, lonmax)
     if scores:
         scores = pd.read_csv(fic_score, sep=';')
-        sc = add_scores(scores, ax)
+        sc = add_scores(scores, ax, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=0, vmax=2)
+        #sc = add_scores(scores, ax)
         cb = fig.colorbar(sc)
         #cb.set_label(label='ANTILOPE / rain-gauges ratio', fontsize=22)
         cb.ax.tick_params(labelsize=16)
@@ -445,13 +447,13 @@ def plot_and_save(field, name, cmap=plt.cm.Greys, vmin=None, vmax=None, scores=N
     fig.savefig(os.path.join(savedir, f'{name}.pdf'), format='pdf')
     field.to_netcdf(os.path.join(savedir, f'{name}.nc').encode('utf-8'))
 
-def plot_field(fig, ax, field, cmap=plt.cm.Greys, vmin=None, vmax=None, scores=None, colorbar=True):
+def plot_field(fig, ax, field, cmap=None, vmin=None, vmax=None, scores=None, colorbar=True):
 
     if vmin is None:
         vmin = np.nanmin(field)
     if vmax is None:
         vmax = np.nanmax(field)
-    if cmap == 'custom':
+    if cmap is None:
         cmap = matplotlib.colors.LinearSegmentedColormap.from_list("", ["black", "darkviolet", "green", "orange", "red"], 5)
         thresholds = [0., 0.5, 0.80, 1.2, 1.5, 10]  # TODO : vérier la coéhrence des seuils entre les figures
         #thresholds = [0., 0.5, 0.90, 1.1, 1.5, 10]
@@ -461,7 +463,7 @@ def plot_field(fig, ax, field, cmap=plt.cm.Greys, vmin=None, vmax=None, scores=N
         cml = field.plot(ax=ax, cmap=cmap, vmin=vmin, vmax=vmax, add_colorbar=False)
 
     if scores is not None:
-        if field.name == 'ratio':
+        if cmap is not None:
             # Plot scores with same cmap since it is the same information
             sc = add_scores(scores, ax, mycmap=cmap, vmin=vmin, vmax=vmax)
         else:
@@ -711,7 +713,9 @@ def ratio_estimation(field, model=None, moving_window=25):
             if h0 is not None:
                 w = np.exp(-(dist/d0))*np.exp(-(np.abs(elevation_dist)/h0))
             else:
-                w = np.round(1/(1+dist)**2, 3)
+                #w = 1/(0.1+dist)**2
+                w = 1/(0.01+dist)**2
+                #w = np.round(1/(1+dist)**2, 3)
                 #w = np.round(np.exp(-(dist/d0)), 3)  # Propagates reference score further
                 #w = np.round(np.exp(-(dist**2/d0)), 3)
                 #w = np.round(np.exp(-(dist/d0)**2), 3)  # Sticks more to the reference
@@ -761,6 +765,13 @@ def ratio_estimation(field, model=None, moving_window=25):
     N = len(used_scores)
     W = np.sum(weights, axis=0)  # =1 if enough info else <1
     #W = np.mean(weights, axis=0)  # =1 if enough info else <1
+    Wm = np.mean(weights, axis=0)
+    tmp = to_xarray(Wm, field, varname='mean_weight')
+    plot_and_save(tmp, "mean_weight", cmap=plt.cm.viridis)
+    Wd = np.sqrt(np.mean((weights-Wm)**2, axis=0))
+    tmp = to_xarray(Wd, field, varname='weight_spread')
+    plot_and_save(tmp, "weight_spread", cmap=plt.cm.viridis)
+
     W[np.isnan(W)] = 0
     tmp = to_xarray(W, field, varname='mean_ratio')
     plot_and_save(tmp, "Total_weight", cmap=plt.cm.viridis, vmin=0.)
@@ -773,7 +784,7 @@ def ratio_estimation(field, model=None, moving_window=25):
     #mean_ratio = np.sum(weights*ratios, axis=0)/W
     #mean_ratio[W==0] = np.nan
     tmp = to_xarray(mean_ratio, field, varname='mean_ratio')
-    plot_and_save(tmp, "Mean_ratio", cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=0, vmax=2)
+    plot_and_save(tmp, "Mean_ratio", cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=0, vmax=2, scores=scores)
     D = np.sqrt(np.sum(weights*(ratios-mean_ratio)**2, axis=0)/W)
     D[W==0] = 0
     #D = np.sum(weights*(ratios-mean_ratio)**2, axis=0)/W
@@ -822,9 +833,12 @@ def ratio_estimation(field, model=None, moving_window=25):
     w0[W==0] = 1
     #w1 = 1 - w0
 
-    #tmp = to_xarray(W/D, field, varname='w1')
-    tmp = to_xarray(D/W, field, varname='w1')
-    plot_and_save(tmp, "D_over_W", cmap=plt.cm.viridis)
+    tmp = to_xarray(1/D, field, varname='D')
+    plot_and_save(tmp, "1_over_D", cmap=plt.cm.viridis)
+#    tmp = to_xarray(W/D, field, varname='w1')
+#    plot_and_save(tmp, "W_over_D", cmap=plt.cm.viridis)
+#    tmp = to_xarray(D/W, field, varname='w1')
+#    plot_and_save(tmp, "D_over_W", cmap=plt.cm.viridis)
     # TODO : include ratio dispersion in error estimation
     #w0 = 1-W  # Ensures that estimated ratio for pixels with no information around stay near 1
 
@@ -934,7 +948,7 @@ def ratio_estimation(field, model=None, moving_window=25):
     if domain == 'alp':
         # From https://qiita.com/tsukada_cs/items/d282f27f4024d00d7022 :
         #plot_and_save(ratio_field, rationame, vmin=0.2, vmax=1.8, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, scores=scores)  # Albane's choice !
-        plot_and_save(ratio_field, rationame, vmin=0.4, vmax=1.6, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap)  # Albane's choice !
+        plot_and_save(ratio_field, rationame, vmin=0.4, vmax=1.6, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, scores=scores)  # Albane's choice !
         #plot_and_save(ratio_field, rationame + '_free_scale', vmin=0, vmax=2, cmap=plt.cm.coolwarm, scores=scores)
         #plot_and_save(np.abs(observation_error), errorname, vmin=0, vmax=12, cmap=plt.cm.viridis, scores=scores)
         #plot_and_save(np.abs(observation_error), errorname, vmin=0, vmax=15, cmap=plt.cm.Reds, scores=scores)
@@ -1109,6 +1123,7 @@ if __name__ == "__main__":
 
         # Estimation with automatic stations observations and AROME
         savedir = rootdir
+        fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_alpes_obs_auto.csv')
         ratio_estimation(antilope, model=model)
         # Estimation with automatic stations observations only
         savedir = os.path.join(rootdir, 'sans_arome')
