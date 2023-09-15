@@ -270,6 +270,7 @@ algo = dict(
         #RS22          = 'RandomSampling/XP22/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         #RS23          = 'RandomSampling/XP23/Random_Sampling_2021120106_2022050106_daily_alp.nc',  # commit f0d6615fe98865a0c87c88dca4dda7e70a1725a1
         RS23          = 'RandomSampling/XP23/Random_Sampling_2021120106_2022043006_daily_alp.nc',  # commit 
+        RS24          = 'RandomSampling/XP24/Random_Sampling_2021120106_2022043006_daily_alp.nc',  # commit 
         ################################################################################################
         # PHD committee :
         RS21          = 'RandomSampling/XP21/Random_Sampling_2021120106_2022050106_daily_alp.nc',
@@ -414,6 +415,7 @@ xpid_label = dict(
         RS21          = 'RS',  # PHD committee
         RS22          = 'RS22',  # Test qq adjustment
         RS23          = 'RS - dynamic error/ratio estimation',  # Test dynamic ratio/error estimation
+        RS24          = 'RS24',
     )
 
 colors = dict(
@@ -421,6 +423,7 @@ colors = dict(
     antilopec = 'orange',
     RS21      = 'red',
     RS23      = 'k',
+    RS24      = 'maroon',
     PF31      = 'green',
     KD35      = 'blue',
 )
@@ -665,7 +668,7 @@ class Evaluation(object):
             #obs = obs[(~np.isnan(obs)) & (obs>0)]
             mean = ensemble.mean(axis=0)
             #mask = np.where((obs>1) & (mean>1))
-            #mask = np.where((obs>1) & (mean>1))
+            #mask = np.where((obs>0) & (mean>0))
             #mask = np.where((obs>5) & (mean>5))
             #mask = np.where((mean>1))
             #mask = np.where((obs>3))

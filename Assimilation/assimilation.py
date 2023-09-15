@@ -1273,8 +1273,8 @@ class Assimilation(object):
         gradient = xr.open_dataarray(fic_gradient)
         gradient = gradient.sel({'lat':np.intersect1d(parameters.lat, gradient.lat), 'lon':np.intersect1d(parameters.lon, gradient.lon)})
 
-        newfield, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(obs, pond)
-        #newfield, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(obs, pond, gradient=gradient.data.flatten())  # Use AROME mean vertical gradient
+        #newfield, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(obs, pond)
+        newfield, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(obs, pond, gradient=gradient.data.flatten())  # Use AROME mean vertical gradient
         #newfield, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(obs, pond, qq_adjustment=True)  # qq adjustment add >0 bias !
 
         #Rdyn = diags(sd, 0)
@@ -1289,11 +1289,12 @@ class Assimilation(object):
         #Rdyn = diags(sd, 0)
         #Rdyn = diags(np.sqrt(sd*np.abs(new_obs.data - parameters.db.data).flatten()), 0)
         Rdyn = diags(np.abs(new_obs.data - parameters.mu.data).flatten(), 0)
+        #Rdyn = diags(np.abs(new_obs.data - parameters.rr.data).flatten(), 0)
         R = dia_matrix(Rdyn+Rstat)
         #R = dia_matrix(Rdyn)
 
         # Plot data
-        if plot is not None:
+        if self.plot:
             #point = 2059  #max obs 20220110
             #point = 1988  #max std 20220110
             #point = 887 #max obs 20210825
@@ -1870,7 +1871,7 @@ class RandomSampling(Assimilation):
             coords = dict(lon=parameters.lon, lat=parameters.lat, member=range(0, nmembers+1)),
         )
         obs = Y.reshape((len(parameters.lat), len(parameters.lon)))  # Get observation field
-        obs = np.round(obs, 1)  # Round precipitation <0.1 at 0 (different distribution used in this case) TODO : convertir dans l'espace r^1/2
+        #obs = np.round(obs, 1)  # Round precipitation <0.1 at 0 (different distribution used in this case) TODO : convertir dans l'espace r^1/2
 
         # Fill first member with corrected observation
         analysis.loc[{'member':0}] = obs
@@ -1911,6 +1912,7 @@ class RandomSampling(Assimilation):
         sd2 = uniform_filter(sd2, 3)
         #sd = R.diagonal().reshape((len(parameters.lat), len(parameters.lon)))  # Get standard deviation field
         sd = sd1 + sd2
+        sd[obs==0] = 0
 
         error = xr.DataArray(
             name   = 'error',
@@ -1933,6 +1935,7 @@ class RandomSampling(Assimilation):
                 self.plot_array(reference_field, parameters, 'Precipitation (mm)', f'{self.date_str}/Reference_{self.date_str}_{self.domain}.pdf', vmin=0, vmax=self.rrmax, cmap=plt.cm.YlGnBu, text1=text1, text2=text2)
 
             npoints = len(evaluation_points)
+            print(npoints)
             if npoints <=3:
                 nrow = 1
                 ncol = npoints
@@ -1945,9 +1948,24 @@ class RandomSampling(Assimilation):
             elif npoints <= 16:
                 nrow = 4
                 ncol = 4
-            else:
-                nrow = 5
+            elif npoints <= 21:
+                nrow = 7
+                ncol = 3
+            elif npoints <= 24:
+                nrow = 6
+                ncol = 4
+            elif npoints <= 28:
+                nrow = 7
+                ncol = 4
+            elif npoints <= 32:
+                nrow = 8
+                ncol = 4
+            elif npoints <= 35:
+                nrow = 7
                 ncol = 5
+            else:
+                nrow = 7
+                ncol = 7
             #point = np.where(Y==np.nanmax(Y))  # max observation (plot only)
             # TODO : plot distributions for reference points and add reference
             #point = np.where(sd==np.nanmax(sd))  # max error (plot only)
@@ -1970,7 +1988,7 @@ class RandomSampling(Assimilation):
                 ax[i,j].bar(original_obs, 1, width=0.3, label='Original observation', color='k', alpha=0.5)
                 #obs = Y[point][0]
                 new_obs = analysis.sel(lat=lat, lon=lon, member=0, method='nearest').data
-                ax[i,j].bar(new_obs, 1, width=0.3, color='red', alpha=1)
+                ax[i,j].bar(new_obs, 1, width=0.3, color='red', alpha=1, label='Corrected observation')
                 #sd = sd[point][0]
                 std = error.sel(lat=lat, lon=lon, method='nearest').data
                 #ax = plot_distribution(ax, np.square(obs), np.square(sd), label=f'New observation distribution (sd={np.square(sd)})', color='red')
@@ -2037,7 +2055,7 @@ class RandomSampling(Assimilation):
                     i = i + 1
             if not os.path.exists(f'{self.date_str}/distributions'):
                 os.makedirs(f'{self.date_str}/distributions')
-            fig.savefig(f'{self.date_str}/distributions/DISTRIBUTION_ANALYSE.pdf')
+            fig.savefig(f'{self.date_str}/distributions/DISTRIBUTION_ANALYSE_{domain}.pdf')
             plt.close(fig)
 
             #ECM_max = np.square(np.nanmax(R))
@@ -2115,7 +2133,7 @@ class RandomSampling(Assimilation):
                 R, Rstat, Rdyn, updated_obs = self.observation_ECM_new(parameters_loc, date)
             Y = updated_obs.data  # Observation vector
             obs = Y.reshape((len(parameters_loc.lat), len(parameters_loc.lon)))  # Get observation field
-            obs = np.round(obs, 1)  # Round precipitation <0.1 at 0 (different distribution used in this case)
+            #obs = np.round(obs, 1)  # Round precipitation <0.1 at 0 (different distribution used in this case)
 
             # Initialisation of ensemble output field
             analysis = xr.DataArray(
@@ -2134,6 +2152,7 @@ class RandomSampling(Assimilation):
             sd2 = uniform_filter(sd2, 3)
             #sd = R.diagonal().reshape((len(parameters_loc.lat), len(parameters_loc.lon)))  # Get standard deviation field
             sd = sd1 + sd2
+            sd[obs==0] = 0
 
             error = xr.DataArray(
                 name   = 'error',
