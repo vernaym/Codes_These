@@ -1880,9 +1880,10 @@ class RandomSampling(Assimilation):
                 coords = dict(lon=parameters.lon, lat=parameters.lat),
             )
 
-        sd1 = Rdyn.diagonal().reshape((len(parameters.lat), len(parameters.lon)))  # Get standard deviation field
-        sd1 = uniform_filter(sd1, 3)
-        sd2 = Rstat.diagonal().reshape((len(parameters.lat), len(parameters.lon)))
+        sd1 = Rstat.diagonal().reshape((len(parameters.lat), len(parameters.lon)))  # Get standard deviation field
+        #sd1 = uniform_filter(sd1, 3)
+        sd2 = Rdyn.diagonal().reshape((len(parameters.lat), len(parameters.lon)))
+        sd2 = uniform_filter(sd2, 3)
         #sd = R.diagonal().reshape((len(parameters.lat), len(parameters.lon)))  # Get standard deviation field
         sd = sd1 + sd2
 
@@ -2101,9 +2102,10 @@ class RandomSampling(Assimilation):
             analysis.loc[{'member':0}] = obs
             self.newlocalfield[0][idp,idd] = analysis.sel({'lat':nearest_lat, 'lon':nearest_lon, 'member':0}).data
 
-            sd1 = Rdyn.diagonal().reshape((len(parameters_loc.lat), len(parameters_loc.lon)))  # Get standard deviation field
-            sd1 = uniform_filter(sd1, 3)
-            sd2 = Rstat.diagonal().reshape((len(parameters_loc.lat), len(parameters_loc.lon)))
+            sd1 = Rstat.diagonal().reshape((len(parameters_loc.lat), len(parameters_loc.lon)))  # Get standard deviation field
+            #sd1 = uniform_filter(sd1, 3)
+            sd2 = Rdyn.diagonal().reshape((len(parameters_loc.lat), len(parameters_loc.lon)))
+            sd2 = uniform_filter(sd2, 3)
             #sd = R.diagonal().reshape((len(parameters_loc.lat), len(parameters_loc.lon)))  # Get standard deviation field
             sd = sd1 + sd2
 
