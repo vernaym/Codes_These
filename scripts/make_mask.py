@@ -332,20 +332,24 @@ def add_cities(latmin, latmax, lonmin, lonmax):
     for idx in tmp.index:
         plt.text(tmp.lng[idx], tmp.lat[idx], tmp.city[idx], alpha=0.5)
 
-def plot(antilope, datebegin, dateend, categories=True, biascorrection=False, scores=False):
+def plot(antilope, datebegin, dateend, categories=True, biascorrection=False, scores=False, dom=None):
 
     #if not os.path.exists(os.path.join(savedir, f'CUMUL_ANTILOPE_2021080106_2022070106_{domain}.pdf')):
+    if dom is None:
+        dom = domain
 
-    if domain == 'alp':
+    if dom == 'alp':
         fig, ax = plt.subplots(figsize=(16,16))
         #fig, ax = plt.subplots(figsize=(14,16))
-    elif domain =='pyr':
+    elif dom =='pyr':
         fig, ax = plt.subplots(figsize=(24,8))
-    elif domain == 'GrandesRousses':
+    elif dom == 'GrandesRousses':
         fig, ax = plt.subplots(figsize=(19,8))
-    elif domain == 'HautesAlpes':
+    elif dom == 'HautesAlpes':
         fig, ax = plt.subplots(figsize=(14,7))
-    elif domain == 'MontBlanc':
+    elif dom == 'Savoie':
+        fig, ax = plt.subplots(figsize=(14,7))
+    elif dom == 'MontBlanc':
         fig, ax = plt.subplots(figsize=(20,10))
     else:
         fig, ax = plt.subplots()
@@ -393,7 +397,7 @@ def plot(antilope, datebegin, dateend, categories=True, biascorrection=False, sc
     #add_cities(latmin, latmax, lonmin, lonmax)
     if scores:
         scores = pd.read_csv(fic_score, sep=';')
-        sc = add_scores(scores, ax, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=0, vmax=2)
+        sc = add_scores(scores, ax, mycmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=0, vmax=2)
         #sc = add_scores(scores, ax)
         cb = fig.colorbar(sc)
         #cb.set_label(label='ANTILOPE / rain-gauges ratio', fontsize=22)
@@ -408,7 +412,7 @@ def plot(antilope, datebegin, dateend, categories=True, biascorrection=False, sc
     ax.grid(False)  # Remove grid lines (does not work !)
     #fig.legend()
     #fig.tight_layout()
-    fig.savefig(os.path.join(savedir, f'CUMUL_ANTILOPE_{datebegin}_{dateend}_{domain}.pdf'))
+    fig.savefig(os.path.join(savedir, f'CUMUL_ANTILOPE_{datebegin}_{dateend}_{dom}.pdf'))
     #sys.exit()
 
 def nearest(array, value):
@@ -425,27 +429,38 @@ def to_xarray(array, field, varname='rr'):
     )
     return output
 
-def plot_and_save(field, name, cmap=plt.cm.Greys, vmin=None, vmax=None, scores=None):
-    if domain == 'GrandesRousses':
+def plot_and_save(field, name, cmap=plt.cm.Greys, vmin=None, vmax=None, scores=None, dom=None, dirsave=None):
+
+    if dom is None:
+        dom = domain
+
+    if dirsave is None:
+        dirsave = savedir
+
+
+    if dom == 'GrandesRousses':
         fig, ax = plt.subplots(figsize=(12,6))
-    elif domain == 'HautesAlpes':
+    elif dom == 'HautesAlpes':
         fig, ax = plt.subplots(figsize=(14,12))
-    elif domain == 'Savoie':
-        fig, ax = plt.subplots(figsize=(12,6))
-    elif domain == 'MontBlanc':
+    elif dom == 'Savoie':
+        #fig, ax = plt.subplots(figsize=(12,6))
+        #fig, ax = plt.subplots(figsize=(16,8))
+        fig, ax = plt.subplots(figsize=(16,40))
+    elif dom == 'MontBlanc':
         fig, ax = plt.subplots(figsize=(12,11))
-    elif domain == 'alp':
+    elif dom == 'alp':
         #fig, ax = plt.subplots(figsize=(16,16))
         fig, ax = plt.subplots(figsize=(14,16))
-    elif domain == 'pyr':
+    elif dom == 'pyr':
         #fig, ax = plt.subplots(figsize=(16,16))
         fig, ax = plt.subplots(figsize=(24,8))
     else:
         fig, ax = plt.subplots()
+
     im = plot_field(fig, ax, field, cmap=cmap, vmin=vmin, vmax=vmax, scores=scores)
-    #fig.savefig(os.path.join(savedir, f'{name}.pdf'), format='pdf', layout='tight')
-    fig.savefig(os.path.join(savedir, f'{name}.pdf'), format='pdf')
-    field.to_netcdf(os.path.join(savedir, f'{name}.nc').encode('utf-8'))
+    #fig.savefig(os.path.join(dirsave, f'{name}.pdf'), format='pdf', layout='tight')
+    fig.savefig(os.path.join(dirsave, f'{name}.pdf'), format='pdf', bbox_inches='tight')
+    field.to_netcdf(os.path.join(dirsave, f'{name}.nc').encode('utf-8'))
 
 def plot_field(fig, ax, field, cmap=None, vmin=None, vmax=None, scores=None, colorbar=True):
 
@@ -478,8 +493,10 @@ def plot_field(fig, ax, field, cmap=None, vmin=None, vmax=None, scores=None, col
 
     if colorbar:
         cb = fig.colorbar(cml)
-        cb.set_label(field.name, fontsize=24)
-        cb.ax.tick_params(labelsize=20)
+        #cb.set_label(field.name, fontsize=24)
+        #cb.ax.tick_params(labelsize=20)
+        cb.set_label(field.name, fontsize=12)
+        cb.ax.tick_params(labelsize=12)
 
     return cml
 
@@ -617,13 +634,13 @@ def ratio_estimation(field, model=None, moving_window=25):
     mnt = mnt.interp(lat=field.lat, lon=field.lon)
     #mnt = mnt.where((mnt['lat']>=latmin) & (mnt['lat']<=latmax) & (mnt['lon']>=lonmin) & (mnt['lon']<=lonmax), drop=True)
 
-    rawdata = field.rr_cumul.data/334  # 334 is the number of days over wich the field cumul is made : we want a mean daily (24h) error
-    tmp = uniform_filter(rawdata, size=moving_window)
+    mean_daily_precipitation = field.rr_cumul.data/334  # 334 is the number of days over wich the field cumul is made : we want a mean daily (24h) error
+    tmp = uniform_filter(mean_daily_precipitation, size=moving_window)
     smoothed = to_xarray(tmp, field)
-    smoothratio = rawdata/smoothed
+    smoothratio = mean_daily_precipitation/smoothed
 
-    #diff = (rawdata-smoothed) * rawdata
-    diff = rawdata-smoothed
+    #diff = (mean_daily_precipitation-smoothed) * mean_daily_precipitation
+    diff = mean_daily_precipitation-smoothed
 
     scores = pd.read_csv(fic_score, sep=';')
     scores = scores.set_index('num_poste')
@@ -767,10 +784,10 @@ def ratio_estimation(field, model=None, moving_window=25):
     #W = np.mean(weights, axis=0)  # =1 if enough info else <1
     Wm = np.mean(weights, axis=0)
     tmp = to_xarray(Wm, field, varname='mean_weight')
-    plot_and_save(tmp, "mean_weight", cmap=plt.cm.viridis)
+    plot_and_save(tmp, "mean_weight", cmap=plt.cm.viridis, vmin=0, vmax=10)
     Wd = np.sqrt(np.mean((weights-Wm)**2, axis=0))
     tmp = to_xarray(Wd, field, varname='weight_spread')
-    plot_and_save(tmp, "weight_spread", cmap=plt.cm.viridis)
+    plot_and_save(tmp, "weight_spread", cmap=plt.cm.viridis, vmin=0, vmax=100)
 
     W[np.isnan(W)] = 0
     tmp = to_xarray(W, field, varname='mean_ratio')
@@ -901,11 +918,11 @@ def ratio_estimation(field, model=None, moving_window=25):
     pos= np.where(observation_error.data>=0)
     #observation_error.data[neg] = 21.391*observation_error.data[neg]  # r=0.5 ==> err=-10.7  # 2018/2019
     #observation_error.data[neg] = 20.137*observation_error.data[neg]-1  # <0
-    observation_error.data[neg] = 20.137*observation_error.data[neg] - 1  # <0
+    observation_error.data[neg] = 20.137*(observation_error.data[neg]-D[neg]) - 1  # <0
     #observation_error.data[neg] = 20*np.square(observation_error.data[neg]-1)  # <0
     #observation_error.data[neg] = 4*observation_error.data[neg]  # r=0.5 ==> err=-2
     #observation_error.data[pos] = 15.148*observation_error.data[pos]  # r=1.5 ==> err=7.574  " 2018/2019
-    observation_error.data[pos] = 16.787*observation_error.data[pos] + 1  # r=1.5 ==> err=8.574  " 2021/2022
+    observation_error.data[pos] = 16.787*(observation_error.data[pos]+D[pos]) + 1  # r=1.5 ==> err=8.574  " 2021/2022
     #observation_error.data[pos] = 16*np.square(observation_error.data[pos]+1)  # r=1.5 ==> err=8.574  " 2021/2022
     #observation_error.data[pos] = 2*observation_error.data[pos]  # r=1.5 ==> err = 1
     #observation_error = 1+np.abs(smoothratio-1)
@@ -922,12 +939,15 @@ def ratio_estimation(field, model=None, moving_window=25):
     # - Increasing w1 (more confidence in the method)
     # - Estimation dispersion (contradictory informations) for low observation errors
     # TODO add term independent of observation error to increase errors where the method estimates a low error but with high uncertainty
-    uncertainty = (1+w1) * observation_error + (1+D) * (np.abs(mean_ratio - 1))
+    #uncertainty = (1+w1) * observation_error + (mean_ratio+D) * 
+    #uncertainty = (1+w1) * observation_error
+    uncertainty = w1 * observation_error  # WARNING : error no longer > 1 !!
+
     #uncertainty = (1+w1) * observation_error + (1+D) * (np.abs(mean_ratio - 1) + np.exp(-np.abs(mean_ratio - 1)))
     #uncertainty = 1 + observation_error*w1+D/W
     #uncertainty = 1 + w1*observation_error/(1+w1)
     uncertainty.data[np.isnan(field.rr_cumul.data)] = np.nanmax(uncertainty.data)
-    uncertainty.data = uniform_filter(uncertainty.data, size=3)
+    #uncertainty.data = uniform_filter(uncertainty.data, size=3)
     uncertainty = uncertainty.rename('Uncertainty')
     confidence = uncertainty.copy()
     confidence.data = 1/confidence.data
@@ -955,7 +975,7 @@ def ratio_estimation(field, model=None, moving_window=25):
         #plot_and_save(np.abs(observation_error), errorname, vmin=0, vmax=15, cmap=plt.cm.Greys, scores=scores)
         #plot_and_save(observation_error, errorname, vmin=1, vmax=15, cmap=plt.cm.YlOrBr, scores=scores)
         plot_and_save(confidence, confidencename, vmin=0, cmap=plt.cm.Greens)
-        plot_and_save(uncertainty, uncertaintyname, vmin=1, vmax=20, cmap=plt.cm.YlOrBr)
+        plot_and_save(uncertainty, uncertaintyname, vmin=1, vmax=10, cmap=plt.cm.YlOrBr)
     elif domain == 'GrandesRousses':
         plot_and_save(ratio_field, rationame, vmin=0.6, vmax=1.4, cmap=plt.cm.coolwarm, scores=scores)
         #plot_and_save(observation_error, errorname, vmin=-6, vmax=6, cmap=plt.cm.coolwarm, scores=scores)

@@ -1256,10 +1256,10 @@ class Assimilation(object):
         Rstat = diags(std.flatten())
         #pond = self.pond.dot(diags(np.exp(-std).flatten(), 0))  # Pondération par la distance et l'erreur statique !! ATTENTION A L'ORDRE !!
         #pond = self.pond.dot(diags(1/std.flatten(), 0))  # std>1 par construction
-        pond = self.pond.dot(diags(1/(std.flatten()+parameters.error.data.flatten()), 0))  # WARNING : error NOT >1 par construction
+        #pond = self.pond.dot(diags(1/(std.flatten()+parameters.error.data.flatten()), 0))  # WARNING : error NOT >1 par construction
         #pond = self.pond.dot(diags(1/(std.flatten()*(1+parameters.error.data.flatten())), 0))  # WARNING : error NOT >1 par construction
         #pond = self.pond.dot(diags(np.exp(-parameters.error.data).flatten(), 0))  # WARNING : error NOT >1 par construction
-        #pond = self.pond.dot(diags(1/(1+parameters.error.data.flatten()), 0))  # WARNING : error NOT >1 par construction
+        pond = self.pond.dot(diags(1/parameters.error.data.flatten(), 0))
 
         #obs = parameters.mu.data.flatten()  # Climatological de-biasing
         obs = parameters.db.data.flatten()  # Dynamic de-biasing
@@ -1589,6 +1589,8 @@ class RandomSampling(Assimilation):
         """
         """
 
+        var = 'mu'
+
         # 1. Select automatic stations
         latmax = np.max(parameters.lat.data)
         latmin = np.min(parameters.lat.data)
@@ -1604,7 +1606,7 @@ class RandomSampling(Assimilation):
         mask = obs_auto['nom'].str.contains('EDF')
         obs_auto = obs_auto[~mask]
         # Extract corresponding antilope values :
-        obs_auto["rr_antilope"] = parameters.mu.sel(lat=xr.DataArray(obs_auto.lats.values, dims='poste'), lon=xr.DataArray(obs_auto.lons.values, dims='poste'), method='nearest').data
+        obs_auto["rr_antilope"] = parameters[var].sel(lat=xr.DataArray(obs_auto.lats.values, dims='poste'), lon=xr.DataArray(obs_auto.lons.values, dims='poste'), method='nearest').data
         #obs_auto["rr_antilope"] = parameters.rr.sel(lat=xr.DataArray(obs_auto.lats.values, dims='poste'), lon=xr.DataArray(obs_auto.lons.values, dims='poste'), method='nearest').data
         # Compute ratio and error :
         obs_auto["ratio"] = (obs_auto["rr_antilope"]+0.1) / (obs_auto["rr"]+0.1)  # Add 0.1 to avoid division by 0 issues
@@ -1627,8 +1629,8 @@ class RandomSampling(Assimilation):
 
         for i,poste in enumerate(obs_auto.index):
             tmp = obs_auto.loc[poste]
-            rr_antilope = parameters.sel(lat=tmp.lats, lon=tmp.lons, method='nearest').mu.data
-            antilope_ratio = (parameters.mu.data+0.1) / (rr_antilope+0.1)
+            rr_antilope = parameters.sel(lat=tmp.lats, lon=tmp.lons, method='nearest')[var].data
+            antilope_ratio = (parameters[var].data+0.1) / (rr_antilope+0.1)
             #rr_antilope = parameters.sel(lat=tmp.lats, lon=tmp.lons, method='nearest').rr.data
             #antilope_ratio = (parameters.rr.data+0.01) / (rr_antilope+0.01)
             arome_cumul = self.arome_clim.sel(lat=tmp.lats, lon=tmp.lons, method='nearest')
@@ -1655,6 +1657,13 @@ class RandomSampling(Assimilation):
         D = np.sqrt(np.sum(weights*(ratios-mean_ratio)**2, axis=0)/W)
         D[W==0] = 0
         mean_ratio = np.divide(np.sum(weights*ratios, axis=0), W)
+
+        if self.plot:
+            tmp = make_mask.to_xarray(mean_ratio, parameters, varname='mean_ratio')
+            make_mask.plot_and_save(tmp, "Mean_ratio", cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=0, vmax=2, dom=self.domain, dirsave=f'{self.date_str}')
+            spread = make_mask.to_xarray(D, parameters, varname='dispersion')
+            make_mask.plot_and_save(spread, "Ratio_spread", cmap=plt.cm.viridis, vmin=0, dom=self.domain, dirsave=f'{self.date_str}')
+
         ratios = np.array(ratios)
         ratios[np.isnan(ratios)] = 1  # Security
         ratios[np.isinf(ratios)] = 1  # No precipitation in reference
@@ -1681,9 +1690,22 @@ class RandomSampling(Assimilation):
         #new_ratio = initial_ratio * w0 + w1 * mean_ratio
         new_ratio = 1 * w0 + w1 * mean_ratio
         #estimated_ratio[np.isnan(estimated_ratio)] = 1
-        new_error = (parameters.mu.data+0.1) / new_ratio - (parameters.mu.data+0.1)  # Absolute error (Add 0.1mm to avoid problems with no precipitation pixels)
-        new_error = np.abs(new_error) + np.abs(new_ratio-1) * (parameters.mu.data+0.1) / new_ratio  # Add modification
-        new_error = w1 * new_error
+
+
+        absolute_error = np.abs((parameters[var].data+0.1) / new_ratio - (parameters[var].data+0.1))  # L1 : Absolute error (Add 0.1mm to avoid problems with no precipitation pixels)
+        #absolute_error = np.abs(new_ratio-1) * (parameters[var].data+0.1) / new_ratio  # Add value change --> exact same information as L1 !!
+        uncertainty = np.abs((parameters[var].data+0.1) / (1+np.abs(new_ratio-1)+D/10) - (parameters[var].data+0.1))
+
+        new_error = absolute_error + uncertainty
+        new_error = new_error + parameters.sigma
+
+        new_error = uniform_filter(new_error, 3) + 0.1 # Add 0.1 by security to avoid appartion of circles arround points with very low error)
+
+        #new_error = new_error + (np.abs(new_ratio-1) + D) * parameters[var].data / new_ratio
+
+        #new_error = np.abs(new_error) + np.abs(new_ratio-1) * (parameters[var].data+0.1) / new_ratio  # Add modification
+        #new_error = w1 * new_error
+        #new_error = new_error + (np.abs(mean_ratio-1) + D) * (parameters[var].data+0.1) / new_ratio  # Try to add error where estimated ratio is near 1 but with a huge dispersion
         #new_error = np.abs(new_error) + np.abs(new_ratio-1) * (parameters.mu.data+0.1) / new_ratio  # Add modification
         #new_error = np.abs(new_ratio-1) * (parameters.mu.data+0.1) / new_ratio  # Add modification
         #new_error = (parameters.rr.data+0.1) / new_ratio - 0.1  - parameters.rr.data  # Add 0.1mm to avoid problems with no precipitation pixels
@@ -1691,8 +1713,6 @@ class RandomSampling(Assimilation):
         # Conversion to xarray
         new_ratio = make_mask.to_xarray(new_ratio, parameters, varname='Ratio')
         new_error = make_mask.to_xarray(np.abs(new_error), parameters, varname='Error (mm)')
-
-        # TODO : introduire une incertitude loin des points de reference
 
         return new_ratio, new_error, obs_auto
 
@@ -1741,7 +1761,6 @@ class RandomSampling(Assimilation):
             parameters = actual_parameters.sel({'time':date}).compute()
 
             obs_auto = self.obs_auto[self.obs_auto.date==date]  # Select date
-
             rat, err, obs_auto = self.dynamic_error_estimation(parameters, obs_auto)
 
             if self.plot:
@@ -1752,6 +1771,8 @@ class RandomSampling(Assimilation):
                 lonmax = domain_coords[domain]['lonmax']
                 sel_lat = np.round(np.arange(latmin, latmax, 0.01), 2)
                 sel_lon = np.round(np.arange(lonmin, lonmax, 0.01), 2)
+                sel_lat = rat.lat.data  # TODO : TMP !!!
+                sel_lon = rat.lon.data  # TODO : TMP !!!
 
                 fig, ax = plt.subplots(figsize=figsize[self.domain]['singleplot'])
                 tmp = rat.sel({'lat':np.intersect1d(sel_lat, rat.lat.data), 'lon':np.intersect1d(sel_lon, rat.lon.data)})
@@ -1887,7 +1908,7 @@ class RandomSampling(Assimilation):
         sd1 = Rstat.diagonal().reshape((len(parameters.lat), len(parameters.lon)))  # Get standard deviation field
         #sd1 = uniform_filter(sd1, 3)
         sd2 = Rdyn.diagonal().reshape((len(parameters.lat), len(parameters.lon)))
-        sd2 = uniform_filter(sd2, 5)
+        sd2 = uniform_filter(sd2, 3)
         #sd = R.diagonal().reshape((len(parameters.lat), len(parameters.lon)))  # Get standard deviation field
         sd = sd1 + sd2
 
@@ -2110,7 +2131,7 @@ class RandomSampling(Assimilation):
             sd1 = Rstat.diagonal().reshape((len(parameters_loc.lat), len(parameters_loc.lon)))  # Get standard deviation field
             #sd1 = uniform_filter(sd1, 3)
             sd2 = Rdyn.diagonal().reshape((len(parameters_loc.lat), len(parameters_loc.lon)))
-            sd2 = uniform_filter(sd2, 5)
+            sd2 = uniform_filter(sd2, 3)
             #sd = R.diagonal().reshape((len(parameters_loc.lat), len(parameters_loc.lon)))  # Get standard deviation field
             sd = sd1 + sd2
 

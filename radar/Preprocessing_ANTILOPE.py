@@ -253,7 +253,7 @@ def codistances(coords, ld=0.1):  # TMP for illustration. TODO : test different 
 
 def random_draw(obs, sd, ratio=None, sd2=None, distribution='gamma'):
 
-    frac = 0.2
+    frac = 0.1
 
     gauss = np.random.normal(loc=0.0, scale=1.0, size=1)[0]  # Draw random element from normal distribution
     if distribution == 'normal':
