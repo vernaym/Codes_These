@@ -63,7 +63,7 @@ domain_coords = dict(
         SouthernAlps   = dict(lonmin=5.7, lonmax=7.0, latmin=44.2, latmax=45.0),
         HauteSavoie    = dict(lonmin=6.45, lonmax=6.95, latmin=45.67, latmax=46.35),
         MontBlanc      = dict(lonmin=6.45, lonmax=7.1, latmin=45.65, latmax=46.1),
-        Savoie         = dict(lonmin=6.06, lonmax=7.06, latmin=45.15, latmax=45.65),
+        Savoie         = dict(lonmin=6.06, lonmax=7.1, latmin=45.15, latmax=45.7),
         Isere          = dict(lonmin=5.54, lonmax=6.19, latmin=44.89, latmax=45.16),
         Brianconnais   = dict(lonmin=6.48, lonmax=6.95, latmin=44.67, latmax=44.95),
         HautesAlpes    = dict(lonmin=5.90, lonmax=6.36, latmin=44.58, latmax=44.81),
@@ -1288,7 +1288,7 @@ class Assimilation(object):
         Rstat = diags(sd, 0)  # WARNING : variable name not adapted anymore
         #Rdyn = diags(sd, 0)
         #Rdyn = diags(np.sqrt(sd*np.abs(new_obs.data - parameters.db.data).flatten()), 0)
-        Rdyn = diags(np.abs(new_obs.data - parameters.db.data).flatten(), 0)
+        Rdyn = diags(np.abs(new_obs.data - parameters.mu.data).flatten(), 0)
         R = dia_matrix(Rdyn+Rstat)
         #R = dia_matrix(Rdyn)
 
@@ -1683,12 +1683,16 @@ class RandomSampling(Assimilation):
         #estimated_ratio[np.isnan(estimated_ratio)] = 1
         new_error = (parameters.mu.data+0.1) / new_ratio - (parameters.mu.data+0.1)  # Absolute error (Add 0.1mm to avoid problems with no precipitation pixels)
         new_error = np.abs(new_error) + np.abs(new_ratio-1) * (parameters.mu.data+0.1) / new_ratio  # Add modification
+        new_error = w1 * new_error
+        #new_error = np.abs(new_error) + np.abs(new_ratio-1) * (parameters.mu.data+0.1) / new_ratio  # Add modification
         #new_error = np.abs(new_ratio-1) * (parameters.mu.data+0.1) / new_ratio  # Add modification
         #new_error = (parameters.rr.data+0.1) / new_ratio - 0.1  - parameters.rr.data  # Add 0.1mm to avoid problems with no precipitation pixels
 
         # Conversion to xarray
         new_ratio = make_mask.to_xarray(new_ratio, parameters, varname='Ratio')
         new_error = make_mask.to_xarray(np.abs(new_error), parameters, varname='Error (mm)')
+
+        # TODO : introduire une incertitude loin des points de reference
 
         return new_ratio, new_error, obs_auto
 
@@ -1883,7 +1887,7 @@ class RandomSampling(Assimilation):
         sd1 = Rstat.diagonal().reshape((len(parameters.lat), len(parameters.lon)))  # Get standard deviation field
         #sd1 = uniform_filter(sd1, 3)
         sd2 = Rdyn.diagonal().reshape((len(parameters.lat), len(parameters.lon)))
-        sd2 = uniform_filter(sd2, 3)
+        sd2 = uniform_filter(sd2, 5)
         #sd = R.diagonal().reshape((len(parameters.lat), len(parameters.lon)))  # Get standard deviation field
         sd = sd1 + sd2
 
@@ -1964,8 +1968,9 @@ class RandomSampling(Assimilation):
         #pond = self.pond.dot(diags(1/std.flatten(), 0))
 
         for member in analysis.member.data:
+            ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='gamma')
             #ana = Preprocessing_ANTILOPE.random_draw(obs, sd1, distribution='gamma')
-            ana = Preprocessing_ANTILOPE.random_draw(obs, sd1, sd2=sd2, distribution='gamma')
+            #ana = Preprocessing_ANTILOPE.random_draw(obs, sd1, sd2=sd2, distribution='gamma')
             #ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='normal')
             analysis.loc[{'member':member}] = ana
 
@@ -2105,7 +2110,7 @@ class RandomSampling(Assimilation):
             sd1 = Rstat.diagonal().reshape((len(parameters_loc.lat), len(parameters_loc.lon)))  # Get standard deviation field
             #sd1 = uniform_filter(sd1, 3)
             sd2 = Rdyn.diagonal().reshape((len(parameters_loc.lat), len(parameters_loc.lon)))
-            sd2 = uniform_filter(sd2, 3)
+            sd2 = uniform_filter(sd2, 5)
             #sd = R.diagonal().reshape((len(parameters_loc.lat), len(parameters_loc.lon)))  # Get standard deviation field
             sd = sd1 + sd2
 
@@ -2120,8 +2125,9 @@ class RandomSampling(Assimilation):
 
             # Fill other members with random draw arround the corrected observation
             for member in range(1, nmembers+1):
+                ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='gamma')
                 #ana = Preprocessing_ANTILOPE.random_draw(obs, sd1, distribution='gamma')
-                ana = Preprocessing_ANTILOPE.random_draw(obs, sd1, sd2=sd2, distribution='gamma')
+                #ana = Preprocessing_ANTILOPE.random_draw(obs, sd1, sd2=sd2, distribution='gamma')
                 #ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='normal')
                 analysis.loc[{'member':member}] = ana
 

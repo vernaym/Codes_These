@@ -252,12 +252,15 @@ def codistances(coords, ld=0.1):  # TMP for illustration. TODO : test different 
     return dist
 
 def random_draw(obs, sd, ratio=None, sd2=None, distribution='gamma'):
+
+    frac = 0.2
+
     gauss = np.random.normal(loc=0.0, scale=1.0, size=1)[0]  # Draw random element from normal distribution
     if distribution == 'normal':
         ana = obs+gauss*sd  # Gaussian perturbation around >0 obs
         gauss = np.random.normal(loc=0.0, scale=1.0, size=1)[0]  # Draw random element from normal distribution
         # Add a 2nd perturbation term:
-        ana= ana + obs*0.2*gauss
+        ana= ana + obs*frac*gauss
 
     elif distribution == 'gamma':
         # TODO : essayer de faire dependre k de l'obs
@@ -274,15 +277,15 @@ def random_draw(obs, sd, ratio=None, sd2=None, distribution='gamma'):
         # - normal distributed around the estimated error --> especially important for error for small prexipitation values
         # This 2 step perturbation reduces the dispersion but introduces spatial variability in the analysis fields
         if ratio is not None:
-            ana = obs + obs*(0.2+np.abs(1-np.sqrt(ratio)))*(gamma-shift) + gauss*sd
+            ana = obs + obs*(frac+np.abs(1-np.sqrt(ratio)))*(gamma-shift) + gauss*sd
         else:
-            ana = obs + obs*0.2*(gamma-shift) + gauss*sd
+            ana = obs + obs*frac*(gamma-shift) + gauss*sd
 
         if sd2 is not None:
-            gamma = np.random.gamma(k, scale=theta)  # Draw random element from normal distribution (>0 only ==> shift necessary to convert into perturbations)
-            ana = ana + sd2*(gamma-shift)
-            #gauss = np.random.normal(loc=0.0, scale=1.0, size=1)[0]  # Draw random element from normal distribution
-            #ana = ana + sd2*gauss
+            #gamma = np.random.gamma(k, scale=theta)  # Draw random element from normal distribution (>0 only ==> shift necessary to convert into perturbations)
+            #ana = ana + sd2*(gamma-shift)
+            gauss = np.random.normal(loc=0.0, scale=1.0, size=1)[0]  # Draw random element from normal distribution
+            ana = ana + sd2*gauss
 
     else:
         print('Error : unknown distribution')
