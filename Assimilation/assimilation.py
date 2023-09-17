@@ -1899,7 +1899,7 @@ class RandomSampling(Assimilation):
             coords = dict(lon=parameters.lon, lat=parameters.lat, member=range(0, nmembers+1)),
         )
         obs = Y.reshape((len(parameters.lat), len(parameters.lon)))  # Get observation field
-        #obs = np.round(obs, 1)  # Round precipitation <0.1 at 0 (different distribution used in this case) TODO : convertir dans l'espace r^1/2
+        obs = np.round(obs, 1)  # Round precipitation <0.1 at 0 (different distribution used in this case) TODO : convertir dans l'espace r^1/2
 
         # Fill first member with corrected observation
         analysis.loc[{'member':0}] = obs
@@ -2161,7 +2161,7 @@ class RandomSampling(Assimilation):
                 R, Rstat, Rdyn, updated_obs = self.observation_ECM_new(parameters_loc, date)
             Y = updated_obs.data  # Observation vector
             obs = Y.reshape((len(parameters_loc.lat), len(parameters_loc.lon)))  # Get observation field
-            #obs = np.round(obs, 1)  # Round precipitation <0.1 at 0 (different distribution used in this case)
+            obs = np.round(obs, 1)  # Round precipitation <0.1 at 0 (different distribution used in this case)
 
             # Initialisation of ensemble output field
             analysis = xr.DataArray(
