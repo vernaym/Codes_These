@@ -106,10 +106,10 @@ if __name__ == "__main__":
         #fic_error = os.path.join(datadir, subdir, f'Observation_error_{d0}_alp.nc')
 
         # Extract AROME precipitation accumulation
-#        fic = os.path.join('/home/vernaym/These/DATA', f'CUMUL_AROME.nc')
-#        cumul = xr.open_dataset(fic)
-#        reduced_cumul = cumul.sel({'lat':np.intersect1d(extract_lat, cumul.lat), 'lon':np.intersect1d(extract_lon, cumul.lon)})
-#        make_mask.plot(reduced_cumul, '2021103000', '2022060200', categories=False, biascorrection=False, scores=False)
+        fic = os.path.join('/home/vernaym/These/DATA', f'CUMUL_AROME.nc')
+        cumul = xr.open_dataset(fic)
+        reduced_cumul = cumul.sel({'lat':np.intersect1d(extract_lat, cumul.lat), 'lon':np.intersect1d(extract_lon, cumul.lon)})
+        make_mask.plot(reduced_cumul, '2021103000', '2022060200', categories=False, biascorrection=False, scores=False, dom=domain, product='AROME')
 
 #        Extract ANTILOPE precipitation accumulation
         fic = os.path.join('/home/vernaym/These/DATA', f'CUMUL_ANTILOPEH_alp_2021103000_2022060200.nc')

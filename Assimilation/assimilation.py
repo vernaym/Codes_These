@@ -1273,8 +1273,8 @@ class Assimilation(object):
         gradient = xr.open_dataarray(fic_gradient)
         gradient = gradient.sel({'lat':np.intersect1d(parameters.lat, gradient.lat), 'lon':np.intersect1d(parameters.lon, gradient.lon)})
 
-        #newfield, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(obs, pond)
-        newfield, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(obs, pond, gradient=gradient.data.flatten())  # Use AROME mean vertical gradient
+        newfield, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(obs, pond)
+        #newfield, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(obs, pond, gradient=gradient.data.flatten())  # Use AROME mean vertical gradient
         #newfield, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(obs, pond, qq_adjustment=True)  # qq adjustment add >0 bias !
 
         #Rdyn = diags(sd, 0)
@@ -1655,8 +1655,8 @@ class RandomSampling(Assimilation):
             #w = np.exp(-(dist/0.1)**2)  # Distance weighting --> Do not propagate information too far away
             #w = np.exp(-dist/0.1)  # Distance weighting
             #w = np.exp(-(dist/self.ld)**2)  # Distance weighting
-            #w = 1/(0.01+dist)**2  # Distance weighting  --> adding 0.01 instead of 1 ensures that the value at the reference point is preserved
-            w = 1/(0.1+dist)**2  # Distance weighting  --> adding 0.1 instead of 1 ensures that the value at the reference point is preserved
+            w = 1/(0.01+dist)**2  # Distance weighting  --> adding 0.01 instead of 1 ensures that the value at the reference point is preserved
+            #w = 1/(0.1+dist)**2  # Distance weighting  --> adding 0.1 instead of 1 ensures that the value at the reference point is preserved
 
             #ratio = (rr_antilope.rr.data+0.1) / (tmp.rr+0.1)  # WARNING : division by 0
             #error = rr_antilope.rr.data - tmp.rr
@@ -1717,7 +1717,7 @@ class RandomSampling(Assimilation):
         new_error = absolute_error + uncertainty
         #new_error = new_error + parameters.sigma
 
-        new_error = uniform_filter(new_error, 3) + 0.1 # Add 0.1 by security to avoid appartion of circles arround points with very low error)
+        #new_error = uniform_filter(new_error, 3) + 0.1 # Add 0.1 by security to avoid appartion of circles arround points with very low error)
 
         #new_error = new_error + (np.abs(new_ratio-1) + D) * parameters[var].data / new_ratio
 
@@ -1791,12 +1791,12 @@ class RandomSampling(Assimilation):
                 lonmax = domain_coords[domain]['lonmax']
                 sel_lat = np.round(np.arange(latmin, latmax, 0.01), 2)
                 sel_lon = np.round(np.arange(lonmin, lonmax, 0.01), 2)
-                sel_lat = rat.lat.data  # TODO : TMP !!!
-                sel_lon = rat.lon.data  # TODO : TMP !!!
+                #sel_lat = rat.lat.data  # TODO : TMP !!!
+                #sel_lon = rat.lon.data  # TODO : TMP !!!
 
                 self.plot_array(rat.data, rat, 'ratio', f'{self.date_str}/Ratio_{self.domain}.pdf', cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=0.5, vmax=1.5, domain=self.domain)
-                self.plot_array(err.data, err, 'error (mm)', f'{self.date_str}/Error_dyn_{self.domain}.pdf', cmap=plt.cm.YlOrBr, domain=self.domain, vmin=0, vmax=3)
-                self.plot_array(err.data+parameters.sigma, err, 'error (mm)', f'{self.date_str}/Error_{self.domain}.pdf', cmap=plt.cm.YlOrBr, domain=self.domain, vmin=0, vmax=10)
+                self.plot_array(err.data, err, 'error (mm)', f'{self.date_str}/Error_dyn_{self.domain}.pdf', cmap=plt.cm.YlOrBr, domain=self.domain, vmin=0)
+                self.plot_array(err.data+parameters.sigma, err, 'error (mm)', f'{self.date_str}/Error_{self.domain}.pdf', cmap=plt.cm.YlOrBr, domain=self.domain, vmin=0)
                 #fig, ax = plt.subplots(figsize=figsize[self.domain]['singleplot'])
                 #tmp = rat.sel({'lat':np.intersect1d(sel_lat, rat.lat.data), 'lon':np.intersect1d(sel_lon, rat.lon.data)})
                 #im = plot_field(tmp, ax, 0.5, 1.5, self.domain, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap)
@@ -2089,8 +2089,8 @@ class RandomSampling(Assimilation):
             #ECM_max = np.nanmax(R.toarray())
             ECM_max = max(np.nanmax(Rdyn.toarray()), np.nanmax(Rstat.toarray()))
             #self.plot_matrix(R, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_ECM_{domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.viridis)
-            self.plot_matrix(Rdyn, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_dyn_ECM_{domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.viridis)
-            self.plot_matrix(Rstat, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_stat_ECM_{domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.viridis)
+            self.plot_matrix(Rdyn, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_dyn_ECM_{domain}.pdf', vmin=0, cmap=plt.cm.viridis)
+            self.plot_matrix(Rstat, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_stat_ECM_{domain}.pdf', vmin=0, cmap=plt.cm.viridis)
 
             #parameters.mu.data = np.square(parameters.mu.data)
             #parameters.rr.data = np.square(parameters.rr.data)

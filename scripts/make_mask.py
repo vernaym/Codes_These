@@ -332,7 +332,7 @@ def add_cities(latmin, latmax, lonmin, lonmax):
     for idx in tmp.index:
         plt.text(tmp.lng[idx], tmp.lat[idx], tmp.city[idx], alpha=0.5)
 
-def plot(antilope, datebegin, dateend, categories=True, biascorrection=False, scores=False, dom=None):
+def plot(antilope, datebegin, dateend, categories=True, biascorrection=False, scores=False, dom=None, product=None):
 
     #if not os.path.exists(os.path.join(savedir, f'CUMUL_ANTILOPE_2021080106_2022070106_{domain}.pdf')):
     if dom is None:
@@ -412,7 +412,10 @@ def plot(antilope, datebegin, dateend, categories=True, biascorrection=False, sc
     ax.grid(False)  # Remove grid lines (does not work !)
     #fig.legend()
     #fig.tight_layout()
-    fig.savefig(os.path.join(savedir, f'CUMUL_ANTILOPE_{datebegin}_{dateend}_{dom}.pdf'))
+    if product is None:
+        fig.savefig(os.path.join(savedir, f'CUMUL_ANTILOPE_{datebegin}_{dateend}_{dom}.pdf'))
+    else:
+        fig.savefig(os.path.join(savedir, f'CUMUL_{product}_{datebegin}_{dateend}_{dom}.pdf'))
     #sys.exit()
 
 def nearest(array, value):
@@ -663,7 +666,7 @@ def ratio_estimation(field, model=None, moving_window=25):
         ratio_arome = model.rr_cumul / uniform_filter(model.rr_cumul.data, int(d0*100))  # ~ gradient vertical modele
         #ratio_modele.data = uniform_filter(ratio_modele.data, 30)
         #ratio_modele.data = uniform_filter(ratio_modele.data, 15)
-        ratio_arome.data = uniform_filter(ratio_arome.data, 15)
+        ratio_arome.data = uniform_filter(ratio_arome.data, 10)
         plot_and_save(ratio_arome, 'arome_gradient' , vmin=0.8, vmax=1.2, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap)
 
     # Mont-Blanc
@@ -730,8 +733,8 @@ def ratio_estimation(field, model=None, moving_window=25):
             if h0 is not None:
                 w = np.exp(-(dist/d0))*np.exp(-(np.abs(elevation_dist)/h0))
             else:
-                w = 1/(0.1+dist)**2
-                #w = 1/(0.01+dist)**2
+                #w = 1/(0.1+dist)**2
+                w = 1/(0.01+dist)**2
                 #w = np.round(1/(1+dist)**2, 3)
                 #w = np.round(np.exp(-(dist/d0)), 3)  # Propagates reference score further
                 #w = np.round(np.exp(-(dist**2/d0)), 3)
@@ -918,11 +921,11 @@ def ratio_estimation(field, model=None, moving_window=25):
     pos= np.where(observation_error.data>=0)
     #observation_error.data[neg] = 21.391*observation_error.data[neg]  # r=0.5 ==> err=-10.7  # 2018/2019
     #observation_error.data[neg] = 20.137*observation_error.data[neg]-1  # <0
-    observation_error.data[neg] = 20.137*(observation_error.data[neg]-D[neg]) - 1  # <0
+    observation_error.data[neg] = 20.137*(observation_error.data[neg]-D[neg]/2) - 0.1  # <0
     #observation_error.data[neg] = 20*np.square(observation_error.data[neg]-1)  # <0
     #observation_error.data[neg] = 4*observation_error.data[neg]  # r=0.5 ==> err=-2
     #observation_error.data[pos] = 15.148*observation_error.data[pos]  # r=1.5 ==> err=7.574  " 2018/2019
-    observation_error.data[pos] = 16.787*(observation_error.data[pos]+D[pos]) + 1  # r=1.5 ==> err=8.574  " 2021/2022
+    observation_error.data[pos] = 16.787*(observation_error.data[pos]+D[pos]/2) + 0.1  # r=1.5 ==> err=8.574  " 2021/2022
     #observation_error.data[pos] = 16*np.square(observation_error.data[pos]+1)  # r=1.5 ==> err=8.574  " 2021/2022
     #observation_error.data[pos] = 2*observation_error.data[pos]  # r=1.5 ==> err = 1
     #observation_error = 1+np.abs(smoothratio-1)
@@ -942,7 +945,7 @@ def ratio_estimation(field, model=None, moving_window=25):
     #uncertainty = (1+w1) * observation_error + (mean_ratio+D) * 
     #uncertainty = (1+w1) * observation_error
     #uncertainty = w1 * observation_error  # WARNING : error no longer > 1 !!
-    uncertainty = observation_error  # WARNING : error no longer > 1 !!
+    uncertainty = observation_error
 
     #uncertainty = (1+w1) * observation_error + (1+D) * (np.abs(mean_ratio - 1) + np.exp(-np.abs(mean_ratio - 1)))
     #uncertainty = 1 + observation_error*w1+D/W
@@ -976,7 +979,7 @@ def ratio_estimation(field, model=None, moving_window=25):
         #plot_and_save(np.abs(observation_error), errorname, vmin=0, vmax=15, cmap=plt.cm.Greys, scores=scores)
         #plot_and_save(observation_error, errorname, vmin=1, vmax=15, cmap=plt.cm.YlOrBr, scores=scores)
         plot_and_save(confidence, confidencename, vmin=0, cmap=plt.cm.Greens)
-        plot_and_save(uncertainty, uncertaintyname, vmin=1, vmax=10, cmap=plt.cm.YlOrBr)
+        plot_and_save(uncertainty, uncertaintyname, vmin=1, vmax=20, cmap=plt.cm.YlOrBr)
     elif domain == 'GrandesRousses':
         plot_and_save(ratio_field, rationame, vmin=0.6, vmax=1.4, cmap=plt.cm.coolwarm, scores=scores)
         #plot_and_save(observation_error, errorname, vmin=-6, vmax=6, cmap=plt.cm.coolwarm, scores=scores)
