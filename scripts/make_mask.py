@@ -444,8 +444,8 @@ def plot_and_save(field, name, cmap=plt.cm.Greys, vmin=None, vmax=None, scores=N
         fig, ax = plt.subplots(figsize=(14,12))
     elif dom == 'Savoie':
         #fig, ax = plt.subplots(figsize=(12,6))
-        #fig, ax = plt.subplots(figsize=(16,8))
-        fig, ax = plt.subplots(figsize=(16,40))
+        fig, ax = plt.subplots(figsize=(16,8))
+        #fig, ax = plt.subplots(figsize=(16,40))
     elif dom == 'MontBlanc':
         fig, ax = plt.subplots(figsize=(12,11))
     elif dom == 'alp':
@@ -730,8 +730,8 @@ def ratio_estimation(field, model=None, moving_window=25):
             if h0 is not None:
                 w = np.exp(-(dist/d0))*np.exp(-(np.abs(elevation_dist)/h0))
             else:
-                #w = 1/(0.1+dist)**2
-                w = 1/(0.01+dist)**2
+                w = 1/(0.1+dist)**2
+                #w = 1/(0.01+dist)**2
                 #w = np.round(1/(1+dist)**2, 3)
                 #w = np.round(np.exp(-(dist/d0)), 3)  # Propagates reference score further
                 #w = np.round(np.exp(-(dist**2/d0)), 3)
@@ -941,7 +941,8 @@ def ratio_estimation(field, model=None, moving_window=25):
     # TODO add term independent of observation error to increase errors where the method estimates a low error but with high uncertainty
     #uncertainty = (1+w1) * observation_error + (mean_ratio+D) * 
     #uncertainty = (1+w1) * observation_error
-    uncertainty = w1 * observation_error  # WARNING : error no longer > 1 !!
+    #uncertainty = w1 * observation_error  # WARNING : error no longer > 1 !!
+    uncertainty = observation_error  # WARNING : error no longer > 1 !!
 
     #uncertainty = (1+w1) * observation_error + (1+D) * (np.abs(mean_ratio - 1) + np.exp(-np.abs(mean_ratio - 1)))
     #uncertainty = 1 + observation_error*w1+D/W
