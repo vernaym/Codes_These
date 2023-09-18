@@ -1293,7 +1293,10 @@ class Assimilation(object):
         #Rdyn = diags(np.sqrt(sd*np.abs(new_obs.data - parameters.db.data).flatten()), 0)
         #Rdyn = diags(np.abs(new_obs.data - parameters.mu.data).flatten(), 0)
         #Rdyn = diags(np.abs(new_obs.data - parameters.rr.data).flatten(), 0)
-        Rdyn = diags(parameters.error.data.flatten(), 0)
+        #error = parameters.error.data.flatten() * sd
+        error = uniform_filter(parameters.error.data.flatten(), 5)
+        #error = parameters.error.data.flatten()
+        Rdyn = diags(error, 0)
         R = dia_matrix(Rdyn+Rstat)
         #R = dia_matrix(Rdyn)
 
@@ -1689,6 +1692,7 @@ class RandomSampling(Assimilation):
             self.plot_array(1/Wd, parameters, 'Weight spread', f'{self.date_str}/Weight_spread_{self.domain}.pdf', cmap=plt.cm.viridis, vmin=0, domain=self.domain)
             self.plot_array(D/(2*Wm), parameters, 'D/W', f'{self.date_str}/D_over_2timesW_{self.domain}.pdf', cmap=plt.cm.viridis, vmin=0, vmax=0.2, domain=self.domain)
             self.plot_array(D/10, parameters, 'D/10', f'{self.date_str}/D_over_10_{self.domain}.pdf', cmap=plt.cm.viridis, vmin=0, domain=self.domain)
+            pass
 
         ratios = np.array(ratios)
         ratios[np.isnan(ratios)] = 1  # Security
@@ -1722,8 +1726,8 @@ class RandomSampling(Assimilation):
         #absolute_error = np.abs(new_ratio-1) * (parameters[var].data+0.1) / new_ratio  # Add value change --> exact same information as L1 !!
         uncertainty = np.abs((parameters[var].data+0.1) / (1+np.abs(new_ratio-1)+D/10) - (parameters[var].data+0.1))
 
-        new_error = absolute_error + uncertainty
-        #new_error = new_error + parameters.sigma
+        #new_error = absolute_error + uncertainty
+        new_error = np.abs(((parameters[var].data+0.1) / new_ratio) * (np.abs(new_ratio-1)+D/2) )
 
         #new_error = uniform_filter(new_error, 3) + 0.1 # Add 0.1 by security to avoid appartion of circles arround points with very low error)
 
@@ -1788,7 +1792,7 @@ class RandomSampling(Assimilation):
 
             obs_auto = self.obs_auto[self.obs_auto.date==date]  # Select date
             var = 'mu'
-            delta = 0.1
+            delta = 0.01
             rat, err, obs_auto = self.dynamic_error_estimation(parameters, obs_auto, var=var, delta=delta)
 
             if self.plot:

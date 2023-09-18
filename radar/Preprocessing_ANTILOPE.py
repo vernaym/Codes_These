@@ -287,8 +287,11 @@ def random_draw(obs, sd, ratio=None, sd2=None, distribution='gamma'):
         if ratio is not None:
             ana = obs + obs*(frac+np.abs(1-np.sqrt(ratio)))*(gamma-shift) + gauss*sd
         else:
-            ana = obs + obs*frac*(gamma-shift) + gauss*sd
             #ana = obs + gauss*sd
+            #ana = obs + obs*frac*(gamma-shift) + gauss*sd
+            #ana = obs + obs*frac*gauss + sd*(gamma-shift)
+            ana = obs + gauss*sd
+            ana = ana + ana*frac*(gamma-shift)
 
         if sd2 is not None:
             gamma = np.random.gamma(k, scale=theta)  # Draw random element from normal distribution (>0 only ==> shift necessary to convert into perturbations)
