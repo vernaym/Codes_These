@@ -238,24 +238,30 @@ def codistances(coords, ld=0.1):  # TMP for illustration. TODO : test different 
     #np.exp(1/(1+dist.data), out=dist.data )
 
     # 2. Elevation inter-distance
-#    mnt1km = xr.open_dataset('/home/vernaym/These/DATA/DEM_ALPESFR_WGS84_1km.nc')  # Open 1km DEM
-#    lons = np.unique([coord[0] for coord in coords])
-#    lats = np.unique([coord[1] for coord in coords])
-#    mnt1km = mnt1km.sel({'lat':np.intersect1d(lats, mnt1km.lat), 'lon':np.intersect1d(lons, mnt1km.lon)})
-#    Z = mnt1km.elevation.data.flatten()
-#    Z=diags(Z, 0)
-#    tmppond = dist.copy()
-#    tmppond[tmppond.nonzero()] = 1
-#    dZ = tmppond.dot(Z) - Z.dot(tmppond)  # Compute elevation inter-distance
-#    dZ = np.abs(dZ)
-#    np.exp(-dZ.data/1000, out=dZ.data)
-#    dist = dist.dot(dZ)
+    mnt1km = xr.open_dataset('/home/vernaym/These/DATA/DEM_ALPESFR_WGS84_1km.nc')  # Open 1km DEM
+    lons = np.unique([coord[0] for coord in coords])
+    lats = np.unique([coord[1] for coord in coords])
+    mnt1km = mnt1km.sel({'lat':np.intersect1d(lats, mnt1km.lat), 'lon':np.intersect1d(lons, mnt1km.lon)})
+    Z = mnt1km.elevation.data.flatten()
+    # WARNING : dZ=0 not taken into account ==> ponderation at central point = 0 !!!!
+    # Solution : avoid to have exactly 0 at central point ==> Add 1m difference
+    Z1 = diags(Z, 0)
+    Z2 = diags(Z+1, 0)
+    tmppond = dist.copy()
+    tmppond[tmppond.nonzero()] = 1
+    dZ = tmppond.dot(Z2) - Z1.dot(tmppond)  # Compute elevation inter-distance
+    dZ = np.abs(dZ)
+    #dZ.data=1/(1000+dZ.data)**2
+    np.exp(-dZ.data/500, out=dZ.data)
+
+    dist = dist.multiply(dZ)
+    #dist=dZ
 
     return dist
 
 def random_draw(obs, sd, ratio=None, sd2=None, distribution='gamma'):
 
-    frac = 0.1
+    frac = 0.2
 
     gauss = np.random.normal(loc=0.0, scale=1.0, size=1)[0]  # Draw random element from normal distribution
     if distribution == 'normal':

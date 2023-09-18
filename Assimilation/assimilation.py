@@ -957,7 +957,7 @@ class Assimilation(object):
 
         return prob_density
 
-    def plot_super_ensemble(self, point, ensemble, mu, std, pond, product, label=None, ax=None, reference=None, initial_obs=None):
+    def plot_super_ensemble(self, point, oldfield, newfield, mu, std, pond, product, label=None, ax=None, reference=None, initial_obs=None):
 
         if ax is None:
             now = True
@@ -966,12 +966,13 @@ class Assimilation(object):
             now = False
 
         weights = pond.getrow(point).toarray()[0]
-        obs = ensemble[point]
+        oldobs = oldfield[point]
+        newobs = newfield[point]
         #obsweight = weights[point]/np.sum(weights)
         obsweight = weights[point]
 
-        ax.hist(ensemble, density=True, bins=np.arange(np.floor(np.nanmin(ensemble))-0.1, np.ceil(np.nanmax(ensemble)) + 0.1, 0.1), weights=weights/np.sum(weights), label='Neighborhood distribution', alpha=0.5)
-        #ax.bar(ensemble, weights/np.sum(weights))
+        ax.hist(oldfield, density=True, bins=np.arange(np.floor(np.nanmin(oldfield))-0.1, np.ceil(np.nanmax(oldfield)) + 0.1, 0.1), weights=weights/np.sum(weights), label='Neighborhood distribution', alpha=0.5)
+        #ax.bar(oldfield, weights/np.sum(weights))
         #ax.plot(obs, obsweight, marker='+', color='orange', label='Initial Observation')
         ax.bar(mu, 2, width=0.005, color='k')
 
@@ -980,30 +981,32 @@ class Assimilation(object):
 #        plot_distribution(ax, obs, std, distribution='norm', linewidth=1, label='Observation distribution')  # mu est la valeur du pixel
 
         # To test a new method (the goal is that it gives the same distribution as the red one in the final version) :
-#        mean = np.sum(weights*ensemble)/np.sum(weights)
+#        mean = np.sum(weights*oldfield)/np.sum(weights)
 #        ax.bar(mean, 2.54, width=0.005, color='k')
 #        plot_distribution(ax, mean, std, distribution='norm', linewidth=1, color='k')  # mu est la valeur du pixel
 
-        ax.plot(obs, obsweight, marker='.', color='k', label=f'Initial {product}', linestyle='', markersize=15)
+        ax.plot(oldobs, obsweight, marker='.', color='k', linestyle='', markersize=10)
+        ax.bar(oldobs, 2, width=0.1, color='k', label='Before correction')
+        ax.bar(newobs, 2, width=0.1, color='green', label='After correction')
 
         if reference is not None:
-            ax.bar(np.sqrt(reference), 2, width=0.1, color='red', label='Reference Observation')
+            ax.bar(reference, 2, width=0.1, color='red', label='Reference Observation')
 
         if initial_obs is not None:
-            ax.bar(np.sqrt(initial_obs[point]), 2, width=0.1, color='blue', label='Initial Observation')
+            ax.bar(initial_obs[point], 2, width=0.1, color='blue', label='Initial Observation')
 
 #        newobs = (obs*obsweight + mean * np.nanmean(weights[weights>0])) / (obsweight+np.nanmean(weights[weights>0]))
-#        #sd   = np.sum(weights*(ensemble-obs)**2)/np.sum(weights)
-#        sd   = np.sum(weights*(ensemble-mean)**2)/np.sum(weights)
+#        #sd   = np.sum(weights*(oldfield-obs)**2)/np.sum(weights)
+#        sd   = np.sum(weights*(oldfield-mean)**2)/np.sum(weights)
 #        plot_distribution(ax, newobs, sd, distribution='norm', linewidth=1, color='blue', label='Observation distribution')
 
         if now:
             # Set figure boundaries
-            ax.set_ylim(bottom=0, top=1)
-            #ax.set_xlim(left=4, right=np.nanmax(ensemble)+std)
+            ax.set_ylim(bottom=0, top=0.5)
+            ax.set_xlim(left=np.nanmin(oldfield)-std, right=np.nanmax(oldfield)+std)
             #ax.set_xlim(left=0, right=3)
-            ax.set_xlabel('R^1/2 (mm^1/2)')
-            ax.set_ylabel('Weight')
+            ax.set_xlabel('Precipitation (mm)')
+            ax.set_ylabel('Probability')
             ax.legend()
 #            if not os.path.exists(f'{self.date_str}/distributions'):
 #                os.makedirs(f'{self.date_str}/distributions')
@@ -1313,7 +1316,7 @@ class Assimilation(object):
                     lat,lon = np.meshgrid(parameters.lat, parameters.lon)
                     point = np.where((lat.flatten()==plot['lat']) & (lon.flatten()==plot['lon']))[0][0]
                     #self.plot_super_ensemble(point, obs, mean[point], sd[point], pond, f'Observation_{num_poste}_{date}', reference=ref, initial_obs=initial_obs)
-                    self.plot_super_ensemble(point, obs, mean[point], R.diagonal()[point], pond, f'Observation_{num_poste}_{date}', reference=ref, initial_obs=initial_obs)
+                    self.plot_super_ensemble(point, obs, newfield, mean[point], R.diagonal()[point], pond, f'Observation_{num_poste}_{date}', reference=ref, initial_obs=initial_obs)
 
         return R, Rstat, Rdyn, new_obs
 
@@ -1667,8 +1670,9 @@ class RandomSampling(Assimilation):
 
         weights = np.array(weights)
         W = np.sum(weights, axis=0)
-        Wm = np.mean(W, axis=0)
-        Wd = np.sqrt(np.mean((weights-Wm)**2))
+        Wm = np.mean(weights, axis=0)
+        Wd = np.sqrt(np.mean((weights-Wm)**2, axis=0))
+
         mean_ratio = np.divide(np.sum(weights*ratios, axis=0), W)
         D = np.sqrt(np.sum(weights*(ratios-mean_ratio)**2, axis=0)/W)
         D[W==0] = 0
@@ -1676,11 +1680,15 @@ class RandomSampling(Assimilation):
 
         if self.plot:
             #tmp = make_mask.to_xarray(mean_ratio, parameters, varname='mean_ratio')
-            self.plot_array(mean_ratio, parameters, 'Mean ratio', f'{self.date_str}/Mean_ratio.pdf', cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=0, vmax=2, domain=self.domain)
+            self.plot_array(mean_ratio, parameters, 'Mean ratio', f'{self.date_str}/Mean_ratio_{self.domain}.pdf', cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=0, vmax=2, domain=self.domain)
             #make_mask.plot_and_save(tmp, "Mean_ratio", cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=0, vmax=2, dom=self.domain, dirsave=f'{self.date_str}')
             #spread = make_mask.to_xarray(D, parameters, varname='dispersion')
-            self.plot_array(D, parameters, 'Ratio ratio', f'{self.date_str}/Ratio_spread.pdf', cmap=plt.cm.viridis, vmin=0, domain=self.domain)
+            self.plot_array(D, parameters, 'Ratio ratio', f'{self.date_str}/Ratio_spread_{self.domain}.pdf', cmap=plt.cm.viridis, vmin=0, domain=self.domain)
             #make_mask.plot_and_save(spread, "Ratio_spread", cmap=plt.cm.viridis, vmin=0, dom=self.domain, dirsave=f'{self.date_str}')
+            self.plot_array(1/Wm, parameters, 'Weight', f'{self.date_str}/Weight_{self.domain}.pdf', cmap=plt.cm.viridis, vmin=0, domain=self.domain)
+            self.plot_array(1/Wd, parameters, 'Weight spread', f'{self.date_str}/Weight_spread_{self.domain}.pdf', cmap=plt.cm.viridis, vmin=0, domain=self.domain)
+            self.plot_array(D/(2*Wm), parameters, 'D/W', f'{self.date_str}/D_over_2timesW_{self.domain}.pdf', cmap=plt.cm.viridis, vmin=0, vmax=0.2, domain=self.domain)
+            self.plot_array(D/10, parameters, 'D/10', f'{self.date_str}/D_over_10_{self.domain}.pdf', cmap=plt.cm.viridis, vmin=0, domain=self.domain)
 
         ratios = np.array(ratios)
         ratios[np.isnan(ratios)] = 1  # Security
@@ -1937,7 +1945,7 @@ class RandomSampling(Assimilation):
         sd1 = Rstat.diagonal().reshape((len(parameters.lat), len(parameters.lon)))  # Get standard deviation field
         #sd1 = uniform_filter(sd1, 3)
         sd2 = Rdyn.diagonal().reshape((len(parameters.lat), len(parameters.lon)))
-        sd2 = uniform_filter(sd2, 3)
+        #sd2 = uniform_filter(sd2, 3)
         #sd = R.diagonal().reshape((len(parameters.lat), len(parameters.lon)))  # Get standard deviation field
         sd = sd1 + sd2
         sd[obs==0] = 0
@@ -2087,8 +2095,8 @@ class RandomSampling(Assimilation):
 
             #ECM_max = np.square(np.nanmax(R))
             #ECM_max = np.nanmax(R.toarray())
-            ECM_max = max(np.nanmax(Rdyn.toarray()), np.nanmax(Rstat.toarray()))
-            #self.plot_matrix(R, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_ECM_{domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.viridis)
+            #ECM_max = max(np.nanmax(Rdyn.toarray()), np.nanmax(Rstat.toarray()))
+            self.plot_matrix(R, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_ECM_{domain}.pdf', vmin=0, cmap=plt.cm.viridis)
             self.plot_matrix(Rdyn, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_dyn_ECM_{domain}.pdf', vmin=0, cmap=plt.cm.viridis)
             self.plot_matrix(Rstat, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_stat_ECM_{domain}.pdf', vmin=0, cmap=plt.cm.viridis)
 
@@ -2155,7 +2163,8 @@ class RandomSampling(Assimilation):
             #if int(num_poste) == 74033400:
             #if int(num_poste) == 38191400:
             #if int(num_poste) == 5133400:
-            if int(num_poste) == 38253400:
+            #if int(num_poste) == 38253400:
+            if int(num_poste) == 73176400:
                 R, Rstat, Rdyn, updated_obs = self.observation_ECM_new(parameters_loc, date, plot=dict(lat=nearest_lat, lon=nearest_lon, date=date, num_poste=num_poste))
             else:
                 R, Rstat, Rdyn, updated_obs = self.observation_ECM_new(parameters_loc, date)
@@ -2177,7 +2186,7 @@ class RandomSampling(Assimilation):
             sd1 = Rstat.diagonal().reshape((len(parameters_loc.lat), len(parameters_loc.lon)))  # Get standard deviation field
             #sd1 = uniform_filter(sd1, 3)
             sd2 = Rdyn.diagonal().reshape((len(parameters_loc.lat), len(parameters_loc.lon)))
-            sd2 = uniform_filter(sd2, 3)
+            #sd2 = uniform_filter(sd2, 3)
             #sd = R.diagonal().reshape((len(parameters_loc.lat), len(parameters_loc.lon)))  # Get standard deviation field
             sd = sd1 + sd2
             sd[obs==0] = 0

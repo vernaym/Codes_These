@@ -1219,8 +1219,10 @@ class Evaluation(object):
                         simu = self.data[product].loc[{'num_poste':poste}].data
                         obs = self.data.obs.loc[{'num_poste':poste}].data
                         fig, ax = plt.subplots()
-                        self.rank_histogram(simu, obs, product, ax, onlypos=True)
-                        fig.savefig(os.path.join(savedir, 'hists', f'rank_histogram_onlypos_{product}_{poste}.pdf'), format='pdf')
+                        #self.rank_histogram(simu, obs, product, ax, onlypos=True)
+                        #fig.savefig(os.path.join(savedir, 'hists', f'rank_histogram_onlypos_{product}_{poste}.pdf'), format='pdf')
+                        self.rank_histogram(simu, obs, product, ax)
+                        fig.savefig(os.path.join(savedir, 'hists', f'rank_histogram_{product}_{poste}.pdf'), format='pdf')
                         plt.close(fig)
         ax1.plot([0,1], [0,1], linestyle=':', color='k')
         ax1.set_xlim([0, 1])

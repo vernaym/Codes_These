@@ -11,13 +11,18 @@ import xarray as xr
 import scipy
 from scipy import sparse
 from scipy.spatial import cKDTree
-from scipy.sparse import csr_matrix
+from scipy.sparse import csr_matrix, csc_matrix, diags
+from scipy.spatial import distance_matrix
 import shapefile
 from metpy.interpolate import cross_section
 
 import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
+
+from These.radar import Preprocessing_ANTILOPE
+
+import richdem as rd
 
 #plt.rcParams["figure.figsize"] = [7.50, 3.50]
 #plt.rcParams["axes.grid"] = False
@@ -266,8 +271,14 @@ def plot_vertical_cross_section(cross):
 
 
 mnt = xr.open_dataset(os.path.join(datadir, "DEM_ALPES_WGS84_250m_bilinear.nc"))
-mnt=mnt.where((mnt['lat']>=latmin) & (mnt['lat']<=latmax) & (mnt['lon']>=lonmin) & (mnt['lon']<=lonmax), drop=True)
 mnt = mnt.rename({'Band1':'elevation'})
+
+# TMP : To produce 1km MNT over the Frenc Alps domain
+#antilope = xr.open_dataset('/home/vernaym/These/DATA/CUMUL_ANTILOPEH_alp_2021103000_2022060200.nc')
+#mnt1km = mnt.interp(lat=antilope.lat, lon=antilope.lon, method='linear')
+#mnt1km.to_netcdf('/home/vernaym/These/DATA/DEM_ALPESFR_WGS84_1km.nc')
+
+mnt=mnt.where((mnt['lat']>=latmin) & (mnt['lat']<=latmax) & (mnt['lon']>=lonmin) & (mnt['lon']<=lonmax), drop=True)
 
 crossection = False
 if crossection:
@@ -298,6 +309,35 @@ if crossection:
 
 else:
 
+    #antilope = xr.open_dataset('/home/vernaym/These/DATA/CUMUL_ANTILOPEH_alp_2021103000_2022060200.nc')
+
+    mnt1km = xr.open_dataset('/home/vernaym/These/DATA/DEM_ALPESFR_WGS84_1km.nc')
+    # Projection of DEM on the 1-km ANTILOPE grid
+    #data = rd.rdarray(mnt.interp(lat=antilope.lat, lon=antilope.lon).sortby('lat', ascending=False).elevation.data, no_data=-9999)
+    data = rd.rdarray(mnt1km.sortby('lat', ascending=False).elevation.data, no_data=-9999)
+
+    # 1. Elevation inter-distance
+    Z = mnt1km.elevation.data.flatten()
+    Z=diags(Z, 0)
+    coords=[(lon,lat) for lat in mnt1km.lat.data for lon in mnt1km.lon.data]
+    pond = Preprocessing_ANTILOPE.codistances(coords)
+    pond[pond.nonzero()] = 1
+    dZ = pond.dot(Z) - Z.dot(pond)  # Compute elevation inter-distance
+    dZ=np.abs(dZ)
+    scipy.sparse.save_npz('/home/vernaym/These/DATA/elevation_codistance_alp.npz', dZ, compressed=False)
+
+    # 2. Slope inter-distance
+    slope = rd.TerrainAttribute(data, attrib='slope_percentage')
+    #slope = rd.TerrainAttribute(data, attrib='slope_degrees')
+    rd.rdShow(slope, axes=False, cmap='magma', figsize=(8, 5.5))
+    plt.show()
+
+    # 3. Aspect inter-distance
+    aspect = rd.TerrainAttribute(data, attrib='aspect')
+    rd.rdShow(aspect, axes=False, cmap='jet', figsize=(8, 5.5))
+    plt.show()
+
+    # 3. Plot elevation
     #filename = os.path.join(savedir, f'ReliefAlpes_correlation{d0}.pdf')
     filename = os.path.join(savedir, f'Relief_{domain}_with_nivometeo.pdf')
 
