@@ -453,6 +453,7 @@ def plot_distribution(ax, mean, sd, ensemble=None, label=None, color=None, distr
 
     if distribution == 'norm':
         ax.plot(x, norm.pdf(x, loc=mean, scale=sd), color=color, label=label, linestyle='--', linewidth=linewidth)
+        ax.bar(mean, 1, width=0.2, color=color, label="Ensemble mean")
         if ensemble is not None:
             #ax.bar(ensemble, norm.pdf(ensemble, loc=mean, scale=sd), 'r-', color=color, label='members', linewidth=linewidth)
             ax.bar(ensemble, norm.pdf(ensemble, loc=mean, scale=sd), width=0.1, color=color)
@@ -1727,7 +1728,7 @@ class RandomSampling(Assimilation):
         uncertainty = np.abs((parameters[var].data+0.1) / (1+np.abs(new_ratio-1)+D/10) - (parameters[var].data+0.1))
 
         #new_error = absolute_error + uncertainty
-        new_error = np.abs(((parameters[var].data+0.1) / new_ratio) * (np.abs(new_ratio-1)+D/2) )
+        new_error = np.abs(((parameters[var].data+0.1) / new_ratio) * (np.abs(new_ratio-1)+D/Wm) )
 
         #new_error = uniform_filter(new_error, 3) + 0.1 # Add 0.1 by security to avoid appartion of circles arround points with very low error)
 
@@ -1950,8 +1951,8 @@ class RandomSampling(Assimilation):
         #sd1 = uniform_filter(sd1, 3)
         sd2 = Rdyn.diagonal().reshape((len(parameters.lat), len(parameters.lon)))
         #sd2 = uniform_filter(sd2, 3)
-        #sd = R.diagonal().reshape((len(parameters.lat), len(parameters.lon)))  # Get standard deviation field
-        sd = sd1 + sd2
+        sd = R.diagonal().reshape((len(parameters.lat), len(parameters.lon)))  # Get standard deviation field
+        #sd = sd1 + sd2
         sd[obs==0] = 0
 
         error = xr.DataArray(
@@ -2046,9 +2047,9 @@ class RandomSampling(Assimilation):
         #pond = self.pond.dot(diags(1/std.flatten(), 0))
 
         for member in analysis.member.data:
-            #ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='gamma')
+            ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='gamma')
             #ana = Preprocessing_ANTILOPE.random_draw(obs, sd1, distribution='gamma')
-            ana = Preprocessing_ANTILOPE.random_draw(obs, sd1, sd2=sd2, distribution='gamma')
+            #ana = Preprocessing_ANTILOPE.random_draw(obs, sd1, sd2=sd2, distribution='gamma')
             #ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='normal')
             analysis.loc[{'member':member}] = ana
 
@@ -2191,8 +2192,8 @@ class RandomSampling(Assimilation):
             #sd1 = uniform_filter(sd1, 3)
             sd2 = Rdyn.diagonal().reshape((len(parameters_loc.lat), len(parameters_loc.lon)))
             #sd2 = uniform_filter(sd2, 3)
-            #sd = R.diagonal().reshape((len(parameters_loc.lat), len(parameters_loc.lon)))  # Get standard deviation field
-            sd = sd1 + sd2
+            sd = R.diagonal().reshape((len(parameters_loc.lat), len(parameters_loc.lon)))  # Get standard deviation field
+            #sd = sd1 + sd2
             sd[obs==0] = 0
 
             error = xr.DataArray(
@@ -2206,9 +2207,9 @@ class RandomSampling(Assimilation):
 
             # Fill other members with random draw arround the corrected observation
             for member in range(1, nmembers+1):
-                #ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='gamma')
+                ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='gamma')
                 #ana = Preprocessing_ANTILOPE.random_draw(obs, sd1, distribution='gamma')
-                ana = Preprocessing_ANTILOPE.random_draw(obs, sd1, sd2=sd2, distribution='gamma')
+                #ana = Preprocessing_ANTILOPE.random_draw(obs, sd1, sd2=sd2, distribution='gamma')
                 #ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='normal')
                 analysis.loc[{'member':member}] = ana
 

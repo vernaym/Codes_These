@@ -287,15 +287,23 @@ def random_draw(obs, sd, ratio=None, sd2=None, distribution='gamma'):
         if ratio is not None:
             ana = obs + obs*(frac+np.abs(1-np.sqrt(ratio)))*(gamma-shift) + gauss*sd
         else:
-            #ana = obs + gauss*sd
+            # WARNING : the small ensemble size (16) lead to a large variability
+            # of the ensemble mean but this algorithm ensures that on average the ensemble
+            # mean is centered on the corrected observation
             #ana = obs + obs*frac*(gamma-shift) + gauss*sd
             #ana = obs + obs*frac*gauss + sd*(gamma-shift)
             ana = obs + gauss*sd
+            #ana = obs + sd*(gamma-shift)
             ana = ana + ana*frac*(gamma-shift)
+            #ana = ana + obs*frac*(gamma-shift)
 
-        if sd2 is not None:
-            gamma = np.random.gamma(k, scale=theta)  # Draw random element from normal distribution (>0 only ==> shift necessary to convert into perturbations)
-            ana = ana + sd2*(gamma-shift)
+#            if sd2 is not None:
+#                gamma = np.random.gamma(k, scale=theta)  # Draw random element from normal distribution (>0 only ==> shift necessary to convert into perturbations)
+#                ana = ana + sd2*(gamma-shift)
+#            gamma = np.random.gamma(k, scale=theta)  # Draw random element from normal distribution (>0 only ==> shift necessary to convert into perturbations)
+#            ana = ana + ana*frac*(gamma-shift)
+
+
             #gauss = np.random.normal(loc=0.0, scale=1.0, size=1)[0]  # Draw random element from normal distribution
             #ana = ana + sd2*gauss
 
