@@ -1290,18 +1290,11 @@ class Assimilation(object):
         )
 
         Rstat = diags(sd, 0)  # WARNING : variable name not adapted anymore
-        #Rdyn = diags(sd, 0)
         #Rdyn = diags(np.sqrt(sd*np.abs(new_obs.data - parameters.db.data).flatten()), 0)
-        #Rdyn = diags(np.abs(new_obs.data - parameters.mu.data).flatten(), 0)
-        #Rdyn = diags(np.abs(new_obs.data - parameters.rr.data).flatten(), 0)
-        #error = parameters.error.data.flatten() * sd
-        #error = uniform_filter(parameters.error.data.flatten(), 5)
-        #error = uniform_filter(parameters.error.data.flatten(), 15)
         error = parameters.error.data
         error = uniform_filter(error, 15)
         Rdyn = diags(error.flatten(), 0)
         R = dia_matrix(Rdyn+Rstat)
-        #R = dia_matrix(Rdyn)
 
         # Plot data
         if plot is not None:
@@ -1646,19 +1639,24 @@ class RandomSampling(Assimilation):
             rr_antilope = parameters.sel(lat=tmp.lats, lon=tmp.lons, method='nearest')[var].data
             #antilope_ratio = (parameters[var].data+0.1) / (rr_antilope+0.1)  # Goal : estimlate ratio for ridges pixels with no precipitation detected by ANTILOPE
             if rr_antilope>0:
-                delta2 = 0
+                mask = np.where(parameters[var].data==0)
+                # Compute a ratio if there is ANTILOLPE precipitation at reference point but not at target point (--> missed precipitation over ridges ? ex : Savoie 20220110)
+                delta2 = np.zeros(np.shape(parameters[var].data))
+                delta2[mask] = delta
+                #delta2 = 0
             else:
                 delta2 = delta
-            antilope_ratio = (parameters[var].data+delta2) / (rr_antilope+delta2)  # Goal : estimlate ratio for ridges pixels with no precipitation detected by ANTILOE
-            antilope_ratio[parameters[var].data==0] = 1  # Do not introduce precipitation on pixel with no precipitation and no reference
-            if tmp["rr"] == 0:
-                antilope_ratio[rr_antilope==0] = 1  # Not enough information available to estimate a ratio --> apply only AROME vertical gradient
+            antilope_ratio = (parameters[var].data+delta2) / (rr_antilope+delta2)  # Goal : estimlate ratio for ridges pixels with no precipitation detected by ANTILOPE
+            #antilope_ratio[parameters[var].data==0] = 1  # Do not introduce precipitation on pixel with no precipitation and no reference
             #antilope_ratio[rr_antilope==0] = 1
             #rr_antilope = parameters.sel(lat=tmp.lats, lon=tmp.lons, method='nearest').rr.data
             #antilope_ratio = (parameters.rr.data+0.01) / (rr_antilope+0.01)
             arome_cumul = self.arome_clim.sel(lat=tmp.lats, lon=tmp.lons, method='nearest')
             ratio_arome = self.arome_clim.rr_cumul.data / arome_cumul.rr_cumul.data
-            ratio_arome[parameters[var].data==0] = 1  # Do not introduce precipitation on pixel with no precipitation and no reference
+            if tmp["rr"] == 0:
+                #antilope_ratio[rr_antilope==0] = 1  # Not enough information available to estimate a ratio --> apply only AROME vertical gradient
+                antilope_ratio[parameters[var].data==0] = 1  # Not enough information available to estimate a ratio --> apply only AROME vertical gradient
+                ratio_arome[parameters[var].data==0] = 1  # Do not introduce precipitation on pixel with no precipitation and no reference
 
             dist = np.sqrt((lats-tmp.lats)**2+(lons-tmp.lons)**2)  # Euclidian horizontal distance
             #w = np.exp(-(dist/0.1)**2)  # Distance weighting --> Do not propagate information too far away
@@ -1712,10 +1710,10 @@ class RandomSampling(Assimilation):
         # * D-->inf ==> w1-->0  (choix : D=1 ==> w1=1/2)
         # * W-->inf ==> w1-->1
         # w1 can be seen as a measure of the confidence in the method
-        X = 1/(2*W-1)  # Facteur pour assurer la condition D=1 ==> w1=1/2. WARNING : W=1/2 valeur singulière
-        K = W * (1 - D / (D + X))
-        K[W==0.5] = 0.5  # W=1/2 valeur singulière de X
-        K[W==0] = 0
+        X = 1/(2*Wm-1)  # Facteur pour assurer la condition D=1 ==> w1=1/2. WARNING : W=1/2 valeur singulière
+        K = Wm * (1 - D / (D + X))
+        K[Wm==0.5] = 0.5  # W=1/2 valeur singulière de X
+        #K[Wm==0] = 0
         w1 = np.exp(-1/K)
         w0 = 1 - w1
         #w1 = W / (1 + W)
@@ -1724,25 +1722,12 @@ class RandomSampling(Assimilation):
         new_ratio = 1 * w0 + w1 * mean_ratio
         #estimated_ratio[np.isnan(estimated_ratio)] = 1
 
-
         absolute_error = np.abs((parameters[var].data+0.1) / new_ratio - (parameters[var].data+0.1))  # L1 : Absolute error (Add 0.1mm to avoid problems with no precipitation pixels)
         #absolute_error = np.abs(new_ratio-1) * (parameters[var].data+0.1) / new_ratio  # Add value change --> exact same information as L1 !!
-        uncertainty = np.abs((parameters[var].data+0.1) / (1+np.abs(new_ratio-1)+D/10) - (parameters[var].data+0.1))
+        #uncertainty = np.abs((parameters[var].data+0.1) / (1+np.abs(new_ratio-1)+D/10) - (parameters[var].data+0.1))
+        uncertainty = np.abs((parameters[var].data+0.1) / (1+np.abs(new_ratio-1)+D/Wm) - (parameters[var].data+0.1))
 
-        #new_error = absolute_error + uncertainty
-        #new_error = np.abs(((parameters[var].data+0.1) / new_ratio) * (np.abs(new_ratio-1)+D/Wm) )
-        new_error = np.abs((parameters[var].data+0.1) * (np.abs(new_ratio-1)+D/Wm) )
-
-        #new_error = uniform_filter(new_error, 3) + 0.1 # Add 0.1 by security to avoid appartion of circles arround points with very low error)
-
-        #new_error = new_error + (np.abs(new_ratio-1) + D) * parameters[var].data / new_ratio
-
-        #new_error = np.abs(new_error) + np.abs(new_ratio-1) * (parameters[var].data+0.1) / new_ratio  # Add modification
-        #new_error = w1 * new_error
-        #new_error = new_error + (np.abs(mean_ratio-1) + D) * (parameters[var].data+0.1) / new_ratio  # Try to add error where estimated ratio is near 1 but with a huge dispersion
-        #new_error = np.abs(new_error) + np.abs(new_ratio-1) * (parameters.mu.data+0.1) / new_ratio  # Add modification
-        #new_error = np.abs(new_ratio-1) * (parameters.mu.data+0.1) / new_ratio  # Add modification
-        #new_error = (parameters.rr.data+0.1) / new_ratio - 0.1  - parameters.rr.data  # Add 0.1mm to avoid problems with no precipitation pixels
+        new_error = absolute_error + uncertainty
 
         # Conversion to xarray
         new_ratio = make_mask.to_xarray(new_ratio, parameters, varname='Ratio')
@@ -2050,9 +2035,9 @@ class RandomSampling(Assimilation):
         #pond = self.pond.dot(diags(1/std.flatten(), 0))
 
         for member in analysis.member.data:
-            ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='gamma')
+            #ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='gamma')
             #ana = Preprocessing_ANTILOPE.random_draw(obs, sd1, distribution='gamma')
-            #ana = Preprocessing_ANTILOPE.random_draw(obs, sd1, sd2=sd2, distribution='gamma')
+            ana = Preprocessing_ANTILOPE.random_draw(obs, sd1, sd2=sd2, distribution='gamma')
             #ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='normal')
             analysis.loc[{'member':member}] = ana
 
@@ -2210,9 +2195,9 @@ class RandomSampling(Assimilation):
 
             # Fill other members with random draw arround the corrected observation
             for member in range(1, nmembers+1):
-                ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='gamma')
+                #ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='gamma')
                 #ana = Preprocessing_ANTILOPE.random_draw(obs, sd1, distribution='gamma')
-                #ana = Preprocessing_ANTILOPE.random_draw(obs, sd1, sd2=sd2, distribution='gamma')
+                ana = Preprocessing_ANTILOPE.random_draw(obs, sd1, sd2=sd2, distribution='gamma')
                 #ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='normal')
                 analysis.loc[{'member':member}] = ana
 
