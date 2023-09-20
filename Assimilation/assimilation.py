@@ -1295,9 +1295,11 @@ class Assimilation(object):
         #Rdyn = diags(np.abs(new_obs.data - parameters.mu.data).flatten(), 0)
         #Rdyn = diags(np.abs(new_obs.data - parameters.rr.data).flatten(), 0)
         #error = parameters.error.data.flatten() * sd
-        error = uniform_filter(parameters.error.data.flatten(), 5)
-        #error = parameters.error.data.flatten()
-        Rdyn = diags(error, 0)
+        #error = uniform_filter(parameters.error.data.flatten(), 5)
+        #error = uniform_filter(parameters.error.data.flatten(), 15)
+        error = parameters.error.data
+        error = uniform_filter(error, 15)
+        Rdyn = diags(error.flatten(), 0)
         R = dia_matrix(Rdyn+Rstat)
         #R = dia_matrix(Rdyn)
 
@@ -1728,7 +1730,8 @@ class RandomSampling(Assimilation):
         uncertainty = np.abs((parameters[var].data+0.1) / (1+np.abs(new_ratio-1)+D/10) - (parameters[var].data+0.1))
 
         #new_error = absolute_error + uncertainty
-        new_error = np.abs(((parameters[var].data+0.1) / new_ratio) * (np.abs(new_ratio-1)+D/Wm) )
+        #new_error = np.abs(((parameters[var].data+0.1) / new_ratio) * (np.abs(new_ratio-1)+D/Wm) )
+        new_error = np.abs((parameters[var].data+0.1) * (np.abs(new_ratio-1)+D/Wm) )
 
         #new_error = uniform_filter(new_error, 3) + 0.1 # Add 0.1 by security to avoid appartion of circles arround points with very low error)
 
@@ -1793,7 +1796,7 @@ class RandomSampling(Assimilation):
 
             obs_auto = self.obs_auto[self.obs_auto.date==date]  # Select date
             var = 'mu'
-            delta = 0.01
+            delta = 0.1
             rat, err, obs_auto = self.dynamic_error_estimation(parameters, obs_auto, var=var, delta=delta)
 
             if self.plot:
@@ -2086,7 +2089,7 @@ class RandomSampling(Assimilation):
                 std = error.sel(lat=ref.lat.data, lon=ref.lon.data, method='nearest').data
                 #ax[i,j] = plot_distribution(ax[i,j], mu, std, label='Analysis theoretical PDF', color='k', linewidth=1)
                 ax[i,j].legend()
-                ax[i,j].set_xlim(left=0, right=60)
+                ax[i,j].set_xlim(left=0, right=80)
                 ax[i,j].set_ylim(top=0.06)
                 ax[i,j].set_xlabel('Precipitation (mm/24h)')
                 j = j + 1
