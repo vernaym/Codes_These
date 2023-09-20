@@ -102,7 +102,7 @@ def get_obs_auto():
 
 def get_safran():
 
-    filename = f'SAFRAN.nc'  #TODO : donner un nom plus explicite
+    filename = f'SAFRAN_{datebegin.ymd}.nc'  #TODO : donner un nom plus explicite
 
     toolbox.input(
         role           = 'Ana_massifs',
@@ -122,6 +122,7 @@ def get_safran():
         datebegin      = datebegin.ymd6h,
         dateend        = dateend.ymd6h,
         namespace      = 'vortex.multi.fr',
+        fatal          = False,
     ),
 
     if os.path.exists(filename):

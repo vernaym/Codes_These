@@ -171,7 +171,7 @@ class PrecipitationAnalysis(object):
             return np.ptp(a[np.isfinite(a)])
         rr = df.rr.values[mask]
         error = df.error.values[mask]
-        errorsize = high - (high-low)*error/rr
+        errorsize = high - (high-low)*error/(2*rr)
         errorsize[errorsize<0] = 5
         #error = low + (error - np.nanmin(error))/(nan_ptp(error)/high)
         #error = low + high/error
