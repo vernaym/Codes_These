@@ -1590,6 +1590,8 @@ class RandomSampling(Assimilation):
         #obs_auto = obs_auto.set_index(['num_poste', 'date'])
         obs_auto = obs_auto.set_index(['num_poste'])
 
+        obs_auto["rr"] = obs_auto["rr"].round(1)
+
         self.obs_auto = obs_auto
 
     def dynamic_error_estimation(self, parameters, obs_auto, var='mu', delta=1):
@@ -1741,9 +1743,9 @@ class RandomSampling(Assimilation):
 #            self.plot_array(X, parameters, 'X', f'{self.date_str}/X_{self.domain}.pdf', cmap=plt.cm.viridis, domain=self.domain)
                 pass
 
-            absolute_error = np.abs((parameters[var].data+0.1) / new_ratio - (parameters[var].data+0.1))  # L1 : Absolute error (Add 0.1mm to avoid problems with no precipitation pixels)
+            absolute_error = np.abs((parameters[var].data+0.1) / new_ratio - (parameters[var].data))  # L1 : Absolute error (Add 0.1mm to avoid problems with no precipitation pixels)
             #absolute_error = np.abs(new_ratio-1) * (parameters[var].data+0.1) / new_ratio  # Add value change --> exact same information as L1 !!
-            uncertainty = np.abs((parameters[var].data+0.1) / (1+np.abs(new_ratio-1)+D/10) - (parameters[var].data+0.1))
+            uncertainty = np.abs((parameters[var].data+0.1) / (1+np.abs(new_ratio-1)+D/10) - (parameters[var].data))
             #uncertainty = np.abs((parameters[var].data+0.1) / (1+np.abs(new_ratio-1)+D/Wm) - (parameters[var].data+0.1))
 
             new_error = absolute_error + uncertainty
@@ -1781,7 +1783,7 @@ class RandomSampling(Assimilation):
         self.error = null.copy()  # Initialisation of error data
         #self.newlocalfield = {m:dict() for m in range(1, self.Ne+1)}  # Used only for ponctual assimilation
 
-        actual_parameters = self.parameters
+        actual_parameters = np.round(self.parameters, 1)
 
         codistances = os.path.join('/home/vernaym/These/DATA', f'codistance_max_dist_{self.max_dist}_{domain}.npz')
 #            if not os.path.exists(codistances):
@@ -1805,8 +1807,9 @@ class RandomSampling(Assimilation):
 
             obs_auto = self.obs_auto[self.obs_auto.date==date]  # Select date
             var = 'mu'
-            delta = 1
+            delta = 0.01
             rat, err, obs_auto = self.dynamic_error_estimation(parameters, obs_auto, var=var, delta=delta)
+            delta = 0
 
             if self.plot:
                 # Reduce the data to the actual domain (remove the potential correlation length edge)
@@ -1819,7 +1822,7 @@ class RandomSampling(Assimilation):
                 #sel_lat = rat.lat.data  # TODO : TMP !!!
                 #sel_lon = rat.lon.data  # TODO : TMP !!!
 
-                self.plot_array(rat.data, rat, 'ratio', f'{self.date_str}/Ratio_{self.domain}.pdf', cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=0.5, vmax=1.5, domain=self.domain)
+                self.plot_array(rat.data, rat, 'ratio', f'{self.date_str}/Ratio_{self.domain}.pdf', cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=0.2, vmax=1.8, domain=self.domain)
                 self.plot_array(err.data, err, 'error (mm)', f'{self.date_str}/Error_dyn_{self.domain}.pdf', cmap=plt.cm.YlOrBr, domain=self.domain, vmin=0)
                 self.plot_array(err.data+parameters.sigma, err, 'error (mm)', f'{self.date_str}/Error_{self.domain}.pdf', cmap=plt.cm.YlOrBr, domain=self.domain, vmin=0)
                 #fig, ax = plt.subplots(figsize=figsize[self.domain]['singleplot'])
@@ -1945,7 +1948,7 @@ class RandomSampling(Assimilation):
         # Kriging of reference values to get a reference field
         kriging = False
         #if len(nivometeo.num_poste) > 1:
-        if len(allobs) > 1:
+        if len(allobs) > 1 and kriging:
             kriging = True
             y    = allobs.lat.values
             x    = allobs.lon.values
