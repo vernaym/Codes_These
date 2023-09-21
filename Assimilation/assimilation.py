@@ -1807,9 +1807,8 @@ class RandomSampling(Assimilation):
 
             obs_auto = self.obs_auto[self.obs_auto.date==date]  # Select date
             var = 'mu'
-            delta = 0.01
+            delta = 0.1
             rat, err, obs_auto = self.dynamic_error_estimation(parameters, obs_auto, var=var, delta=delta)
-            delta = 0
 
             if self.plot:
                 # Reduce the data to the actual domain (remove the potential correlation length edge)
@@ -1840,11 +1839,10 @@ class RandomSampling(Assimilation):
             # Fill parameters Dataset with dynamic fields
             parameters['error'] = err
             parameters['ratio'] = rat
-            #parameters['db'] = (parameters['mu']+0.1) / parameters['ratio'] - 0.1  # Add 0.1 to introduce precipitation in "missed precipitation" pixels
-            parameters['db'] = (parameters[var]+delta) / parameters['ratio'] - delta  # Add 1 to introduce precipitation in "missed precipitation" pixels
+            #parameters['db'] = (parameters[var]+delta) / parameters['ratio'] - delta  # Add delta to introduce precipitation in "missed precipitation" pixels
+            parameters['db'] = parameters[var] / parameters['ratio']
             mask = parameters[var].data > 1
             parameters['db'].data[mask] = parameters[var].data[mask] / parameters['ratio'].data[mask]
-            #parameters['db'] = (parameters['rr']+0.01) / parameters['ratio'] - 0.01  # Add 0.01 to introduce precipitation in "missed precipitation" pixels
 
             ####################  TMP  #####################
             # Plot distributions before / after conversion
@@ -1969,6 +1967,8 @@ class RandomSampling(Assimilation):
         sd = R.diagonal().reshape((len(parameters.lat), len(parameters.lon)))  # Get standard deviation field
         #sd = sd1 + sd2
         sd[obs==0] = 0
+        sd1[obs==0] = 0
+        sd2[obs==0] = 0
 
         error = xr.DataArray(
             name   = 'error',
@@ -2210,6 +2210,8 @@ class RandomSampling(Assimilation):
             sd = R.diagonal().reshape((len(parameters_loc.lat), len(parameters_loc.lon)))  # Get standard deviation field
             #sd = sd1 + sd2
             sd[obs==0] = 0
+            sd1[obs==0] = 0
+            sd2[obs==0] = 0
 
             error = xr.DataArray(
                 name   = 'error',
