@@ -663,10 +663,11 @@ def ratio_estimation(field, model=None, moving_window=25):
     used_scores = []
 
     if model is not None:
-        ratio_arome = model.rr_cumul / uniform_filter(model.rr_cumul.data, int(d0*100))  # ~ gradient vertical modele
+        ratio_arome = model.rr_cumul / uniform_filter(model.rr_cumul.data, 10)  # ~ gradient vertical modele
+        #ratio_arome = model.rr_cumul / uniform_filter(model.rr_cumul.data, int(d0*100))  # ~ gradient vertical modele
         #ratio_modele.data = uniform_filter(ratio_modele.data, 30)
         #ratio_modele.data = uniform_filter(ratio_modele.data, 15)
-        ratio_arome.data = uniform_filter(ratio_arome.data, 10)
+        #ratio_arome.data = uniform_filter(ratio_arome.data, 10)
         plot_and_save(ratio_arome, 'arome_gradient' , vmin=0.8, vmax=1.2, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap)
 
     # Mont-Blanc
