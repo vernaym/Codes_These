@@ -1293,8 +1293,8 @@ class Assimilation(object):
         Rstat = diags(sd, 0)  # WARNING : variable name not adapted anymore
         #Rdyn = diags(np.sqrt(sd*np.abs(new_obs.data - parameters.db.data).flatten()), 0)
         error = parameters.error.data
-        #error = uniform_filter(error, 15)
-        error = uniform_filter(error, 10)
+        error = uniform_filter(error, 15)
+        #error = uniform_filter(error, 10)
         Rdyn = diags(error.flatten(), 0)
         R = dia_matrix(Rdyn+Rstat)
 
