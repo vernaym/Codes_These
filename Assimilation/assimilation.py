@@ -1290,7 +1290,7 @@ class Assimilation(object):
             coords = dict(lon=parameters.lon, lat=parameters.lat)
         )
 
-        Rstat = diags(sd, 0)  # WARNING : variable name not adapted anymore
+        Rstat = diags(sd/2, 0)  # WARNING : variable name not adapted anymore
         #Rdyn = diags(np.sqrt(sd*np.abs(new_obs.data - parameters.db.data).flatten()), 0)
         error = parameters.error.data
         error = uniform_filter(error, 15)
@@ -1660,11 +1660,12 @@ class RandomSampling(Assimilation):
                 else:
                     delta2 = delta
                 antilope_ratio = (parameters[var].data+delta2) / (rr_antilope+delta2)  # Goal : estimlate ratio for ridges pixels with no precipitation detected by ANTILOE
-                antilope_ratio[parameters[var].data==0] = 1  # Do not introduce precipitation on pixel with no precipitation and no reference
-                if tmp["rr"] == 0:
-                    antilope_ratio[rr_antilope==0] = 1  # Not enough information available to estimate a ratio --> apply only AROME vertical gradient
-                #antilope_ratio[parameters[var].data==0] = 1  # Do not introduce precipitation on pixel with no precipitation and no reference
-                #antilope_ratio[rr_antilope==0] = 1
+                if tmp["rr"] < 1:
+                    #antilope_ratio[rr_antilope==0] = 1  # Not enough information available to estimate a ratio --> apply only AROME vertical gradient
+                    mask = (parameters[var].data == 0)
+                    antilope_ratio[mask] = 1  # Not enough information available to estimate a ratio --> apply only AROME vertical gradient
+                    ratio_arome[mask] = 1  # Do not introduce precipitation on pixel with no precipitation and no reference
+
                 #rr_antilope = parameters.sel(lat=tmp.lats, lon=tmp.lons, method='nearest').rr.data
                 #antilope_ratio = (parameters.rr.data+0.01) / (rr_antilope+0.01)
                 arome_cumul = self.arome_clim.sel(lat=tmp.lats, lon=tmp.lons, method='nearest')
