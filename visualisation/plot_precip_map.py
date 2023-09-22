@@ -83,9 +83,12 @@ class PrecipitationAnalysis(object):
         https://stackoverflow.com/questions/71780189/how-to-show-only-boundaries-no-fill-of-a-shapefile-in-python-plotly-express
         """
 
+        self.ntrace = 0
+
         # 1. SAFRAN (plot first to be bellox other layers)
         if self.safran is not None:
             self.plot_safran()
+            self.ntrace += 1
         else:
             self.read_safran_massifs()
 
@@ -95,9 +98,11 @@ class PrecipitationAnalysis(object):
 
         # 3. Nivométéo observations
         self.add_ponctual_obs(self.nivometeo, color='red', name='Nivometeo')
+        self.ntrace += 1
 
         # 4. Automatic observations
         self.add_ponctual_obs(self.auto, color='black', name='Automatic stations')
+        self.ntrace += 1
 
         self.update_figure()
 
@@ -132,7 +137,7 @@ class PrecipitationAnalysis(object):
         # TODO : Add plot of raw ANTILOPE field
 
         alti = self.antilope['elevation'].data.flatten()
-        df = pd.DataFrame(
+        self.df = pd.DataFrame(
                 data    = np.transpose([x, y, rr, error, alti]),
                 columns = ['lon', 'lat', 'rr', 'error', 'alti'],
                 index   = range(len(rr)),
@@ -140,61 +145,74 @@ class PrecipitationAnalysis(object):
         select = dict()
         visible ='legendonly'  # Does not work as intended : https://community.plotly.com/t/legendonly-doesnt-work-anymore-in-scattermapbox/72822
         visible = True
-        elevation_range = [0, 500, 1000, 1500, 2000, 2500, 3000]
-        for i,elevation in enumerate(elevation_range):
-        # Avoid to plot data multiple time --> plot by elevation bands
-        # Plotting the full 1-km ANTILOPE domain takes about 12M memory...
-        # https://plotly.com/python/v3/selection-events/
-            if elevation == 0:
-                showscale = True
-            else:
-                showscale = False
-            z0 = elevation_range[i]
-            if i+1 < len(elevation_range):
-                z1 = elevation_range[i+1]
-                mask  = np.where((rr>0.05) & (alti>=z0) & (alti<z1) & (~np.isnan(error)))
-            else:
-                mask  = np.where((rr>0.05) & (alti>=z0) & (~np.isnan(error)))
-            name    = f'ANTILOPE>{z0:d}m'
 
-            self.fig.add_trace(self.add_antilope_scatter(df, name, mask, showscale=showscale, uncertainty=True))
-            #if i == 0:
-                # TODO : useless (same data ==> use a button !)
-            #    self.fig = self.fig.add_trace(self.add_antilope_scatter(df, name, select[i], uncertainty=False))
+        #mask  = np.where((rr>=0.1) & (~np.isnan(error)))
+        self.df = self.df[self.df['rr']>0]
+        name = 'AS-ANTILOPE'
+        self.scaletrace = self.ntrace
+        self.fig.add_trace(self.add_antilope_scatter(name, showscale=True, uncertainty=True))
+#
+#        elevation_range = [0, 500, 1000, 1500, 2000, 2500, 3000]
+#        for i,elevation in enumerate(elevation_range):
+#        # Avoid to plot data multiple time --> plot by elevation bands
+#        # Plotting the full 1-km ANTILOPE domain takes about 12M memory...
+#        # https://plotly.com/python/v3/selection-events/
+#            if elevation == 0:
+#                showscale = True
+#                self.scaletrace = self.ntrace.copy()
+#            else:
+#                showscale = False
+#            z0 = elevation_range[i]
+#            if i+1 < len(elevation_range):
+#                z1 = elevation_range[i+1]
+#                mask  = np.where((rr>0.05) & (alti>=z0) & (alti<z1) & (~np.isnan(error)))
+#            else:
+#                mask  = np.where((rr>0.05) & (alti>=z0) & (~np.isnan(error)))
+#            name    = f'ANTILOPE>{z0:d}m'
+#
+#            self.fig.add_trace(self.add_antilope_scatter(df, name, mask, showscale=showscale, uncertainty=True))
+#            self.ntrace += 1
+#            #if i == 0:
+#                # TODO : useless (same data ==> use a button !)
+#            #    self.fig = self.fig.add_trace(self.add_antilope_scatter(df, name, select[i], uncertainty=False))
 
-    def add_antilope_scatter(self, df, name, mask, showscale=False,  uncertainty=True, visible=True):
+    def add_antilope_scatter(self, name, df=None, showscale=False, uncertainty=True, visible=True):
         # Normalisation de l'erreur entre low and high
         # Linear decrease between high and low marker size values
         low  = 5
         high = 15
         def nan_ptp(a):
             return np.ptp(a[np.isfinite(a)])
-        rr = df.rr.values[mask]
-        error = df.error.values[mask]
+        rr = self.df.rr.values
+        error = self.df.error.values
         errorsize = high - (high-low)*error/(2*rr)
         errorsize[errorsize<0] = 5
         #error = low + (error - np.nanmin(error))/(nan_ptp(error)/high)
         #error = low + high/error
 
+        if df is None:
+            df = self.df
+
+
         return go.Scattermapbox(
-                    lon  = df.lon.values[mask],
-                    lat  = df.lat.values[mask],
+                    lon  = df.lon.values,
+                    lat  = df.lat.values,
                     #selectedpoints = select,  # TODO : use this footprint to set updatemenus buttons DOES NOT WORK (because it refers to user selected points)
                     mode = 'markers',
                     name = name,
                     #text = antilope.rr.data.flatten(),  # obs=corrected obs, rr=raw obs
-                    text = df.rr.values[mask],
+                    text = df.rr.values,
                     visible = visible,
                     showlegend = True,
                     #selected = go.scattermapbox.Selected(marker={"size":50}),
-                    customdata = np.stack((df.alti.values[mask], df.rr.values[mask], df.error.values[mask]), axis=-1),
+                    customdata = np.stack((df.alti.values, df.rr.values, df.error.values), axis=-1),
                     hovertemplate =
                         '<b>Altitude (m)</b>: %{customdata[0]:d}m<br>'+
                         '<b>Precipitation (mm)</b>: %{customdata[1]:.2f}mm<br>'+
                         '<b>Incertitude (mm)</b>: %{customdata[2]:.2f}mm<br>',
                     marker = dict(
                         #color = antilope.rr.data.flatten(),
-                        color = df.rr.values[mask],
+                        color = df.rr.values,
                         cmin  = 0,
                         #cmax  = np.nanmax(self.antilope.rr.data.flatten()),
                         cmax  = np.nanmax(self.antilope.analysis.data.flatten()),
@@ -379,6 +397,59 @@ class PrecipitationAnalysis(object):
         Update figure layout
         """
 
+        updatecolorbar = dict(
+            # from https://plotly.com/python/custom-buttons/#:~:text=The%20%22update%22%20method%20should%20be,the%20chart%20title%20and%20annotations.
+            buttons=list([
+                dict(
+                    #args=["marker", "colorscale", "dense"],
+                    args=[{"marker":{"colorscale":"dense", "showscale":True}}, [self.scaletrace]],
+                    label="CEN",
+                    method="restyle"
+                ),
+                dict(
+                    #args=["marker", "colorscale", "rainbow"],
+                    args=[{"marker":{"colorscale":"rainbow", "showscale":True}}, [self.scaletrace]],
+                    label="ANTILOPE oper",
+                    method="restyle"
+                ),
+            ]),
+            type = "buttons",
+            direction="down",
+            pad={"r": 10, "t": 10},
+            showactive=True,
+            x=0.1,
+            xanchor="left",
+            y=1,
+            yanchor="top"
+        )
+
+        buttons = list()
+        elevation_range = [0, 500, 1000, 1500, 2000, 2500, 3000]
+        for i,elevation in enumerate(elevation_range):
+            df = self.df[self.df["alti"]>=elevation]
+            mask = np.where(self.df["alti"]>=elevation)
+            buttons.append(
+                    dict(
+                        label  = f'>{elevation}m',
+                        #method = "relayout",
+                        method = "update",
+                        #args = [dict(self.add_antilope_scatter(name, df=df, showscale=True, uncertainty=True)), [self.scaletrace]],
+                        args = [dict(selectedpoints=mask, unselected=dict(marker=dict(opacity=0))), [self.scaletrace]],
+                    )
+                )
+
+        # TODO : https://stackoverflow.com/questions/61556618/plotly-how-to-display-and-filter-a-dataframe-with-multiple-dropdowns
+        elevationfilter = dict(
+                type="buttons",
+                buttons=buttons,
+                pad={"r": 10, "t": 10},
+                showactive=True,
+                x=0.91,
+                xanchor="right",
+                y=0.7,
+                yanchor="top"
+            )
+
         self.fig.update_layout(
             #coloraxis_showscale=False,
             title = f'24h precipitation (mm) between {self.datebegin} and {self.dateend}',
@@ -408,7 +479,20 @@ class PrecipitationAnalysis(object):
                 zoom = 7,
             ),
             #updatemenus = self.updatemenus,  # To activate updatemenu
+            #updatemenus = [updatecolorbar],
+            updatemenus = [elevationfilter],
         )
+
+        self.fig.update_layout(
+            annotations=[
+                dict(text="colorscale", x=0, xref="paper", y=1, yref="paper",
+                                     align="left", showarrow=False),
+                #dict(text="Reverse<br>Colorscale", x=0, xref="paper", y=1.06,
+                #                     yref="paper", showarrow=False),
+                #dict(text="Lines", x=0.47, xref="paper", y=1.045, yref="paper",
+                #                     showarrow=False)
+            ])
+
 
 #    fig.for_each_trace(lambda t: t.update(name = newnames[t.name],
 #                                      legendgroup = newnames[t.name],
