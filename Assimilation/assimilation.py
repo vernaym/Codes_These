@@ -1260,7 +1260,8 @@ class Assimilation(object):
         Rstat = diags(std.flatten())
         #pond = self.pond.dot(diags(np.exp(-std).flatten(), 0))  # Pondération par la distance et l'erreur statique !! ATTENTION A L'ORDRE !!
         #pond = self.pond.dot(diags(1/std.flatten(), 0))  # std>1 par construction
-        pond = self.pond.dot(diags(1/(std.flatten()+parameters.error.data.flatten()), 0))  # WARNING : error NOT >1 par construction
+        uncertainty = std + parameters.error.data
+        pond = self.pond.dot(diags(1/uncertainty.flatten(), 0))  # WARNING : error NOT >1 par construction
         #pond = self.pond.dot(diags(1/(std.flatten()*(1+parameters.error.data.flatten())), 0))  # WARNING : error NOT >1 par construction
         #pond = self.pond.dot(diags(np.exp(-parameters.error.data).flatten(), 0))  # WARNING : error NOT >1 par construction
         #pond = self.pond.dot(diags(1/parameters.error.data.flatten(), 0))
@@ -1278,8 +1279,8 @@ class Assimilation(object):
         gradient = xr.open_dataarray(fic_gradient)
         gradient = gradient.sel({'lat':np.intersect1d(parameters.lat, gradient.lat), 'lon':np.intersect1d(parameters.lon, gradient.lon)})
 
-        newfield, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(obs, pond)
-        #newfield, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(obs, pond, gradient=gradient.data.flatten())  # Use AROME mean vertical gradient
+        #newfield, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(obs, pond)
+        newfield, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(obs, pond, gradient=gradient.data.flatten(), uncertainty=uncertainty)  # Use AROME mean vertical gradient
         #newfield, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(obs, pond, qq_adjustment=True)  # qq adjustment add >0 bias !
 
         #Rdyn = diags(sd, 0)
@@ -1290,7 +1291,7 @@ class Assimilation(object):
             coords = dict(lon=parameters.lon, lat=parameters.lat)
         )
 
-        Rstat = diags(sd/2, 0)  # WARNING : variable name not adapted anymore
+        Rstat = diags(sd, 0)  # WARNING : variable name not adapted anymore
         #Rdyn = diags(np.sqrt(sd*np.abs(new_obs.data - parameters.db.data).flatten()), 0)
         error = parameters.error.data
         error = uniform_filter(error, 15)

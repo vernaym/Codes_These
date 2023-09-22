@@ -53,7 +53,7 @@ ld = 0.1
 max_dist = ld*2
 
 
-def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False, qq_adjustment=False, gradient=None):
+def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False, qq_adjustment=False, gradient=None, uncertainty=None):
     """
     * field          : 2D (n*k) array containing the field to modify
     * pond           : (nk*nk) sparse ponderation matrix (each line gives the correlation between the corresponding pixel
@@ -97,7 +97,12 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
     #newfield = np.round(newfield, 1)
 
     if gradient is not None:
-        newfield = newfield * gradient
+        # TODO : apply AROME vertical gradient only for pixels with large uncertainties to avoid to introduce underestimaiton in valleys
+        uncertainty = uncertainty.reshape(np.shape(field))
+        w1 = uncertainty / (newfield + uncertainty)
+        w1[newfield==0] = 1
+        w0 = 1 - w1
+        newfield = newfield * (1 * w0 + gradient * w1)
 
     if qq_adjustment:
         # Try to match extreme values with original field (quantile-quantile like method)
