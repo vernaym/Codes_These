@@ -1291,7 +1291,7 @@ class Assimilation(object):
             coords = dict(lon=parameters.lon, lat=parameters.lat)
         )
 
-        Rstat = diags(sd/2, 0)  # WARNING : variable name not adapted anymore
+        Rstat = diags(sd, 0)  # WARNING : variable name not adapted anymore
         #Rdyn = diags(np.sqrt(sd*np.abs(new_obs.data - parameters.db.data).flatten()), 0)
         error = parameters.error.data
         error = uniform_filter(error, 15)
