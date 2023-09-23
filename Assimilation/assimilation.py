@@ -1661,12 +1661,11 @@ class RandomSampling(Assimilation):
                 else:
                     delta2 = delta
                 antilope_ratio = (parameters[var].data+delta2) / (rr_antilope+delta2)  # Goal : estimlate ratio for ridges pixels with no precipitation detected by ANTILOE
-                if tmp["rr"] < 1:
-                    #antilope_ratio[rr_antilope==0] = 1  # Not enough information available to estimate a ratio --> apply only AROME vertical gradient
-                    mask = (parameters[var].data == 0)
-                    antilope_ratio[mask] = 1  # Not enough information available to estimate a ratio --> apply only AROME vertical gradient
-                    ratio_arome[mask] = 1  # Do not introduce precipitation on pixel with no precipitation and no reference
-
+                antilope_ratio[parameters[var].data==0] = 1  # Do not introduce precipitation on pixel with no precipitation and no reference
+                if tmp["rr"] == 0:
+                    antilope_ratio[rr_antilope==0] = 1  # Not enough information available to estimate a ratio --> apply only AROME vertical gradient
+                #antilope_ratio[parameters[var].data==0] = 1  # Do not introduce precipitation on pixel with no precipitation and no reference
+                #antilope_ratio[rr_antilope==0] = 1
                 #rr_antilope = parameters.sel(lat=tmp.lats, lon=tmp.lons, method='nearest').rr.data
                 #antilope_ratio = (parameters.rr.data+0.01) / (rr_antilope+0.01)
                 arome_cumul = self.arome_clim.sel(lat=tmp.lats, lon=tmp.lons, method='nearest')
