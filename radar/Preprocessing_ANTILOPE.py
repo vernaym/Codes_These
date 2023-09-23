@@ -103,6 +103,7 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
         w1[newfield==0] = 1
         w0 = 1 - w1
         newfield = newfield * (1 * w0 + gradient * w1)
+        sd2 = sd2 * (1 * w0 + gradient * w1)  # Increase error proportionnally
 
     if qq_adjustment:
         # Try to match extreme values with original field (quantile-quantile like method)
