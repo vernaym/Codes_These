@@ -234,7 +234,8 @@ def codistances(coords, ld=0.1):  # TMP for illustration. TODO : test different 
     tree = cKDTree(coords)
     dist = tree.sparse_distance_matrix(tree, max_distance=max_dist, p=2, output_type='coo_matrix')
     dist = csr_matrix(dist)
-    dist.data=1/(1+dist.data)**2  # IDW
+    dist.data=1/(1+dist.data)  # IDW
+    #dist.data=1/(1+dist.data)**2  # IDW
     #dist.data=1/(0.01+dist.data)**2  # IDW
     #dist.data=1/(0.1+dist.data)**2  # IDW
     #dist.data=1/(0.5+dist.data)**2  # IDW
