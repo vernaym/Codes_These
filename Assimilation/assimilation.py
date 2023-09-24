@@ -1261,7 +1261,7 @@ class Assimilation(object):
         #pond = self.pond.dot(diags(np.exp(-std).flatten(), 0))  # Pondération par la distance et l'erreur statique !! ATTENTION A L'ORDRE !!
         #pond = self.pond.dot(diags(1/std.flatten(), 0))  # std>1 par construction
         uncertainty = std + parameters.error.data
-        pond = self.pond.dot(diags(1/uncertainty.flatten(), 0))  # WARNING : error NOT >1 par construction
+        pond = self.pond.dot(diags(1/(1+uncertainty.flatten()), 0))  # WARNING : error NOT >1 par construction
         #pond = self.pond.dot(diags(1/(std.flatten()*(1+parameters.error.data.flatten())), 0))  # WARNING : error NOT >1 par construction
         #pond = self.pond.dot(diags(np.exp(-parameters.error.data).flatten(), 0))  # WARNING : error NOT >1 par construction
         #pond = self.pond.dot(diags(1/parameters.error.data.flatten(), 0))
