@@ -453,7 +453,7 @@ def plot_distribution(ax, mean, sd, ensemble=None, label=None, color=None, distr
 
     if distribution == 'norm':
         ax.plot(x, norm.pdf(x, loc=mean, scale=sd), color=color, label=label, linestyle='--', linewidth=linewidth)
-        ax.bar(mean, 1, width=0.2, color=color, label="Ensemble mean")
+        ax.bar(mean, 1, width=0.3, color=color, label="Ensemble mean")
         if ensemble is not None:
             #ax.bar(ensemble, norm.pdf(ensemble, loc=mean, scale=sd), 'r-', color=color, label='members', linewidth=linewidth)
             ax.bar(ensemble, norm.pdf(ensemble, loc=mean, scale=sd), width=0.1, color=color)
@@ -2118,7 +2118,9 @@ class RandomSampling(Assimilation):
                 std = error.sel(lat=ref.lat.data, lon=ref.lon.data, method='nearest').data
                 #ax[i,j] = plot_distribution(ax[i,j], mu, std, label='Analysis theoretical PDF', color='k', linewidth=1)
                 ax[i,j].legend()
-                ax[i,j].set_xlim(left=0, right=np.max(ens)*2)
+                #ax[i,j].set_xlim(left=0, right=np.max(ens)*2)
+                ax[i,j].set_xlim(left=0, right=80)
+                #ax[i,j].set_ylim(top=norm.pdf(mu, loc=mu, scale=std)*1.2)
                 ax[i,j].set_ylim(top=0.06)
                 ax[i,j].set_xlabel('Precipitation (mm/24h)')
                 ymax[i+j] = max(ymax[i+j], np.max(ens))*1.1
