@@ -1274,13 +1274,13 @@ class Assimilation(object):
         # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
         # read AROME mean vertical gradient (TEST !)
-        #fic_gradient = os.path.join('/home/vernaym/workdir/ASSIMILATION/mask/alp', f'model_gradient.nc')
-        fic_gradient = os.path.join('/home/vernaym/workdir/ASSIMILATION/mask/alp', f'arome_gradient.nc')
+        #fic_gradient = os.path.join('/home/vernaym/workdir/ASSIMILATION/mask/alp', f'arome_gradient.nc')
+        fic_gradient = os.path.join('/home/vernaym/These/DATA', f'CUMUL_AROME.nc')
         gradient = xr.open_dataarray(fic_gradient)
         gradient = gradient.sel({'lat':np.intersect1d(parameters.lat, gradient.lat), 'lon':np.intersect1d(parameters.lon, gradient.lon)})
 
-        newfield, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(obs, pond)
-        #newfield, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(obs, pond, gradient=gradient.data.flatten(), uncertainty=uncertainty)  # Use AROME mean vertical gradient
+        #newfield, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(obs, pond)
+        newfield, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(obs, pond, gradient=gradient.data.flatten(), uncertainty=uncertainty)  # Use AROME mean vertical gradient
         #newfield, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(obs, pond, qq_adjustment=True)  # qq adjustment add >0 bias !
 
         #Rdyn = diags(sd, 0)

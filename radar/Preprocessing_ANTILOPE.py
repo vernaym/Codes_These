@@ -67,6 +67,7 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
     initial_field = field.flatten()
     X = diags(field.flatten(), 0)
 
+
     # 1. Calcul de la moyenne pondérée par la distance ET l'erreur statique
     if super_ensemble is None:
         super_ensemble = pond.copy()  # WARNING : make a copy or pond will change when super_ensemble changes
@@ -74,6 +75,17 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
     if weight is None:
         pond.data[np.isnan(pond.data)] = 0.0
         weight = pond.sum(axis=1).A1  # The sum of the weights (axis=1 <==> sum over rows)
+
+    # TODO : multiply field by AROME gradient
+    if gradient is not None:
+        C = diags(gradient, 0)  # Matrice de cumul AROME
+        C0 = super_ensemble.dot(C)  # 1 line = all values of a given window
+        C0.data = 1 / C0.data
+        C1 = C.dot(super_ensemble)  # 1 line = value of the central point
+        #C1.data = 1 / C1.data
+        G = C0.multiply(C1)  # Gradient local
+        #G.data = 1 / G.data
+        pond = pond.multiply(G)
 
     mean = pond.dot(X).sum(axis=1).A1  # getA1 transforms the 1*N matrix object into a 1D np.array
     mean = mean / weight
@@ -96,14 +108,14 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
     #newfield = (initial_field * pixel_weight + mean * meanweight/(meanweight+pixel_weight)) / (pixel_weight + meanweight/(meanweight+pixel_weight))
     #newfield = np.round(newfield, 1)
 
-    if gradient is not None:
-        # TODO : apply AROME vertical gradient only for pixels with large uncertainties to avoid to introduce underestimaiton in valleys
-        uncertainty = uncertainty.reshape(np.shape(field))
-        w1 = uncertainty / (newfield + uncertainty)
-        w1[newfield==0] = 1
-        w0 = 1 - w1
-        newfield = newfield * (1 * w0 + gradient * w1)
-        sd2 = sd2 * (1 * w0 + gradient * w1)  # Increase error proportionnally
+#    if gradient is not None:
+#        # TODO : apply AROME vertical gradient only for pixels with large uncertainties to avoid to introduce underestimaiton in valleys
+#        uncertainty = uncertainty.reshape(np.shape(field))
+#        w1 = uncertainty / (newfield + uncertainty)
+#        w1[newfield==0] = 1
+#        w0 = 1 - w1
+#        newfield = newfield * (1 * w0 + gradient * w1)
+#        sd2 = sd2 * (1 * w0 + gradient * w1)  # Increase error proportionnally
 
     if qq_adjustment:
         # Try to match extreme values with original field (quantile-quantile like method)
