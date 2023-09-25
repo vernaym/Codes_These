@@ -271,6 +271,7 @@ algo = dict(
         #RS23          = 'RandomSampling/XP23/Random_Sampling_2021120106_2022050106_daily_alp.nc',  # commit f0d6615fe98865a0c87c88dca4dda7e70a1725a1
         RS23          = 'RandomSampling/XP23/Random_Sampling_2021120106_2022043006_daily_alp.nc',  # commit 
         RS24          = 'RandomSampling/XP24/Random_Sampling_2021120106_2022043006_daily_alp.nc',  # commit 
+        RS25          = 'RandomSampling/XP25/Random_Sampling_2021120106_2022043006_daily_alp.nc',  # commit 
         ################################################################################################
         # PHD committee :
         RS21          = 'RandomSampling/XP21/Random_Sampling_2021120106_2022050106_daily_alp.nc',
@@ -416,6 +417,7 @@ xpid_label = dict(
         RS22          = 'RS22',  # Test qq adjustment
         RS23          = 'RS - dynamic error/ratio estimation',  # Test dynamic ratio/error estimation
         RS24          = 'RS24',
+        RS25          = 'RS25',
     )
 
 colors = dict(
@@ -424,6 +426,7 @@ colors = dict(
     RS21      = 'red',
     RS23      = 'k',
     RS24      = 'maroon',
+    RS25      = 'green',
     PF31      = 'green',
     KD35      = 'blue',
 )
@@ -1126,6 +1129,7 @@ class Evaluation(object):
                 rmse = np.array(scores_dict[product]['rmse'])
                 spread = np.array(scores_dict[product]['spread'])
                 spreadvar = np.array(spreadvar)
+                print(product)
                 tools.plot_scatter(rmse, spread, 'RMSE (mm)', 'Mean spread (mm)', f"spread_skill_{product}_by_station.pdf", savedir, addtext=liste_postes)
                 rr = np.nanmean(self.data.obs.data, axis=1)
                 tools.plot_scatter(rr, spread/rmse, 'Mean precipitation (mm)', 'Spread/RMSE', f"spread_skill_vs_rr_{product}_by_station.pdf", savedir, addtext=liste_postes)

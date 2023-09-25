@@ -246,8 +246,8 @@ def codistances(coords, ld=0.1):  # TMP for illustration. TODO : test different 
     tree = cKDTree(coords)
     dist = tree.sparse_distance_matrix(tree, max_distance=max_dist, p=2, output_type='coo_matrix')
     dist = csr_matrix(dist)
-    #dist.data=1/(1+dist.data)  # IDW
-    dist.data=1/(1+dist.data)**2  # IDW
+    dist.data=1/(1+dist.data)  # IDW
+    #dist.data=1/(1+dist.data)**2  # IDW
     #dist.data=1/(0.01+dist.data)**2  # IDW
     #dist.data=1/(0.1+dist.data)**2  # IDW
     #dist.data=1/(0.5+dist.data)**2  # IDW
@@ -272,7 +272,7 @@ def codistances(coords, ld=0.1):  # TMP for illustration. TODO : test different 
     dZ = np.abs(dZ)
     #dZ.data=1/(1000+dZ.data)**2
     #np.exp(-dZ.data/1000, out=dZ.data)
-    dZ.data = 1/(1+dZ.data/2000)
+    dZ.data = 1/(1+dZ.data/1000)
 
     dist = dist.multiply(dZ)
     #dist=dZ
@@ -314,8 +314,10 @@ def random_draw(obs, sd, ratio=None, sd2=None, distribution='gamma'):
             #ana = obs + gauss*sd
 
         if sd2 is not None:
-            gamma = np.random.gamma(k, scale=theta)  # Draw random element from normal distribution (>0 only ==> shift necessary to convert into perturbations)
-            ana = ana + sd2*(gamma-shift)
+            gauss = np.random.normal(loc=0.0, scale=1.0, size=1)[0]  # Draw random element from normal distribution
+            ana = ana + sd2*gauss
+            #gamma = np.random.gamma(k, scale=theta)  # Draw random element from normal distribution (>0 only ==> shift necessary to convert into perturbations)
+            #ana = ana + sd2*(gamma-shift)
 
     else:
         print('Error : unknown distribution')

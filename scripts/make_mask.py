@@ -922,12 +922,12 @@ def ratio_estimation(field, model=None, moving_window=25):
     neg = np.where(observation_error.data<0)
     pos= np.where(observation_error.data>=0)
     #observation_error.data[neg] = 21.391*observation_error.data[neg]  # r=0.5 ==> err=-10.7  # 2018/2019
-    #observation_error.data[neg] = 20.137*observation_error.data[neg]-1  # <0
-    observation_error.data[neg] = 20.137*(observation_error.data[neg]-D[neg]/2) - 0.1  # <0
+    observation_error.data[neg] = 20.137 * observation_error.data[neg] - 1  # <0
+    #observation_error.data[neg] = 20.137 * (observation_error.data[neg]-D[neg]/2) - 0.1  # <0
     #observation_error.data[neg] = 20*np.square(observation_error.data[neg]-1)  # <0
     #observation_error.data[neg] = 4*observation_error.data[neg]  # r=0.5 ==> err=-2
-    #observation_error.data[pos] = 15.148*observation_error.data[pos]  # r=1.5 ==> err=7.574  " 2018/2019
-    observation_error.data[pos] = 16.787*(observation_error.data[pos]+D[pos]/2) + 0.1  # r=1.5 ==> err=8.574  " 2021/2022
+    observation_error.data[pos] = 16.787 * observation_error.data[pos] + 1  # r=1.5 ==> err=7.574  " 2018/2019
+    #observation_error.data[pos] = 16.787 * (observation_error.data[pos]+D[pos]/2) + 0.1  # r=1.5 ==> err=8.574  " 2021/2022
     #observation_error.data[pos] = 16*np.square(observation_error.data[pos]+1)  # r=1.5 ==> err=8.574  " 2021/2022
     #observation_error.data[pos] = 2*observation_error.data[pos]  # r=1.5 ==> err = 1
     #observation_error = 1+np.abs(smoothratio-1)
@@ -947,13 +947,15 @@ def ratio_estimation(field, model=None, moving_window=25):
     #uncertainty = (1+w1) * observation_error + (mean_ratio+D) * 
     #uncertainty = (1+w1) * observation_error
     #uncertainty = w1 * observation_error  # WARNING : error no longer > 1 !!
-    uncertainty = observation_error
+    #uncertainty = observation_error
+    #uncertainty = observation_error * (1 + np.abs(estimated_ratio-1) + D)
+    uncertainty = (1+w1) * observation_error + (1+D) * (np.abs(mean_ratio - 1))
 
     #uncertainty = (1+w1) * observation_error + (1+D) * (np.abs(mean_ratio - 1) + np.exp(-np.abs(mean_ratio - 1)))
     #uncertainty = 1 + observation_error*w1+D/W
     #uncertainty = 1 + w1*observation_error/(1+w1)
     uncertainty.data[np.isnan(field.rr_cumul.data)] = np.nanmax(uncertainty.data)
-    #uncertainty.data = uniform_filter(uncertainty.data, size=3)
+    uncertainty.data = uniform_filter(uncertainty.data, size=3)
     uncertainty = uncertainty.rename('Uncertainty')
     confidence = uncertainty.copy()
     confidence.data = 1/confidence.data

@@ -18,7 +18,8 @@ import matplotlib.pyplot as plt
 #print(np.mean(y))
 
 obs = 20
-sd = 5
+sd1 = 2
+sd2 = 3
 k = 3
 theta = np.sqrt(1/k)  # Ensure a variance of 1 (var=k*theta^2)
 shift = k*theta  # shift = mean
@@ -26,8 +27,11 @@ analysis = []
 for i in range(1600):
     gamma = np.random.gamma(k, scale=theta)
     gauss = np.random.normal(loc=0.0, scale=1.0, size=1)[0]
-    ana = obs + gauss*sd
-    ana = ana + (gamma-shift)*0.2*ana
+    ana = obs + gauss*sd1
+    ana = ana + (gamma-shift)*0.1*obs
+    gamma = np.random.gamma(k, scale=theta)
+    ana = ana + (gamma-shift)*sd2
+
     analysis.append(ana)
 
 mu = np.mean(analysis)

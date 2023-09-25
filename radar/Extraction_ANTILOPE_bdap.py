@@ -68,6 +68,7 @@ def parse_command_line():
             choices=['ANTILOPEQ', 'ANTILOPEJP1Q', 'ANTILOPEH', 'ANTILOPEJP1H'], default='ANTILOPEJP1Q')
     # ANTILOPEQ disponible depuis le 2006070206 (grille FRAN0012)
     parser.add_argument('-g', '--grid', help='BDAP grid name from which to extract data', default='FRANXL1S100', choices=['FRAN0012', 'FRANXL1S100'])
+    # La grille FRAN0012 est disponible depuis le 02/07/2006
     # La grille ANTILOPE FRANXL1S100 est disponible depuis le 23/11/2017
     parser.add_argument('-p', '--parameter', help='Parameter to extract', default='PRECIP')
     parser.add_argument('-l', '--level', help='Level to extract', default='SOL')

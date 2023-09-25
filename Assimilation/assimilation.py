@@ -1261,7 +1261,7 @@ class Assimilation(object):
         #pond = self.pond.dot(diags(np.exp(-std).flatten(), 0))  # Pondération par la distance et l'erreur statique !! ATTENTION A L'ORDRE !!
         #pond = self.pond.dot(diags(1/std.flatten(), 0))  # std>1 par construction
         uncertainty = std + parameters.error.data
-        pond = self.pond.dot(diags(1/(1+uncertainty.flatten()), 0))  # WARNING : error NOT >1 par construction
+        pond = self.pond.dot(diags(1/uncertainty.flatten(), 0))  # WARNING : error NOT >1 par construction
         #pond = self.pond.dot(diags(1/(std.flatten()*(1+parameters.error.data.flatten())), 0))  # WARNING : error NOT >1 par construction
         #pond = self.pond.dot(diags(np.exp(-parameters.error.data).flatten(), 0))  # WARNING : error NOT >1 par construction
         #pond = self.pond.dot(diags(1/parameters.error.data.flatten(), 0))
@@ -1277,10 +1277,11 @@ class Assimilation(object):
         #fic_gradient = os.path.join('/home/vernaym/workdir/ASSIMILATION/mask/alp', f'arome_gradient.nc')
         fic_gradient = os.path.join('/home/vernaym/These/DATA', f'CUMUL_AROME.nc')
         gradient = xr.open_dataarray(fic_gradient)
+        gradient.data = uniform_filter(gradient.data, 10)
         gradient = gradient.sel({'lat':np.intersect1d(parameters.lat, gradient.lat), 'lon':np.intersect1d(parameters.lon, gradient.lon)})
 
-        #newfield, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(obs, pond)
-        newfield, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(obs, pond, gradient=gradient.data.flatten(), uncertainty=uncertainty)  # Use AROME mean vertical gradient
+        newfield, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(obs, pond)
+        #newfield, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(obs, pond, gradient=gradient.data.flatten(), uncertainty=uncertainty)  # Use AROME mean vertical gradient
         #newfield, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(obs, pond, qq_adjustment=True)  # qq adjustment add >0 bias !
 
         #Rdyn = diags(sd, 0)
@@ -1293,9 +1294,11 @@ class Assimilation(object):
 
         Rstat = diags(sd, 0)  # WARNING : variable name not adapted anymore
         #Rdyn = diags(np.sqrt(sd*np.abs(new_obs.data - parameters.db.data).flatten()), 0)
-        error = parameters.error.data
-        error = uniform_filter(error, 15)
+        #error = parameters.error.data
         #error = uniform_filter(error, 10)
+        #Rdyn = diags(error.flatten(), 0)
+        error = np.abs(new_obs.data - parameters.mu.data)
+        error = uniform_filter(error, 5)
         Rdyn = diags(error.flatten(), 0)
         R = dia_matrix(Rdyn+Rstat)
 
@@ -1755,12 +1758,17 @@ class RandomSampling(Assimilation):
 #            self.plot_array(X, parameters, 'X', f'{self.date_str}/X_{self.domain}.pdf', cmap=plt.cm.viridis, domain=self.domain)
                 pass
 
+            # TODO : trouver une formulation plus élégante (et moins redondante) de l'erreur d'obs
             absolute_error = np.abs((parameters[var].data+delta) / new_ratio - (parameters[var].data+delta))  # L1 : Absolute error (Add 0.1mm to avoid problems with no precipitation pixels)
             #absolute_error = np.abs(new_ratio-1) * (parameters[var].data+0.1) / new_ratio  # Add value change --> exact same information as L1 !!
             uncertainty = np.abs((parameters[var].data+delta) / (1+np.abs(new_ratio-1)+D/10) - (parameters[var].data+delta))
             #uncertainty = np.abs((parameters[var].data+0.1) / (1+np.abs(new_ratio-1)+D/Wm) - (parameters[var].data+0.1))
 
             new_error = absolute_error + uncertainty
+
+            new_error = (parameters.mu.data+0.1) / new_ratio - (parameters.mu.data+0.1)  # Absolute error (Add 0.1mm to avoid problems with no precipitation pixels)
+            new_error = np.abs(new_error) + np.abs(new_ratio-1) * (parameters.mu.data+0.1) / new_ratio  # Add modification
+            new_error = w1 * new_error
 
         else:
 
@@ -2079,9 +2087,9 @@ class RandomSampling(Assimilation):
         #pond = self.pond.dot(diags(1/std.flatten(), 0))
 
         for member in analysis.member.data:
-            #ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='gamma')
+            ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='gamma')
             #ana = Preprocessing_ANTILOPE.random_draw(obs, sd1, distribution='gamma')
-            ana = Preprocessing_ANTILOPE.random_draw(obs, sd1, sd2=sd2, distribution='gamma')
+            #ana = Preprocessing_ANTILOPE.random_draw(obs, sd1, sd2=sd2, distribution='gamma')
             #ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='normal')
             analysis.loc[{'member':member}] = ana
 
@@ -2246,9 +2254,9 @@ class RandomSampling(Assimilation):
 
             # Fill other members with random draw arround the corrected observation
             for member in range(1, nmembers+1):
-                #ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='gamma')
+                ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='gamma')
                 #ana = Preprocessing_ANTILOPE.random_draw(obs, sd1, distribution='gamma')
-                ana = Preprocessing_ANTILOPE.random_draw(obs, sd1, sd2=sd2, distribution='gamma')
+                #ana = Preprocessing_ANTILOPE.random_draw(obs, sd1, sd2=sd2, distribution='gamma')
                 #ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='normal')
                 analysis.loc[{'member':member}] = ana
 
