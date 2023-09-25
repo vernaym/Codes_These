@@ -271,7 +271,8 @@ def codistances(coords, ld=0.1):  # TMP for illustration. TODO : test different 
     dZ = tmppond.dot(Z2) - Z1.dot(tmppond)  # Compute elevation inter-distance
     dZ = np.abs(dZ)
     #dZ.data=1/(1000+dZ.data)**2
-    np.exp(-dZ.data/100, out=dZ.data)
+    #np.exp(-dZ.data/1000, out=dZ.data)
+    dZ.data = 1/(1+dZ.data/2000)
 
     dist = dist.multiply(dZ)
     #dist=dZ
