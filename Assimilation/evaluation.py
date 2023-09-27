@@ -808,7 +808,6 @@ class Evaluation(object):
 #        return dict(zip(np.array(subdata['poste_nivo.num_poste']), zip(np.array(subdata['poste_nivo.lat_dg']), np.array(subdata['poste_nivo.lon_dg']))))
 #
     def read_antilope(self, dates):
-        print('DBUG debut lecture antilope')
         fic = 'ANTILOPEQ_evaluation.nc'
         if not os.path.exists(os.path.join(datadir, fic)):
             #filename = 'ANTILOPEQ_2021073106_2022070106_GrandesRousses.nc'
@@ -824,7 +823,6 @@ class Evaluation(object):
                 antilope['time'] = antilope.time-np.timedelta64(7, 'h')
                 antilope = antilope.resample(time='1D').sum(dim='time')  # !!! VERY SLOW !!! WARNING : does not work with pandas>=2.0.0
                 antilope['time'] = antilope.time+np.timedelta64(30, 'h')
-            print('DBUG fin lecture antilope')
             antilope.to_netcdf(os.path.join(datadir, fic))
         else:
             antilope = xr.open_dataset(os.path.join(datadir, fic))
@@ -839,7 +837,6 @@ class Evaluation(object):
         return antilope
 
     def read_raw_ensemble(self, dates):
-        print('DBUG debut lecture ensemble')
         filename = 'RAW_pearome_alp_daily.nc'
         if not os.path.exists(os.path.join(datadir, filename)):
             #filenames = [os.path.join(datadir, f'aspearome_{mb:03d}_2021073106_2022070106_GrandesRousses_daily.nc') for mb in range(1,17)]
@@ -863,7 +860,6 @@ class Evaluation(object):
         else:
             raw = xr.open_dataset(os.path.join(datadir, filename))
         raw = raw.loc[{'time':dates}]
-        print('DBUG fin lecture ensemble')
 
         return raw
 
@@ -872,8 +868,6 @@ class Evaluation(object):
 #        if not os.path.exists(filename):
 #            print(f'WARNING : file {filename} does not exist, looking for it under {workdir}')
 #            filename = os.path.join(workdir, filename)
-
-        print(f'DBUG debut lecture simu {filename}')
 
         if os.path.exists(filename):
             simulation =  xr.open_dataset(filename)
@@ -900,7 +894,6 @@ class Evaluation(object):
             #import pdb
             #pdb.set_trace()
 
-        print('DBUG fin lecture simu')
         return simulation
 
     def evaluate(self):
@@ -995,10 +988,10 @@ class Evaluation(object):
             print(xpid)
             #if xpid.startswith('RS'):
             #if xpid == 'RS12':
-#            if xpid == 'RS15':
-#                antilopec = tmp.loc[{'member':0}]
-#                antilopec = antilopec.loc[{'time':dates}]
-#                antc = True
+            if xpid == 'RS25':
+                antilopec = tmp.loc[{'member':0}]
+                antilopec = antilopec.loc[{'time':dates}]
+                antc = True
             tmp = tmp.loc[{'member':range(1,17)}]
             simus[xpid] = tmp
 

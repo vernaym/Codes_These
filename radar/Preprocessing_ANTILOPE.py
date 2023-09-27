@@ -272,7 +272,7 @@ def codistances(coords, ld=0.1):  # TMP for illustration. TODO : test different 
     dZ = np.abs(dZ)
     #dZ.data=1/(1000+dZ.data)**2
     #np.exp(-dZ.data/1000, out=dZ.data)
-    dZ.data = 1/(1+dZ.data/1000)
+    dZ.data = 1/(1+dZ.data/500)
 
     dist = dist.multiply(dZ)
     #dist=dZ

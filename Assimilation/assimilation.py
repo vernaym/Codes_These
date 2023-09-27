@@ -1595,7 +1595,7 @@ class RandomSampling(Assimilation):
         #obs_auto = obs_auto.set_index(['num_poste', 'date'])
         obs_auto = obs_auto.set_index(['num_poste'])
 
-        obs_auto["rr"] = obs_auto["rr"].round(1)
+        #obs_auto["rr"] = obs_auto["rr"].round(1)
 
         self.obs_auto = obs_auto
 
@@ -1621,20 +1621,20 @@ class RandomSampling(Assimilation):
         obs_auto["rr_antilope"] = parameters[var].sel(lat=xr.DataArray(obs_auto.lats.values, dims='poste'), lon=xr.DataArray(obs_auto.lons.values, dims='poste'), method='nearest').data
         #obs_auto["rr_antilope"] = parameters.rr.sel(lat=xr.DataArray(obs_auto.lats.values, dims='poste'), lon=xr.DataArray(obs_auto.lons.values, dims='poste'), method='nearest').data
         # Compute ratio and error :
-        obs_auto = obs_auto[obs_auto["rr"] >= 1]  # No precipitation in reference ==> keep ANTILOPE (gauge obstructed ?). Most of these situations are filtered out by the condition 0.1<ratio<1.9
-        obs_auto["delta"] = delta
-        #mask = (obs_auto["rr_antilope"] > 0)  # Avoid ratio=0
-        mask = (obs_auto["rr"]>0)
-        obs_auto["delta"][mask] = 0
-        obs_auto["ratio"] = (obs_auto["rr_antilope"]+obs_auto["delta"]) / (obs_auto["rr"]+obs_auto["delta"])  # Add delta to avoid division by 0 issues  --> large modification of the ratio for low precipitation events !
-        #obs_auto["ratio"] = (obs_auto["rr_antilope"]+0.1) / (obs_auto["rr"]+0.1)  # Add 0.1 to avoid division by 0 issues
+        #obs_auto = obs_auto[obs_auto["rr"] >= 1]  # No precipitation in reference ==> keep ANTILOPE (gauge obstructed ?). Most of these situations are filtered out by the condition 0.1<ratio<1.9
+        #obs_auto["delta"] = delta
+        ##mask = (obs_auto["rr_antilope"] > 0)  # Avoid ratio=0
+        #mask = (obs_auto["rr"]>0)
+        #obs_auto["delta"][mask] = 0
+        #obs_auto["ratio"] = (obs_auto["rr_antilope"]+obs_auto["delta"]) / (obs_auto["rr"]+obs_auto["delta"])  # Add delta to avoid division by 0 issues  --> large modification of the ratio for low precipitation events !
+        obs_auto["ratio"] = (obs_auto["rr_antilope"]+delta) / (obs_auto["rr"]+delta)  # Add 0.1 to avoid division by 0 issues
         obs_auto["error"] = obs_auto["rr_antilope"] - obs_auto["rr"]
         # Remove observations with unrealistic ratios :
         mask = (obs_auto['ratio']<1.2) & (obs_auto['ratio']>0.8)
         #mask = (obs_auto['ratio']<1.9) & (obs_auto['ratio']>0.1)
         #mask = (obs_auto['ratio']<2) & (obs_auto['ratio']>0.1)
         obs_auto = obs_auto[mask]
-        obs_auto["ratio"][obs_auto["rr"] == 0] = 1  # No precipitation in reference ==> keep ANTILOPE (gauge obstructed ?). Most of these situations are filtered out by the condition 0.1<ratio<1.9
+        #obs_auto["ratio"][obs_auto["rr"] == 0] = 1  # No precipitation in reference ==> keep ANTILOPE (gauge obstructed ?). Most of these situations are filtered out by the condition 0.1<ratio<1.9
 
         lons, lats = np.meshgrid(parameters.lon.data, parameters.lat.data)
         initial_ratio = self.ratio.sel(lat=parameters.lat, lon=parameters.lon)
@@ -1647,133 +1647,132 @@ class RandomSampling(Assimilation):
             arome_clim = xr.open_dataset(os.path.join(datadir, 'CUMUL_AROME.nc'))
             self.arome_clim = arome_clim.sel(lat=parameters.lat, lon=parameters.lon)
 
-        if len(obs_auto.index) > 0:
+        #if len(obs_auto.index) > 0:
 
-            for i,poste in enumerate(obs_auto.index):
-                tmp = obs_auto.loc[poste]
-                rr_antilope = parameters.sel(lat=tmp.lats, lon=tmp.lons, method='nearest')[var].data
-                #antilope_ratio = (parameters[var].data+0.1) / (rr_antilope+0.1)  # Goal : estimlate ratio for ridges pixels with no precipitation detected by ANTILOPE
+        for i,poste in enumerate(obs_auto.index):
+            tmp = obs_auto.loc[poste]
+            rr_antilope = parameters.sel(lat=tmp.lats, lon=tmp.lons, method='nearest')[var].data
+            #antilope_ratio = (parameters[var].data+0.1) / (rr_antilope+0.1)  # Goal : estimlate ratio for ridges pixels with no precipitation detected by ANTILOPE
 #                if rr_antilope>1:
 #                    mask = np.where(parameters[var].data<1)
 #                    # Compute a ratio if there is ANTILOLPE precipitation at reference point but not at target point (--> missed precipitation over ridges ? ex : Savoie 20220110)
 #                    delta2 = np.zeros(np.shape(parameters[var].data))
 #                    delta2[mask] = delta
 #                    #delta2 = 0
-                if rr_antilope>0:
-                    delta2 = 0
-                else:
-                    delta2 = delta
-                antilope_ratio = (parameters[var].data+delta2) / (rr_antilope+delta2)  # Goal : estimlate ratio for ridges pixels with no precipitation detected by ANTILOE
-                antilope_ratio[parameters[var].data==0] = 1  # Do not introduce precipitation on pixel with no precipitation and no reference
-                if tmp["rr"] == 0:
-                    antilope_ratio[rr_antilope==0] = 1  # Not enough information available to estimate a ratio --> apply only AROME vertical gradient
-                #antilope_ratio[parameters[var].data==0] = 1  # Do not introduce precipitation on pixel with no precipitation and no reference
-                #antilope_ratio[rr_antilope==0] = 1
-                #rr_antilope = parameters.sel(lat=tmp.lats, lon=tmp.lons, method='nearest').rr.data
-                #antilope_ratio = (parameters.rr.data+0.01) / (rr_antilope+0.01)
-                arome_cumul = self.arome_clim.sel(lat=tmp.lats, lon=tmp.lons, method='nearest')
-                ratio_arome = self.arome_clim.rr_cumul.data / arome_cumul.rr_cumul.data
-                ratio_arome[parameters[var].data==0] = 1  # Do not introduce precipitation on pixel with no precipitation and no reference
+            if rr_antilope>0:
+                delta2 = 0
+            else:
+                delta2 = delta
+            antilope_ratio = (parameters[var].data+delta2) / (rr_antilope+delta2)  # Goal : estimlate ratio for ridges pixels with no precipitation detected by ANTILOE
+#            antilope_ratio[parameters[var].data==0] = 1  # Do not introduce precipitation on pixel with no precipitation and no reference
+#            if tmp["rr"] == 0:
+#                antilope_ratio[rr_antilope==0] = 1  # Not enough information available to estimate a ratio --> apply only AROME vertical gradient
+            #antilope_ratio[parameters[var].data==0] = 1  # Do not introduce precipitation on pixel with no precipitation and no reference
+            #antilope_ratio[rr_antilope==0] = 1
+            #rr_antilope = parameters.sel(lat=tmp.lats, lon=tmp.lons, method='nearest').rr.data
+            #antilope_ratio = (parameters.rr.data+0.01) / (rr_antilope+0.01)
+            arome_cumul = self.arome_clim.sel(lat=tmp.lats, lon=tmp.lons, method='nearest')
+            ratio_arome = self.arome_clim.rr_cumul.data / arome_cumul.rr_cumul.data
+            ratio_arome[parameters[var].data==0] = 1  # Do not introduce precipitation on pixel with no precipitation and no reference
 #                if tmp["rr"] < 1:
 #                    #antilope_ratio[rr_antilope==0] = 1  # Not enough information available to estimate a ratio --> apply only AROME vertical gradient
 #                    mask = (parameters[var].data == 0)
 #                    antilope_ratio[mask] = 1  # Not enough information available to estimate a ratio --> apply only AROME vertical gradient
 #                    ratio_arome[mask] = 1  # Do not introduce precipitation on pixel with no precipitation and no reference
 
-                dist = np.sqrt((lats-tmp.lats)**2+(lons-tmp.lons)**2)  # Euclidian horizontal distance
-                #w = np.exp(-(dist/0.1)**2)  # Distance weighting --> Do not propagate information too far away
-                #w = np.exp(-dist/0.1)  # Distance weighting
-                #w = np.exp(-(dist/self.ld)**2)  # Distance weighting
-                w = 1/(0.01+dist)**2  # Distance weighting  --> adding 0.01 instead of 1 ensures that the value at the reference point is preserved
-                #w = 1/(0.1+dist)**2  # Distance weighting  --> adding 0.1 instead of 1 ensures that the value at the reference point is preserved
+            dist = np.sqrt((lats-tmp.lats)**2+(lons-tmp.lons)**2)  # Euclidian horizontal distance
+            #w = np.exp(-(dist/0.1)**2)  # Distance weighting --> Do not propagate information too far away
+            #w = np.exp(-dist/0.1)  # Distance weighting
+            #w = np.exp(-(dist/self.ld)**2)  # Distance weighting
+            w = 1/(0.01+dist)**2  # Distance weighting  --> adding 0.01 instead of 1 ensures that the value at the reference point is preserved
+            #w = 1/(0.1+dist)**2  # Distance weighting  --> adding 0.1 instead of 1 ensures that the value at the reference point is preserved
 
-                #ratio = (rr_antilope.rr.data+0.1) / (tmp.rr+0.1)  # WARNING : division by 0
-                #error = rr_antilope.rr.data - tmp.rr
-                ratio = tmp.ratio  # ratio is well defined (+0.1)
-                weights.append(w)
-                #ratios.append(ratio*antilope_ratio)
-                ratios.append(ratio*antilope_ratio/ratio_arome)
+            #ratio = (rr_antilope.rr.data+0.1) / (tmp.rr+0.1)  # WARNING : division by 0
+            #error = rr_antilope.rr.data - tmp.rr
+            ratio = tmp.ratio  # ratio is well defined (+0.1)
+            weights.append(w)
+            #ratios.append(ratio*antilope_ratio)
+            ratios.append(ratio*antilope_ratio/ratio_arome)
 
-            #if i==17:
-            #    self.plot_array(delta2, parameters, 'delta',  f'{self.date_str}/delta2_{i}_{self.domain}.pdf', domain=self.domain)
-            #    self.plot_array(antilope_ratio, parameters, 'Ratio ratio', f'{self.date_str}/antilope_ratio_{i}_{self.domain}.pdf', cmap=plt.cm.RdBu_r, vmin=0, vmax=2, domain=self.domain)
+        #if i==17:
+        #    self.plot_array(delta2, parameters, 'delta',  f'{self.date_str}/delta2_{i}_{self.domain}.pdf', domain=self.domain)
+        #    self.plot_array(antilope_ratio, parameters, 'Ratio ratio', f'{self.date_str}/antilope_ratio_{i}_{self.domain}.pdf', cmap=plt.cm.RdBu_r, vmin=0, vmax=2, domain=self.domain)
 
-            #obs_auto.loc[73257005]
-            #idx = 17
-            #self.plot_array(weights[idx], parameters, 'Ratio ratio', f'{self.date_str}/weight_{idx}_{self.domain}.pdf', cmap=plt.cm.viridis,vmax=10, domain=self.domain)
-            #self.plot_array(ratios[idx], parameters, 'Ratio ratio', f'{self.date_str}/ratios_{idx}_{self.domain}.pdf', cmap=plt.cm.RdBu_r, vmin=0, vmax=2, domain=self.domain)
+        #obs_auto.loc[73257005]
+        #idx = 17
+        #self.plot_array(weights[idx], parameters, 'Ratio ratio', f'{self.date_str}/weight_{idx}_{self.domain}.pdf', cmap=plt.cm.viridis,vmax=10, domain=self.domain)
+        #self.plot_array(ratios[idx], parameters, 'Ratio ratio', f'{self.date_str}/ratios_{idx}_{self.domain}.pdf', cmap=plt.cm.RdBu_r, vmin=0, vmax=2, domain=self.domain)
 
-            weights = np.array(weights)
-            W = np.sum(weights, axis=0)
-            Wm = np.mean(weights, axis=0)
-            Wd = np.sqrt(np.mean((weights-Wm)**2, axis=0))
+        weights = np.array(weights)
+        W = np.sum(weights, axis=0)
+        Wm = np.mean(weights, axis=0)
+        Wd = np.sqrt(np.mean((weights-Wm)**2, axis=0))
 
-            mean_ratio = np.divide(np.sum(weights*ratios, axis=0), W)
-            D = np.sqrt(np.sum(weights*(ratios-mean_ratio)**2, axis=0)/W)
-            D[W==0] = 0
+        mean_ratio = np.divide(np.sum(weights*ratios, axis=0), W)
+        D = np.sqrt(np.sum(weights*(ratios-mean_ratio)**2, axis=0)/W)
+        D[W==0] = 0
 
-            if self.plot:
+        if self.plot:
 #            self.plot_array(mean_ratio, parameters, 'Mean ratio', f'{self.date_str}/Mean_ratio_{self.domain}.pdf', cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=0, vmax=2, domain=self.domain)
 #            self.plot_array(D, parameters, 'Ratio ratio', f'{self.date_str}/D_{self.domain}.pdf', cmap=plt.cm.viridis, vmin=0, vmax=1, domain=self.domain)
 #            self.plot_array(1/Wm, parameters, 'Weight', f'{self.date_str}/Weight_{self.domain}.pdf', cmap=plt.cm.viridis, vmin=0, domain=self.domain)
 #            self.plot_array(1/Wd, parameters, 'Weight spread', f'{self.date_str}/Weight_spread_{self.domain}.pdf', cmap=plt.cm.viridis, vmin=0, domain=self.domain)
 #            self.plot_array(D/(2*Wm), parameters, 'D/W', f'{self.date_str}/D_over_2timesW_{self.domain}.pdf', cmap=plt.cm.viridis, vmin=0, vmax=0.2, domain=self.domain)
 #            self.plot_array(D/10, parameters, 'D/10', f'{self.date_str}/D_over_10_{self.domain}.pdf', cmap=plt.cm.viridis, vmin=0, domain=self.domain)
-                pass
+            pass
 
-            ratios = np.array(ratios)
-            ratios[np.isnan(ratios)] = 1  # Security
-            ratios[np.isinf(ratios)] = 1  # No precipitation in reference
-            #ratios[ratios==0] = 1  # No precipitation in antilope --> add 0.1 in ratio comutation to avoid this
+        ratios = np.array(ratios)
+        ratios[np.isnan(ratios)] = 1  # Security
+        ratios[np.isinf(ratios)] = 1  # No precipitation in reference
+        #ratios[ratios==0] = 1  # No precipitation in antilope --> add 0.1 in ratio comutation to avoid this
 
-            # Compute estimated ratio by weighting between 1 and the mean estimated ratio
-            # Decrease the weight for pixels with large ratio dispersion (more uncertainty !)
-            # Ensure that estimated ratio for pixels with no information around (W=0) stay at 1
-            # Rules :
-            # * w0+w1=1  (Keep ratio ODG)
-            # * W=0 ==> w1=0  (Ensure that estimated ratio for pixels with no information around (W=0) stay at 1)
-            # * D=0 ==> w1=W/(W+1)
-            # * D-->inf ==> w1-->0  (choix : D=1 ==> w1=1/2)
-            # * W-->inf ==> w1-->1
-            # w1 can be seen as a measure of the confidence in the method
-            #X = 1/(2*Wm-1)  # Facteur pour assurer la condition D=1 ==> w1=1/2. WARNING : W=1/2 valeur singulière
-            #K = Wm * (1 - D / (D + X))
-            #K[Wm==0.5] = 0.5  # W=1/2 valeur singulière de X
-            #K[Wm==0] = 0
-            X = 1/(2*W-1)  # Facteur pour assurer la condition D=1 ==> w1=1/2. WARNING : W=1/2 valeur singulière
-            K = W * (1 - D / (D + X))
-            K[W==0.5] = 0.5  # W=1/2 valeur singulière de X
-            K[W==0] = 0
-            w1 = np.exp(-1/K)
-            w0 = 1 - w1
-            #w1 = W / (1 + W)
-            #w0 = 1 - w1
-            #new_ratio = initial_ratio * w0 + w1 * mean_ratio
-            new_ratio = 1 * w0 + w1 * mean_ratio
-            #estimated_ratio[np.isnan(estimated_ratio)] = 1
+        # Compute estimated ratio by weighting between 1 and the mean estimated ratio
+        # Decrease the weight for pixels with large ratio dispersion (more uncertainty !)
+        # Ensure that estimated ratio for pixels with no information around (W=0) stay at 1
+        # Rules :
+        # * w0+w1=1  (Keep ratio ODG)
+        # * W=0 ==> w1=0  (Ensure that estimated ratio for pixels with no information around (W=0) stay at 1)
+        # * D=0 ==> w1=W/(W+1)
+        # * D-->inf ==> w1-->0  (choix : D=1 ==> w1=1/2)
+        # * W-->inf ==> w1-->1
+        # w1 can be seen as a measure of the confidence in the method
+        #X = 1/(2*Wm-1)  # Facteur pour assurer la condition D=1 ==> w1=1/2. WARNING : W=1/2 valeur singulière
+        #K = Wm * (1 - D / (D + X))
+        #K[Wm==0.5] = 0.5  # W=1/2 valeur singulière de X
+        #K[Wm==0] = 0
+        X = 1/(2*W-1)  # Facteur pour assurer la condition D=1 ==> w1=1/2. WARNING : W=1/2 valeur singulière
+        K = W * (1 - D / (D + X))
+        K[W==0.5] = 0.5  # W=1/2 valeur singulière de X
+        K[W==0] = 0
+        w1 = np.exp(-1/K)
+        w0 = 1 - w1
+        #w1 = W / (1 + W)
+        #w0 = 1 - w1
+        #new_ratio = initial_ratio * w0 + w1 * mean_ratio
+        new_ratio = 1 * w0 + w1 * mean_ratio
+        #estimated_ratio[np.isnan(estimated_ratio)] = 1
 
-            if self.plot:
+        if self.plot:
 #            self.plot_array(w1, parameters, 'w1', f'{self.date_str}/w1_{self.domain}.pdf', cmap=plt.cm.viridis, vmin=0, vmax=1, domain=self.domain)
 #            self.plot_array(K, parameters, 'K', f'{self.date_str}/K_{self.domain}.pdf', cmap=plt.cm.viridis, domain=self.domain)
 #            self.plot_array(X, parameters, 'X', f'{self.date_str}/X_{self.domain}.pdf', cmap=plt.cm.viridis, domain=self.domain)
-                pass
+            pass
 
-            # TODO : trouver une formulation plus élégante (et moins redondante) de l'erreur d'obs
-            absolute_error = np.abs((parameters[var].data+delta) / new_ratio - (parameters[var].data+delta))  # L1 : Absolute error (Add 0.1mm to avoid problems with no precipitation pixels)
-            #absolute_error = np.abs(new_ratio-1) * (parameters[var].data+0.1) / new_ratio  # Add value change --> exact same information as L1 !!
-            uncertainty = np.abs((parameters[var].data+delta) / (1+np.abs(new_ratio-1)+D/10) - (parameters[var].data+delta))
-            #uncertainty = np.abs((parameters[var].data+0.1) / (1+np.abs(new_ratio-1)+D/Wm) - (parameters[var].data+0.1))
+        # TODO : trouver une formulation plus élégante (et moins redondante) de l'erreur d'obs
+        # The following formulation introduces a <0 bias
+        #absolute_error = np.abs((parameters[var].data+delta) / new_ratio - (parameters[var].data+delta))  # L1 : Absolute error (Add 0.1mm to avoid problems with no precipitation pixels)
+        #uncertainty = np.abs((parameters[var].data+delta) / (1+np.abs(new_ratio-1)+D/10) - (parameters[var].data+delta))
+        ##uncertainty = np.abs((parameters[var].data+0.1) / (1+np.abs(new_ratio-1)+D/Wm) - (parameters[var].data+0.1))
+        #new_error = absolute_error + uncertainty
 
-            new_error = absolute_error + uncertainty
+        #new_error = (parameters.mu.data+0.1) / new_ratio - (parameters.mu.data+0.1)  # Absolute error (Add 0.1mm to avoid problems with no precipitation pixels)
+        #new_error = np.abs(new_error) + np.abs(new_ratio-1) * (parameters.mu.data+0.1) / new_ratio  # Add modification
+        new_error = np.abs(new_ratio-1) * (parameters.mu.data+0.1) / new_ratio
+        new_error = w1 * new_error
 
-            new_error = (parameters.mu.data+0.1) / new_ratio - (parameters.mu.data+0.1)  # Absolute error (Add 0.1mm to avoid problems with no precipitation pixels)
-            new_error = np.abs(new_error) + np.abs(new_ratio-1) * (parameters.mu.data+0.1) / new_ratio  # Add modification
-            new_error = w1 * new_error
-
-        else:
-
-            new_ratio = np.ones(np.shape(parameters[var].data))
-            new_error = np.zeros(np.shape(parameters[var].data))
+#        else:
+#            new_ratio = np.ones(np.shape(parameters[var].data))
+#            new_error = np.zeros(np.shape(parameters[var].data))
 
         # Conversion to xarray
         new_ratio = make_mask.to_xarray(new_ratio, parameters, varname='Ratio')
@@ -1803,8 +1802,8 @@ class RandomSampling(Assimilation):
         self.error = null.copy()  # Initialisation of error data
         #self.newlocalfield = {m:dict() for m in range(1, self.Ne+1)}  # Used only for ponctual assimilation
 
-        #actual_parameters = self.parameters
-        actual_parameters = np.round(self.parameters, 1)
+        actual_parameters = self.parameters
+        #actual_parameters = np.round(self.parameters, 1)
 
         codistances = os.path.join('/home/vernaym/These/DATA', f'codistance_max_dist_{self.max_dist}_{domain}.npz')
 #            if not os.path.exists(codistances):
