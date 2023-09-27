@@ -2087,9 +2087,9 @@ class RandomSampling(Assimilation):
         #pond = self.pond.dot(diags(1/std.flatten(), 0))
 
         for member in analysis.member.data:
-            ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='gamma')
+            #ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='gamma')
             #ana = Preprocessing_ANTILOPE.random_draw(obs, sd1, distribution='gamma')
-            #ana = Preprocessing_ANTILOPE.random_draw(obs, sd1, sd2=sd2, distribution='gamma')
+            ana = Preprocessing_ANTILOPE.random_draw(obs, sd1, sd2=sd2, distribution='gamma')
             #ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='normal')
             analysis.loc[{'member':member}] = ana
 
@@ -2254,9 +2254,9 @@ class RandomSampling(Assimilation):
 
             # Fill other members with random draw arround the corrected observation
             for member in range(1, nmembers+1):
-                ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='gamma')
+                #ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='gamma')
                 #ana = Preprocessing_ANTILOPE.random_draw(obs, sd1, distribution='gamma')
-                #ana = Preprocessing_ANTILOPE.random_draw(obs, sd1, sd2=sd2, distribution='gamma')
+                ana = Preprocessing_ANTILOPE.random_draw(obs, sd1, sd2=sd2, distribution='gamma')
                 #ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='normal')
                 analysis.loc[{'member':member}] = ana
 
