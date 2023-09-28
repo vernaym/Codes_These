@@ -66,7 +66,8 @@ domain_coords = dict(
         Savoie         = dict(lonmin=6.06, lonmax=7.1, latmin=45.15, latmax=45.7),
         Isere          = dict(lonmin=5.54, lonmax=6.19, latmin=44.89, latmax=45.16),
         Brianconnais   = dict(lonmin=6.48, lonmax=6.95, latmin=44.67, latmax=44.95),
-        HautesAlpes    = dict(lonmin=5.90, lonmax=6.36, latmin=44.58, latmax=44.81),
+        HautesAlpes    = dict(lonmin=5.9, lonmax=7, latmin=44, latmax=45.1),
+        Vercors        = dict(lonmin=5.4, lonmax=6, latmin=44.75, latmax=45.4),
         AlpesSud       = dict(lonmin=6.56, lonmax=6.92, latmin=44.18, latmax=44.49),
         alp            = dict(latmax=46.450, latmin=44.100, lonmin=5.400, lonmax=7.200),
 )
@@ -77,6 +78,8 @@ figsize = dict(
         HauteSavoie    = dict(singleplot=(12,12), ensembleplot=(12,12)),
         MontBlanc      = dict(singleplot=(15,10), ensembleplot=(15,10)),
         Savoie         = dict(singleplot=(16,8), ensembleplot=(16,7)),
+        HautesAlpes    = dict(singleplot=(15,10), ensembleplot=(15,10)),
+        Vercors        = dict(singleplot=(15,12), ensembleplot=(15,12)),
         Isere          = dict(singleplot=(16,8), ensembleplot=(16,7)),
 )
 
