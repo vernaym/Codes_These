@@ -1298,7 +1298,7 @@ class Assimilation(object):
         #error = uniform_filter(error, 10)
         #Rdyn = diags(error.flatten(), 0)
         error = np.abs(new_obs.data - parameters.mu.data)
-        error = uniform_filter(error, 10)
+        error = uniform_filter(error, 5)
         Rdyn = diags(error.flatten(), 0)
         R = dia_matrix(Rdyn+Rstat)
 
@@ -1642,7 +1642,6 @@ class RandomSampling(Assimilation):
         weights = list()
         ratios  = list()
         errors  = list()
-
         if self.arome_clim is None:
             arome_clim = xr.open_dataset(os.path.join(datadir, 'CUMUL_AROME.nc'))
             self.arome_clim = arome_clim.sel(lat=parameters.lat, lon=parameters.lon)
@@ -1671,7 +1670,7 @@ class RandomSampling(Assimilation):
                 #antilope_ratio[parameters[var].data==0] = 1  # Do not introduce precipitation on pixel with no precipitation and no reference
                 #if tmp["rr"] == 0:
                 #    antilope_ratio[rr_antilope==0] = 1  # Not enough information available to estimate a ratio --> apply only AROME vertical gradient
-                #antilope_ratio[parameters[var].data==0] = 1  # Do not introduce precipitation on pixel with no precipitation and no reference
+                antilope_ratio[parameters[var].data==0] = 1  # Do not introduce precipitation on pixel with no precipitation and no reference
                 #antilope_ratio[rr_antilope==0] = 1
                 #rr_antilope = parameters.sel(lat=tmp.lats, lon=tmp.lons, method='nearest').rr.data
                 #antilope_ratio = (parameters.rr.data+0.01) / (rr_antilope+0.01)
@@ -1696,7 +1695,10 @@ class RandomSampling(Assimilation):
                 ratio = tmp.ratio  # ratio is well defined (+0.1)
                 weights.append(w)
                 #ratios.append(ratio*antilope_ratio)
-                ratios.append(ratio*antilope_ratio/ratio_arome)
+                rat = ratio*antilope_ratio/ratio_arome
+                ratios.append(rat)
+                error = np.abs(rat - 1) * (parameters[var].data + delta2) / rat
+                errors.append(error)
 
             #if i==17:
             #    self.plot_array(delta2, parameters, 'delta',  f'{self.date_str}/delta2_{i}_{self.domain}.pdf', domain=self.domain)
@@ -1727,8 +1729,8 @@ class RandomSampling(Assimilation):
                 pass
 
             ratios = np.array(ratios)
-            ratios[np.isnan(ratios)] = 1  # Security
-            ratios[np.isinf(ratios)] = 1  # No precipitation in reference
+            #ratios[np.isnan(ratios)] = 1  # Security
+            #ratios[np.isinf(ratios)] = 1  # No precipitation in reference
             #ratios[ratios==0] = 1  # No precipitation in antilope --> add 0.1 in ratio comutation to avoid this
 
             # Compute estimated ratio by weighting between 1 and the mean estimated ratio
@@ -1770,10 +1772,18 @@ class RandomSampling(Assimilation):
             ##uncertainty = np.abs((parameters[var].data+0.1) / (1+np.abs(new_ratio-1)+D/Wm) - (parameters[var].data+0.1))
             #new_error = absolute_error + uncertainty
 
-            #new_error = (parameters.mu.data+0.1) / new_ratio - (parameters.mu.data+0.1)  # Absolute error (Add 0.1mm to avoid problems with no precipitation pixels)
-            #new_error = np.abs(new_error) + np.abs(new_ratio-1) * (parameters.mu.data+0.1) / new_ratio  # Add modification
-            new_error = (np.abs(new_ratio-1)+D/2) * (parameters[var].data+delta) / new_ratio
-            #new_error = w1 * new_error
+            #new_error = (parameters.mu.data + delta) / new_ratio - (parameters.mu.data + delta)  # Absolute error (Add 0.1mm to avoid problems with no precipitation pixels)
+            #new_error = np.abs(new_error) + np.abs(new_ratio - 1) * (parameters.mu.data + delta) / new_ratio  # Add modification
+            #new_error = np.abs(new_ratio - 1) * (parameters.mu.data + delta) / new_ratio  # Add modification
+            # TODO : increase error where dispsersion is large but new_ratio ~1
+            #new_error = (np.abs(new_ratio-1)+D/2) * (parameters[var].data+delta) / new_ratio  # --> introduces a <0 bias
+            #new_error = w1 * new_error + w0 * np.abs(mean_ratio-1) * (parameters[var].data+delta) / mean_ratio
+
+
+            errors = np.array(errors)
+            errors[np.isnan(errors)] = 0  # Security
+            errors[np.isinf(errors)] = 0  # No precipitation in reference
+            new_error = np.divide(np.sum(weights*errors, axis=0), W)
 
         else:
             new_ratio = np.ones(np.shape(parameters[var].data))
