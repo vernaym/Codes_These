@@ -8,11 +8,12 @@ import pytz
 
 local_tz = pytz.timezone("Europe/Paris")
 
-csv = False
+csv = True
 
 if csv:
     #df=pd.read_csv("/home/vernaym/These/DATA/obs_horaires_clim_RR.data", sep=';', parse_dates=['dat'])
-    df=pd.read_csv("/home/vernaym/These/DATA/obs_horaires_auto_RR_20211101_20220430.csv", sep=';', parse_dates=['date'])
+    #df=pd.read_csv("/home/vernaym/These/DATA/obs_horaires_auto_RR_20211101_20220430.csv", sep=';', parse_dates=['date'])
+    df=pd.read_csv("/home/vernaym/These/DATA/obs_horaires_RR_auto_pyr_20211110_20220430.csv", sep=';', parse_dates=['date'])
 
     #newdates=df['dat']-pd.Timedelta(7, 'H')  # Shift time to sum rr over 6h J --> 6h J+1 period
     #df = df.assign(date=newdates).drop(columns=['dat'])  # Replace date column
@@ -30,7 +31,7 @@ if csv:
     df = df.set_index(['num_poste', 'lat', 'lon', 'alti', 'nom', 'reseau_poste', 'date']).sort_index()
 
     #df.to_csv("/home/vernaym/These/DATA/obs_quotidienne_clim_RR.data", sep=';')
-    df.to_csv("/home/vernaym/These/DATA/obs_quotidienne_auto_RR_20211101_20220430.csv", sep=';')
+    df.to_csv("/home/vernaym/These/DATA/obs_quotidienne_auto_RR_pyr_20211101_20220430.csv", sep=';')
 
 else:
 
@@ -58,5 +59,5 @@ else:
     #antilope['time'] = antilope.time-np.timedelta64(6, 'h')  # Spring time
     antilope = antilope.resample(time='D').sum(dim='time')  # !!! VERY SLOW !!!
     antilope['time'] = antilope.time+np.timedelta64(24+shift-1, 'h')
-    return antilope
+    #return antilope
 

@@ -150,9 +150,10 @@ extract_dom = dict(
         ),
         pyr = dict(
             latmax = 43.5,
-            latmin = 42.0,
-            lonmin = -2.0,
-            lonmax = 3.5,
+            #latmin = 42.0,
+            latmin = 42.3,
+            lonmin = -1.5,
+            lonmax = 2.7,
         ),
     )
 
@@ -265,7 +266,7 @@ def add_scores(scores, ax, mycmap=None, vmin=None, vmax=None):
         info = info[info.index.isin(onlypostes)]
         if mycmap is None:
             #sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=450, edgecolors='black', linewidth=3, alpha=1)
-            sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=30, edgecolors='black', alpha=0.3)
+            sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=50, edgecolors='black', alpha=0.5)
             #sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=300, edgecolors='black', alpha=1)
         else:
             #sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, vmin=vmin, vmax=vmax, marker=marker, s=300, edgecolors='black', alpha=1)
@@ -342,7 +343,7 @@ def plot(antilope, datebegin, dateend, categories=True, biascorrection=False, sc
         fig, ax = plt.subplots(figsize=(16,16))
         #fig, ax = plt.subplots(figsize=(14,16))
     elif dom =='pyr':
-        fig, ax = plt.subplots(figsize=(24,8))
+        fig, ax = plt.subplots(figsize=(33,10))
     elif dom == 'GrandesRousses':
         fig, ax = plt.subplots(figsize=(19,8))
     elif dom == 'HautesAlpes':
@@ -397,14 +398,21 @@ def plot(antilope, datebegin, dateend, categories=True, biascorrection=False, sc
     #add_cities(latmin, latmax, lonmin, lonmax)
     if scores:
         scores = pd.read_csv(fic_score, sep=';')
-        sc = add_scores(scores, ax, mycmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=0, vmax=2)
-        #sc = add_scores(scores, ax)
-        cb = fig.colorbar(sc)
+        #sc = add_scores(scores, ax, mycmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=0, vmax=2)
+        sc = add_scores(scores, ax)
+        plt.subplots_adjust(bottom=0.05, left=0.05, right=0.85, top=0.95)
+        cax1 = plt.axes((0.94, 0.05, 0.01, 0.9))
+        cax2 = plt.axes((0.87, 0.05, 0.01, 0.9))
+        cb = fig.colorbar(sc, cax1)
         #cb.set_label(label='ANTILOPE / rain-gauges ratio', fontsize=22)
         cb.ax.tick_params(labelsize=16)
         cb.set_label(label='Mean ANTILOPE / rain-gauges ratio', fontsize=22)
         #cb.set_label(label='ANTILOPE / rain-gauges ratio', fontsize=14)
-    cb2 = fig.colorbar(cml, extend='both')
+    else:
+        plt.subplots_adjust(bottom=0.05, left=0.05, right=0.90, top=0.95)
+        cax2 = plt.axes((0.92, 0.05, 0.02, 0.9))
+
+    cb2 = fig.colorbar(cml, extend='both', cax=cax2)
     cb2.set_label(label=f'Total precipitation between \n {datebegin} and {dateend} (mm)', fontsize=22)
     #cb2.set_label(label=f'Total precipitation between \n {datebegin} and {dateend} (mm)', fontsize=14)
     cb2.ax.tick_params(labelsize=16)
@@ -440,7 +448,6 @@ def plot_and_save(field, name, cmap=plt.cm.Greys, vmin=None, vmax=None, scores=N
     if dirsave is None:
         dirsave = savedir
 
-
     if dom == 'GrandesRousses':
         fig, ax = plt.subplots(figsize=(12,6))
     elif dom == 'HautesAlpes':
@@ -456,14 +463,16 @@ def plot_and_save(field, name, cmap=plt.cm.Greys, vmin=None, vmax=None, scores=N
         fig, ax = plt.subplots(figsize=(14,16))
     elif dom == 'pyr':
         #fig, ax = plt.subplots(figsize=(16,16))
-        fig, ax = plt.subplots(figsize=(24,8))
+        fig, ax = plt.subplots(figsize=(33, 10))
     else:
         fig, ax = plt.subplots()
 
     im = plot_field(fig, ax, field, cmap=cmap, vmin=vmin, vmax=vmax, scores=scores)
     #fig.savefig(os.path.join(dirsave, f'{name}.pdf'), format='pdf', layout='tight')
-    fig.savefig(os.path.join(dirsave, f'{name}.pdf'), format='pdf', bbox_inches='tight')
+    #fig.savefig(os.path.join(dirsave, f'{name}.pdf'), format='pdf', bbox_inches='tight')
+    fig.savefig(os.path.join(dirsave, f'{name}.pdf'), format='pdf')
     field.to_netcdf(os.path.join(dirsave, f'{name}.nc').encode('utf-8'))
+    plt.close(fig)
 
 def plot_field(fig, ax, field, cmap=None, vmin=None, vmax=None, scores=None, colorbar=True):
 
@@ -495,7 +504,9 @@ def plot_field(fig, ax, field, cmap=None, vmin=None, vmax=None, scores=None, col
     #add_cities(latmin, latmax, lonmin, lonmax)
 
     if colorbar:
-        cb = fig.colorbar(cml)
+        plt.subplots_adjust(bottom=0.05, left=0.05, right=0.93, top=0.95)
+        cax = plt.axes((0.95, 0.05, 0.02, 0.9))
+        cb = fig.colorbar(cml, cax=cax)
         #cb.set_label(field.name, fontsize=24)
         #cb.ax.tick_params(labelsize=20)
         cb.set_label(field.name, fontsize=12)
@@ -646,6 +657,7 @@ def ratio_estimation(field, model=None, moving_window=25):
     diff = mean_daily_precipitation-smoothed
 
     scores = pd.read_csv(fic_score, sep=';')
+    #scores = scores.loc[(scores.lats>=latmin) & (scores.lats<=latmax) & (scores.lons>=lonmin) & (scores.lons<=lonmax)]
     scores = scores.set_index('num_poste')
     scores = scores.sort_values('lats')
 
@@ -689,11 +701,11 @@ def ratio_estimation(field, model=None, moving_window=25):
     ratios  = list()
     for i,poste in enumerate(scores.index):
     #for i,poste in enumerate(reversed(scores.index)):
-        if poste in onlypostes:
+        ratio = scores.loc[poste, 'ratio']
+        if poste in onlypostes and ratio > 0.1 and ratio < 1.9:
         #if poste not in blacklist:
             used_scores.append(poste)
             #print(scores.loc[poste])
-            ratio = scores.loc[poste, 'ratio']
             dist = np.sqrt((lats-scores.loc[poste,'lats'])**2+(lons-scores.loc[poste, 'lons'])**2)  # Euclidian horizontal distance
             idx, idy = np.where(dist==np.min(dist))
             ref_cumul = field.rr_cumul.data[idx[0],idy[0]]
@@ -973,21 +985,21 @@ def ratio_estimation(field, model=None, moving_window=25):
     errorname = f'Observation_error'
     uncertaintyname = f'Observation_uncertainty'
     confidencename = f'Observation_confidence'
-    if domain == 'alp':
-        # From https://qiita.com/tsukada_cs/items/d282f27f4024d00d7022 :
-        #plot_and_save(ratio_field, rationame, vmin=0.2, vmax=1.8, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, scores=scores)  # Albane's choice !
-        plot_and_save(ratio_field, rationame, vmin=0.4, vmax=1.6, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, scores=scores)  # Albane's choice !
-        #plot_and_save(ratio_field, rationame + '_free_scale', vmin=0, vmax=2, cmap=plt.cm.coolwarm, scores=scores)
-        #plot_and_save(np.abs(observation_error), errorname, vmin=0, vmax=12, cmap=plt.cm.viridis, scores=scores)
-        #plot_and_save(np.abs(observation_error), errorname, vmin=0, vmax=15, cmap=plt.cm.Reds, scores=scores)
-        #plot_and_save(np.abs(observation_error), errorname, vmin=0, vmax=15, cmap=plt.cm.Greys, scores=scores)
-        #plot_and_save(observation_error, errorname, vmin=1, vmax=15, cmap=plt.cm.YlOrBr, scores=scores)
-        plot_and_save(confidence, confidencename, vmin=0, cmap=plt.cm.Greens)
-        plot_and_save(uncertainty, uncertaintyname, vmin=1, vmax=20, cmap=plt.cm.YlOrBr)
-    elif domain == 'GrandesRousses':
-        plot_and_save(ratio_field, rationame, vmin=0.6, vmax=1.4, cmap=plt.cm.coolwarm, scores=scores)
-        #plot_and_save(observation_error, errorname, vmin=-6, vmax=6, cmap=plt.cm.coolwarm, scores=scores)
-        #plot_and_save(np.abs(observation_error), erroname, vmin=1, vmax=8, cmap=plt.cm.viridis, scores=scores)
+    #if domain == 'alp':
+    # From https://qiita.com/tsukada_cs/items/d282f27f4024d00d7022 :
+    #plot_and_save(ratio_field, rationame, vmin=0.2, vmax=1.8, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, scores=scores)  # Albane's choice !
+    plot_and_save(ratio_field, rationame, vmin=0.6, vmax=1.4, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, scores=scores)  # Albane's choice !
+    #plot_and_save(ratio_field, rationame + '_free_scale', vmin=0, vmax=2, cmap=plt.cm.coolwarm, scores=scores)
+    #plot_and_save(np.abs(observation_error), errorname, vmin=0, vmax=12, cmap=plt.cm.viridis, scores=scores)
+    #plot_and_save(np.abs(observation_error), errorname, vmin=0, vmax=15, cmap=plt.cm.Reds, scores=scores)
+    #plot_and_save(np.abs(observation_error), errorname, vmin=0, vmax=15, cmap=plt.cm.Greys, scores=scores)
+    #plot_and_save(observation_error, errorname, vmin=1, vmax=15, cmap=plt.cm.YlOrBr, scores=scores)
+    plot_and_save(confidence, confidencename, vmin=0, cmap=plt.cm.Greens)
+    plot_and_save(uncertainty, uncertaintyname, vmin=1, vmax=20, cmap=plt.cm.YlOrBr)
+#    elif domain == 'GrandesRousses':
+#        plot_and_save(ratio_field, rationame, vmin=0.6, vmax=1.4, cmap=plt.cm.coolwarm, scores=scores)
+#        #plot_and_save(observation_error, errorname, vmin=-6, vmax=6, cmap=plt.cm.coolwarm, scores=scores)
+#        #plot_and_save(np.abs(observation_error), erroname, vmin=1, vmax=8, cmap=plt.cm.viridis, scores=scores)
 
     plt.close('all')
 
@@ -1132,26 +1144,31 @@ if __name__ == "__main__":
 #    antilope.lat.data = antilope.lat.data+0.005  # TODO : comprendre et resoudre le probleme de decallage des coordonnees
     antilope = antilope.where((antilope.lon>=lonmin) & (antilope.lon<=lonmax) & (antilope.lat<=latmax) & (antilope.lat>latmin-0.01), drop=True)  # >=44.1 ne fonctionne pas pour ANTILOPEQ (np.where(antilope.lat==44.1) renvoie une liste vide...)
 
-    #model = xr.open_dataset(os.path.join(datadir, 'CUMUL_ASPEAROME001.nc'))
-    model = xr.open_dataset(os.path.join(datadir, 'CUMUL_AROME.nc'))
-    # TODO : prendre un cumul sur la même période que ANTILOPE pour éviter de fausser la méthode avec des situations spécifiques
-    model = model.where((model.lon>=lonmin) & (model.lon<=lonmax) & (model.lat<=latmax) & (model.lat>latmin-0.01), drop=True)
+    if domain == 'pyr':
+        model = None
+    else:
+        #model = xr.open_dataset(os.path.join(datadir, 'CUMUL_ASPEAROME001.nc'))
+        model = xr.open_dataset(os.path.join(datadir, 'CUMUL_AROME.nc'))
+        # TODO : prendre un cumul sur la même période que ANTILOPE pour éviter de fausser la méthode avec des situations spécifiques
+        model = model.where((model.lon>=lonmin) & (model.lon<=lonmax) & (model.lat<=latmax) & (model.lat>latmin-0.01), drop=True)
 
     plot_antilope = False
 
     if plot_antilope:
         #plot(antilope, datebegin, dateend, categories=True, biascorrection=True)
         #plot(antilope, datebegin, dateend, categories=False, biascorrection=True)
-        plot(antilope, datebegin, dateend, categories=True, biascorrection=True, scores=True)
+        #plot(antilope, datebegin, dateend, categories=True, biascorrection=True, scores=True)
         #plot(antilope, datebegin, dateend, categories=True)
         #plot(antilope, datebegin, dateend, categories=False)
-        #plot(antilope, datebegin, dateend, categories=False, scores=True)
+        fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_{domain}_obs_auto.csv')
+        plot(antilope, datebegin, dateend, categories=False, scores=True)
 
     else:
 
         # Estimation with automatic stations observations and AROME
         savedir = rootdir
-        fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_alpes_obs_auto.csv')
+        #fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_alpes_obs_auto.csv')
+        fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_{domain}_obs_auto.csv')
         ratio_estimation(antilope, model=model)
         # Estimation with automatic stations observations only
         savedir = os.path.join(rootdir, 'sans_arome')

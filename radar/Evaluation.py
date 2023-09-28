@@ -958,9 +958,9 @@ if __name__ == "__main__":
 
     extract_period = date_range(args.datebegin, args.dateend)
 
-    reference = read_nivometeo()
+    #reference = read_nivometeo()
     #reference = read_obs_clim()
-    #reference = read_obs_auto()
+    reference = read_obs_auto()
     reference.lon = np.round(reference.lon, 2)
     reference.lat = np.round(reference.lat, 2)
     ref_lon = reference.groupby('num_poste').lon.mean().to_xarray()
@@ -971,7 +971,8 @@ if __name__ == "__main__":
     if args.product == 'antilope':
         # TODO : read ANNTILOPEH and extract data from 7h UTC to 7h UTC before march 20th and from 8h UTC to 8h UTC after
         #RADAR_data = 'ANTILOPEQ_{0:s}_{1:s}.csv'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))
-        RADAR_data = 'ANTILOPEH_2021103000_2022060200_alp.nc'
+        #RADAR_data = 'ANTILOPEH_2021103000_2022060200_alp.nc'
+        RADAR_data = 'ANTILOPEH_2021080106_2022070106_pyr.nc'
         #RADAR_data = 'ANTILOPEQ_2021103100_2022060200_alp_postes_clim.csv'
     elif args.product == 'antilopejp1':
         RADAR_data = 'ANTILOPEJP1Q_{0:s}_{1:s}.csv'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))
@@ -1001,10 +1002,10 @@ if __name__ == "__main__":
         antilope['time'] = antilope.time+np.timedelta64(30, 'h')
 
         # De-biaisage
-        filename = os.path.join('/home/vernaym/workdir/ASSIMILATION/mask/alp', 'Estimated_ratio.nc')  # Mask test
-        ratio = xr.open_dataset(filename)
+        #filename = os.path.join('/home/vernaym/workdir/ASSIMILATION/mask/alp', 'Estimated_ratio.nc')  # Mask test
+        #ratio = xr.open_dataset(filename)
         #ratio = ratio.where((ratio.lon>=lonmin) & (ratio.lon<=lonmax) & (ratio.lat<=latmax) & (ratio.lat>latmin-0.01), drop=True)  # # >=44.1 ne fonctionne pas pour ANTILOPEQ (np.where(antilope.lat==44.1) renvoie une liste vide...)
-        antilope.rr.data = antilope.rr.data / ratio.Ratio.data
+        #antilope.rr.data = antilope.rr.data / ratio.Ratio.data
 
         # Extraction des valeurs sur les points de reference
         antilope = antilope.sel(lat=ref_lat, lon=ref_lon, method = 'nearest')
@@ -1119,8 +1120,8 @@ if __name__ == "__main__":
         # 5. Maps
         #for domain in ['alpes', 'pyrenees', 'corse']:
         #for domain in ['alpes', 'pyrenees']:
-        for domain in ['alpes']:
-#        for domain in ['pyrenees']:
+#        for domain in ['alpes']:
+        for domain in ['pyrenees']:
             plot_full_domain(domain, lats.to_numpy(), lons.to_numpy(), df_stat, suffix=suffix, product=args.product)
             plot_massif(df, suffix=suffix, product=args.product, domain=domain, threshold=args.threshold)
             #plot_massif(df.loc[df['massif_number'].isin(map_massifs[domain])], suffix=suffix, product=args.product, domain=domain, threshold=args.threshold)
