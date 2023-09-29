@@ -40,9 +40,9 @@ dateend   = datebegin + Period(hours=24)
 #datadir = '/home/vernaym/workdir/visualisation'
 datadir = '/home/vernaym/extraction_obs'  # On sxcen
 
-domain = 'alp'
+#domain = 'alp'
 
-def get_antilope():
+def get_antilope(domain):
 
     filename = f'ANTILOPE_{date.ymd}.nc'
     if not os.path.exists(filename):
@@ -59,7 +59,7 @@ def get_antilope():
             hostname       = 'sotrtm35-sidev.meteo.fr',
             username       = 'vernaym',
             tube           = 'ftp',
-            remote         = '/home/mrns/vernaym/extraction_antilope/alp/ANTILOPEH_[begindate]_[enddate]_alp.nc',  # ANTILOPEH_2023042007_2023042106_alp.nc
+            remote         = f'/home/mrns/vernaym/extraction_antilope/{domain}/ANTILOPEH_[begindate]_[enddate]_{domain}.nc',  # ANTILOPEH_2023042007_2023042106_alp.nc
             unknown        = True,
             #cutoff         = 'assimilation',
             #now            = True,
@@ -84,9 +84,9 @@ def get_nivometeo():
     else:
         return None
 
-def get_obs_auto():
+def get_obs_auto(domain):
     #fic_score = os.path.join(datadir, f'auto.data')
-    fic_score = os.path.join(datadir, f'obs_horaires_RR_{datebegin.ymd}_{dateend.ymd}.csv')  # obs_horaires_RR.data
+    fic_score = os.path.join(datadir, f'obs_horaires_RR_{datebegin.ymd}_{dateend.ymd}_{domain}.csv')  # obs_horaires_RR.data
     auto = pd.read_csv(fic_score, sep=';', parse_dates=['date'],
             dtype={'num_poste':int, 'nom':str, 'lat':float, 'lon':float, 'alti':int, 'rr': float, 'reseau_poste': int}, na_values=['--'])
     auto=auto.loc[(auto["date"]>np.datetime64(datebegin)) & (auto["date"]<=dateend)]
@@ -100,7 +100,7 @@ def get_obs_auto():
 
     return auto
 
-def get_safran():
+def get_safran(domain):
 
     filename = f'SAFRAN_{datebegin.ymd}.nc'  #TODO : donner un nom plus explicite
 
@@ -137,23 +137,25 @@ def get_safran():
     else:
         return None
 
-# 1. Récupération de ANTILOPE depuis sotrtm35-sidev
-antilope = get_antilope()
-
-# 2. Récupération de l'analyse SAFRAN oper de 9h
-safran = get_safran()
-#safran = None
-
-# 3. Read nivometeo observations
+# 1. Read nivometeo observations
 nivometeo = get_nivometeo()
 
-# 4. Read automatic observations
-auto = get_obs_auto()
+for domain in ['alp', 'pyr']:
 
-myplot = PrecipitationAnalysis(date, 'alp', antilope=antilope, nivometeo=nivometeo, auto=auto, safran=safran, var='analysis')  # Plot corrected field
-myplot.plot()
-myplot.save()
-myplot = PrecipitationAnalysis(date, 'alp', antilope=antilope, nivometeo=nivometeo, auto=auto, safran=safran, var='rr')  # Plot raw ANTILOPE field
-myplot.plot()
-myplot.save()
+# 2. Récupération de ANTILOPE depuis sotrtm35-sidev
+    antilope = get_antilope(domain)
+
+# 3. Récupération de l'analyse SAFRAN oper de 9h
+    safran = get_safran(domain)
+#safran = None
+
+# 4. Read automatic observations
+    auto = get_obs_auto(domain)
+
+    myplot = PrecipitationAnalysis(date, domain, antilope=antilope, nivometeo=nivometeo, auto=auto, safran=safran, var='analysis')  # Plot corrected field
+    myplot.plot()
+    myplot.save()
+    myplot = PrecipitationAnalysis(date, domain, antilope=antilope, nivometeo=nivometeo, auto=auto, safran=safran, var='rr')  # Plot raw ANTILOPE field
+    myplot.plot()
+    myplot.save()
 

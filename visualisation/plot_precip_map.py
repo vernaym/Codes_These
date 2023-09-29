@@ -122,7 +122,10 @@ class PrecipitationAnalysis(object):
         Plot ANTILOPE as multiple dot scatterplot (depending on the elevation)
         """
         # 1. read_relief (TODO : add to ANTILOPE pre-processing ?)
-        mnt = xr.open_dataset(os.path.join(datadir, "DEM_ALPES_WGS84_250m_bilinear.nc"))
+        if self.domain == 'alp':
+            mnt = xr.open_dataset(os.path.join(datadir, "DEM_ALPES_WGS84_250m_bilinear.nc"))
+        elif self.domain == 'pyr':
+            pass
         # WARNING : update of xarray necessary !
         #data = antilope.interp(lat=mnt.lat.data, lon=mnt.lon.data)
         tmp = mnt.interp(lat=self.antilope.lat.data, lon=self.antilope.lon.data)
@@ -185,8 +188,8 @@ class PrecipitationAnalysis(object):
             return np.ptp(a[np.isfinite(a)])
         rr = self.df.rr.values
         error = self.df.error.values
-        errorsize = high - (high-low)*error/(2*rr)
-        errorsize[errorsize<0] = 5
+        self.errorsize = high - (high-low)*error/(2*rr)
+        self.errorsize[self.errorsize<0] = 5
         #error = low + (error - np.nanmin(error))/(nan_ptp(error)/high)
         #error = low + high/error
 
@@ -216,7 +219,7 @@ class PrecipitationAnalysis(object):
                         cmin  = 0,
                         #cmax  = np.nanmax(self.antilope.rr.data.flatten()),
                         cmax  = np.nanmax(self.antilope.analysis.data.flatten()),
-                        size  = np.nan_to_num(errorsize, nan=5) if uncertainty else 10,
+                        size  = np.nan_to_num(self.errorsize, nan=5) if uncertainty else 10,
                         #opacity=0.5,
                         #colorscale = 'YlGnBu',
                         colorscale = 'dense',
@@ -392,34 +395,112 @@ class PrecipitationAnalysis(object):
                 #opacity=0.5,
             ))
 
+    def marker_prop(self, colorscale=None, size=None):
+
+        if colorscale is None:
+            colorscale = 'dense'
+        if size is None:
+            size = np.nan_to_num(self.errorsize, nan=5)
+
+        marker = dict(
+                color = self.df.rr.values,
+                #autocolorscale = False,
+                colorscale = colorscale,
+                showscale = True,
+                cmin  = 0,
+                cmax  = np.nanmax(self.antilope.analysis.data.flatten()),
+                size  = size,
+                colorbar_title = "Precipitation(mm)",
+                colorbar = dict(
+                    titleside = "right",
+                    ticks = "outside",
+                    # Move the colorbar away from the legend :
+                    yanchor="top",
+                    y=1,
+                    x=-0.1,
+                )
+            )
+        return marker
+
     def update_figure(self):
         """
         Update figure layout
         """
 
+
+        buttons = list()
+        for colorscale in ['Dense', 'Rainbow', 'dense', 'viridis', 'Viridis', 'HSV', px.colors.sequential.dense]:
+            buttons.append(
+                    dict(
+                        args = [ dict(
+                            marker = dict(
+                                color = self.df.rr.values,
+                                #autocolorscale = False,
+                                colorscale = colorscale,
+                                showscale = True,
+                                cmin  = 0,
+                                cmax  = np.nanmax(self.antilope.analysis.data.flatten()),
+                                size  = np.nan_to_num(self.errorsize, nan=5),
+                                colorbar_title = "Precipitation(mm)",
+                                colorbar = dict(
+                                    titleside = "right",
+                                    ticks = "outside",
+                                    # Move the colorbar away from the legend :
+                                    yanchor="top",
+                                    y=1,
+                                    x=-0.1,
+                                ),
+                            ),
+                        ), [self.scaletrace]],
+                        label = f"{colorscale}",
+                        method = "restyle",
+                        #method="update",
+                    )
+                )
+
         updatecolorbar = dict(
-            # from https://plotly.com/python/custom-buttons/#:~:text=The%20%22update%22%20method%20should%20be,the%20chart%20title%20and%20annotations.
-            buttons=list([
-                dict(
-                    #args=["marker", "colorscale", "dense"],
-                    args=[{"marker":{"colorscale":"dense", "showscale":True}}, [self.scaletrace]],
-                    label="CEN",
-                    method="restyle"
-                ),
-                dict(
-                    #args=["marker", "colorscale", "rainbow"],
-                    args=[{"marker":{"colorscale":"rainbow", "showscale":True}}, [self.scaletrace]],
-                    label="ANTILOPE oper",
-                    method="restyle"
-                ),
-            ]),
-            type = "buttons",
+            buttons = buttons,
             direction="down",
             pad={"r": 10, "t": 10},
             showactive=True,
-            x=0.1,
+            x=1.05,
             xanchor="left",
-            y=1,
+            y=0.5,
+            yanchor="top"
+        )
+
+        buttons = list([
+                dict(
+                    args = list([
+                        dict(
+                            marker = self.marker_prop(size=10),
+                            ),
+                        [self.scaletrace],
+                        ]),
+                    label  = 'No uncertainty',
+                    method = 'restyle',
+                    ),
+                dict(
+                    args = list([
+                        dict(
+                            marker = self.marker_prop(),
+                            ),
+                        [self.scaletrace],
+                        ]),
+                    label  = 'Uncertainty',
+                    #method = 'update',
+                    method = 'restyle',
+                )
+            ])
+
+        updateuncertainty = dict(
+            type='buttons',
+            buttons = buttons,
+            pad={"r": 10, "t": 10},
+            showactive=True,
+            x=1.05,
+            xanchor="left",
+            y=0.4,
             yanchor="top"
         )
 
@@ -444,9 +525,9 @@ class PrecipitationAnalysis(object):
                 buttons=buttons,
                 pad={"r": 10, "t": 10},
                 showactive=True,
-                x=0.91,
+                x=1.1,
                 xanchor="right",
-                y=0.7,
+                y=0.8,
                 yanchor="top"
             )
 
@@ -480,7 +561,7 @@ class PrecipitationAnalysis(object):
             ),
             #updatemenus = self.updatemenus,  # To activate updatemenu
             #updatemenus = [updatecolorbar],
-            updatemenus = [elevationfilter],
+            updatemenus = [elevationfilter, updatecolorbar, updateuncertainty],
         )
 
         self.fig.update_layout(
