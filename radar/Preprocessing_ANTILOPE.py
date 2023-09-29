@@ -272,7 +272,7 @@ def codistances(coords, ld=0.1):  # TMP for illustration. TODO : test different 
     dZ = np.abs(dZ)
     #dZ.data=1/(1000+dZ.data)**2
     #np.exp(-dZ.data/1000, out=dZ.data)
-    dZ.data = 1/(1+dZ.data/500)
+    dZ.data = 1/(1+dZ.data/200)
 
     dist = dist.multiply(dZ)
     #dist=dZ
@@ -364,7 +364,7 @@ class AntilopePreprocessing(object):
 
             # 1. Static de-biasing :
             #antilope = self.debiasing(antilope)
-            mask = xr.open_dataset(os.path.join(workdir, f"Estimated_ratio.nc"))
+            mask = xr.open_dataset(os.path.join(workdir, f"Estimated_ratio_{self.domain}.nc"))
             #mask = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask/alp", f"Estimated_ratio.nc"))  # !!!!! TODO : TMP !!!!!
 
             antilope["ratio"] = mask.Ratio  # Fill missing point with NaNs
@@ -372,10 +372,10 @@ class AntilopePreprocessing(object):
 
             # 2. Dynamic correction (localisation)
             #antilope['error'] = xr.open_dataset(os.path.join(datadir, 'Observation_error.nc'))
-            error = xr.open_dataarray(os.path.join(workdir, 'Observation_error.nc'))
+            error = xr.open_dataarray(os.path.join(workdir, 'Observation_error_{self.domain}.nc'))
             #error = xr.open_dataarray(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask/alp", 'Observation_error.nc'))
             std = error.data
-            codist = os.path.join(datadir, f'codistance_max_dist_{max_dist:.2f}_{domain}.npz')
+            codist = os.path.join(datadir, f'codistance_max_dist_{max_dist:.2f}_{self.domain}.npz')
             if not os.path.exists(codist):
                 # Compute inter-distances
                 coords=[(lon,lat) for lat in error.lat.data for lon in error.lon.data]
