@@ -470,8 +470,8 @@ class Evaluation(object):
 
         simu = simu[~np.isnan(obs)]
         obs = obs[~np.isnan(obs)]
-        #simu = simu[obs>1]  # TODO : TMP !!!!!
-        #obs=obs[obs>1]  # TODO : TMP !!!!!
+        simu = simu[obs>0]  # TODO : TMP !!!!!
+        obs=obs[obs>0]  # TODO : TMP !!!!!
 
         if np.shape(simu) == np.shape(obs):  # "Simulation" déterministe
             bias = simu - obs
@@ -676,6 +676,7 @@ class Evaluation(object):
             #mask = np.where((mean>1))
             #mask = np.where((obs>3))
             mask = np.where((obs>0))
+            #mask = np.where((obs>1))
             ensemble = ensemble[:, mask]
             ensemble = np.squeeze(ensemble, axis=1)  # TODO : comprendre pourquoi cette ligne est nécessaire
             obs = obs[mask]
@@ -934,7 +935,9 @@ class Evaluation(object):
 
         antilope = self.read_antilope(dates_obs)
         dates_antilope = antilope.time.data
-        dates = np.intersect1d(dates_obs[:-1], antilope.time.data)
+        dstd = np.datetime64('2022-03-27')
+        #dates_antilope = dates_antilope[dates_antilope<dstd]
+        dates = np.intersect1d(dates_obs[:-1], dates_antilope)
         antilope = antilope.loc[{'time':dates}]
         self.data = self.data.loc[{'date':dates}]
 
@@ -1216,10 +1219,10 @@ class Evaluation(object):
                         simu = self.data[product].loc[{'num_poste':poste}].data
                         obs = self.data.obs.loc[{'num_poste':poste}].data
                         fig, ax = plt.subplots()
-                        #self.rank_histogram(simu, obs, product, ax, onlypos=True)
-                        #fig.savefig(os.path.join(savedir, 'hists', f'rank_histogram_onlypos_{product}_{poste}.pdf'), format='pdf')
-                        self.rank_histogram(simu, obs, product, ax)
-                        fig.savefig(os.path.join(savedir, 'hists', f'rank_histogram_{product}_{poste}.pdf'), format='pdf')
+                        self.rank_histogram(simu, obs, product, ax, onlypos=True)
+                        fig.savefig(os.path.join(savedir, 'hists', f'rank_histogram_onlypos_{product}_{poste}.pdf'), format='pdf')
+                        #self.rank_histogram(simu, obs, product, ax)
+                        #fig.savefig(os.path.join(savedir, 'hists', f'rank_histogram_{product}_{poste}.pdf'), format='pdf')
                         plt.close(fig)
         ax1.plot([0,1], [0,1], linestyle=':', color='k')
         ax1.set_xlim([0, 1])

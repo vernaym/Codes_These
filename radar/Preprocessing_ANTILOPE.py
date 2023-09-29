@@ -76,7 +76,7 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
         pond.data[np.isnan(pond.data)] = 0.0
         weight = pond.sum(axis=1).A1  # The sum of the weights (axis=1 <==> sum over rows)
 
-    # TODO : multiply field by AROME gradient
+    # multiply field by AROME gradient
     if gradient is not None:
         C = diags(gradient, 0)  # Matrice de cumul AROME
         C0 = super_ensemble.dot(C)  # 1 line = all values of a given window
