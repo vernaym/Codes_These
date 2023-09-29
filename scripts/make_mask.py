@@ -124,6 +124,12 @@ extract_dom = dict(
             lonmin = 6.010,
             lonmax = 6.490,
         ),
+        HauteSavoie = dict(
+            latmax = 46.29,
+            latmin = 45.70,
+            lonmin = 6.0,
+            lonmax = 7.1,
+        ),
         Savoie = dict(
             latmax = 45.6,
             latmin = 45.0,

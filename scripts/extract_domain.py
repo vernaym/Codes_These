@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 import palettable
 
 import make_mask
+import plot_elevation
 
 if len(sys.argv) > 1:
     domain = sys.argv[1]
@@ -24,7 +25,7 @@ domain_coords = dict(
         NorthernAlps   = dict(lonmin=6.0, lonmax=6.9, latmin=45.6, latmax=46.35),
         CentralAlps    = dict(lonmin=5.6, lonmax=7.0, latmin=45.0, latmax=45.6),
         SouthernAlps   = dict(lonmin=5.7, lonmax=7.0, latmin=44.2, latmax=45.0),
-        HauteSavoie    = dict(lonmin=6.45, lonmax=6.95, latmin=45.67, latmax=46.35),
+        HauteSavoie    = dict(lonmin=5.82, lonmax=7.05, latmin=45.70, latmax=46.29),
         MontBlanc      = dict(lonmin=6.45, lonmax=7.1, latmin=45.65, latmax=46.1),
         Savoie         = dict(lonmin=6.0, lonmax=7.2, latmin=45.1, latmax=45.9),
         Isere          = dict(lonmin=5.54, lonmax=6.19, latmin=44.89, latmax=45.16),
@@ -37,7 +38,7 @@ domain_coords = dict(
 figsize = dict(
         alp            = (14,16),
         GrandesRousses = (15,7),
-        HauteSavoie    = (12,12),
+        HauteSavoie    = (16,8),
         HautesAlpes    = (16,10),
         MontBlanc      = (15,10),
         Savoie         = (16,8),
@@ -100,6 +101,33 @@ if __name__ == "__main__":
 
     d0 = 0.15
     d0 = 0.25
+
+    fic = os.path.join("/home/vernaym/QGIS/MNT", "DEM_ALPES_WGS84_250m_bilinear.nc")
+    field = xr.open_dataset(fic)
+    #reduced_field = field.sel({'lat':np.intersect1d(extract_lat, field.lat), 'lon':np.intersect1d(extract_lon, field.lon)})
+    extract_lat = field.lat.data[(field.lat.data>=domain_coords[domain]['latmin']) & (field.lat.data<=domain_coords[domain]['latmax'])]
+    extract_lon = field.lon.data[(field.lon.data>=domain_coords[domain]['lonmin']) & (field.lon.data<=domain_coords[domain]['lonmax'])]
+    reduced_field = field.sel({'lat':np.intersect1d(extract_lat, field.lat), 'lon':np.intersect1d(extract_lon, field.lon)})
+    fig,ax = plt.subplots(figsize=figsize[domain])
+    #https://discourse.holoviz.org/t/cannot-remove-grid-for-hv-quadmesh/2211/8
+    #im = mnt.elevation.plot(ax=ax, cmap=plt.cm.terrain, subplot_kws={'frame_on':False}, linewidth=0, label='Elevation (m)', add_colorbar=False)
+    im = reduced_field.Band1.plot(ax=ax, cmap=plt.cm.terrain, linewidth=0, label='Elevation (m)', add_colorbar=False)
+    plot_elevation.add_boundaries(ax)
+    plot_elevation.add_radar_positions(ax)
+    make_mask.add_cities(domain_coords[domain]['latmin'], domain_coords[domain]['latmax'], domain_coords[domain]['lonmin'], domain_coords[domain]['lonmax'])
+    plt.tight_layout()
+    ax.set_frame_on(False)
+    ax.legend(fontsize=20, loc=4)  # loc=4 --> bottom-right
+    cb = fig.colorbar(im)
+    cb.ax.tick_params(labelsize=20)
+    cb.set_label('Elevation (m)', size=24)
+    ax.set_xlabel(None)
+    ax.set_ylabel(None)
+    ax.tick_params(axis='both', which='major', labelsize=14)
+    fig.savefig(os.path.join('/home/vernaym/These/figures', f'DEM_WGS84_250m_{domain}.pdf'), format='pdf')
+    import pdb
+    pdb.set_trace()
+
     for subdir in ['', 'nivometeo']:
         if not os.path.exists(os.path.join(savedir, subdir)):
             os.makedirs(os.path.join(savedir, subdir))
