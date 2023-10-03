@@ -103,9 +103,9 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
     # Do not try to preserve values of pixels with low errors on average : the dynamic correction must account
     # for temporary failures as well as uncertainties due to the error estimation method
     #newfield = (initial_field * pixel_weight + mean * meanweight) / (pixel_weight + meanweight)  # Stay closer to the original value (spatial structures can still be visible)
-    #newfield = (initial_field * pixel_weight + mean * meanweight/pixel_weight) / (pixel_weight + meanweight/pixel_weight)  # Smoother fields --> underestimation of extreme values
+    newfield = (initial_field * pixel_weight + mean * meanweight/pixel_weight) / (pixel_weight + meanweight/pixel_weight)  # Smoother fields --> underestimation of extreme values
     #newfield = (initial_field * pixel_weight + mean * weight/pixel_weight) / (pixel_weight + weight/pixel_weight)  # Smoother fields --> underestimation of extreme values
-    newfield = (initial_field * pixel_weight + mean * meanweight/(meanweight+pixel_weight)) / (pixel_weight + meanweight/(meanweight+pixel_weight))
+    #newfield = (initial_field * pixel_weight + mean * meanweight/(meanweight+pixel_weight)) / (pixel_weight + meanweight/(meanweight+pixel_weight))
     #newfield = np.round(newfield, 1)
 
 #    if gradient is not None:
@@ -234,7 +234,7 @@ def get_std(data, mean, pond, weight=None, super_ensemble=None):
 
     return sd
 
-def codistances(coords, ld=0.1):  # TMP for illustration. TODO : test different correlation distances
+def codistances(coords, domain='alp', ld=0.1):  # TMP for illustration. TODO : test different correlation distances
     """
     Solution pour le calcul des inter-distances trouvée sur : https://stackoverflow.com/questions/35296935/python-calculate-lots-of-distances-quickly
     """
@@ -257,7 +257,9 @@ def codistances(coords, ld=0.1):  # TMP for illustration. TODO : test different 
     #np.exp(1/(1+dist.data), out=dist.data )
 
     # 2. Elevation inter-distance
-    mnt1km = xr.open_dataset('/home/vernaym/These/DATA/DEM_ALPESFR_WGS84_1km.nc')  # Open 1km DEM
+    #mnt1km = xr.open_dataset('/home/vernaym/These/DATA/DEM_ALPESFR_WGS84_1km.nc')  # Open 1km DEM
+    #mnt250m = xr.open_dataset('/home/vernaym/QGIS/MNT/DEM_FRANCE_L93_250m_bilinear.nc')  # Open 1km DEM
+    mnt1km = xr.open_dataset(f'/home/vernaym/These/DATA/DEM_{domain.upper()}_WGS84_1km.nc')  # Open 1km DEM
     lons = np.unique([coord[0] for coord in coords])
     lats = np.unique([coord[1] for coord in coords])
     mnt1km = mnt1km.sel({'lat':np.intersect1d(lats, mnt1km.lat), 'lon':np.intersect1d(lons, mnt1km.lon)})
@@ -310,7 +312,10 @@ def random_draw(obs, sd, ratio=None, sd2=None, distribution='gamma'):
             # WARNING : the small ensemble size (16) lead to a large variability
             # of the ensemble mean but this algorithm ensures that on average the ensemble
             # mean is centered on the corrected observation
-            ana = obs + obs*frac*(gamma-shift) + gauss*sd
+            #ana = obs + obs*frac*(gamma-shift) + gauss*sd
+            ana = obs + obs*frac*(gamma-shift)
+            gamma = np.random.gamma(k, scale=theta)  # Draw random element from normal distribution (>0 only ==> shift necessary to convert into perturbations)
+            ana = ana + sd * (gamma-shift)
             #ana = obs + gauss*sd
 
         if sd2 is not None:
@@ -372,14 +377,14 @@ class AntilopePreprocessing(object):
 
             # 2. Dynamic correction (localisation)
             #antilope['error'] = xr.open_dataset(os.path.join(datadir, 'Observation_error.nc'))
-            error = xr.open_dataarray(os.path.join(workdir, 'Observation_error_{self.domain}.nc'))
+            error = xr.open_dataarray(os.path.join(workdir, f'Observation_error_{self.domain}.nc'))
             #error = xr.open_dataarray(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask/alp", 'Observation_error.nc'))
             std = error.data
             codist = os.path.join(datadir, f'codistance_max_dist_{max_dist:.2f}_{self.domain}.npz')
             if not os.path.exists(codist):
                 # Compute inter-distances
                 coords=[(lon,lat) for lat in error.lat.data for lon in error.lon.data]
-                pond = codistances(coords)
+                pond = codistances(coords, self.domain)
                 scipy.sparse.save_npz(codist, pond, compressed=False)  # TODO comprendre pourquoi ca ne marche pas pour éviter de recalculer les codistances à chaque fois
             else:
                 pond = scipy.sparse.load_npz(codist)

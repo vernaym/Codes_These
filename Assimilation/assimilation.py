@@ -1301,7 +1301,7 @@ class Assimilation(object):
         #error = uniform_filter(error, 10)
         #Rdyn = diags(error.flatten(), 0)
         error = np.abs(new_obs.data - parameters.mu.data)
-        error = uniform_filter(error, 5)
+        error = uniform_filter(error, 5)  # TODO : try without error smoothing
         Rdyn = diags(error.flatten(), 0)
         R = dia_matrix(Rdyn+Rstat)
 
@@ -1831,7 +1831,7 @@ class RandomSampling(Assimilation):
 #                self.pond = scipy.sparse.load_npz(codistances)
         coords=[(lon,lat) for lat in actual_parameters.lat.data for lon in actual_parameters.lon.data]
         #self.pond = self.codistances(coords)
-        self.pond = Preprocessing_ANTILOPE.codistances(coords)
+        self.pond = Preprocessing_ANTILOPE.codistances(coords, self.domain)
 
         for idd, date in enumerate(self.period):
             print(date)
@@ -2222,7 +2222,7 @@ class RandomSampling(Assimilation):
 
             parameters_loc = parameters.sel({'lat':np.intersect1d(sel_lat, parameters.lat), 'lon':np.intersect1d(sel_lon, parameters.lon)})
             coords=[(lon,lat) for lat in parameters_loc.lat for lon in parameters_loc.lon]
-            self.pond = Preprocessing_ANTILOPE.codistances(coords)  # TODO : ameliorer les perf
+            self.pond = Preprocessing_ANTILOPE.codistances(coords, self.domain)  # TODO : ameliorer les perf
 
             #if int(num_poste) == 74033400:
             #if int(num_poste) == 38191400:
@@ -2330,7 +2330,7 @@ class EnsembleKalmanFilter(Assimilation):
 #                self.pond = scipy.sparse.load_npz(codistances)
             coords=[(lon,lat) for lat in actual_parameters.lat.data for lon in actual_parameters.lon.data]
             #self.pond = self.codistances(coords)
-            self.pond = Preprocessing_ANTILOPE.codistances(coords)
+            self.pond = Preprocessing_ANTILOPE.codistances(coords, self.domain)
         else:
             self.pond = scipy.sparse.eye(len(actual_parameters.lat)*len(actual_parameters.lon))
             self.pond = csr_matrix(self.pond)
@@ -2406,7 +2406,7 @@ class EnsembleKalmanFilter(Assimilation):
                 # Compute inter-distances
                 coords=[(lon,lat) for lat in parameters_loc.lat for lon in parameters_loc.lon]
                 #self.pond = self.codistances(coords)
-                self.pond = Preprocessing_ANTILOPE.codistances(coords)
+                self.pond = Preprocessing_ANTILOPE.codistances(coords, self.domain)
             else:  # Verrue !
                 ensemble_loc = ensemble.sel({'lat':np.round([nearest_lat], 2), 'lon':np.round([nearest_lon], 2)})
                 parameters_loc = parameters.sel({'lat':np.round([nearest_lat], 2), 'lon':np.round([nearest_lon], 2)})
@@ -3090,7 +3090,7 @@ class ParticleFilter(Assimilation):
 #                self.pond = scipy.sparse.load_npz(codistances)
             coords=[(lon,lat) for lat in actual_parameters.lat.data for lon in actual_parameters.lon.data]
             #self.pond = self.codistances(coords)
-            self.pond = Preprocessing_ANTILOPE.codistances(coords)
+            self.pond = Preprocessing_ANTILOPE.codistances(coords, self.domain)
         else:
             self.pond = scipy.sparse.eye(len(actual_parameters.lat)*len(actual_parameters.lon))
 

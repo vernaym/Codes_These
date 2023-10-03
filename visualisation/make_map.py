@@ -44,7 +44,7 @@ datadir = '/home/vernaym/extraction_obs'  # On sxcen
 
 def get_antilope(domain):
 
-    filename = f'ANTILOPE_{date.ymd}.nc'
+    filename = f'ANTILOPE_{domain}_{date.ymd}.nc'
     if not os.path.exists(filename):
         toolbox.input(
             #role           = 'Observations',
@@ -102,7 +102,7 @@ def get_obs_auto(domain):
 
 def get_safran(domain):
 
-    filename = f'SAFRAN_{datebegin.ymd}.nc'  #TODO : donner un nom plus explicite
+    filename = f'SAFRAN_{domain}_{datebegin.ymd}.nc'  #TODO : donner un nom plus explicite
 
     toolbox.input(
         role           = 'Ana_massifs',
@@ -140,7 +140,10 @@ def get_safran(domain):
 # 1. Read nivometeo observations
 nivometeo = get_nivometeo()
 
-for domain in ['alp', 'pyr']:
+# TODO : plot all data on the same map !
+
+#for domain in ['alp', 'pyr']:
+for domain in ['pyr']:
 
 # 2. Récupération de ANTILOPE depuis sotrtm35-sidev
     antilope = get_antilope(domain)

@@ -85,7 +85,7 @@ class PrecipitationAnalysis(object):
 
         self.ntrace = 0
 
-        # 1. SAFRAN (plot first to be bellox other layers)
+        # 1. SAFRAN (plot first to be bellow other layers)
         if self.safran is not None:
             self.plot_safran()
             self.ntrace += 1
@@ -122,14 +122,12 @@ class PrecipitationAnalysis(object):
         Plot ANTILOPE as multiple dot scatterplot (depending on the elevation)
         """
         # 1. read_relief (TODO : add to ANTILOPE pre-processing ?)
-        if self.domain == 'alp':
-            mnt = xr.open_dataset(os.path.join(datadir, "DEM_ALPES_WGS84_250m_bilinear.nc"))
-        elif self.domain == 'pyr':
-            pass
+        #mnt = xr.open_dataset("/home/vernaym/QGIS/MNT/DEM_FRANCE_L93_250m_bilinear.nc")
+        mnt = xr.open_dataset(f"/home/vernaym/These/DATA/DEM_{self.domain.upper()}_WGS84_1km.nc")
         # WARNING : update of xarray necessary !
         #data = antilope.interp(lat=mnt.lat.data, lon=mnt.lon.data)
         tmp = mnt.interp(lat=self.antilope.lat.data, lon=self.antilope.lon.data)
-        self.antilope["elevation"] = tmp.Band1
+        self.antilope["elevation"] = tmp.elevation
 
         x,y  = np.meshgrid(self.antilope.lon.data, self.antilope.lat.data)
         x = x.flatten()
@@ -223,7 +221,7 @@ class PrecipitationAnalysis(object):
                         #opacity=0.5,
                         #colorscale = 'YlGnBu',
                         colorscale = 'dense',
-                        #symbol='square',  # Impossible to change if color is definied : https://stackoverflow.com/questions/59628536/option-symbol-in-scattermapbox-is-not-working
+                        #symbol='square',  # Impossible to change if color is defined : https://stackoverflow.com/questions/59628536/option-symbol-in-scattermapbox-is-not-working
                         #cmin = 100,
                         #cmax = 1200,
                         colorbar_title = "Precipitation(mm)",
@@ -242,98 +240,27 @@ class PrecipitationAnalysis(object):
                     ),
                 )
 
-    def add_button(self):
-        """
-        NOT IMPLEMENTED YET
-        Add button to activate / deactivate marker size depending on the uncertainty
-        DOEST NOT WORK : try with dash ?
-        https://stackoverflow.com/questions/68894919/how-to-set-the-values-of-args-and-args2-in-plotlys-buttons-in-updatemenus
-        """
-        updatemenus = [{
-                    'active':1,
-                    'buttons': [{'method': 'update',  # whether the button changes the plot, the layout or both
-                                 'label': 'Incertitude',  # what is written on the button / label
-                                 'args':[  # what happens when the button is clicked
-                                        # 1. updates to the traces
-                                        dict(marker = dict(
-                                            #color = antilope.rr.data.flatten(),
-                                            color = rr[select[0]],
-                                            cmin  = 0,
-                                            cmax  = np.nanmax(antilope.rr.data.flatten()),
-                                            size  = 20,  # TODO : revoir la taille minimale
-                                            colorscale = 'dense',
-                                            colorbar_title = "Precipitation(mm)",
-                                            colorbar = dict(
-                                                titleside = "right",
-                                                ticks = "outside",
-                                                yanchor="top",
-                                                y=1,
-                                                x=-0.1,
-                                            ),
-                                         ),
-                                         ),
-                                         # 2. updates to the layout
-                                         #{'title':'Sine'},
-                                         {},
-                                         # 3. which traces are affected 
-                                         [0],
-                                         #[trace for trace in range(-(i+1)*2, 0)],
-                                         ],
-                                 'args2':[  # what happens when it’s unclicked
-                                        # 1. updates to the traces
-                                        dict(marker = dict(
-                                            #color = antilope.rr.data.flatten(),
-                                            color = rr[select[0]],
-                                            cmin  = 0,
-                                            cmax  = np.nanmax(antilope.rr.data.flatten()),
-                                            size  = np.nan_to_num(error[select[i]], nan=5),  # TODO : revoir la taille minimale
-                                            colorscale = 'dense',
-                                            colorbar_title = "Precipitation(mm)",
-                                            colorbar = dict(
-                                                titleside = "right",
-                                                ticks = "outside",
-                                                yanchor="top",
-                                                y=1,
-                                                x=-0.1,
-                                            ),
-                                         ),
-                                         ),
-                                         #'name':['sin', 'sin - 1'],
-                                         #'visible': True}, 
-                                         # 2. updates to the layout
-                                         {},
-                                         #{'title':'Sine'},
-                                         # 3. which traces are affected 
-                                         [0],
-                                         #[trace for trace in range(-(i+1)*2, 0)],
-                                         ],
-                                  },
-                                ],
-                    'type':'buttons',
-#                'type':'dropdown',
-#                'direction': 'down',
-                    'showactive': True,}
-                ]
-
-    def add_ponctual_obs(self, df, color='black', name='Unknown'):
+    def add_ponctual_obs(self, data, color='black', name='Unknown'):
         """
         Add ponctual rain gauges (red for nivometeo, black for other networks)
         """
-        if df is not None:
+
+        if data is not None:
             self.fig.add_trace(go.Scattermapbox(
-                        #df,
-                        lon  = df.lon.round(3),
-                        lat  = df.lat.round(3),
-                        text = df.rr.round(1).astype('string'),  # WARNING : working only with token mapbox :  https://plotly.com/python/mapbox-layers/
+                        #data,
+                        lon  = data.lon.values,
+                        lat  = data.lat.values,
+                        text = data.rr.round(1).astype('string'),  # WARNING : working only with token mapbox :  https://plotly.com/python/mapbox-layers/
+                        #text = data.rr.values.round(1),  # WARNING : working only with token mapbox :  https://plotly.com/python/mapbox-layers/
                         mode = 'text',
                         name = name,
                         textfont = dict(size=16, family='Arial', color=color),
                         textposition = 'middle center',
                         hoverinfo = 'text',
-                        #hover_data=[df.num_poste, df.nom],
-                        #hovertext = [df.num_poste, df.nom],
-                        customdata = np.stack((df.num_poste, df.nom, df.alti, df.reseau_poste), axis=-1),
-                        #customdata = [df.num_poste, df.nom],
+                        #hover_data=[data.num_poste, data.nom],
+                        #hovertext = [data.num_poste, data.nom],
+                        customdata = np.stack((data.num_poste, data.nom, data.alti, data.reseau_poste), axis=-1),
+                        #customdata = [data.num_poste, data.nom],
                         #hovertemplate="<br>".join([
                         #    f"Num poste: : %{customdata[0]}",
                         #    f"Nom : %{customdata[1]}",
@@ -343,8 +270,8 @@ class PrecipitationAnalysis(object):
                             '<b>Nom</b>: %{customdata[1]}<br>'+
                             '<b>Altitude</b>: %{customdata[2]}m<br>'+
                             '<b>Réseau</b>: %{customdata[3]}<br>',
-                        #hovertext=df.num_poste,
-                        #hovertext=[df.num_poste, df.nom],
+                        #hovertext=data.num_poste,
+                        #hovertext=[data.num_poste, data.nom],
                         # TODO : formater le texte flottant : "Nom (num_poste)"
                         #hovertemplate = '',
                     )
@@ -410,6 +337,7 @@ class PrecipitationAnalysis(object):
                 cmin  = 0,
                 cmax  = np.nanmax(self.antilope.analysis.data.flatten()),
                 size  = size,
+                #symbol ='square',  # Impossible to change if color is defined : https://stackoverflow.com/questions/59628536/option-symbol-in-scattermapbox-is-not-working
                 colorbar_title = "Precipitation(mm)",
                 colorbar = dict(
                     titleside = "right",
@@ -428,31 +356,17 @@ class PrecipitationAnalysis(object):
         """
 
 
+        # 1. Button to set colorscale
         buttons = list()
-        for colorscale in ['Dense', 'Rainbow', 'dense', 'viridis', 'Viridis', 'HSV', px.colors.sequential.dense]:
+        # See https://plotly.com/python/reference/scattermapbox/ for possible colorscales
+        #for colorscale in ['Dense', 'Rainbow', 'dense', 'viridis', 'Viridis', 'HSV', px.colors.sequential.dense]:
+        for colorscale in ['Blackbody','Bluered','Blues','Cividis','Earth','Electric','Greens','Greys','Hot','Jet','Picnic','Portland','Rainbow','RdBu','Reds','Viridis','YlGnBu','YlOrRd']:
             buttons.append(
                     dict(
-                        args = [ dict(
-                            marker = dict(
-                                color = self.df.rr.values,
-                                #autocolorscale = False,
-                                colorscale = colorscale,
-                                showscale = True,
-                                cmin  = 0,
-                                cmax  = np.nanmax(self.antilope.analysis.data.flatten()),
-                                size  = np.nan_to_num(self.errorsize, nan=5),
-                                colorbar_title = "Precipitation(mm)",
-                                colorbar = dict(
-                                    titleside = "right",
-                                    ticks = "outside",
-                                    # Move the colorbar away from the legend :
-                                    yanchor="top",
-                                    y=1,
-                                    x=-0.1,
-                                ),
-                            ),
-                        ), [self.scaletrace]],
+                        # See https://stackoverflow.com/questions/73435977/change-colorscale-of-marker-with-update-menu-without-repeating-data
+                        args = [{'marker.colorscale':colorscale}, [self.scaletrace]],
                         label = f"{colorscale}",
+                        #method = "relayout",
                         method = "restyle",
                         #method="update",
                     )
@@ -463,34 +377,42 @@ class PrecipitationAnalysis(object):
             direction="down",
             pad={"r": 10, "t": 10},
             showactive=True,
-            x=1.05,
+            x=1.03,
             xanchor="left",
-            y=0.5,
+            y=0.45,
             yanchor="top"
         )
 
+        # 2. Button to reverse colorscale
+        buttons=list([
+            dict(
+                args=[{'marker.reversescale':False}],
+                args2=[{'marker.reversescale':True}],
+                label="Reverse colorscale",
+                method="restyle"
+            ),
+        ])
+
+        updatecolorscaledirection = dict(
+            type='buttons',
+            buttons = buttons,
+            pad={"r": 10, "t": 10},
+            showactive=True,
+            x=1.03,
+            xanchor="left",
+            y=0.4,
+            yanchor="top"
+        )
+
+        # 3. Button to switch on/off error dependent marker size
         buttons = list([
                 dict(
-                    args = list([
-                        dict(
-                            marker = self.marker_prop(size=10),
-                            ),
-                        [self.scaletrace],
-                        ]),
-                    label  = 'No uncertainty',
-                    method = 'restyle',
-                    ),
-                dict(
-                    args = list([
-                        dict(
-                            marker = self.marker_prop(),
-                            ),
-                        [self.scaletrace],
-                        ]),
+                    args = [{'marker.size':15}, [self.scaletrace]],
+                    args2 = [{'marker.size':np.nan_to_num(self.errorsize, nan=5)}, [self.scaletrace]],
                     label  = 'Uncertainty',
-                    #method = 'update',
                     method = 'restyle',
-                )
+                    #method = 'update',
+                    ),
             ])
 
         updateuncertainty = dict(
@@ -498,12 +420,13 @@ class PrecipitationAnalysis(object):
             buttons = buttons,
             pad={"r": 10, "t": 10},
             showactive=True,
-            x=1.05,
+            x=1.03,
             xanchor="left",
-            y=0.4,
+            y=0.3,
             yanchor="top"
         )
 
+        # 4. Button to filter data by elevation
         buttons = list()
         elevation_range = [0, 500, 1000, 1500, 2000, 2500, 3000]
         for i,elevation in enumerate(elevation_range):
@@ -512,10 +435,11 @@ class PrecipitationAnalysis(object):
             buttons.append(
                     dict(
                         label  = f'>{elevation}m',
-                        #method = "relayout",
-                        method = "update",
-                        #args = [dict(self.add_antilope_scatter(name, df=df, showscale=True, uncertainty=True)), [self.scaletrace]],
+                        #method = "restyle",  # modify data or data attributes
+                        #method = "relayout",  # modify layout attributes
+                        method = "update",  # modify data and layout attributes; combination of "restyle" and "relayout"
                         args = [dict(selectedpoints=mask, unselected=dict(marker=dict(opacity=0))), [self.scaletrace]],
+                        #args = [dict(selectedpoints=mask, unselected=dict(marker=dict(opacity=0)))],
                     )
                 )
 
@@ -525,8 +449,8 @@ class PrecipitationAnalysis(object):
                 buttons=buttons,
                 pad={"r": 10, "t": 10},
                 showactive=True,
-                x=1.1,
-                xanchor="right",
+                x=1.03,
+                xanchor="left",
                 y=0.8,
                 yanchor="top"
             )
@@ -561,17 +485,18 @@ class PrecipitationAnalysis(object):
             ),
             #updatemenus = self.updatemenus,  # To activate updatemenu
             #updatemenus = [updatecolorbar],
-            updatemenus = [elevationfilter, updatecolorbar, updateuncertainty],
+            updatemenus = [elevationfilter, updatecolorbar, updateuncertainty, updatecolorscaledirection],
+            #updatemenus = [elevationfilter, updatecolorbar],
         )
 
         self.fig.update_layout(
             annotations=[
-                dict(text="colorscale", x=0, xref="paper", y=1, yref="paper",
-                                     align="left", showarrow=False),
-                #dict(text="Reverse<br>Colorscale", x=0, xref="paper", y=1.06,
-                #                     yref="paper", showarrow=False),
-                #dict(text="Lines", x=0.47, xref="paper", y=1.045, yref="paper",
-                #                     showarrow=False)
+                dict(text="Elevation filter :", x=1.03, xref="paper", y=0.82, xanchor="left",
+                                     yanchor="top", align="center", yref="paper", showarrow=False),
+                dict(text="colorscale :", x=1.03, xref="paper", y=0.47, yref="paper", xanchor="left",
+                                     yanchor="top", align="center", showarrow=False),
+                dict(text="Marker size :", x=1.03, xref="paper", y=0.32, yref="paper", xanchor="left",
+                                     yanchor="top", align="center", showarrow=False)
             ])
 
 
