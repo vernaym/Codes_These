@@ -260,7 +260,10 @@ def codistances(coords, domain='alp', ld=0.1):  # TMP for illustration. TODO : t
     #mnt1km = xr.open_dataset('/home/vernaym/These/DATA/DEM_ALPESFR_WGS84_1km.nc')  # Open 1km DEM
     #mnt250m = xr.open_dataset('/home/vernaym/QGIS/MNT/DEM_FRANCE_L93_250m_bilinear.nc')  # Open 1km DEM
     #mnt1km = xr.open_dataset(f'/home/vernaym/These/DATA/DEM_{domain.upper()}_WGS84_1km.nc')  # Open 1km DEM
-    mnt1km = xr.open_dataset(os.path.join(workdir, f'DEM_{domain.upper()}_WGS84_1km.nc'))  # Open 1km DEM
+    try:
+        mnt1km = xr.open_dataset(os.path.join(datadir, f'DEM_{domain.upper()}_WGS84_1km.nc'))  # Open 1km DEM
+    except:
+        mnt1km = xr.open_dataset(os.path.join(datadir, f'DEM_ALP_WGS84_1km.nc'))  # Default
     lons = np.unique([coord[0] for coord in coords])
     lats = np.unique([coord[1] for coord in coords])
     mnt1km = mnt1km.sel({'lat':np.intersect1d(lats, mnt1km.lat), 'lon':np.intersect1d(lons, mnt1km.lon)})
@@ -275,7 +278,7 @@ def codistances(coords, domain='alp', ld=0.1):  # TMP for illustration. TODO : t
     dZ = np.abs(dZ)
     #dZ.data=1/(1000+dZ.data)**2
     #np.exp(-dZ.data/1000, out=dZ.data)
-    dZ.data = 1/(1+dZ.data/200)
+    dZ.data = 1/(1+dZ.data/1000)
 
     dist = dist.multiply(dZ)
     #dist=dZ
