@@ -106,7 +106,7 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
     newfield = (initial_field * pixel_weight + mean * meanweight/pixel_weight) / (pixel_weight + meanweight/pixel_weight)  # Smoother fields --> underestimation of extreme values
     #newfield = (initial_field * pixel_weight + mean * weight/pixel_weight) / (pixel_weight + weight/pixel_weight)  # Smoother fields --> underestimation of extreme values
     #newfield = (initial_field * pixel_weight + mean * meanweight/(meanweight+pixel_weight)) / (pixel_weight + meanweight/(meanweight+pixel_weight))
-    #newfield = np.round(newfield, 1)
+    newfield = np.round(newfield, 1)
 
 #    if gradient is not None:
 #        # TODO : apply AROME vertical gradient only for pixels with large uncertainties to avoid to introduce underestimaiton in valleys
@@ -259,7 +259,8 @@ def codistances(coords, domain='alp', ld=0.1):  # TMP for illustration. TODO : t
     # 2. Elevation inter-distance
     #mnt1km = xr.open_dataset('/home/vernaym/These/DATA/DEM_ALPESFR_WGS84_1km.nc')  # Open 1km DEM
     #mnt250m = xr.open_dataset('/home/vernaym/QGIS/MNT/DEM_FRANCE_L93_250m_bilinear.nc')  # Open 1km DEM
-    mnt1km = xr.open_dataset(f'/home/vernaym/These/DATA/DEM_{domain.upper()}_WGS84_1km.nc')  # Open 1km DEM
+    #mnt1km = xr.open_dataset(f'/home/vernaym/These/DATA/DEM_{domain.upper()}_WGS84_1km.nc')  # Open 1km DEM
+    mnt1km = xr.open_dataset(os.path.join(workdir, f'DEM_{domain.upper()}_WGS84_1km.nc'))  # Open 1km DEM
     lons = np.unique([coord[0] for coord in coords])
     lats = np.unique([coord[1] for coord in coords])
     mnt1km = mnt1km.sel({'lat':np.intersect1d(lats, mnt1km.lat), 'lon':np.intersect1d(lons, mnt1km.lon)})
@@ -312,10 +313,10 @@ def random_draw(obs, sd, ratio=None, sd2=None, distribution='gamma'):
             # WARNING : the small ensemble size (16) lead to a large variability
             # of the ensemble mean but this algorithm ensures that on average the ensemble
             # mean is centered on the corrected observation
-            #ana = obs + obs*frac*(gamma-shift) + gauss*sd
-            ana = obs + obs*frac*(gamma-shift)
-            gamma = np.random.gamma(k, scale=theta)  # Draw random element from normal distribution (>0 only ==> shift necessary to convert into perturbations)
-            ana = ana + sd * (gamma-shift)
+            ana = obs + obs*frac*(gamma-shift) + gauss*sd
+            #ana = obs + obs*frac*(gamma-shift)
+            #gamma = np.random.gamma(k, scale=theta)  # Draw random element from normal distribution (>0 only ==> shift necessary to convert into perturbations)
+            #ana = ana + sd * (gamma-shift)
             #ana = obs + gauss*sd
 
         if sd2 is not None:

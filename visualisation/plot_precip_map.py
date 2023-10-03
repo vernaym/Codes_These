@@ -63,16 +63,18 @@ token = open("/home/vernaym/.mapbox/token").read() # Token from mapbox account
 class PrecipitationAnalysis(object):
 
 
-    def __init__(self, date, domain='alp', antilope=None, safran=None, nivometeo=None, auto=None, var='obs'):
+    def __init__(self, date, antilope=None, safran=None, nivometeo=None, auto=None, var='obs'):
         self.antilope = antilope
+        self.rrmax = max([np.nanmax(antilope.rr.data.flatten()) for antilope in self.antilope.values() if antilope is not None])
         self.var = var
         self.safran = safran
         self.nivometeo = nivometeo
-        self.auto = auto
+        # TODO : concatener les df des obs auto
+        self.auto = pd.concat([df for df in auto.values()])
         self.date = date
         self.datebegin = date.replace(hour=6)
         self.dateend   = self.datebegin+datetime.timedelta(days=1)
-        self.domain = domain
+        #self.domain = domain
         self.massifs = None
 
         self.fig = go.Figure()  # Figure initialisation
@@ -112,32 +114,37 @@ class PrecipitationAnalysis(object):
     def save(self):
         #fig.write_json('test.json')
         if self.var == 'analysis':
-            self.fig.write_html(os.path.join(rootdir, self.domain, f"precipitation_{self.date.strftime('%Y%m%d')}.html"))
+            self.fig.write_html(os.path.join(rootdir, 'figures', f"precipitation_{self.date.strftime('%Y%m%d')}.html"))
         else:
-            self.fig.write_html(os.path.join(rootdir, self.domain, f"precipitation_{self.var}_{self.date.strftime('%Y%m%d')}.html"))
+            self.fig.write_html(os.path.join(rootdir, 'figures', f"precipitation_{self.var}_{self.date.strftime('%Y%m%d')}.html"))
 
 
     def plot_antilope(self):
         """
         Plot ANTILOPE as multiple dot scatterplot (depending on the elevation)
         """
-        # 1. read_relief (TODO : add to ANTILOPE pre-processing ?)
-        #mnt = xr.open_dataset("/home/vernaym/QGIS/MNT/DEM_FRANCE_L93_250m_bilinear.nc")
-        mnt = xr.open_dataset(f"/home/vernaym/These/DATA/DEM_{self.domain.upper()}_WGS84_1km.nc")
-        # WARNING : update of xarray necessary !
-        #data = antilope.interp(lat=mnt.lat.data, lon=mnt.lon.data)
-        tmp = mnt.interp(lat=self.antilope.lat.data, lon=self.antilope.lon.data)
-        self.antilope["elevation"] = tmp.elevation
 
-        x,y  = np.meshgrid(self.antilope.lon.data, self.antilope.lat.data)
-        x = x.flatten()
-        y = y.flatten()
-        rr = self.antilope[self.var].data.flatten()  # Corrected obs
-        error = self.antilope['error'].data.flatten()
+        x = np.array([])
+        y = np.array([])
+        rr = np.array([])
+        error = np.array([])
+        alti = np.array([])
+        for domain in self.antilope.keys():
+            # 1. read_relief (TODO : add to ANTILOPE pre-processing ?)
+            #mnt = xr.open_dataset(f"/home/vernaym/These/DATA/DEM_{domain.upper()}_WGS84_1km.nc")
+            mnt = xr.open_dataset(f"DEM_{domain.upper()}_WGS84_1km.nc")
+            # WARNING : update of xarray necessary !
+            #data = antilope.interp(lat=mnt.lat.data, lon=mnt.lon.data)
+            tmp = mnt.interp(lat=self.antilope[domain].lat.data, lon=self.antilope[domain].lon.data)
+            self.antilope[domain]["elevation"] = tmp.elevation
 
-        # TODO : Add plot of raw ANTILOPE field
+            X,Y  = np.meshgrid(self.antilope[domain].lon.data, self.antilope[domain].lat.data)
+            x = np.concatenate((x, X.flatten()))
+            y = np.concatenate((y, Y.flatten()))
+            rr = np.concatenate((rr, self.antilope[domain][self.var].data.flatten()))  # Corrected obs
+            error = np.concatenate((error, self.antilope[domain]['error'].data.flatten()))
+            alti = np.concatenate((alti, self.antilope[domain]['elevation'].data.flatten()))
 
-        alti = self.antilope['elevation'].data.flatten()
         self.df = pd.DataFrame(
                 data    = np.transpose([x, y, rr, error, alti]),
                 columns = ['lon', 'lat', 'rr', 'error', 'alti'],
@@ -216,7 +223,7 @@ class PrecipitationAnalysis(object):
                         color = df.rr.values,
                         cmin  = 0,
                         #cmax  = np.nanmax(self.antilope.rr.data.flatten()),
-                        cmax  = np.nanmax(self.antilope.analysis.data.flatten()),
+                        cmax  = self.rrmax,
                         size  = np.nan_to_num(self.errorsize, nan=5) if uncertainty else 10,
                         #opacity=0.5,
                         #colorscale = 'YlGnBu',
@@ -301,20 +308,27 @@ class PrecipitationAnalysis(object):
             for feature in j_file["features"]:
                 feature['id'] = self.massifs.code[i]
                 i += 1
-            # TODO : add dynamic elevation choice
-            plotsafran = self.safran.where(self.safran.ZS==2100., drop=True)
+
+            massif_number = np.array([])
+            rr = np.array([])
+            for domain in self.safran.keys():
+                # TODO : add dynamic elevation choice
+                if self.safran[domain] is not None:
+                    safran = self.safran[domain].where(self.safran[domain].ZS==1800., drop=True)
+                    massif_number = np.concatenate((massif_number, safran.massif_number))
+                    rr = np.concatenate((rr, safran.rr.data))
 
             self.fig.add_trace(go.Choroplethmapbox(
                 geojson = j_file,
-                locations = plotsafran.massif_number,
-                z = plotsafran.rr.data,  #TODO : add elevation choice
+                locations = massif_number,
+                z = rr,  #TODO : add elevation choice
                 #colorscale = 'YlGnBu',
                 colorscale = 'dense',
-                name = 'SAFRAN',
+                name = 'SAFRAN (1800m)',
                 zmin = 0,
                 #zmax = np.nanmax(antilope.rr.data.flatten()),
-                zmax = np.nanmax(self.antilope[self.var].data.flatten()),
-                visible = True,
+                zmax = self.rrmax,
+                visible = False,
                 uid = 4,
                 uirevision = True,
                 showscale = False,  # Same scale as ANTILOPE data (à vérifier !)
@@ -407,7 +421,7 @@ class PrecipitationAnalysis(object):
         # 3. Button to switch on/off error dependent marker size
         buttons = list([
                 dict(
-                    args = [{'marker.size':15}, [self.scaletrace]],
+                    args = [{'marker.size':20}, [self.scaletrace]],
                     args2 = [{'marker.size':np.nan_to_num(self.errorsize, nan=5)}, [self.scaletrace]],
                     label  = 'Uncertainty',
                     method = 'restyle',

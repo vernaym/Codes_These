@@ -142,23 +142,25 @@ nivometeo = get_nivometeo()
 
 # TODO : plot all data on the same map !
 
-#for domain in ['alp', 'pyr']:
-for domain in ['pyr']:
+antilope = dict()
+safran = dict()
+auto = dict()
+for domain in ['alp', 'pyr']:
 
 # 2. Récupération de ANTILOPE depuis sotrtm35-sidev
-    antilope = get_antilope(domain)
+    antilope[domain] = get_antilope(domain)
 
 # 3. Récupération de l'analyse SAFRAN oper de 9h
-    safran = get_safran(domain)
+    safran[domain] = get_safran(domain)
 #safran = None
 
 # 4. Read automatic observations
-    auto = get_obs_auto(domain)
+    auto[domain] = get_obs_auto(domain)
 
-    myplot = PrecipitationAnalysis(date, domain, antilope=antilope, nivometeo=nivometeo, auto=auto, safran=safran, var='analysis')  # Plot corrected field
-    myplot.plot()
-    myplot.save()
-    myplot = PrecipitationAnalysis(date, domain, antilope=antilope, nivometeo=nivometeo, auto=auto, safran=safran, var='rr')  # Plot raw ANTILOPE field
-    myplot.plot()
-    myplot.save()
+myplot = PrecipitationAnalysis(date, antilope=antilope, nivometeo=nivometeo, auto=auto, safran=safran, var='analysis')  # Plot corrected field
+myplot.plot()
+myplot.save()
+myplot = PrecipitationAnalysis(date, antilope=antilope, nivometeo=nivometeo, auto=auto, safran=safran, var='rr')  # Plot raw ANTILOPE field
+myplot.plot()
+myplot.save()
 

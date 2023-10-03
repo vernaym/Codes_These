@@ -171,31 +171,31 @@ choixSelect("selectJournee",newdate)
 //Fonction qui est appelée pour mettre à jour l'ensemble des select (au chargement ou au changement de type de graphique)
 function remplissageSelect(){
 
-  remplissageSelectSimple("selectDomaine",tabDomaine); 
+  //remplissageSelectSimple("selectDomaine",tabDomaine); 
   //Remplissage des dates d'analyse
   remplissageSelectDate();
 }
 
 //Fonction permettant de construire le nom de l'image et de la charger
 function chargeImage(){
-  
+
   //On commence par récupérer les valeurs de tous les select
-  var domaine=document.getElementById("selectDomaine").value;
+  //var domaine=document.getElementById("selectDomaine").value;
   var date=document.getElementById("selectDate").value;
 
   //On construit le nom de l'image
   var nomMapCourt;
   var nomTableCourt;
-  
+
   //nomMapCourt="map_"+massif+"_"+date;
   //nomTableCourt="table_"+massif+"_"+date;
 
   //On ajoute les extensions au nom du graphique
-  var nomMap=lien+fileSep+tabDomaines[domaine]+fileSep+'precipitation_'+date+".html";
+  //var nomMap=lien+fileSep+tabDomaines[domaine]+fileSep+'precipitation_'+date+".html";
+  var nomMap=lien+fileSep+'figures'+fileSep+'precipitation_'+date+".html";
   //var nomTable=lien+fileSep+xpid+fileSep+tabDomaines[domaine]+fileSep+daterun+reseau+fileSep+nomTableCourt+".png";
   //var nomMap="/cnrm/mrns/users/NO_SAVE/vernaym/ANTILOPE/test.html";
-  console.log(domaine);
-  
+
   //On fixe l'image
   var map=document.getElementById("map");
   nbExcept=1;
