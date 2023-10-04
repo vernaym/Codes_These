@@ -20,6 +20,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 
+from These.scripts import tools
 from These.radar import Preprocessing_ANTILOPE
 
 import richdem as rd
@@ -214,21 +215,11 @@ def plot_correlation(ax, mnt):
     fig2.savefig(os.path.join(savedir, f'codistance_matrix_correlation{d0}.png'), format='png')
 
     corr = codist.getrow(9882).toarray()[0].reshape((len(mnt.lat), len(mnt.lon)))
-    corr = to_xarray(corr, mnt, varname='correlation')
+    corr = tools.to_xarray(corr, mnt, varname='correlation')
     corr = corr.where(corr>0)
     cml = corr.plot(ax=ax, cmap=plt.cm.Greys, add_colorbar=False, alpha=0.5)
     circle = plt.Circle((5.685, 44.365), max_dist, color='k', fill=False, linewidth=2)
     ax.add_artist(circle)
-
-def to_xarray(array, field, varname=''):
-    output = xr.DataArray(
-    name   = varname,
-    data   = array,
-    dims   = ["lat", "lon"],
-    coords = dict(lon=field.lon, lat=field.lat),
-    #attrs  = dict(description="Difference between each pixel cumul and the max of its neighbours"),
-    )
-    return output
 
 def extract_cross_section(field, varname='elevation'):
     """

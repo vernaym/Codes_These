@@ -24,6 +24,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 
 import scipy
+from scipy.ndimage import uniform_filter
 from scipy.sparse import csr_matrix, csc_matrix, diags
 from scipy.spatial.distance import cdist
 from scipy.spatial import cKDTree
@@ -31,6 +32,8 @@ from scipy.sparse.linalg import inv, spsolve
 
 import vortex
 from bronx.stdtypes.date import Date, Period
+
+from These.scripts import tools
 
 #def usage():
 #    print("USAGE Preprocessing_ANTILOPE.py date")
@@ -204,6 +207,140 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
 
     return newfield, mean, sd
 
+def filter_gauges(df, antilope, delta=0.1):
+    """
+    Filter gauges observations and compute corresponding ANTILOPE ratio.
+    """
+    latmax = np.max(antilope.lat.data)
+    latmin = np.min(antilope.lat.data)
+    lonmax = np.max(antilope.lon.data)
+    lonmin = np.min(antilope.lon.data)
+    df = df[(df.lat>=latmin) & (df.lat<=latmax) & (df.lon>=lonmin) & (df.lon<=lonmax)]
+    # Columns 'lats'/'lons' used by method make_mask.plot_field
+    # columns 'lat'/'lon' used for concatenation with nivometeo observations before kriging in 'gridded_random_draw"
+    df['lats'] = df['lat']
+    df['lons'] = df['lon']
+    # Remove unreliable EDF obervations :
+    mask = df['nom'].str.contains('EDF')
+    df = df[~mask]
+    # Extract corresponding antilope values :
+    df["rr_antilope"] = antilope.sel(lat=xr.DataArray(df.lats.values, dims='poste'), lon=xr.DataArray(df.lons.values, dims='poste'), method='nearest').data
+    # Compute ratio and error :
+    # TODO : Try de-commenting the following line
+    #df = df[df["rr"] >= 1]  # No precipitation in reference ==> keep ANTILOPE (gauge obstructed ?) --> solve missed precipitation over ridges. (ex : Savoie 20220110)
+    df["delta"] = delta
+    mask = (df["rr"]>1)
+    df["delta"][mask] = 0
+    df["ratio"] = (df["rr_antilope"]+df["delta"]) / (df["rr"]+df["delta"])  # Add delta to avoid division by 0 issues  --> large modification of the ratio for low precipitation events !
+    df["error"] = df["rr_antilope"] - df["rr"]
+    # Remove observations with unrealistic ratios :
+    mask = (df['ratio']<1.2) & (df['ratio']>0.8)  # Gauges with larger errors must have been rejected by the ANTILOPE algorithm --> we trust it
+    df = df[mask]
+    #df["ratio"][df["rr"] == 0] = 1  # No precipitation in reference ==> keep ANTILOPE (gauge obstructed ?). Most of these situations are filtered out by the condition 0.1<ratio<1.9
+
+    return df
+
+def dynamic_error_estimation(antilope, obs_auto, arome_clim=None, delta=0.1):
+
+    lons, lats = np.meshgrid(antilope.lon.data, antilope.lat.data)
+    weights = list()
+    ratios  = list()
+    errors  = list()
+    for i,poste in enumerate(obs_auto.index):
+        tmp = obs_auto.loc[poste]
+        rr_antilope = antilope.sel(lat=tmp.lats, lon=tmp.lons, method='nearest').data
+        #antilope_ratio = (antilope.data+0.1) / (rr_antilope+0.1)  # Goal : estimlate ratio for ridges pixels with no precipitation detected by ANTILOPE
+#            if rr_antilope > 1 and tmp["rr"] > 1:
+#                mask = np.where(antilope.data < 1)
+#                # Compute a ratio if there is ANTILOLPE precipitation at reference point but not at target point (--> missed precipitation over ridges ? ex : Savoie 20220110)
+#                delta2 = np.zeros(np.shape(antilope.data))
+#                delta2[mask] = delta
+#                #delta2 = 0
+#            elif rr_antilope > 0 and tmp["rr"] > 0:
+#                delta2 = np.zeros(np.shape(antilope.data))
+#                mask = np.where(antilope.data > 0)
+#                delta2[mask] = 1
+        if rr_antilope > 1:
+            delta2 = 0
+        else:
+            delta2 = delta
+        antilope_ratio = (antilope.data+delta2) / (rr_antilope+delta2)  # Goal : estimlate ratio for ridges pixels with no precipitation detected by ANTILOE
+        #antilope_ratio[antilope.data==0] = 1  # Do not introduce precipitation on pixel with no precipitation and no reference
+        #if tmp["rr"] == 0:
+        #    antilope_ratio[rr_antilope==0] = 1  # Not enough information available to estimate a ratio --> apply only AROME vertical gradient
+        antilope_ratio[antilope.data==0] = 1  # Do not introduce precipitation on pixel with no precipitation and no reference
+        if arome_clim is not None:
+            arome_cumul = arome_clim.sel(lat=tmp.lats, lon=tmp.lons, method='nearest')
+            ratio_arome = arome_clim.rr_cumul.data / arome_cumul.rr_cumul.data
+            ratio_arome[antilope.data==0] = 1  # Do not introduce precipitation on pixel with no precipitation and no reference
+        else:
+            ratio_arome = 1
+#                if tmp["rr"] < 1:
+#                    #antilope_ratio[rr_antilope==0] = 1  # Not enough information available to estimate a ratio --> apply only AROME vertical gradient
+#                    mask = (antilope.data == 0)
+#                    antilope_ratio[mask] = 1  # Not enough information available to estimate a ratio --> apply only AROME vertical gradient
+#                    ratio_arome[mask] = 1  # Do not introduce precipitation on pixel with no precipitation and no reference
+
+        dist = np.sqrt((lats-tmp.lats)**2+(lons-tmp.lons)**2)  # Euclidian horizontal distance
+        w = 1/(0.01+dist)**2  # Distance weighting  --> adding 0.01 instead of 1 ensures that the value at the reference point is preserved
+
+        #ratio = (rr_antilope.rr.data+0.1) / (tmp.rr+0.1)  # WARNING : division by 0
+        #error = rr_antilope.rr.data - tmp.rr
+        ratio = tmp.ratio  # ratio is well defined (+0.1)
+        weights.append(w)
+        #ratios.append(ratio*antilope_ratio)
+        rat = ratio*antilope_ratio/ratio_arome
+        ratios.append(rat)
+        error = np.abs(rat - 1) * ((antilope.data + delta2) / rat - delta2)
+        errors.append(error)
+
+    weights = np.array(weights)
+    W = np.sum(weights, axis=0)
+    Wm = np.mean(weights, axis=0)
+    Wd = np.sqrt(np.mean((weights-Wm)**2, axis=0))
+
+    mean_ratio = np.divide(np.sum(weights*ratios, axis=0), W)
+    D = np.sqrt(np.sum(weights*(ratios-mean_ratio)**2, axis=0)/W)
+    D[W==0] = 0
+
+    ratios = np.array(ratios)
+
+    # Compute estimated ratio by weighting between 1 and the mean estimated ratio
+    # Decrease the weight for pixels with large ratio dispersion (more uncertainty !)
+    # Ensure that estimated ratio for pixels with no information around (W=0) stay at 1
+    # Rules :
+    # * w0+w1=1  (Keep ratio ODG)
+    # * W=0 ==> w1=0  (Ensure that estimated ratio for pixels with no information around (W=0) stay at 1)
+    # * D=0 ==> w1=W/(W+1)
+    # * D-->inf ==> w1-->0  (choix : D=1 ==> w1=1/2)
+    # * W-->inf ==> w1-->1
+    # w1 can be seen as a measure of the confidence in the method
+    #X = 1/(2*Wm-1)  # Facteur pour assurer la condition D=1 ==> w1=1/2. WARNING : W=1/2 valeur singulière
+    #K = Wm * (1 - D / (D + X))
+    #K[Wm==0.5] = 0.5  # W=1/2 valeur singulière de X
+    #K[Wm==0] = 0
+    X = 1/(2*W-1)  # Facteur pour assurer la condition D=1 ==> w1=1/2. WARNING : W=1/2 valeur singulière
+    K = W * (1 - D / (D + X))
+    K[W==0.5] = 0.5  # W=1/2 valeur singulière de X
+    K[W==0] = 0
+    w1 = np.exp(-1/K)
+    w0 = 1 - w1
+    #w1 = W / (1 + W)
+    #w0 = 1 - w1
+    new_ratio = 1 * w0 + w1 * mean_ratio
+    #estimated_ratio[np.isnan(estimated_ratio)] = 1
+
+    errors = np.array(errors)
+    errors[np.isnan(errors)] = 0  # Security
+    errors[np.isinf(errors)] = 0  # No precipitation in reference
+    new_error = np.divide(np.sum(weights*errors, axis=0), W)
+
+    # Conversion to xarray
+    new_ratio = tools.to_xarray(new_ratio, antilope, varname='Ratio')
+    new_error = tools.to_xarray(np.abs(new_error), antilope, varname='Error (mm)')
+
+    return new_ratio, new_error
+
 def get_std(data, mean, pond, weight=None, super_ensemble=None):
     """
     Compute the weighted variance of the weighted ensemble :
@@ -354,7 +491,7 @@ class AntilopePreprocessing(object):
         self.filename = filename
         self.run()
 
-    def run(self):
+    def run(self, obs_auto=None):
         #filename = os.path.join(datadir, f'ANTILOPEH_{self.datebegin.strftime("%Y%m%d%H")}_{self.dateend.strftime("%Y%m%d%H")}_{self.domain}.nc')  # TODO : extract only up to 6h
         #if os.path.exists(filename):
         antilope = xr.open_dataset(self.filename)
@@ -373,17 +510,40 @@ class AntilopePreprocessing(object):
 
             # 1. Static de-biasing :
             #antilope = self.debiasing(antilope)
-            mask = xr.open_dataset(os.path.join(workdir, f"Estimated_ratio_{self.domain}.nc"))
-            #mask = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask/alp", f"Estimated_ratio.nc"))  # !!!!! TODO : TMP !!!!!
+            ratio = xr.open_dataset(os.path.join(workdir, f"Estimated_ratio_{self.domain}.nc"))
 
-            antilope["ratio"] = mask.Ratio  # Fill missing point with NaNs
+            antilope["ratio"] = ratio.Ratio  # Fill missing point with NaNs
+            var0 = 'rr'
             antilope["rr_debiaise"] = (antilope.rr/antilope.ratio).fillna(antilope.rr)  # Fill NaN values with the original ANTILOPE value
+            var1 = "rr_debiaise"
 
-            # 2. Dynamic correction (localisation)
+            # 2. Dynamic error / de-biasing
+            if obs_auto is not None:
+                delta = 0.1
+                if self.domain == 'alp':
+                    arome_clim = xr.open_dataset(os.path.join(datadir, 'CUMUL_AROME.nc'))
+                    arome_clim = arome_clim.sel(lat=ratio.lat, lon=ratio.lon)
+                else:
+                    arome_clim = None
+                obs_auto = filter_gauges(obs_auto, antilope[var1], delta=delta)
+                dyn_ratio, dyn_error = dynamic_error_estimation(antilope[var1], obs_auto, arome_clim=None, delta=delta)
+                antilope['ratio'] = dyn_ratio
+                antilope['error'] = dyn_error
+                antilope['db'] = (antilope[var1]+delta) / antilope['ratio'] - delta  # Add delta to introduce precipitation in "missed precipitation" pixels
+                mask = antilope[var1].data > 0
+                antilope['db'].data[mask] = antilope[var1].data[mask] / antilope['ratio'].data[mask]
+                var2 = 'db'
+            else:
+                var2 = var1
+
+            # 3. WMA correction (localisation)
             #antilope['error'] = xr.open_dataset(os.path.join(datadir, 'Observation_error.nc'))
             error = xr.open_dataarray(os.path.join(workdir, f'Observation_error_{self.domain}.nc'))
             #error = xr.open_dataarray(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask/alp", 'Observation_error.nc'))
             std = error.data
+            if 'error' in antilope.keys():
+                std2 = antilope.error.sel({'lat':np.intersect1d(error.lat.data, antilope.lat.data), 'lon':np.intersect1d(error.lon.data, antilope.lon.data)}).data
+                std = std + std2
             codist = os.path.join(datadir, f'codistance_max_dist_{max_dist:.2f}_{self.domain}.npz')
             if not os.path.exists(codist):
                 # Compute inter-distances
@@ -394,22 +554,29 @@ class AntilopePreprocessing(object):
                 pond = scipy.sparse.load_npz(codist)
             #pond = pond.dot(diags(np.exp(-(std-1)).flatten(), 0))  # std is in [1, inf[
             pond = pond.dot(diags(1/std.flatten(), 0))  # std is in [1, inf[
-            obs = antilope.rr_debiaise.sel(({'lat':np.intersect1d(error.lat.data, antilope.lat.data), 'lon':np.intersect1d(error.lon.data, antilope.lon.data)})).data.flatten()
+            obs = antilope[var2].sel({'lat':np.intersect1d(error.lat.data, antilope.lat.data), 'lon':np.intersect1d(error.lon.data, antilope.lon.data)}).data.flatten()
 
             new, mean, sd = dynamic_correction(obs, pond)  # Update obs (new) and get observation error (sd)
             antilope['obs'] = xr.DataArray(
-                    data   = new.reshape((len(mask.lat), len(mask.lon))),
+                    data   = new.reshape((len(ratio.lat), len(ratio.lon))),
                     dims   = ["lat", "lon"],
-                    coords = dict(lon=mask.lon, lat=mask.lat)
+                    coords = dict(lon=ratio.lon, lat=ratio.lat)
                 )
-            # Observation error = WMA spread (+30% of the precipitation field ?)
+
+            # 4. Observation error = WMA spread + field modification + 20% of the precipitation field ?
+            err = np.abs(antilope['obs'] - antilope[var1])
+            #err = np.abs(antilope['obs'].data - antilope[var0].data)  " TODO : try error = corrected_antilope - raw_antilope
+            err = error.sel(({'lat':np.intersect1d(ratio.lat.data, err.lat.data), 'lon':np.intersect1d(ratio.lon.data, err.lon.data)})).data
+            err = uniform_filter(err, 5)  # TODO : try to remove filter
+            rr = antilope['obs'].sel(({'lat':np.intersect1d(ratio.lat.data, antilope.lat.data), 'lon':np.intersect1d(ratio.lon.data, antilope.lon.data)})).data
+            std = sd.reshape((len(ratio.lat), len(ratio.lon))) + err + 0.2 * rr
             antilope['error'] = xr.DataArray(
-                    data   = sd.reshape((len(mask.lat), len(mask.lon))),
-                    #data   = sd.reshape((len(mask.lat), len(mask.lon))) + 0.3 * new.reshape((len(mask.lat), len(mask.lon))),
+                    data   = std.reshape((len(ratio.lat), len(ratio.lon))),
+                    #data   = sd.reshape((len(ratio.lat), len(ratio.lon))) + 0.3 * new.reshape((len(ratio.lat), len(ratio.lon))),
                     dims   = ["lat", "lon"],
-                    coords = dict(lon=mask.lon, lat=mask.lat)
+                    coords = dict(lon=ratio.lon, lat=ratio.lat)
                 )
-            #antilope['error'] = sd.reshape((len(mask.lat), len(mask.lon))) + 0.3 * antilope['obs']
+            #antilope['error'] = sd.reshape((len(ratio.lat), len(ratio.lon))) + 0.3 * antilope['obs']
 
             # Fill potential missing data with nan
             #antilope['obs'] = antilope['obs'].fillna(antilope.rr)
@@ -418,7 +585,7 @@ class AntilopePreprocessing(object):
 #            antilope = antilope.rename({'rr_debiaise':'analysis'})
             antilope = antilope.rename({'obs':'analysis'})
 
-            # 3. Nivometeo Assimilation
+            # 5. Nivometeo Assimilation
             #antilope = self.nivometeo_assimilation(antilope, pond)
 
             #antilope.to_netcdf(self.filename)  # WARNING : overwrite the initial file !!  TMP !

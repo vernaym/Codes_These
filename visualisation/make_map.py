@@ -42,7 +42,7 @@ datadir = '/home/vernaym/extraction_obs'  # On sxcen
 
 #domain = 'alp'
 
-def get_antilope(domain):
+def get_antilope(domain, obs_auto=None):
 
     filename = f'ANTILOPE_{domain}_{date.ymd}.nc'
     if not os.path.exists(filename):
@@ -66,7 +66,7 @@ def get_antilope(domain):
         )
 
     pp = AntilopePreprocessing(date, domain, filename)
-    antilope = pp.run()
+    antilope = pp.run(obs_auto=obs_auto)
 
     return antilope
 
@@ -147,15 +147,16 @@ safran = dict()
 auto = dict()
 for domain in ['alp', 'pyr']:
 
-# 2. Récupération de ANTILOPE depuis sotrtm35-sidev
-    antilope[domain] = get_antilope(domain)
-
-# 3. Récupération de l'analyse SAFRAN oper de 9h
-    safran[domain] = get_safran(domain)
-#safran = None
-
-# 4. Read automatic observations
+    # 2. Read automatic observations
     auto[domain] = get_obs_auto(domain)
+
+    # 3. Récupération de ANTILOPE depuis sotrtm35-sidev
+    antilope[domain] = get_antilope(domain, auto[domain])
+
+    # 4. Récupération de l'analyse SAFRAN oper de 9h
+    safran[domain] = get_safran(domain)
+    #safran = None
+
 
 myplot = PrecipitationAnalysis(date, antilope=antilope, nivometeo=nivometeo, auto=auto, safran=safran, var='analysis')  # Plot corrected field
 myplot.plot()

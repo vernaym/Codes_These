@@ -10,13 +10,9 @@ import pandas as pd
 import xarray as xr
 import time
 
-from sklearn.linear_model import LinearRegression
-
 import matplotlib as mpl
 #matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-import seaborn as sns
-import palettable
 
 def hourly_to_daily(data):
     """
@@ -32,6 +28,16 @@ def hourly_to_daily(data):
     data['time'] = data.time+np.timedelta64(30, 'h')
 
     return data
+
+def to_xarray(array, field, varname='rr'):
+    output = xr.DataArray(
+    name   = varname,
+    data   = array,
+    dims   = ["lat", "lon"],
+    coords = dict(lon=field.lon, lat=field.lat),
+    #attrs  = dict(description="Difference between each pixel cumul and the max of its neighbours"),
+    )
+    return output
 
 def plot_scatter(reference, model, xlabel, ylabel, savename, savedir, color=None, addtext=None):
     ref = reference.flatten()

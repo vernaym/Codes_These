@@ -65,7 +65,8 @@ class PrecipitationAnalysis(object):
 
     def __init__(self, date, antilope=None, safran=None, nivometeo=None, auto=None, var='obs'):
         self.antilope = antilope
-        self.rrmax = max([np.nanmax(antilope.rr.data.flatten()) for antilope in self.antilope.values() if antilope is not None] + [80])
+        #self.rrmax = min([max([np.nanmax(antilope.rr.data.flatten()) for antilope in self.antilope.values() if antilope is not None]), 80])
+        self.rrmax = max([np.nanmax(antilope.analysis.data.flatten()) for antilope in self.antilope.values() if antilope is not None])
         self.var = var
         self.safran = safran
         self.nivometeo = nivometeo
@@ -349,7 +350,8 @@ class PrecipitationAnalysis(object):
                 colorscale = colorscale,
                 showscale = True,
                 cmin  = 0,
-                cmax  = np.nanmax(self.antilope.analysis.data.flatten()),
+                #cmax  = np.nanmax(self.antilope.analysis.data.flatten()),
+                cmax  = self.rrmax,
                 size  = size,
                 #symbol ='square',  # Impossible to change if color is defined : https://stackoverflow.com/questions/59628536/option-symbol-in-scattermapbox-is-not-working
                 colorbar_title = "Precipitation(mm)",
