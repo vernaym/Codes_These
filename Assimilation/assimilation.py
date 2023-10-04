@@ -1300,8 +1300,8 @@ class Assimilation(object):
         #error = parameters.error.data
         #error = uniform_filter(error, 10)
         #Rdyn = diags(error.flatten(), 0)
-        #error = np.abs(new_obs.data - parameters.mu.data)
-        error = np.abs(new_obs.data - parameters.rr.data)  # TODO : try this error formulation
+        error = np.abs(new_obs.data - parameters.mu.data)
+        #error = np.abs(new_obs.data - parameters.rr.data)  # TODO : try this error formulation
         error = uniform_filter(error, 5)  # TODO : try without error smoothing
         Rdyn = diags(error.flatten(), 0)
         R = dia_matrix(Rdyn+Rstat)
