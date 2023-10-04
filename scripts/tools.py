@@ -40,6 +40,7 @@ def to_xarray(array, field, varname='rr'):
     return output
 
 def plot_scatter(reference, model, xlabel, ylabel, savename, savedir, color=None, addtext=None):
+    from sklearn.linear_model import LinearRegression
     ref = reference.flatten()
     mod = model.flatten()
     mask = np.where(~np.isnan(ref) & ~np.isnan(mod))
