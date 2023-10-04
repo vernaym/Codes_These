@@ -47,7 +47,7 @@ domain_coords = dict(
         NorthernAlps   = dict(lonmin=6.0, lonmax=6.9, latmin=45.6, latmax=46.35),
         CentralAlps    = dict(lonmin=5.6, lonmax=7.0, latmin=45.0, latmax=45.6),
         SouthernAlps   = dict(lonmin=5.7, lonmax=7.0, latmin=44.2, latmax=45.0),
-        HauteSavoie    = dict(lonmin=6.45, lonmax=6.95, latmin=45.67, latmax=46.35),
+        HauteSavoie    = dict(lonmin=5.82, lonmax=7.05, latmin=45.5, latmax=46.29),
         MontBlanc      = dict(lonmin=6.45, lonmax=7.1, latmin=45.65, latmax=46.1),
         Savoie         = dict(lonmin=6.06, lonmax=7.06, latmin=45.15, latmax=45.65),
         Isere          = dict(lonmin=5.54, lonmax=6.19, latmin=44.89, latmax=45.16),

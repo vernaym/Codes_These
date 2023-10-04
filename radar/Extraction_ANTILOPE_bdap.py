@@ -50,7 +50,7 @@ coords = dict(
     GrandesRousses = ['45250', '44750', '6000', '6500'],
     #ange = ['45240', '44990', '6010', '6490']
     ange = ['45440', '44990', '5810', '6690']
-    HauteSavoie = ['46490', '45500', '5620', '7250']
+    HauteSavoie = ['46490', '45300', '5620', '7250']  # WARNING : includes margin
 )
 
 # Pas en lat/lon de la grille
