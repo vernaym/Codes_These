@@ -489,7 +489,6 @@ class AntilopePreprocessing(object):
         #self.dateend   = self.datebegin+datetime.timedelta(days=1)  # TODO : extract only up to 6h
         self.domain = domain
         self.filename = filename
-        self.run()
 
     def run(self, obs_auto=None):
         #filename = os.path.join(datadir, f'ANTILOPEH_{self.datebegin.strftime("%Y%m%d%H")}_{self.dateend.strftime("%Y%m%d%H")}_{self.domain}.nc')  # TODO : extract only up to 6h
@@ -521,7 +520,7 @@ class AntilopePreprocessing(object):
             if obs_auto is not None:
                 delta = 0.1
                 if self.domain == 'alp':
-                    arome_clim = xr.open_dataset(os.path.join(datadir, 'CUMUL_AROME.nc'))
+                    arome_clim = xr.open_dataset(os.path.join(workdir, 'CUMUL_AROME.nc'))
                     arome_clim = arome_clim.sel(lat=ratio.lat, lon=ratio.lon)
                 else:
                     arome_clim = None

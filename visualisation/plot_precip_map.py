@@ -113,7 +113,7 @@ class PrecipitationAnalysis(object):
         self.fig.show()
 
     def save(self):
-        #fig.write_json('test.json')
+        #self.fig.write_json(os.path.join(rootdir, 'test.json'))
         if self.var == 'analysis':
             self.fig.write_html(os.path.join(rootdir, 'figures', f"precipitation_{self.date.strftime('%Y%m%d')}.html"))
         else:
@@ -188,14 +188,14 @@ class PrecipitationAnalysis(object):
     def add_antilope_scatter(self, name, df=None, showscale=False, uncertainty=True, visible=True):
         # Normalisation de l'erreur entre low and high
         # Linear decrease between high and low marker size values
-        low  = 5
+        low  = 10
         high = 15
         def nan_ptp(a):
             return np.ptp(a[np.isfinite(a)])
         rr = self.df.rr.values
         error = self.df.error.values
         self.errorsize = high - (high-low)*error/(2*rr)
-        self.errorsize[self.errorsize<0] = 5
+        self.errorsize[self.errorsize<low] = low
         #error = low + (error - np.nanmin(error))/(nan_ptp(error)/high)
         #error = low + high/error
 

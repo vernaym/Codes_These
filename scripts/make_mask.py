@@ -715,8 +715,8 @@ def ratio_estimation(field, model=None, moving_window=25):
             dist = np.sqrt((lats-scores.loc[poste,'lats'])**2+(lons-scores.loc[poste, 'lons'])**2)  # Euclidian horizontal distance
             idx, idy = np.where(dist==np.min(dist))
             ref_cumul = field.rr_cumul.data[idx[0],idy[0]]
-            ref_elevation = mnt.Band1.data[idx[0],idy[0]]  # TODO : utiliser plutot l'altitude réelle du poste ?
-            elevation_dist = mnt.Band1.data - ref_elevation
+            #ref_elevation = mnt.Band1.data[idx[0],idy[0]]  # TODO : utiliser plutot l'altitude réelle du poste ?
+            #elevation_dist = mnt.Band1.data - ref_elevation
             if model is not None:
                 model_cumul = model.rr_cumul.data[idx[0],idy[0]]  # Cumul du modele au point d'évaluation
                 ratio_modele = model.rr_cumul.data/model_cumul  # Ratio entre chaque point du modele et le point d'évaluation
