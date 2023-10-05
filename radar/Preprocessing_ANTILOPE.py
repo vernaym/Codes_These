@@ -569,7 +569,8 @@ class AntilopePreprocessing(object):
             err = error.sel(({'lat':np.intersect1d(ratio.lat.data, err.lat.data), 'lon':np.intersect1d(ratio.lon.data, err.lon.data)})).data
             err = uniform_filter(err, 5)  # TODO : try to remove filter
             rr = antilope['obs'].sel(({'lat':np.intersect1d(ratio.lat.data, antilope.lat.data), 'lon':np.intersect1d(ratio.lon.data, antilope.lon.data)})).data
-            std = sd.reshape((len(ratio.lat), len(ratio.lon))) + err + 0.2 * rr
+            #std = sd.reshape((len(ratio.lat), len(ratio.lon))) + err + 0.2 * rr
+            std = sd.reshape((len(ratio.lat), len(ratio.lon))) + err
             antilope['error'] = xr.DataArray(
                     data   = std.reshape((len(ratio.lat), len(ratio.lon))),
                     #data   = sd.reshape((len(ratio.lat), len(ratio.lon))) + 0.3 * new.reshape((len(ratio.lat), len(ratio.lon))),
