@@ -113,7 +113,7 @@ class PrecipitationAnalysis(object):
         self.fig.show()
 
     def save(self):
-        #self.fig.write_json(os.path.join(rootdir, 'test.json'))
+        self.fig.write_json(os.path.join(rootdir, 'figures', f"precipitation_{self.date.strftime('%Y%m%d')}.json"))
         if self.var == 'analysis':
             self.fig.write_html(os.path.join(rootdir, 'figures', f"precipitation_{self.date.strftime('%Y%m%d')}.html"))
         else:
