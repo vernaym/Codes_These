@@ -958,9 +958,9 @@ if __name__ == "__main__":
 
     extract_period = date_range(args.datebegin, args.dateend)
 
-    #reference = read_nivometeo()
+    reference = read_nivometeo()
     #reference = read_obs_clim()
-    reference = read_obs_auto()
+    #reference = read_obs_auto()
     reference.lon = np.round(reference.lon, 2)
     reference.lat = np.round(reference.lat, 2)
     ref_lon = reference.groupby('num_poste').lon.mean().to_xarray()
@@ -970,9 +970,9 @@ if __name__ == "__main__":
 
     if args.product == 'antilope':
         # TODO : read ANNTILOPEH and extract data from 7h UTC to 7h UTC before march 20th and from 8h UTC to 8h UTC after
-        #RADAR_data = 'ANTILOPEQ_{0:s}_{1:s}.csv'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))
+        RADAR_data = 'ANTILOPEQ_{0:s}_{1:s}.csv'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))
         #RADAR_data = 'ANTILOPEH_2021103000_2022060200_alp.nc'
-        RADAR_data = 'ANTILOPEH_2021080106_2022070106_pyr.nc'
+        #RADAR_data = 'ANTILOPEH_2021080106_2022070106_pyr.nc'
         #RADAR_data = 'ANTILOPEQ_2021103100_2022060200_alp_postes_clim.csv'
     elif args.product == 'antilopejp1':
         RADAR_data = 'ANTILOPEJP1Q_{0:s}_{1:s}.csv'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))
@@ -993,32 +993,37 @@ if __name__ == "__main__":
         antilope = xrdata.to_dataframe().reset_index().rename(columns={'time':'date'})
         # TODO : Extraire les valeurs de la PEAROME correspondant aux point d'obs nivometeo
     else:
-        #antilope = pd.read_csv(RADAR_data, sep=';', parse_dates=['date'], dtype={f'rr_{args.product}': float, 'num_poste': int}, na_values=['--'])
-        antilope = xr.open_dataset(os.path.join(datadir, RADAR_data))
-        # Calcul des cumuls sur 24h
-        antilope['time'] = antilope.time-np.timedelta64(7, 'h')
-        #antilope['time'] = antilope.time-np.timedelta64(8, 'h')  # Pour les obs nivometeo
-        antilope = antilope.resample(time='1D').sum(dim='time')  # !!! VERY SLOW !!! WARNING : does not work with pandas>=2.0.0
-        antilope['time'] = antilope.time+np.timedelta64(30, 'h')
+        if RADAR_data.split('.')[-1] == 'csv':
+            antilope = pd.read_csv(RADAR_data, sep=';', parse_dates=['date'], dtype={f'rr_{args.product}': float, 'num_poste': int}, na_values=['--'])
+        else:
+            antilope = xr.open_dataset(os.path.join(datadir, RADAR_data))
+            # Calcul des cumuls sur 24h
+            antilope['time'] = antilope.time-np.timedelta64(7, 'h')
+            #antilope['time'] = antilope.time-np.timedelta64(8, 'h')  # Pour les obs nivometeo
+            antilope = antilope.resample(time='1D').sum(dim='time')  # !!! VERY SLOW !!! WARNING : does not work with pandas>=2.0.0
+            antilope['time'] = antilope.time+np.timedelta64(30, 'h')
 
-        # De-biaisage
-        #filename = os.path.join('/home/vernaym/workdir/ASSIMILATION/mask/alp', 'Estimated_ratio.nc')  # Mask test
-        #ratio = xr.open_dataset(filename)
-        #ratio = ratio.where((ratio.lon>=lonmin) & (ratio.lon<=lonmax) & (ratio.lat<=latmax) & (ratio.lat>latmin-0.01), drop=True)  # # >=44.1 ne fonctionne pas pour ANTILOPEQ (np.where(antilope.lat==44.1) renvoie une liste vide...)
-        #antilope.rr.data = antilope.rr.data / ratio.Ratio.data
+            # De-biaisage
+            #filename = os.path.join('/home/vernaym/workdir/ASSIMILATION/mask/alp', 'Estimated_ratio.nc')  # Mask test
+            #ratio = xr.open_dataset(filename)
+            #ratio = ratio.where((ratio.lon>=lonmin) & (ratio.lon<=lonmax) & (ratio.lat<=latmax) & (ratio.lat>latmin-0.01), drop=True)  # # >=44.1 ne fonctionne pas pour ANTILOPEQ (np.where(antilope.lat==44.1) renvoie une liste vide...)
+            #antilope.rr.data = antilope.rr.data / ratio.Ratio.data
 
-        # Extraction des valeurs sur les points de reference
-        antilope = antilope.sel(lat=ref_lat, lon=ref_lon, method = 'nearest')
-        # conversion en DF
-        antilope = antilope.to_dataframe()
-        antilope = antilope.reset_index()
-        antilope = antilope.rename(columns={'time':'date', 'rr':f'rr_{args.product}'})
+            # Extraction des valeurs sur les points de reference
+            antilope = antilope.sel(lat=ref_lat, lon=ref_lon, method = 'nearest')
+            # conversion en DF
+            antilope = antilope.to_dataframe()
+            antilope = antilope.reset_index()
+            antilope = antilope.rename(columns={'time':'date', 'rr':f'rr_{args.product}'})
     #antilope['date'] = antilope['date'].dt.date
 
     # II- Merge des DF et mise en forme des données
     ###############################################
     # TODO : merge DF
-    df = pd.merge(antilope, reference, on=["date", "num_poste", "lat", "lon"])
+    if 'lat' in antilope.keys().values:
+        df = pd.merge(antilope, reference, on=["date", "num_poste", "lat", "lon"])
+    else:
+        df = pd.merge(antilope, reference, on=["date", "num_poste"])
     df = df.rename(columns={'nom':'name'})
     if args.lpn:
         #lpn = pd.read_csv('LPN_nivometeo.csv', sep=';', parse_dates=['H_NIVO.DAT'], dtype={'H.num_poste':int, 'H_NIVO.ALTI_LPNX':int}, index_col=['H_NIVO.DAT'])
@@ -1031,6 +1036,8 @@ if __name__ == "__main__":
         lpn = lpn.groupby(['num_poste']).resample('1D').max()  # When 2 observation (at 6:00 and 12:00) are available, set the daily LPN as the maximum
         lpn = lpn[~np.isnan(lpn['LPNX'])]['LPNX'].reset_index()
         lpn.date = lpn.date.dt.date
+        import pdb
+        pdb.set_trace()
         df = pd.merge(df, lpn, on=["date", "num_poste"])
         # Pour ne prendre en compte que les situations de neige :
         df = df[df['elevation']>df['LPNX']]
@@ -1059,7 +1066,7 @@ if __name__ == "__main__":
     if args.threshold is not None:
         df = df.loc[df['rr_ref']>args.threshold]  # If a threshold is given, filter data above
         suffix = f'{args.threshold}mm'
-        nb_obs_min = 20
+        nb_obs_min = 10
 
     # Calcul des valeurs agrégées par station
     rr_ref  = df.groupby(['num_poste']).rr_ref.mean()
@@ -1120,8 +1127,8 @@ if __name__ == "__main__":
         # 5. Maps
         #for domain in ['alpes', 'pyrenees', 'corse']:
         #for domain in ['alpes', 'pyrenees']:
-#        for domain in ['alpes']:
-        for domain in ['pyrenees']:
+        for domain in ['alpes']:
+#        for domain in ['pyrenees']:
             plot_full_domain(domain, lats.to_numpy(), lons.to_numpy(), df_stat, suffix=suffix, product=args.product)
             plot_massif(df, suffix=suffix, product=args.product, domain=domain, threshold=args.threshold)
             #plot_massif(df.loc[df['massif_number'].isin(map_massifs[domain])], suffix=suffix, product=args.product, domain=domain, threshold=args.threshold)
