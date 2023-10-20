@@ -151,8 +151,9 @@ def add_scores(ax):
 
 def add_postes(ax, type_poste='nivometeo'):
     postdir = '/home/vernaym/These/DATA'
-    if type_poste == 'nivometeo':
-        fic_postes = os.path.join(postdir, f'scores_2021110106_2022043006_alp.csv')
+    if type_poste.startswith('nivometeo'):
+        #fic_postes = os.path.join(postdir, f'scores_2021110106_2022043006_alp.csv')
+        fic_postes = os.path.join(postdir, f'postes_nivometeo.csv')
         marker = '*'
         color  = 'red'
         label  = 'Nivometeo station'
@@ -165,6 +166,7 @@ def add_postes(ax, type_poste='nivometeo'):
     #scores = pd.read_csv(fic_score, sep=';')
 
     postes = pd.read_csv(fic_postes, sep=';')
+    postes = postes.rename(columns={'poste_nivo.lat_dg':'lats', 'poste_nivo.lon_dg':'lons'})
     postes_domain = postes.loc[(postes.lons>=lonmin) & (postes.lons<=lonmax) & (postes.lats<=latmax) & (postes.lats>=latmin)]
     lons = postes['lons']
     lats = postes['lats']
@@ -181,11 +183,11 @@ def add_radar_positions(ax):
         ladole      = dict(lat=46.42565, lon=6.10001, alt=1677, name='La Dole'),
     )
     def getImage(path):
-       return OffsetImage(plt.imread(path, format="png"), zoom=.1)
+       return OffsetImage(plt.imread(path, format="png"), zoom=.05)
 
     symbole_radar = '/home/vernaym/These/figures/symbole_radar.png'
     for radar, infos in radars.items():
-       ab = AnnotationBbox(getImage(symbole_radar), (infos['lon'], infos['lat']), frameon=False)
+       ab = AnnotationBbox(getImage(symbole_radar), (infos['lon'], infos['lat']), frameon=False, label='radar')
        ax.add_artist(ab)
 
 def codistances(coords):
@@ -262,7 +264,8 @@ def plot_vertical_cross_section(cross):
 
 
 mnt = xr.open_dataset(os.path.join(datadir, "DEM_ALPES_WGS84_250m_bilinear.nc"))
-mnt = mnt.rename({'Band1':'elevation'})
+if 'elevation' not in mnt.keys():
+    mnt = mnt.rename({'Band1':'elevation'})
 
 # TMP : To produce 1km MNT over the Frenc Alps domain
 #antilope = xr.open_dataset('/home/vernaym/These/DATA/CUMUL_ANTILOPEH_alp_2021103000_2022060200.nc')
@@ -302,31 +305,31 @@ else:
 
     #antilope = xr.open_dataset('/home/vernaym/These/DATA/CUMUL_ANTILOPEH_alp_2021103000_2022060200.nc')
 
-    mnt1km = xr.open_dataset('/home/vernaym/These/DATA/DEM_ALPESFR_WGS84_1km.nc')
-    # Projection of DEM on the 1-km ANTILOPE grid
-    #data = rd.rdarray(mnt.interp(lat=antilope.lat, lon=antilope.lon).sortby('lat', ascending=False).elevation.data, no_data=-9999)
-    data = rd.rdarray(mnt1km.sortby('lat', ascending=False).elevation.data, no_data=-9999)
-
-    # 1. Elevation inter-distance
-    Z = mnt1km.elevation.data.flatten()
-    Z=diags(Z, 0)
-    coords=[(lon,lat) for lat in mnt1km.lat.data for lon in mnt1km.lon.data]
-    pond = Preprocessing_ANTILOPE.codistances(coords)
-    pond[pond.nonzero()] = 1
-    dZ = pond.dot(Z) - Z.dot(pond)  # Compute elevation inter-distance
-    dZ=np.abs(dZ)
-    scipy.sparse.save_npz('/home/vernaym/These/DATA/elevation_codistance_alp.npz', dZ, compressed=False)
-
-    # 2. Slope inter-distance
-    slope = rd.TerrainAttribute(data, attrib='slope_percentage')
-    #slope = rd.TerrainAttribute(data, attrib='slope_degrees')
-    rd.rdShow(slope, axes=False, cmap='magma', figsize=(8, 5.5))
-    plt.show()
-
-    # 3. Aspect inter-distance
-    aspect = rd.TerrainAttribute(data, attrib='aspect')
-    rd.rdShow(aspect, axes=False, cmap='jet', figsize=(8, 5.5))
-    plt.show()
+#    mnt1km = xr.open_dataset('/home/vernaym/These/DATA/DEM_ALPESFR_WGS84_1km.nc')
+#    # Projection of DEM on the 1-km ANTILOPE grid
+#    #data = rd.rdarray(mnt.interp(lat=antilope.lat, lon=antilope.lon).sortby('lat', ascending=False).elevation.data, no_data=-9999)
+#    data = rd.rdarray(mnt1km.sortby('lat', ascending=False).elevation.data, no_data=-9999)
+#
+#    # 1. Elevation inter-distance
+#    Z = mnt1km.elevation.data.flatten()
+#    Z=diags(Z, 0)
+#    coords=[(lon,lat) for lat in mnt1km.lat.data for lon in mnt1km.lon.data]
+#    pond = Preprocessing_ANTILOPE.codistances(coords)
+#    pond[pond.nonzero()] = 1
+#    dZ = pond.dot(Z) - Z.dot(pond)  # Compute elevation inter-distance
+#    dZ=np.abs(dZ)
+#    scipy.sparse.save_npz('/home/vernaym/These/DATA/elevation_codistance_alp.npz', dZ, compressed=False)
+#
+#    # 2. Slope inter-distance
+#    slope = rd.TerrainAttribute(data, attrib='slope_percentage')
+#    #slope = rd.TerrainAttribute(data, attrib='slope_degrees')
+#    rd.rdShow(slope, axes=False, cmap='magma', figsize=(8, 5.5))
+#    plt.show()
+#
+#    # 3. Aspect inter-distance
+#    aspect = rd.TerrainAttribute(data, attrib='aspect')
+#    rd.rdShow(aspect, axes=False, cmap='jet', figsize=(8, 5.5))
+#    plt.show()
 
     # 3. Plot elevation
     #filename = os.path.join(savedir, f'ReliefAlpes_correlation{d0}.pdf')
@@ -342,9 +345,9 @@ else:
 
     # Add optional features
     add_boundaries(ax)
-    add_postes(ax, type_poste='auto')
-    add_postes(ax, type_poste='nivometeo')
     add_radar_positions(ax)
+    add_postes(ax, type_poste='automatic stations')
+    add_postes(ax, type_poste='nivometeo stations')
 
     ax.set_frame_on(False)
     ax.legend(fontsize=20, loc=4)  # loc=4 --> bottom-right
