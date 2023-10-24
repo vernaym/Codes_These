@@ -269,14 +269,14 @@ algo = dict(
         #RS20          = 'RandomSampling/XP20/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         #RS22          = 'RandomSampling/XP22/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         #RS23          = 'RandomSampling/XP23/Random_Sampling_2021120106_2022050106_daily_alp.nc',  # commit f0d6615fe98865a0c87c88dca4dda7e70a1725a1
-        RS23          = 'RandomSampling/XP23/Random_Sampling_2021120106_2022043006_daily_alp.nc',  # commit 
-        RS24          = 'RandomSampling/XP24/Random_Sampling_2021120106_2022043006_daily_alp.nc',  # commit 
-        RS25          = 'RandomSampling/XP25/Random_Sampling_2021120106_2022043006_daily_alp.nc',  # commit 
+        #RS23          = 'RandomSampling/XP23/Random_Sampling_2021120106_2022043006_daily_alp.nc',  # commit 
+        #RS24          = 'RandomSampling/XP24/Random_Sampling_2021120106_2022043006_daily_alp.nc',  # commit 
+        #RS25          = 'RandomSampling/XP25/Random_Sampling_2021120106_2022043006_daily_alp.nc',  # commit 
         ################################################################################################
         # PHD committee :
         RS21          = 'RandomSampling/XP21/Random_Sampling_2021120106_2022050106_daily_alp.nc',
-        #PF31          = 'XP31/Assimilation_locale_2021120106_2022050106_daily_alp_mask9_debiasing3.nc',
-        #KD35          = 'EnsembleKalmanFilter/XP35/EnKF_2021120106_2022050106_daily_alp.nc',
+        PF31          = 'XP31/Assimilation_locale_2021120106_2022050106_daily_alp_mask9_debiasing3.nc',
+        KD35          = 'EnsembleKalmanFilter/XP35/EnKF_2021120106_2022050106_daily_alp.nc',
         ################################################################################################
     )
 
@@ -421,14 +421,18 @@ xpid_label = dict(
     )
 
 colors = dict(
+    antilope  = 'tab:purple',
     raw       = 'Grey',
-    antilopec = 'orange',
-    RS21      = 'red',
+    antilopec = 'tab:orange',
+    #RS21      = 'red',
+    RS21      = 'r',
     RS23      = 'k',
     RS24      = 'maroon',
     RS25      = 'green',
-    PF31      = 'green',
-    KD35      = 'blue',
+    #PF31      = 'green',
+    PF31      = 'g',
+    #KD35      = 'blue',
+    KD35      = 'b',
 )
 
 def nearest(array, value):
@@ -470,8 +474,8 @@ class Evaluation(object):
 
         simu = simu[~np.isnan(obs)]
         obs = obs[~np.isnan(obs)]
-        simu = simu[obs>0]  # TODO : TMP !!!!!
-        obs=obs[obs>0]  # TODO : TMP !!!!!
+        #simu = simu[obs>0]  # TODO : TMP !!!!!
+        #obs=obs[obs>0]  # TODO : TMP !!!!!
 
         if np.shape(simu) == np.shape(obs):  # "Simulation" déterministe
             bias = simu - obs
@@ -487,6 +491,7 @@ class Evaluation(object):
         else:
             mean = simu.mean(axis=1)
         mask = np.where((mean>1) & (obs>1))
+        #mask = np.where((mean>0) & (obs>0))
         simu = simu[mask]
         obs = obs[mask]
 
@@ -942,8 +947,8 @@ class Evaluation(object):
         self.data = self.data.loc[{'date':dates}]
 
 #        data = dict(antilope=list(), wma=list(), antiloped=list(), antilopec=list())
-        #data = dict(antilope=list(), raw=list(), antilopec=list())
-        data = dict(antilopec=list(), raw=list())
+        data = dict(antilope=list(), raw=list(), antilopec=list())
+#        data = dict(antilopec=list(), raw=list())
 #        data = dict(antilope=list(), antiloped=list(), antiloper=list())
         #data = dict(antilope=list(), raw=list(), antilopec=list())
         #data = dict(antilopec=list())
