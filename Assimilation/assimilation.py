@@ -1980,10 +1980,10 @@ class RandomSampling(Assimilation):
 
             #ECM_max = np.square(np.nanmax(R))
             #ECM_max = np.nanmax(R.toarray())
-            #ECM_max = max(np.nanmax(Rdyn.toarray()), np.nanmax(Rstat.toarray()))
-            self.plot_matrix(R, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_ECM_{domain}.pdf', vmin=0, cmap=plt.cm.viridis)
-            self.plot_matrix(Rdyn, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_dyn_ECM_{domain}.pdf', vmin=0, cmap=plt.cm.viridis)
-            self.plot_matrix(Rstat, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_stat_ECM_{domain}.pdf', vmin=0, cmap=plt.cm.viridis)
+            ECM_max = max(np.nanmax(Rdyn.toarray()), np.nanmax(Rstat.toarray()))
+            self.plot_matrix(R, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_ECM_{domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.Reds)
+            self.plot_matrix(Rdyn, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_dyn_ECM_{domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.Reds)
+            self.plot_matrix(Rstat, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_stat_ECM_{domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.Reds)
 
             #parameters.mu.data = np.square(parameters.mu.data)
             #parameters.rr.data = np.square(parameters.rr.data)
