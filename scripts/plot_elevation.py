@@ -191,7 +191,7 @@ def add_radar_positions(ax):
     def getImage(path):
        return OffsetImage(plt.imread(path, format="png"), zoom=.05)
 
-    symbole_radar = '/home/vernaym/These/figures/symbole_radar.png'
+    symbole_radar = '/home/vernaym/These/figures/symbole_radar_violet.png'
     for radar, infos in radars.items():
        ab = AnnotationBbox(getImage(symbole_radar), (infos['lon'], infos['lat']), frameon=False, label='radar')
        ax.add_artist(ab)
@@ -359,6 +359,7 @@ else:
     for c in im.collections:
         c.set_edgecolor("face")
     c = ax.contour(lons, lats, mnt.elevation.data, colors='grey', levels=[1000, 2500], transform=ccrs.PlateCarree())  # https://www.earthdatascience.org/tutorials/visualize-digital-elevation-model-contours-matplotlib/
+    plt.clabel(c, inline=1, fontsize=10)
 
     # Add optional features
     add_boundaries(ax)

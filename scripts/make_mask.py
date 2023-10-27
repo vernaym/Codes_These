@@ -30,9 +30,11 @@ import matplotlib.animation as animation
 import seaborn as sns
 import cmocean
 import palettable
+import cartopy.crs as ccrs
+from cartopy.mpl.ticker import LongitudeFormatter, LatitudeFormatter
 
 #plt.rcParams["figure.figsize"] = [7.50, 3.50]
-plt.rcParams["figure.autolayout"] = True
+#plt.rcParams["figure.autolayout"] = True
 
 #from pykrige.uk import UniversalKriging
 
@@ -271,19 +273,19 @@ def add_scores(scores, ax, mycmap=None, vmin=None, vmax=None):
         onlypostes = [poste for poste in info.index if poste not in blacklist]
         info = info[info.index.isin(onlypostes)]
         if mycmap is None:
-            #sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=450, edgecolors='black', linewidth=3, alpha=1)
-            sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=50, edgecolors='black', alpha=0.5)
+            sc = ax.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=350, edgecolors='black', linewidth=3, alpha=1)
+            #sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=50, edgecolors='black', alpha=0.5)
             #sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=300, edgecolors='black', alpha=1)
         else:
-            #sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, vmin=vmin, vmax=vmax, marker=marker, s=300, edgecolors='black', alpha=1)
-            sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, vmin=vmin, vmax=vmax, marker=marker, s=50, edgecolors='black', alpha=0.5)
+            sc = ax.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, vmin=vmin, vmax=vmax, marker=marker, s=300, edgecolors='black', alpha=1)
+            #sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, vmin=vmin, vmax=vmax, marker=marker, s=50, edgecolors='black', alpha=0.5)
 
         #labels = [str(num_poste) for num_poste in info['num_poste']]
         labels = [str(np.around(ratio, decimals=2)) for ratio in info['ratio']]
         # TODO : add score value
         #for idx, label in enumerate(labels):
         for idx in info.index:
-            txt = plt.text(info['lons'][idx], info['lats'][idx], np.around(info['ratio'][idx], decimals=2), fontsize=12)
+            txt = ax.text(info['lons'][idx]+0.02, info['lats'][idx]-0.01, np.around(info['ratio'][idx], decimals=2), fontsize=16)
             #txt = plt.text(info['lons'][idx], info['lats'][idx], info['num_poste'][idx])
     #cb = ax.colorbar(sc, label=legend)
     #ax.colorbar(sc, label=legend, shrink=shrink, anchor=anchor)
@@ -292,8 +294,8 @@ def add_scores(scores, ax, mycmap=None, vmin=None, vmax=None):
 def add_landmarks(ax):
     # Add landmarks
     for landmark, infos in landmarks.items():
-        ax.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='red', markersize=5)
-        ax.annotate(landmark, (infos['lon']+0.003, infos['lat']+0.003), color='red', fontsize=20)
+        ax.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='red', markersize=5, transform=ccrs.PlateCarree())
+        ax.annotate(landmark, (infos['lon']+0.003, infos['lat']+0.003), color='red', fontsize=20, transform=ccrs.PlateCarree())
 
 def add_radar_positions(ax):
     radars = dict(
@@ -304,19 +306,19 @@ def add_radar_positions(ax):
     def getImage(path):
        return OffsetImage(plt.imread(path, format="png"), zoom=0.03)
 
-    symbole_radar = '/home/vernaym/These/figures/symbole_radar.png'
+    symbole_radar = '/home/vernaym/These/figures/symbole_radar_maroon.png'
     for radar, infos in radars.items():
        ab = AnnotationBbox(getImage(symbole_radar), (infos['lon'], infos['lat']), frameon=False)
        ax.add_artist(ab)
 
-def add_boundaries():
+def add_boundaries(ax):
 
     shapefile_name = os.path.join("/home/vernaym/QGIS/FondDeCarte/", "world-administrative-boundaries.shp")
     borders = shapefile.Reader(shapefile_name)
     for shape in borders.shapeRecords():
         x = [i[0] for i in shape.shape.points[:]]
         y = [i[1] for i in shape.shape.points[:]]
-        plt.plot(x,y, color='k')
+        ax.plot(x,y, color='k', linestyle=':', transform=ccrs.PlateCarree())
 
 def add_massifs():
 #    shapefile_name = os.path.join("/home/vernaym/QGIS/FondDeCarte/", "world-administrative-boundaries.shp")
@@ -330,12 +332,12 @@ def add_massifs():
     for shape in massifs.shapeRecords():
         x = [i[0] for i in shape.shape.points[:]]
         y = [i[1] for i in shape.shape.points[:]]
-        plt.plot(x, y,color='grey', alpha=0.5)
+        plt.plot(x, y,color='grey', alpha=0.5, transform=ccrs.PlateCarree())
 
 def add_cities(latmin, latmax, lonmin, lonmax):
     cities = pd.read_csv(os.path.join('/home/vernaym/safran/monitoring/', 'cities.csv'), sep=',')
     tmp = cities[(cities.population>25000) & (cities.lat>=latmin) & (cities.lat<=latmax) & (cities.lng>=lonmin) & (cities.lng<=lonmax)]
-    plt.plot(tmp.lng.to_numpy(), tmp.lat.to_numpy(), marker='.', linestyle='')
+    plt.plot(tmp.lng.to_numpy(), tmp.lat.to_numpy(), marker='.', linestyle='', transform=ccrs.PlateCarree())
     for idx in tmp.index:
         plt.text(tmp.lng[idx], tmp.lat[idx], tmp.city[idx], alpha=0.5)
 
@@ -345,26 +347,32 @@ def plot(antilope, datebegin, dateend, categories=True, biascorrection=False, sc
     if dom is None:
         dom = domain
 
-    if dom == 'alp':
-        fig, ax = plt.subplots(figsize=(16,16))
-        #fig, ax = plt.subplots(figsize=(14,16))
-    elif dom =='pyr':
-        fig, ax = plt.subplots(figsize=(33,10))
-    elif dom == 'GrandesRousses':
-        fig, ax = plt.subplots(figsize=(19,8))
-    elif dom == 'HautesAlpes':
-        fig, ax = plt.subplots(figsize=(14,7))
-    elif dom == 'Savoie':
-        fig, ax = plt.subplots(figsize=(14,7))
-    elif dom == 'MontBlanc':
-        fig, ax = plt.subplots(figsize=(20,10))
-    else:
-        fig, ax = plt.subplots()
-
     latmin = np.min(antilope.lat.data)
     latmax = np.max(antilope.lat.data)
     lonmin = np.min(antilope.lon.data)
     lonmax = np.max(antilope.lon.data)
+
+    if dom == 'alp':
+        if biascorrection:
+            fig, axes = plt.subplots(1, 2, figsize=(30,16), subplot_kw=dict(projection=ccrs.PlateCarree()))
+        else:
+            fig, axes = plt.subplots(1, 1, figsize=(16,16), subplot_kw=dict(projection=ccrs.PlateCarree()))
+            axes.set_extent([lonmin, lonmax, latmin, latmax], crs=ccrs.PlateCarree())
+        for ax in axes:
+            ax.set_extent([lonmin, lonmax, latmin, latmax], crs=ccrs.PlateCarree())
+        #fig, ax = plt.subplots(figsize=(14,16), subplot_kw=dict(projection=ccrs.PlateCarree()))
+    elif dom =='pyr':
+        fig, ax = plt.subplots(figsize=(33,10), subplot_kw=dict(projection=ccrs.PlateCarree()))
+    elif dom == 'GrandesRousses':
+        fig, ax = plt.subplots(figsize=(19,8), subplot_kw=dict(projection=ccrs.PlateCarree()))
+    elif dom == 'HautesAlpes':
+        fig, ax = plt.subplots(figsize=(14,7), subplot_kw=dict(projection=ccrs.PlateCarree()))
+    elif dom == 'Savoie':
+        fig, ax = plt.subplots(figsize=(14,7), subplot_kw=dict(projection=ccrs.PlateCarree()))
+    elif dom == 'MontBlanc':
+        fig, ax = plt.subplots(figsize=(20,10), subplot_kw=dict(projection=ccrs.PlateCarree()))
+    else:
+        fig, ax = plt.subplots(subplot_kw=dict(projection=ccrs.PlateCarree()))
 
     if biascorrection:
         #filename = os.path.join('/home/vernaym/These/DATA/mask', 'Estimated_ratio.nc')
@@ -372,60 +380,114 @@ def plot(antilope, datebegin, dateend, categories=True, biascorrection=False, sc
         ratio = xr.open_dataset(filename)
         #ratio.lat.data = ratio.lat.data+0.005  # TODO : comprendre et resoudre le probleme de decallage des coordonnees
         ratio = ratio.where((ratio.lon>=lonmin) & (ratio.lon<=lonmax) & (ratio.lat<=latmax) & (ratio.lat>latmin-0.01), drop=True)  # # >=44.1 ne fonctionne pas pour ANTILOPEQ (np.where(antilope.lat==44.1) renvoie une liste vide...)
-        antilope.rr_cumul.data = antilope.rr_cumul.data / ratio.Ratio.data
+        antilope["rr_cumul_debiased"] = antilope.rr_cumul / ratio.Ratio
 
     cmap = plt.cm.YlGnBu
 
-    if categories :
+    if categories:
         # To group by range of data
         cmaplist = [cmap(i) for i in range(20, cmap.N+1)]
         cmap = matplotlib.colors.LinearSegmentedColormap.from_list('Custom cmap', cmaplist, cmap.N-20)
         # define the bins and normalize
-        bounds = np.arange(200, 1300, 100)
+        bounds = np.arange(200, 1100, 50)
         #norm = matplotlib.colors.BoundaryNorm(bounds, cmap.N)
         norm = matplotlib.colors.BoundaryNorm(bounds, len(bounds)-1)
-        cml = antilope.rr_cumul.plot.pcolormesh(ax=ax, cmap=cmap, norm=norm, add_colorbar=False)
-
-        #cml = antilope.rr_cumul.plot(ax=ax, cmap=cmap, norm=norm, add_colorbar=False)
+        lons, lats = np.meshgrid(antilope.lon.data, antilope.lat.data)
+        #cml = ax.contourf(lons, lats, antilope.rr_cumul.data, cmap=cmap, levels=50, transform=ccrs.PlateCarree(), alpha=1, antialiased=True)
+        if biascorrection:
+            cml = axes[0].contourf(lons, lats, antilope.rr_cumul.data, cmap=cmap, levels=bounds, transform=ccrs.PlateCarree(), alpha=1, antialiased=True, extend='both')
+            # Remove lines
+            for c in cml.collections:
+                c.set_edgecolor("face")
+            cml2 = axes[1].contourf(lons, lats, antilope.rr_cumul_debiased.data, cmap=cmap, levels=bounds, transform=ccrs.PlateCarree(), alpha=1, antialiased=True, extend='both')
+            # Remove lines
+            for c in cml2.collections:
+                c.set_edgecolor("face")
+        else:
+            cml = ax.contourf(lons, lats, antilope.rr_cumul.data, cmap=cmap, levels=bounds, transform=ccrs.PlateCarree(), alpha=1, antialiased=True, extend='both')
+            # Remove lines
+            for c in cml.collections:
+                c.set_edgecolor("face")
+#        cml = antilope.rr_cumul.plot.pcolormesh(ax=ax, cmap=cmap, norm=norm, add_colorbar=False, transform=ccrs.PlateCarree())
+        #cml = antilope.rr_cumul.plot(ax=ax, cmap=cmap, norm=norm, add_colorbar=False, transform=ccrs.PlateCarree())
         #antilope.rr_cumul.plot(ax=ax, cbar_kwargs={"label":'Total precipitation between 2021080106 and 2022070106 (mm)'}, cmap=plt.cm.coolwarm)
-        #cml = antilope.rr_cumul.plot(ax=ax, cmap=plt.cm.YlGnBu, add_colorbar=False)
-        #cml = plt.contourf(antilope.lon, antilope.lat, antilope.rr_cumul, cmap=cmap, norm=norm, add_colorbar=False)
-        #cml = antilope.rr_cumul.plot(ax=ax, cmap=plt.cm.YlGnBu, add_colorbar=False, alpha=0.5)
+        #cml = antilope.rr_cumul.plot(ax=ax, cmap=plt.cm.YlGnBu, add_colorbar=False, transform=ccrs.PlateCarree())
+        #cml = plt.contourf(antilope.lon, antilope.lat, antilope.rr_cumul, cmap=cmap, norm=norm, add_colorbar=False, transform=ccrs.PlateCarree())
+        #cml = antilope.rr_cumul.plot(ax=ax, cmap=plt.cm.YlGnBu, add_colorbar=False, alpha=0.5, transform=ccrs.PlateCarree())
     else:
-#        cml = antilope.rr_cumul.plot(ax=ax, vmin=100, vmax=1200, cmap=plt.cm.YlGnBu, add_colorbar=False)
-        cml = antilope.rr_cumul.plot(ax=ax, cmap=plt.cm.YlGnBu, add_colorbar=False)
-        #cml = antilope.rr_cumul.plot(ax=ax, cmap=plt.cm.YlGnBu, add_colorbar=False)
-        #cml = antilope.rr_cumul.plot(ax=ax, vmin=150, vmax=500, cmap=plt.cm.YlGnBu, add_colorbar=False)
+#        cml = antilope.rr_cumul.plot(ax=ax, vmin=100, vmax=1200, cmap=plt.cm.YlGnBu, add_colorbar=False, transform=ccrs.PlateCarree())
+        cml = antilope.rr_cumul.plot(ax=ax, cmap=plt.cm.YlGnBu, add_colorbar=False, transform=ccrs.PlateCarree())
+        #cml = antilope.rr_cumul.plot(ax=ax, cmap=plt.cm.YlGnBu, add_colorbar=False, transform=ccrs.PlateCarree())
+        #cml = antilope.rr_cumul.plot(ax=ax, vmin=150, vmax=500, cmap=plt.cm.YlGnBu, add_colorbar=False, transform=ccrs.PlateCarree())
 
-    #add_landmarks(ax)
-    add_radar_positions(ax)
-    add_massifs()
-    add_boundaries()
-    #add_cities(latmin, latmax, lonmin, lonmax)
+    # Add elevation lines
+    mnt = xr.open_dataset('/home/vernaym/QGIS/MNT/DEM_ALPES_WGS84_250m_bilinear.nc')
+    if 'elevation' not in mnt.keys():
+        mnt = mnt.rename({'Band1':'elevation'})
+    mnt=mnt.where((mnt['lat']>=latmin) & (mnt['lat']<=latmax) & (mnt['lon']>=lonmin) & (mnt['lon']<=lonmax), drop=True)
+    lons, lats = np.meshgrid(mnt.lon.data, mnt.lat.data)
+    levels = [1000, 2250, 3500]
+    levels = [2000, 3000]
+    levels = [1500, 2500, 3500]
+    levels = [1200, 2400, 3600]
+    #if biascorrection:
+    for ax in axes:
+        c = ax.contour(lons, lats, mnt.elevation.data, colors='dimgray', levels=levels, transform=ccrs.PlateCarree(), alpha=0.9)
+        ax.clabel(c, inline=1, fontsize=14)
+        #add_landmarks(ax)
+        add_radar_positions(ax)
+        #add_massifs()
+        add_boundaries(ax)
+        #add_cities(latmin, latmax, lonmin, lonmax)
+
     if scores:
         scores = pd.read_csv(fic_score, sep=';')
         #sc = add_scores(scores, ax, mycmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=0, vmax=2)
-        sc = add_scores(scores, ax)
-        plt.subplots_adjust(bottom=0.05, left=0.05, right=0.85, top=0.95)
-        cax1 = plt.axes((0.94, 0.05, 0.01, 0.9))
-        cax2 = plt.axes((0.87, 0.05, 0.01, 0.9))
-        cb = fig.colorbar(sc, cax1)
-        #cb.set_label(label='ANTILOPE / rain-gauges ratio', fontsize=22)
-        cb.ax.tick_params(labelsize=16)
-        cb.set_label(label='Mean ANTILOPE / rain-gauges ratio', fontsize=22)
-        #cb.set_label(label='ANTILOPE / rain-gauges ratio', fontsize=14)
+        sc = add_scores(scores, axes[0])
+        if biascorrection:
+            scores2 = pd.read_csv(os.path.join(datadir, f'scores_2021110106_2022043006_alpes_obs_nivometeo_antilope_debiaise.csv'), sep=';')
+            scores2=scores2[scores2.num_poste.isin(scores.num_poste.values)]
+            sc = add_scores(scores2, axes[1])
+            plt.subplots_adjust(bottom=0.02, left=0.05, right=0.82, top=0.99, wspace=0.05)
+            cax1 = plt.axes((0.93, 0.04, 0.02, 0.92))  # left-position, bottom-position, width, height
+            cax2 = plt.axes((0.84, 0.04, 0.02, 0.92))
+            cb = fig.colorbar(sc, cax1)
+            cb.ax.tick_params(labelsize=20)
+            cb.set_label(label='Mean ANTILOPE / gauge ratio', fontsize=24)
+        else:
+            plt.subplots_adjust(bottom=0.04, left=0.085, right=0.77, top=0.99)
+            cax1 = plt.axes((0.90, 0.065, 0.03, 0.895))
+            cax2 = plt.axes((0.78, 0.065, 0.03, 0.895))
+            cb = fig.colorbar(sc, cax1)
+            #cb.set_label(label='ANTILOPE / rain-gauges ratio', fontsize=22)
+            cb.ax.tick_params(labelsize=20)
+            cb.set_label(label='Mean ANTILOPE / gauge ratio', fontsize=24)
+            #cb.set_label(label='ANTILOPE / rain-gauges ratio', fontsize=14)
     else:
-        plt.subplots_adjust(bottom=0.05, left=0.05, right=0.90, top=0.95)
+        plt.subplots_adjust(bottom=0.05, left=0.03, right=0.90, top=0.95)
         cax2 = plt.axes((0.92, 0.05, 0.02, 0.9))
 
     cb2 = fig.colorbar(cml, extend='both', cax=cax2)
-    cb2.set_label(label=f'Total precipitation between \n {datebegin} and {dateend} (mm)', fontsize=22)
+    cb2.set_label(label=f'Total precipitation between {datebegin} and {dateend} (mm)', fontsize=24)
     #cb2.set_label(label=f'Total precipitation between \n {datebegin} and {dateend} (mm)', fontsize=14)
-    cb2.ax.tick_params(labelsize=16)
+    cb2.ax.tick_params(labelsize=20)
     #cb2.ax.tick_params(labelsize=12)
-    ax.grid(False)  # Remove grid lines (does not work !)
-    #fig.legend()
-    #fig.tight_layout()
+
+    xticks = np.arange(5.5, 7.5, 0.5)
+    yticks = np.arange(44.5, 46.5, 0.5)
+    lon_formatter = LongitudeFormatter(zero_direction_label=True)
+    lat_formatter = LatitudeFormatter()
+    axes[0].set_yticks(yticks, crs=ccrs.PlateCarree())
+    axes[0].yaxis.set_major_formatter(lat_formatter)
+    axes[0].set_ylabel('latitude', fontsize=22)
+    for ax in axes:
+        ax.grid(False)  # Remove grid lines (does not work !)
+        # Set x/y axes ticks and labels
+        ax.set_xticks(xticks, crs=ccrs.PlateCarree())
+        ax.xaxis.set_major_formatter(lon_formatter)
+        ax.tick_params(axis='both', which='major', labelsize=18)
+        ax.set_xlabel('longitude', fontsize=22)
+
     if product is None:
         fig.savefig(os.path.join(savedir, f'CUMUL_ANTILOPE_{datebegin}_{dateend}_{dom}.pdf'))
     else:
@@ -505,7 +567,7 @@ def plot_field(fig, ax, field, cmap=None, vmin=None, vmax=None, scores=None, col
 #    plt.plot(6.82, 45.85, marker='+', color='red')
 
     add_radar_positions(ax)
-    add_boundaries()
+    add_boundaries(ax)
     add_massifs()
     #add_cities(latmin, latmax, lonmin, lonmax)
 
@@ -1158,16 +1220,19 @@ if __name__ == "__main__":
         # TODO : prendre un cumul sur la même période que ANTILOPE pour éviter de fausser la méthode avec des situations spécifiques
         model = model.where((model.lon>=lonmin) & (model.lon<=lonmax) & (model.lat<=latmax) & (model.lat>latmin-0.01), drop=True)
 
-    plot_antilope = False
+    plot_antilope = True
 
     if plot_antilope:
+        #fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_{domain}_obs_auto.csv')
+        fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_alp.csv')
+
         #plot(antilope, datebegin, dateend, categories=True, biascorrection=True)
         #plot(antilope, datebegin, dateend, categories=False, biascorrection=True)
-        #plot(antilope, datebegin, dateend, categories=True, biascorrection=True, scores=True)
+        plot(antilope, datebegin, dateend, categories=True, biascorrection=True, scores=True)
         #plot(antilope, datebegin, dateend, categories=True)
         #plot(antilope, datebegin, dateend, categories=False)
-        fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_{domain}_obs_auto.csv')
-        plot(antilope, datebegin, dateend, categories=False, scores=True)
+        #plot(antilope, datebegin, dateend, categories=False, scores=True)
+        #plot(antilope, datebegin, dateend, categories=True, scores=True)
 
     else:
 
