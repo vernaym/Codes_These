@@ -352,9 +352,12 @@ else:
     ax.set_frame_on(False)
     #https://discourse.holoviz.org/t/cannot-remove-grid-for-hv-quadmesh/2211/8
     #im = mnt.elevation.plot(ax=ax, cmap=plt.cm.terrain, subplot_kws={'frame_on':False}, linewidth=0, label='Elevation (m)', add_colorbar=False)
-    im = mnt.elevation.plot(ax=ax, cmap=plt.cm.terrain, linewidth=0, label='Elevation (m)', add_colorbar=False, transform=ccrs.PlateCarree())
+    #im = mnt.elevation.plot(ax=ax, cmap=plt.cm.terrain, linewidth=0, label='Elevation (m)', add_colorbar=False, transform=ccrs.PlateCarree())
     lons, lats = np.meshgrid(mnt.lon.data, mnt.lat.data)
-    #im = ax.contourf(lons, lats, mnt.elevation.data, cmap=plt.cm.terrain, levels=20, transform=ccrs.PlateCarree())  # https://www.earthdatascience.org/tutorials/visualize-digital-elevation-model-contours-matplotlib/
+    im = ax.contourf(lons, lats, mnt.elevation.data, cmap=plt.cm.terrain, levels=50, transform=ccrs.PlateCarree(), alpha=1, antialiased=True)  # https://www.earthdatascience.org/tutorials/visualize-digital-elevation-model-contours-matplotlib/
+    # This is the fix for the white lines between contour levels
+    for c in im.collections:
+        c.set_edgecolor("face")
     c = ax.contour(lons, lats, mnt.elevation.data, colors='grey', levels=[1000, 2500], transform=ccrs.PlateCarree())  # https://www.earthdatascience.org/tutorials/visualize-digital-elevation-model-contours-matplotlib/
 
     # Add optional features
@@ -365,7 +368,7 @@ else:
     add_postes(ax, type_poste='nivometeo stations')
 
     ax.set_frame_on(False)
-    ax.legend(fontsize=20, loc=4)  # loc=4 --> bottom-right
+    ax.legend(fontsize=20, loc=2)  # loc=2 --> upper-left
     #plot_correlation(ax, mnt)  # To add correlation area
     # Force colorbar size
     cb = fig.colorbar(im, fraction=0.058, pad=0.04)  # From https://stackoverflow.com/questions/18195758/set-matplotlib-colorbar-size-to-match-graph
