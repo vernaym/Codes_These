@@ -15,10 +15,14 @@ from scipy.sparse import csr_matrix, csc_matrix, diags
 from scipy.spatial import distance_matrix
 import shapefile
 from metpy.interpolate import cross_section
+import cartopy.crs as ccrs
+from cartopy.mpl.ticker import LongitudeFormatter, LatitudeFormatter
 
 import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
+
+from osgeo import gdal
 
 from These.scripts import tools
 from These.radar import Preprocessing_ANTILOPE
@@ -62,7 +66,7 @@ lonmin = domain_coords[domain]['lonmin']
 lonmax = domain_coords[domain]['lonmax']
 
 figsize = dict(
-        alp            = (14,16),
+        alp            = (15.1,16),
         GrandesRousses = (15,7),
         HauteSavoie    = (12,12),
         HautesAlpes    = (16,10),
@@ -78,11 +82,12 @@ max_dist = d0*3
 blacklist = [5063407, 5063410, 38191408]  # La Meije, LA GRAVE, Huez 2350
 
 landmarks = {
-        "Alpe d'Huez" : dict(lon=6.070, lat=45.092, alt=1800, marker='o'),
-        "Les 2 Alpes" : dict(lon=6.127, lat=45.013, alt=1800, marker='o'),
-        "Lautaret"    : dict(lon=6.408, lat=45.038, alt=2058, marker='X'),
-        "La Meije"    : dict(lon=6.311, lat=45.008, alt=3500, marker='^'),  # real alt = 3984
-        "Pic Blanc"   : dict(lon=6.131, lat=45.128, alt=3000, marker='^'),  # real alt = 3333
+        #"Alpe d'Huez" : dict(lon=6.070, lat=45.092, alt=1800, marker='o'),
+        #"Les 2 Alpes" : dict(lon=6.127, lat=45.013, alt=1800, marker='o'),
+        #"Lautaret"    : dict(lon=6.408, lat=45.038, alt=2058, marker='X'),
+        #"La Meije"    : dict(lon=6.311, lat=45.008, alt=3500, marker='^'),  # real alt = 3984
+        #"Pic Blanc"   : dict(lon=6.131, lat=45.128, alt=3000, marker='^'),  # real alt = 3333
+        "Mont-Blanc"  : dict(lon=6.87, lat=45.84, alt=4807, marker='^'),
     }
 
 
@@ -110,8 +115,8 @@ def proj_mnt(mnt):
 def add_landmarks(ax):
     # Add landmarks
     for landmark, infos in landmarks.items():
-        ax.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='red', markersize=5)
-        ax.annotate(landmark, (infos['lon']+0.003, infos['lat']+0.003), color='red', fontsize=12)
+        ax.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='white', markersize=24, transform=ccrs.PlateCarree())
+        ax.annotate(landmark, (infos['lon']-0.04, infos['lat']-0.08), color='k', weight='bold', fontsize=24, transform=ccrs.PlateCarree())
 
 def add_boundaries(ax):
     shapefile_name = os.path.join("/home/vernaym/QGIS/FondDeCarte/", "world-administrative-boundaries.shp")
@@ -119,20 +124,21 @@ def add_boundaries(ax):
     for shape in borders.shapeRecords():
         x = [i[0] for i in shape.shape.points[:]]
         y = [i[1] for i in shape.shape.points[:]]
-        plt.plot(x,y, color='k')
+        plt.plot(x,y, color='k', transform=ccrs.PlateCarree())
 
+def add_massifs(ax):
     massifs = shapefile.Reader("/home/vernaym/safran/ctes/shapefiles/massifs_safran.shp")
     for shape in massifs.shapeRecords():
         x = [i[0] for i in shape.shape.points[:]]
         y = [i[1] for i in shape.shape.points[:]]
-        ax.plot(x,y,color='k')
+        ax.plot(x,y,color='k', transform=ccrs.PlateCarree())
 
 def add_scores(ax):
     fic_score = os.path.join(datadir, 'scores_2021080106_2022080106_alp.csv')
     scores = pd.read_csv(fic_score, sep=';')
     cmap = matplotlib.colors.LinearSegmentedColormap.from_list("", ["black", "blue", "green", "orange", "red"], 5)
     thresholds = [0., 0.5, 0.80, 1.2, 1.5, 10]
-    norm = matplotlib.colors.BoundaryNorm(thresholds, cmap.N)
+    norm = matplotlib.colors.BoundaryNorm(thresholds, cmap.N, transform=ccrs.PlateCarree())
 
     def set_marker(row):
         if row['ratio'] <= 0.8:
@@ -174,7 +180,7 @@ def add_postes(ax, type_poste='nivometeo'):
 
     #sc = ax.scatter(scores['poste_nivo.lon_dg'], scores['poste_nivo.lat_dg'], c=scores['poste_nivo.alti'],  marker='^', s=300)
     #sc = ax.scatter(scores['poste_nivo.lon_dg'], scores['poste_nivo.lat_dg'],  marker='^', s=450, color='k')
-    sc = ax.scatter(lons, lats,  marker=marker, s=300, color=color, label=label)
+    sc = ax.scatter(lons, lats,  marker=marker, s=250, color=color, label=label, transform=ccrs.PlateCarree())
 
 def add_radar_positions(ax):
     radars = dict(
@@ -264,6 +270,9 @@ def plot_vertical_cross_section(cross):
 
 
 mnt = xr.open_dataset(os.path.join(datadir, "DEM_ALPES_WGS84_250m_bilinear.nc"))
+#mnt = gdal.Open(os.path.join(datadir, "DEM_ALPES_WGS84_250m_bilinear.tif"))
+#tmp = np.transpose(mnt.ReadAsArray().astype(np.float), axis=1)
+#plt.contour(tmp, cmap = "viridis", levels = list(range(0, 5000, 100)))
 if 'elevation' not in mnt.keys():
     mnt = mnt.rename({'Band1':'elevation'})
 
@@ -337,14 +346,20 @@ else:
 
     # Plot elevation
     #if not os.path.exists(filename):
-    fig,ax = plt.subplots(figsize=figsize[domain])
+    fig,ax = plt.subplots(figsize=figsize[domain], subplot_kw=dict(projection=ccrs.PlateCarree()))
+    #ax = ax.ravel()
+    ax.set_extent([5.4, 7.2, 44.1, 46.45], crs=ccrs.PlateCarree())
     ax.set_frame_on(False)
     #https://discourse.holoviz.org/t/cannot-remove-grid-for-hv-quadmesh/2211/8
     #im = mnt.elevation.plot(ax=ax, cmap=plt.cm.terrain, subplot_kws={'frame_on':False}, linewidth=0, label='Elevation (m)', add_colorbar=False)
-    im = mnt.elevation.plot(ax=ax, cmap=plt.cm.terrain, linewidth=0, label='Elevation (m)', add_colorbar=False)
+    im = mnt.elevation.plot(ax=ax, cmap=plt.cm.terrain, linewidth=0, label='Elevation (m)', add_colorbar=False, transform=ccrs.PlateCarree())
+    lons, lats = np.meshgrid(mnt.lon.data, mnt.lat.data)
+    #im = ax.contourf(lons, lats, mnt.elevation.data, cmap=plt.cm.terrain, levels=20, transform=ccrs.PlateCarree())  # https://www.earthdatascience.org/tutorials/visualize-digital-elevation-model-contours-matplotlib/
+    c = ax.contour(lons, lats, mnt.elevation.data, colors='grey', levels=[1000, 2500], transform=ccrs.PlateCarree())  # https://www.earthdatascience.org/tutorials/visualize-digital-elevation-model-contours-matplotlib/
 
     # Add optional features
     add_boundaries(ax)
+    add_landmarks(ax)
     add_radar_positions(ax)
     add_postes(ax, type_poste='automatic stations')
     add_postes(ax, type_poste='nivometeo stations')
@@ -352,12 +367,21 @@ else:
     ax.set_frame_on(False)
     ax.legend(fontsize=20, loc=4)  # loc=4 --> bottom-right
     #plot_correlation(ax, mnt)  # To add correlation area
-    cb = fig.colorbar(im)
+    # Force colorbar size
+    cb = fig.colorbar(im, fraction=0.058, pad=0.04)  # From https://stackoverflow.com/questions/18195758/set-matplotlib-colorbar-size-to-match-graph
     cb.ax.tick_params(labelsize=20)
     cb.set_label('Elevation (m)', size=24)
-    ax.set_xlabel(None)
-    ax.set_ylabel(None)
-    ax.tick_params(axis='both', which='major', labelsize=14)
+    xticks = np.arange(5.5, 7.5, 0.5)
+    yticks = np.arange(44.5, 46.5, 0.5)
+    ax.set_xticks(xticks, crs=ccrs.PlateCarree())
+    ax.set_yticks(yticks, crs=ccrs.PlateCarree())
+    lon_formatter = LongitudeFormatter(zero_direction_label=True)
+    lat_formatter = LatitudeFormatter()
+    ax.xaxis.set_major_formatter(lon_formatter)
+    ax.yaxis.set_major_formatter(lat_formatter)
+    ax.tick_params(axis='both', which='major', labelsize=18)
+    ax.set_xlabel('longitude', fontsize=22)
+    ax.set_ylabel('latitude', fontsize=22)
     fig.savefig(filename, format='pdf')
 
     # Plot elevation difference
