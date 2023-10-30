@@ -470,7 +470,7 @@ def plot_massif(mydf, massif=None, subdomain=None, error=0.2, threshold=None, **
     tmp['biais'] = tmp['rr_radar'] - tmp['rr_ref']
     mydf['diff'] = np.square(mydf[f'rr_{kw["product"]}'] - mydf['rr_ref'])
     tmp['nb_days'] = mydf.groupby(['num_poste']).date.count()
-    if args.threshold is None:
+    if threshold is not None:
         #tmp = tmp[tmp['nb_days']>100]
         tmp = tmp[tmp['nb_days']>30]
     else:
@@ -795,110 +795,115 @@ def error_vs_RR(df, datebegin, dateend, threshold=None, **kw):
     else:
         fig.savefig(f'ANTILOPE_rmsd_vs_ANTILOPE_RR_{datebegin.strftime("%Y%m%d")}_{dateend.strftime("%Y%m%d")}.pdf', format='pdf', bbox_inches='tight')
 
-    fig, ax = plt.subplots()
-    outname = 'Histogram_rr_antilope=0'
-    #count, bins = np.histogram(antilope0['error'][antilope0['rr_ref']>0], range=(0,5), bins=20)
-    antilope0['date'] = pd.to_datetime(antilope0['date'])
-    # Pour regarder quand les obs nivometeo sont réellement de 6h à 6h
-    #antilope0 = antilope0[antilope0['date'].dt.month==4]
-    #outname = '_'.join([outname, 'april'])
-    freq_0 = len(antilope0[antilope0['rr_ref']==0])/len(antilope0)
-    len_0 = len(antilope0[antilope0['rr_ref']==0])
-    tmp = antilope0[antilope0['rr_ref']>0]
-    # Pour regarder quand les obs nivometeo sont réellement de 6h à 6h
-    count, bins = np.histogram(tmp['rr_ref'], range=(0,8), bins=32)
-    ax.hist(bins[:-1], bins, weights=count/len(antilope0), label=f'freq of obs=0 : {freq_0:.3} ({len_0})')
-    #ax.hist(bins[:-1], bins, weights=count, label=f'freq of obs=0 : {freq_0:.3} ({len_0})')
-    ax.set_xticks(bins[0::2])
-    plt.xlabel('Nivométéo 24h précipitation (mm)', fontsize=12)
-    plt.ylabel('Frequency', fontsize=12)
-    plt.legend()
-    plt.tight_layout()
-    fig.savefig(f'{outname}.pdf', format='pdf')
+    if len(antilope0) >0:
+        fig, ax = plt.subplots()
+        outname = 'Histogram_rr_antilope=0'
+        #count, bins = np.histogram(antilope0['error'][antilope0['rr_ref']>0], range=(0,5), bins=20)
+        antilope0['date'] = pd.to_datetime(antilope0['date'])
+        # Pour regarder quand les obs nivometeo sont réellement de 6h à 6h
+        #antilope0 = antilope0[antilope0['date'].dt.month==4]
+        #outname = '_'.join([outname, 'april'])
+        freq_0 = len(antilope0[antilope0['rr_ref']==0])/len(antilope0)
+        len_0 = len(antilope0[antilope0['rr_ref']==0])
+        tmp = antilope0[antilope0['rr_ref']>0]
+        # Pour regarder quand les obs nivometeo sont réellement de 6h à 6h
+        count, bins = np.histogram(tmp['rr_ref'], range=(0,8), bins=32)
+        ax.hist(bins[:-1], bins, weights=count/len(antilope0), label=f'freq of obs=0 : {freq_0:.3} ({len_0})')
+        #ax.hist(bins[:-1], bins, weights=count, label=f'freq of obs=0 : {freq_0:.3} ({len_0})')
+        ax.set_xticks(bins[0::2])
+        plt.xlabel('Nivométéo 24h précipitation (mm)', fontsize=12)
+        plt.ylabel('Frequency', fontsize=12)
+        plt.legend()
+        plt.tight_layout()
+        fig.savefig(f'{outname}.pdf', format='pdf')
 
-    fig, ax = plt.subplots()
-    outname = 'Histogram_rr_ref=0'
-    seuil_min = 8
-    seuil_max = 12
-    #tmp = df[(df[f'rr_{kw["product"]}']>=seuil_min) & (df[f'rr_{kw["product"]}']<=seuil_max)]
-    nivometeo0 = df[df[f'rr_ref']==0]
-    nivometeo0['date'] = pd.to_datetime(reference['date'])
-    # Pour regarder quand les obs nivometeo sont réellement de 6h à 6h
-    #nivometeo0 = nivometeo0[nivometeo0['date'].dt.month==4]
-    #outname = '_'.join([outname, 'april'])
-    freq_0 = len(nivometeo0[nivometeo0[f'rr_{kw["product"]}']==0]) / len(nivometeo0)
-    nb_0 = len(nivometeo0[nivometeo0[f'rr_{kw["product"]}']==0])
-    tmp = nivometeo0[nivometeo0[f'rr_{kw["product"]}']>0]
-    #print(len(tmp[tmp.date>=datetime(2022, 3, 27).date()]))  # Nombre de cas après changement d'heure (==> précipitations observées de 6h à 6h)
-    #count, bins = np.histogram(tmp['rr_ref'][tmp['rr_ref']>0], range=(0,10), bins=20)
-    count, bins = np.histogram(tmp[f'rr_{kw["product"]}'], range=(0,8), bins=32)
-    #count, bins = np.histogram(tmp['rr_ref'], range=(0,20), bins=20)
-    bins = bins
-    #count = np.insert(count, 0, len(tmp[tmp['rr_ref']==0])) / len(tmp)
-    #bins = np.insert(bins, 0, -0.5)
-    ax.hist(bins[:-1], bins, weights=count/len(nivometeo0), label=f'freq of antilope=0 : {freq_0:.3} ({nb_0})')
-    #ax.hist(bins[:-1], bins, weights=count, label=f'freq of antilope=0 : {freq_0:.3} ({nb_0})')
-    ax.set_xticks(bins[0::2])
-    plt.xlabel('ANTILOPE 24h précipitation (mm)', fontsize=12)
-    plt.ylabel('Frequency', fontsize=12)
-    plt.legend()
-    plt.tight_layout()
-    fig.savefig(f'{outname}.pdf', format='pdf')
-
-    fig, ax = plt.subplots()
-    outname = 'Histogram_rr_antilope>0'
-    #count, bins = np.histogram(antilope0['error'][antilope0['rr_ref']>0], range=(0,5), bins=20)
     antilope0 = df[df[f'rr_{kw["product"]}']>0]
-    antilope0['date'] = pd.to_datetime(antilope0['date'])
-    # Pour regarder quand les obs nivometeo sont réellement de 6h à 6h
-    #antilope0 = antilope0[antilope0['date'].dt.month==4]
-    #outname = '_'.join([outname, 'april'])
-    len_0 = len(antilope0[antilope0['rr_ref']==0])
-    freq_0 = len_0 / len(antilope0) if len(antilope0)>0 else 0.
-    tmp = antilope0[antilope0['rr_ref']>0]
-    #tmp = antilope0
-    # Pour regarder quand les obs nivometeo sont réellement de 6h à 6h
-    count, bins = np.histogram(tmp['rr_ref'], range=(0,30), bins=15)
-    count = np.insert(count, 0, len_0)
-    bins = np.insert(bins, 0, -2)
-    ax.hist(bins[:-1], bins, weights=count/len(antilope0), label=f'freq of obs=0 : {freq_0:.3} ({len_0})')
-    #ax.hist(bins[:-1], bins, weights=count, label=f'freq of obs=0 : {freq_0:.3} ({len_0})')
-    ax.set_xticks(bins[0::2])
-    plt.xlabel('Nivométéo 24h précipitation (mm)', fontsize=12)
-    plt.ylabel('Frequency', fontsize=12)
-    plt.legend()
-    plt.tight_layout()
-    fig.savefig(f'{outname}.pdf', format='pdf')
+    if len(antilope0) >0:
+        fig, ax = plt.subplots()
+        outname = 'Histogram_rr_antilope>0'
+        #count, bins = np.histogram(antilope0['error'][antilope0['rr_ref']>0], range=(0,5), bins=20)
+        antilope0['date'] = pd.to_datetime(antilope0['date'])
+        # Pour regarder quand les obs nivometeo sont réellement de 6h à 6h
+        #antilope0 = antilope0[antilope0['date'].dt.month==4]
+        #outname = '_'.join([outname, 'april'])
+        len_0 = len(antilope0[antilope0['rr_ref']==0])
+        freq_0 = len_0 / len(antilope0) if len(antilope0)>0 else 0.
+        tmp = antilope0[antilope0['rr_ref']>0]
+        #tmp = antilope0
+        # Pour regarder quand les obs nivometeo sont réellement de 6h à 6h
+        count, bins = np.histogram(tmp['rr_ref'], range=(0,30), bins=15)
+        count = np.insert(count, 0, len_0)
+        bins = np.insert(bins, 0, -2)
+        ax.hist(bins[:-1], bins, weights=count/len(antilope0), label=f'freq of obs=0 : {freq_0:.3} ({len_0})')
+        #ax.hist(bins[:-1], bins, weights=count, label=f'freq of obs=0 : {freq_0:.3} ({len_0})')
+        ax.set_xticks(bins[0::2])
+        plt.xlabel('Nivométéo 24h précipitation (mm)', fontsize=12)
+        plt.ylabel('Frequency', fontsize=12)
+        plt.legend()
+        plt.tight_layout()
+        fig.savefig(f'{outname}.pdf', format='pdf')
 
-    fig, ax = plt.subplots()
-    outname = 'Histogram_rr_ref>0'
-    seuil_min = 8
-    seuil_max = 12
-    #tmp = df[(df[f'rr_{kw["product"]}']>=seuil_min) & (df[f'rr_{kw["product"]}']<=seuil_max)]
+    nivometeo0 = df[df[f'rr_ref']==0]
+    if len(nivometeo0) > 0:
+        fig, ax = plt.subplots()
+        outname = 'Histogram_rr_ref=0'
+        seuil_min = 8
+        seuil_max = 12
+        #tmp = df[(df[f'rr_{kw["product"]}']>=seuil_min) & (df[f'rr_{kw["product"]}']<=seuil_max)]
+        nivometeo0['date'] = pd.to_datetime(reference['date'])
+        # Pour regarder quand les obs nivometeo sont réellement de 6h à 6h
+        #nivometeo0 = nivometeo0[nivometeo0['date'].dt.month==4]
+        #outname = '_'.join([outname, 'april'])
+        freq_0 = len(nivometeo0[nivometeo0[f'rr_{kw["product"]}']==0]) / len(nivometeo0)
+        nb_0 = len(nivometeo0[nivometeo0[f'rr_{kw["product"]}']==0])
+        tmp = nivometeo0[nivometeo0[f'rr_{kw["product"]}']>0]
+        #print(len(tmp[tmp.date>=datetime(2022, 3, 27).date()]))  # Nombre de cas après changement d'heure (==> précipitations observées de 6h à 6h)
+        #count, bins = np.histogram(tmp['rr_ref'][tmp['rr_ref']>0], range=(0,10), bins=20)
+        count, bins = np.histogram(tmp[f'rr_{kw["product"]}'], range=(0,8), bins=32)
+        #count, bins = np.histogram(tmp['rr_ref'], range=(0,20), bins=20)
+        bins = bins
+        #count = np.insert(count, 0, len(tmp[tmp['rr_ref']==0])) / len(tmp)
+        #bins = np.insert(bins, 0, -0.5)
+        ax.hist(bins[:-1], bins, weights=count/len(nivometeo0), label=f'freq of antilope=0 : {freq_0:.3} ({nb_0})')
+        #ax.hist(bins[:-1], bins, weights=count, label=f'freq of antilope=0 : {freq_0:.3} ({nb_0})')
+        ax.set_xticks(bins[0::2])
+        plt.xlabel('ANTILOPE 24h précipitation (mm)', fontsize=12)
+        plt.ylabel('Frequency', fontsize=12)
+        plt.legend()
+        plt.tight_layout()
+        fig.savefig(f'{outname}.pdf', format='pdf')
+
+
     nivometeo0 = df[df[f'rr_ref']>0]
-    nivometeo0['date'] = pd.to_datetime(reference['date'])
-    # Pour regarder quand les obs nivometeo sont réellement de 6h à 6h
-    #nivometeo0 = nivometeo0[nivometeo0['date'].dt.month==4]
-    #outname = '_'.join([outname, 'april'])
-    nb_0 = len(nivometeo0[nivometeo0[f'rr_{kw["product"]}']==0])
-    freq_0 = nb_0 / len(nivometeo0)
-    tmp = nivometeo0[nivometeo0[f'rr_{kw["product"]}']>0]
-    #print(len(tmp[tmp.date>=datetime(2022, 3, 27).date()]))  # Nombre de cas après changement d'heure (==> précipitations observées de 6h à 6h)
-    #count, bins = np.histogram(tmp['rr_ref'][tmp['rr_ref']>0], range=(0,10), bins=20)
-    count, bins = np.histogram(tmp[f'rr_{kw["product"]}'], range=(0,30), bins=15)
-    count = np.insert(count, 0, nb_0)
-    bins = np.insert(bins, 0, -2)
-    #count, bins = np.histogram(tmp['rr_ref'], range=(0,20), bins=20)
-    #count = np.insert(count, 0, len(tmp[tmp['rr_ref']==0])) / len(tmp)
-    #bins = np.insert(bins, 0, -0.5)
-    ax.hist(bins[:-1], bins, weights=count/len(nivometeo0), label=f'freq of antilope=0 : {freq_0:.3} ({nb_0})')
-    #ax.hist(bins[:-1], bins, weights=count, label=f'freq of antilope=0 : {freq_0:.3} ({nb_0})')
-    ax.set_xticks(bins[0::2])
-    plt.xlabel('ANTILOPE 24h précipitation (mm)', fontsize=12)
-    plt.ylabel('Frequency', fontsize=12)
-    plt.legend()
-    plt.tight_layout()
-    fig.savefig(f'{outname}.pdf', format='pdf')
+    if len(nivometeo0) > 0:
+        fig, ax = plt.subplots()
+        outname = 'Histogram_rr_ref>0'
+        seuil_min = 8
+        seuil_max = 12
+        #tmp = df[(df[f'rr_{kw["product"]}']>=seuil_min) & (df[f'rr_{kw["product"]}']<=seuil_max)]
+        nivometeo0['date'] = pd.to_datetime(reference['date'])
+        # Pour regarder quand les obs nivometeo sont réellement de 6h à 6h
+        #nivometeo0 = nivometeo0[nivometeo0['date'].dt.month==4]
+        #outname = '_'.join([outname, 'april'])
+        nb_0 = len(nivometeo0[nivometeo0[f'rr_{kw["product"]}']==0])
+        freq_0 = nb_0 / len(nivometeo0)
+        tmp = nivometeo0[nivometeo0[f'rr_{kw["product"]}']>0]
+        #print(len(tmp[tmp.date>=datetime(2022, 3, 27).date()]))  # Nombre de cas après changement d'heure (==> précipitations observées de 6h à 6h)
+        #count, bins = np.histogram(tmp['rr_ref'][tmp['rr_ref']>0], range=(0,10), bins=20)
+        count, bins = np.histogram(tmp[f'rr_{kw["product"]}'], range=(0,30), bins=15)
+        count = np.insert(count, 0, nb_0)
+        bins = np.insert(bins, 0, -2)
+        #count, bins = np.histogram(tmp['rr_ref'], range=(0,20), bins=20)
+        #count = np.insert(count, 0, len(tmp[tmp['rr_ref']==0])) / len(tmp)
+        #bins = np.insert(bins, 0, -0.5)
+        ax.hist(bins[:-1], bins, weights=count/len(nivometeo0), label=f'freq of antilope=0 : {freq_0:.3} ({nb_0})')
+        #ax.hist(bins[:-1], bins, weights=count, label=f'freq of antilope=0 : {freq_0:.3} ({nb_0})')
+        ax.set_xticks(bins[0::2])
+        plt.xlabel('ANTILOPE 24h précipitation (mm)', fontsize=12)
+        plt.ylabel('Frequency', fontsize=12)
+        plt.legend()
+        plt.tight_layout()
+        fig.savefig(f'{outname}.pdf', format='pdf')
 
 def read_obs_clim():
 
@@ -1030,14 +1035,11 @@ if __name__ == "__main__":
         lpn = pd.read_csv('LPN_nivometeo.csv', sep=';', parse_dates=['H_NIVO.DAT'], dtype={'H_NIVO.NUM_POSTE':int, 'H_NIVO.ALTI_LPNX':int})
         lpn.rename(columns={'H_NIVO.ALTI_LPNX':'LPNX', 'H_NIVO.NUM_POSTE':'num_poste'}, inplace=True)
         lpn = lpn[lpn['LPNX']>0]  # consider 0 values as missing observation
-        lpn['date'] = lpn['H_NIVO.DAT'] + pd.Timedelta("12h")  # La LPN observée à 12:00 D concerne les précipitations entre D (6:00) et D+1 (6:00) que l'on veut identifier
+        #lpn['date'] = lpn['H_NIVO.DAT'] + pd.Timedelta("12h")  # La LPN observée à 12:00 D concerne les précipitations entre D (6:00) et D+1 (6:00) que l'on veut identifier
+        lpn = lpn.rename(columns={'H_NIVO.DAT':'date'})
         # par la date ym(D+1), on décale donc de 12h pour que la date de l'obs passe à D+1
-        lpn.index = lpn['date']
-        lpn = lpn.groupby(['num_poste']).resample('1D').max()  # When 2 observation (at 6:00 and 12:00) are available, set the daily LPN as the maximum
-        lpn = lpn[~np.isnan(lpn['LPNX'])]['LPNX'].reset_index()
-        lpn.date = lpn.date.dt.date
-        import pdb
-        pdb.set_trace()
+        lpn = lpn.set_index("date").at_time('6:00').reset_index()
+        lpn = lpn[~np.isnan(lpn['LPNX'])]
         df = pd.merge(df, lpn, on=["date", "num_poste"])
         # Pour ne prendre en compte que les situations de neige :
         df = df[df['elevation']>df['LPNX']]
