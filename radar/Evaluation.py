@@ -78,7 +78,7 @@ def parse_command_line():
     parser.add_argument('-m', '--massif', help='PLot for a specific massif', default=None, type=int)
     parser.add_argument('-s', '--subdomain', default=None, help='PLot for a specific subdomain, values=[NWA, NEA, CA, SA, WP, CP, EP]')
     parser.add_argument('-t', '--threshold', default=None, help='Threshold of precipitation (mm) to apply in the data to consider', type=int)
-    parser.add_argument('-p', '--product', default='antilopejp1', help='Product to deal with', choices=['antilope', 'antilopejp1', 'panthere', 'kriging', 'arome'])
+    parser.add_argument('-p', '--product', default='antilopejp1', help='Product to deal with', choices=['antilope', 'antilopejp1', 'panthere', 'kriging', 'arome', 'pearome'])
     parser.add_argument('-l', '--lpn', action='store_true', help='Take into account the rain-snow limit')
 
     args = parser.parse_args()
@@ -462,6 +462,12 @@ def plot_massif(mydf, massif=None, subdomain=None, error=0.2, threshold=None, **
     mydf = mydf.loc[~mydf[f'rr_{kw["product"]}'].isna()].loc[~mydf['rr_ref'].isna()]
     mydf['error'] = (mydf[f'rr_{kw["product"]}'] >= mydf['rr_ref'] * (1-error)) & (mydf[f'rr_{kw["product"]}'] <= mydf['rr_ref'] * (1+error))
     tmp = pd.DataFrame()
+    tmp['nb_days'] = mydf.groupby(['num_poste']).date.count()
+    if threshold is not None:
+        #tmp = tmp[tmp['nb_days']>100]
+        tmp = tmp[tmp['nb_days']>30]
+    else:
+        tmp = tmp[tmp['nb_days']>10]
     tmp['lons'] = mydf.groupby(['num_poste']).lon.mean()
     tmp['lats'] = mydf.groupby(['num_poste']).lat.mean()
     tmp['rr_radar'] = mydf.groupby(['num_poste'])[f'rr_{kw["product"]}'].mean()
@@ -470,11 +476,6 @@ def plot_massif(mydf, massif=None, subdomain=None, error=0.2, threshold=None, **
     tmp['biais'] = tmp['rr_radar'] - tmp['rr_ref']
     mydf['diff'] = np.square(mydf[f'rr_{kw["product"]}'] - mydf['rr_ref'])
     tmp['nb_days'] = mydf.groupby(['num_poste']).date.count()
-    if threshold is not None:
-        #tmp = tmp[tmp['nb_days']>100]
-        tmp = tmp[tmp['nb_days']>30]
-    else:
-        tmp = tmp[tmp['nb_days']>10]
     #tmp = tmp[tmp['rr_ref']>0]
     tmp['rmse']  = np.sqrt(mydf.groupby(['num_poste'])["diff"].mean())
     tmp['ratio'] = tmp['rr_radar'] / tmp['rr_ref']
@@ -958,6 +959,33 @@ def read_nivometeo():
 
     return nivometeo
 
+def read_pearome():
+    filename = 'RAW_pearome_alp_daily.nc'
+    if not os.path.exists(os.path.join(datadir, filename)):
+        #filenames = [os.path.join(datadir, f'aspearome_{mb:03d}_2021073106_2022070106_GrandesRousses_daily.nc') for mb in range(1,17)]
+        filenames = [os.path.join(datadir, f'aspearome_{mb:03d}_2021102806_2022060206_alp_hourly.nc') for mb in range(1,17)]
+        #raw = xr.open_mfdataset(filenames, combine='nested', concat_dim='member').compute().clip(0)
+        raw = xr.open_mfdataset(filenames, combine='nested', concat_dim='member', chunks={'time': 24})  # Setting chunks is critical (read the doc !)
+        raw['member']=np.arange(1,17)
+        # Convert hourly precipitation into 24h precipitation between 6h J-1 and 6h J
+        # Problem : the xarray tools to do that allows only accumulations between
+        # 0h and 23h.
+        # solution : shift time serie by 7h, compute 24h accumulations and
+        # shift back !
+        raw['time'] = raw.time-np.timedelta64(7, 'h')
+        raw = raw.resample(time='D').sum(dim='time')  # !!! VERY SLOW !!!
+        raw['time'] = raw.time+np.timedelta64(30, 'h')
+        #raw = raw.compute().clip(0)  # TODO : try without computing (seems towork !)
+        raw = raw.clip(0)  # TODO : try without computing (seems towork !)
+        raw = raw.transpose('lat', 'lon', 'time', 'member')  # transpose data to put dimension in the same order as assimilated fields
+        raw = raw.compute()
+        raw.to_netcdf(os.path.join(datadir, filename))
+    else:
+        raw = xr.open_dataset(os.path.join(datadir, filename))
+    #raw = raw.loc[{'time':dates}]
+
+    return raw
+
 if __name__ == "__main__":
     args = parse_command_line()
 
@@ -985,7 +1013,7 @@ if __name__ == "__main__":
         RADAR_data = 'Kriging_{0:s}_{1:s}_{2:s}.csv'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'), 'exponential')
     elif args.product == 'arome':
         RADAR_data = 'arome_{0:s}_{1:s}_GrandesRousses.nc'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))
-    else:
+    elif args.product == 'panthere':
         RADAR_data = 'PANTHERE_{0:s}_{1:s}.csv'.format(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))
 
 
@@ -997,6 +1025,11 @@ if __name__ == "__main__":
         xrdata = xr.open_dataset(os.path.join(datadir, RADAR_data))
         antilope = xrdata.to_dataframe().reset_index().rename(columns={'time':'date'})
         # TODO : Extraire les valeurs de la PEAROME correspondant aux point d'obs nivometeo
+    elif args.product == 'pearome':
+        xrdata = read_pearome()
+        xrdata = xrdata.sel(lat=ref_lat, lon=ref_lon, method='nearest')
+        xrdata = xrdata.mean(dim='member')
+        antilope = xrdata.to_dataframe().reset_index().rename(columns={'time':'date', 'rr':f'rr_{args.product}'})
     else:
         if RADAR_data.split('.')[-1] == 'csv':
             antilope = pd.read_csv(RADAR_data, sep=';', parse_dates=['date'], dtype={f'rr_{args.product}': float, 'num_poste': int}, na_values=['--'])
@@ -1026,9 +1059,8 @@ if __name__ == "__main__":
     ###############################################
     # TODO : merge DF
     if 'lat' in antilope.keys().values:
-        df = pd.merge(antilope, reference, on=["date", "num_poste", "lat", "lon"])
-    else:
-        df = pd.merge(antilope, reference, on=["date", "num_poste"])
+        antilope = antilope.drop(columns={"lat", "lon"})
+    df = pd.merge(antilope, reference, on=["date", "num_poste"])
     df = df.rename(columns={'nom':'name'})
     if args.lpn:
         #lpn = pd.read_csv('LPN_nivometeo.csv', sep=';', parse_dates=['H_NIVO.DAT'], dtype={'H.num_poste':int, 'H_NIVO.ALTI_LPNX':int}, index_col=['H_NIVO.DAT'])
