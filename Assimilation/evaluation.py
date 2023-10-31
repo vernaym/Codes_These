@@ -311,7 +311,8 @@ xpid_label = dict(
         #antilopec     = 'De-biasing + WMA',
         antilopec     = 'Pre-processed ANTILOPE',
         #raw           = 'Raw PE-AROME ensemble',
-        raw           = 'PE-AROME',
+        #raw           = 'PE-AROME',
+        raw           = 'PEAROME',
         GD0           = 'Global daily analysis',
         LD0           = 'Daily analysis with PF',
         LD0G          = 'Daily analysis with gamma likelyhood and no option',
@@ -421,18 +422,18 @@ xpid_label = dict(
     )
 
 colors = dict(
-    antilope  = 'tab:purple',
-    raw       = 'Grey',
-    antilopec = 'tab:orange',
+    antilope  = 'tan',
+    raw       = 'darkorange',
+    antilopec = 'skyblue',
     #RS21      = 'red',
-    RS21      = 'r',
+    RS21      = 'darkblue',
     RS23      = 'k',
     RS24      = 'maroon',
     RS25      = 'green',
     #PF31      = 'green',
-    PF31      = 'g',
+    PF31      = 'green',
     #KD35      = 'blue',
-    KD35      = 'b',
+    KD35      = 'red',
 )
 
 def nearest(array, value):
@@ -490,17 +491,20 @@ class Evaluation(object):
             mean = simu
         else:
             mean = simu.mean(axis=1)
-        mask = np.where((mean>1) & (obs>1))
+        #mask = np.where((mean>1) & (obs>1))
         #mask = np.where((mean>0) & (obs>0))
-        simu = simu[mask]
-        obs = obs[mask]
+        #simu = simu[mask]
+        #obs = obs[mask]
 
         if np.shape(simu) == np.shape(obs):  # "Simulation" déterministe
-            ratio = simu / obs
-        else:  # Simulation s'ensmble
-            ratio =  simu.mean(axis=1)/ obs
+            #ratio = simu / obs
+            ratio = np.sum(simu) / np.sum(obs)
+        else:  # Simulation d'ensmble
+            #ratio =  simu.mean(axis=1) / obs
+            ratio =  np.sum(simu.mean(axis=1)) / np.sum(obs)
+        #ratio = np.nanmean(ratio)
 
-        return np.nanmean(ratio)
+        return ratio
 
     def error_frequency(self, simu, obs, treshold=0.2, *args, **kw):
 
@@ -1323,19 +1327,16 @@ class Evaluation(object):
                             # Plot station numbers :
                             #axis.text(pos, liste_score[idx], str(int(poste)), fontsize=6)
                             # Plot only horizontal lines :
-                            axis.plot(pos, liste_score[idx], linestyle='', marker='_', markersize='20', color='k')
+                            #axis.plot(pos, liste_score[idx], linestyle='', marker='_', markersize='20', color='k')
+                            pass
                     else:
                         print(f'{score} of product {product} not available for poste {str(int(poste))}')
 
             for product in products:
-                x = self.scores.loc[{'score':score}][product].data
-                add_num_poste(ax, pos, x)
-                print(score, product)
-                labels.append(self.add_label(ax.violinplot(x[~np.isnan(x)], showmeans=True, positions=[pos]), xpid_label[product], color=colors[product]))
                 if score == 'bias':
-                    ax.axhline(color='k')
+                    ax.axhline(color='grey', alpha=0.5)
                 if score == 'ratio':
-                    ax.axhline(1, color='k')
+                    ax.axhline(1, color='grey', alpha=0.2)
                 if score.startswith('brier') and product not in ['antilope', 'antiloped', 'wma', 'antilopec', 'raw']:
                     pass
 #                    ref = self.scores.loc[{'score':score}]['raw'].data
@@ -1344,6 +1345,9 @@ class Evaluation(object):
 #                    labels2.append(self.add_label(ax2.violinplot(bss[~np.isnan(bss)], showmeans=True, positions=[pos2]), xpid_label[product]))
 #                    ax2.axhline(color='k')
 #                    pos2 += 1
+                x = self.scores.loc[{'score':score}][product].data
+                add_num_poste(ax, pos, x)
+                labels.append(self.add_label(ax.violinplot(x[~np.isnan(x)], showmeans=True, positions=[pos]), xpid_label[product], color=colors[product]))
                 if len(products) <= 2:
                     pos +=0.5
                 else:
@@ -1356,11 +1360,21 @@ class Evaluation(object):
                 #ax2.set_xticklabels([''] + products[2:], fontsize=28)
                 #ax2.set_xticks(range(len(products)))
                 #ax2.legend(*zip(*labels2), fontsize=18)
+            elif score == 'ratio':
+                ax.set_ylabel(f'{score}', fontsize=16)
+                ax.set_ylim(0, 2)
             else:
                 ax.set_ylabel(f'{score} (mm)', fontsize=16)
 
             #ax.set_xticklabels([''] + products, fontsize=28)
             #ax.set_xticks(range(len(products)+2))
+            # Remove xaxis labels
+            ax.tick_params(
+                axis='x',          # changes apply to the x-axis
+                which='both',      # both major and minor ticks are affected
+                bottom=False,      # ticks along the bottom edge are off
+                top=False,         # ticks along the top edge are off
+                labelbottom=False) # labels along the bottom edge are off
             ax.yaxis.set_tick_params(labelsize=16)
             ax.legend(*zip(*labels), fontsize=16)
 
@@ -1384,7 +1398,7 @@ class Evaluation(object):
             brier = np.array([])
             for threshold in self.thresholds:
                 brier = np.append(brier, np.mean(self.scores.loc[{'score':f'brier_{int(threshold*10)}'}][product].data))
-            ax.plot(self.thresholds, brier, label=xpid_label[product], linewidth=2, color=colors[product])
+            ax.plot(self.thresholds, brier, label=xpid_label[product], linewidth=2, alpha=0.7, color=colors[product])
             #ax.semilogx(self.thresholds, brier, label=xpid_label[product], linewidth=3)
         ax.legend(fontsize=18)
         ax.set_ylabel('Brier Score', fontsize=16)
@@ -1407,12 +1421,9 @@ class Evaluation(object):
             violin['cmaxes'].set_color(color)
             violin['cmins'].set_color(color)
             violin['cbars'].set_color(color)
-            #for item in violin.keys():
-            #    item.set_color(color)
-            #violin["bodies"][0].set_facecolors(color)
-            #violin["bodies"][0].set_facecolor(color)
-            #violin["bodies"][0].set_edgecolors(color)
-            #violin["bodies"][0].set_edgecolor(color)
+            for pc in violin['bodies']:
+                pc.set_facecolor(color)
+                pc.set_edgecolor(color)
 
         return (mpatches.Patch(color=color), label)
 
