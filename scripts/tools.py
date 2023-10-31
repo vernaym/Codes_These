@@ -75,17 +75,25 @@ def plot_scatter(reference, model, xlabel, ylabel, savename, savedir, color=None
         np.min([ax.get_xlim(), ax.get_ylim()]),  # min of both axes
         np.max([ax.get_xlim(), ax.get_ylim()]),  # max of both axes
     ]
+    lims = [0, 45]
+
+    # Add x/y mean lines for article figures
+    xmean = np.mean(x)
+    ymean = np.mean(y)
+    ax.plot([xmean, xmean], lims, color='red', linestyle='--', linewidth=0.5)
+    ax.plot(lims, [ymean, ymean], color='red', linestyle='--', linewidth=0.5)
 
     # Plot bissectrice and adjuste axes limits
     ax.plot(lims, lims, 'k-', alpha=0.75, zorder=0)
-    ax.plot(lims, [1, 1], color='k', linestyle='--', linewidth=0.5)
-    ax.plot([1, 1], lims, color='k', linestyle='--', linewidth=0.5)
+    #ax.plot(lims, [1, 1], color='k', linestyle='--', linewidth=0.5)
+    #ax.plot([1, 1], lims, color='k', linestyle='--', linewidth=0.5)
     ax.set_aspect('equal')
     ax.set_xlim(lims)
     ax.set_ylim(lims)
     ax.set_ylabel(ylabel)
     ax.set_xlabel(xlabel)
-    ax.legend(fontsize=10)
-    plt.tight_layout()
+    #ax.legend(fontsize=10)
+    fig.tight_layout()
+    fig.subplots_adjust(left=0.005, top=0.98, right=0.99, bottom=0.1)
     fig.savefig(os.path.join(savedir, savename), format='pdf')
     plt.close(fig)

@@ -22,16 +22,13 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-print('USAGE : evaluation_produit_existants.py [treshold]')
+print('USAGE : evaluation_produit_existants.py [onlysnow]')
 
 savedir = '/home/vernaym/These/figures/evaluation/produits_existants'
 
-suffix = ''
-if len(sys.argv) > 1:
-    suffix = f'_{sys.argv[1]}'
-
-subdir = 'onlysnow'
 subdir = ''
+if len(sys.argv) > 1:
+    subdir = sys.argv[1]
 
 fig, axes = plt.subplots(1, 2, figsize=(12,6))
 for i,threshold in enumerate([0, 10]):
@@ -52,8 +49,8 @@ for i,threshold in enumerate([0, 10]):
 
     filename = os.path.join('/home/vernaym/workdir/evaluation_ANTILOPE/krigeage_pluvios_antilope/krigeage_sans_obs_clim', subdir, f'scores_2018120106_2019043006_alpes{suffix}.csv')
     krigeage = pd.read_csv(filename, sep=';')
-    #labels.append(scores.add_label(ax.violinplot(krigeage.freq_error, positions=[2], showmeans=True), 'KRIGEAGE'))
-    labels.append(scores.add_label(ax.violinplot(krigeage.rmse, positions=[2], showmeans=True), 'KRIGEAGE'))
+    #labels.append(scores.add_label(ax.violinplot(krigeage.freq_error, positions=[2], showmeans=True), 'KRIGING'))
+    labels.append(scores.add_label(ax.violinplot(krigeage.rmse, positions=[2], showmeans=True), 'KRIGING'))
 
     filename = os.path.join('/home/vernaym/workdir/evaluation_ANTILOPE/ANTILOPEQ/2018-2019', subdir, f'scores_2018110106_2019043006_alpes{suffix}.csv')
     antilope = pd.read_csv(filename, sep=';')
@@ -69,7 +66,10 @@ for i,threshold in enumerate([0, 10]):
         ax.legend(*zip(*labels), fontsize=10, loc='upper left')
         #ax.set_ylabel('Frequency of error below 20%')
         ax.set_ylabel('Root mean square error (mm)')
-        ax.set_title('All precipitation events')
+        if subdir == 'onlysnow':
+            ax.set_title('All solid precipitation events')
+        else:
+            ax.set_title('All precipitation events')
     else:
         # Remove y axislabel
         ax.tick_params(
@@ -78,7 +78,10 @@ for i,threshold in enumerate([0, 10]):
             left=False,      # ticks along the bottom edge are off
             right=False,         # ticks along the top edge are off
             labelleft=False) # labels along the bottom edge are off
-        ax.set_title('Precipitation events above 10mm / 24h')
+        if subdir == 'onlysnow':
+            ax.set_title('Solid precipitation events above 10mm / 24h')
+        else:
+            ax.set_title('Precipitation events above 10mm / 24h')
 
     ax.set_ylim(bottom=0, top=50)
     # Remove xaxis labels
@@ -91,5 +94,5 @@ for i,threshold in enumerate([0, 10]):
 
 plt.tight_layout()
 #fig.savefig(os.path.join(savedir, f"freq_error{suffix}{subdir}.pdf"), format='pdf')
-fig.savefig(os.path.join(savedir, f"RMSE{suffix}{subdir}.pdf"), format='pdf')
+fig.savefig(os.path.join(savedir, f"RMSE{subdir}.pdf"), format='pdf')
 plt.close(fig)

@@ -273,7 +273,7 @@ algo = dict(
         #RS24          = 'RandomSampling/XP24/Random_Sampling_2021120106_2022043006_daily_alp.nc',  # commit 
         #RS25          = 'RandomSampling/XP25/Random_Sampling_2021120106_2022043006_daily_alp.nc',  # commit 
         ################################################################################################
-        # PHD committee :
+        # PHD committeei / article :
         RS21          = 'RandomSampling/XP21/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         PF31          = 'XP31/Assimilation_locale_2021120106_2022050106_daily_alp_mask9_debiasing3.nc',
         KD35          = 'EnsembleKalmanFilter/XP35/EnKF_2021120106_2022050106_daily_alp.nc',
