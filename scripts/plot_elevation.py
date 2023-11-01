@@ -21,6 +21,8 @@ from cartopy.mpl.ticker import LongitudeFormatter, LatitudeFormatter
 import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
+import matplotlib.patches as patches
+from matplotlib_scalebar.scalebar import ScaleBar
 
 from osgeo import gdal
 
@@ -85,8 +87,8 @@ landmarks = {
         #"Alpe d'Huez" : dict(lon=6.070, lat=45.092, alt=1800, marker='o'),
         #"Les 2 Alpes" : dict(lon=6.127, lat=45.013, alt=1800, marker='o'),
         #"Lautaret"    : dict(lon=6.408, lat=45.038, alt=2058, marker='X'),
-        #"La Meije"    : dict(lon=6.311, lat=45.008, alt=3500, marker='^'),  # real alt = 3984
-        #"Pic Blanc"   : dict(lon=6.131, lat=45.128, alt=3000, marker='^'),  # real alt = 3333
+        "La Meije"    : dict(lon=6.311, lat=45.008, alt=3500, marker='^'),  # real alt = 3984
+        "Pic Blanc"   : dict(lon=6.131, lat=45.128, alt=3000, marker='^'),  # real alt = 3333
         "Mont-Blanc"  : dict(lon=6.87, lat=45.84, alt=4807, marker='^'),
     }
 
@@ -115,8 +117,26 @@ def proj_mnt(mnt):
 def add_landmarks(ax):
     # Add landmarks
     for landmark, infos in landmarks.items():
-        ax.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='white', markersize=24, transform=ccrs.PlateCarree())
-        ax.annotate(landmark, (infos['lon']-0.04, infos['lat']-0.08), color='k', weight='bold', fontsize=24, transform=ccrs.PlateCarree())
+        ax.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='white', markersize=20, transform=ccrs.PlateCarree())
+        if landmark == 'Pic Blanc':
+            ax.annotate(landmark, (infos['lon']+0.03, infos['lat']-0.02), weight='bold', color='k', fontsize=22, transform=ccrs.PlateCarree())
+        else:
+            ax.annotate(landmark, (infos['lon']-0.1, infos['lat']-0.07), weight='bold', color='k', fontsize=22, transform=ccrs.PlateCarree())
+
+def add_rectangle(ax):
+    # Create a Rectangle patch
+    for domain in ['MontBlanc', 'GrandesRousses']:
+        x0 = domain_coords[domain]['lonmin']
+        y0 = domain_coords[domain]['latmin']
+        dx = domain_coords[domain]['lonmax'] - x0
+        dy = domain_coords[domain]['latmax'] - y0
+        if domain =='MontBlanc':
+            rect = patches.Rectangle((x0, y0), dx, dy, linewidth=4, edgecolor='k', facecolor='none', label='Mont-Blanc')  #  https://matplotlib.org/stable/api/_as_gen/matplotlib.patches.Rectangle.html
+        elif domain == 'GrandesRousses':
+            rect = patches.Rectangle((x0, y0), dx, dy, linewidth=4, edgecolor='r', facecolor='none', label='Grandes Rousses')  #  https://matplotlib.org/stable/api/_as_gen/matplotlib.patches.Rectangle.html
+
+        # Add the patch to the Axes
+        ax.add_patch(rect)
 
 def add_boundaries(ax):
     shapefile_name = os.path.join("/home/vernaym/QGIS/FondDeCarte/", "world-administrative-boundaries.shp")
@@ -124,7 +144,7 @@ def add_boundaries(ax):
     for shape in borders.shapeRecords():
         x = [i[0] for i in shape.shape.points[:]]
         y = [i[1] for i in shape.shape.points[:]]
-        plt.plot(x,y, color='k', transform=ccrs.PlateCarree())
+        plt.plot(x,y, color='k', linestyle=':', alpha=0.8, transform=ccrs.PlateCarree())
 
 def add_massifs(ax):
     massifs = shapefile.Reader("/home/vernaym/safran/ctes/shapefiles/massifs_safran.shp")
@@ -364,17 +384,34 @@ else:
     # Add optional features
     add_boundaries(ax)
     add_landmarks(ax)
+    add_rectangle(ax)
     add_radar_positions(ax)
     add_postes(ax, type_poste='automatic stations')
     add_postes(ax, type_poste='nivometeo stations')
 
     ax.set_frame_on(False)
-    ax.legend(fontsize=20, loc=2)  # loc=2 --> upper-left
+    # Add scalebar (https://stackoverflow.com/questions/39786714/how-to-insert-scale-bar-in-a-map-in-matplotlib)
+    scalebar = ScaleBar(
+            100000,  # 1 pixel = 1km
+            length_fraction=0.4,
+            location='upper left',
+            #frameon=False,  # Switch on/off scale background
+            box_alpha=0.8,  #Transparency of the scale background
+            border_pad = 1,  # Pad between the scale anbd the border of the plot
+            font_properties=dict(size=18),
+            scale_loc='top'
+        )
+    ax.add_artist(scalebar)
+
+    # Add colorbar
+    #ax.legend(fontsize=20, loc=2)  # loc=2 --> upper-left
+    ax.legend(fontsize=20, loc=(0.01, 0.83))  # loc=2 --> upper-left
     #plot_correlation(ax, mnt)  # To add correlation area
     # Force colorbar size
     cb = fig.colorbar(im, fraction=0.058, pad=0.04)  # From https://stackoverflow.com/questions/18195758/set-matplotlib-colorbar-size-to-match-graph
     cb.ax.tick_params(labelsize=20)
     cb.set_label('Elevation (m)', size=24)
+
     xticks = np.arange(5.5, 7.5, 0.5)
     yticks = np.arange(44.5, 46.5, 0.5)
     ax.set_xticks(xticks, crs=ccrs.PlateCarree())
