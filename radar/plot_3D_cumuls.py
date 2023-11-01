@@ -46,8 +46,8 @@ extract_dom = dict(
     lonmax = 6.490,
 )
 # Mont Blanc
-domain = 'MontBlanc'
-extract_dom = dict(lonmin=6.7, lonmax=6.95, latmin=45.75, latmax=46.0)
+#domain = 'MontBlanc'
+#extract_dom = dict(lonmin=6.7, lonmax=6.95, latmin=45.75, latmax=46.0)
 
 outProj = Proj(init='epsg:4326')
 inProj = Proj(init='epsg:2154')
@@ -64,6 +64,19 @@ if not os.path.isfile(filename):
 
 def rotate(angle):
     ax.view_init(azim=angle)
+
+def add_north_arrow(ax):
+
+  #py = 0.8 * ax.figure.bbox.height
+  #px = 0.05 * ax.figure.bbox.width
+  py = 45.2
+  px = 7.0
+
+  # Draw an arrow with a text "N" above it using annotation
+  ax.annotate("N", xy=(px, py), fontsize=16, xycoords="figure pixels")
+  ax.annotate("",  xy=(px+10,  py+10), xytext=(px+30, py+30), xycoords="figure pixels",
+          arrowprops=dict(arrowstyle="-|>", facecolor="black", linewidth=3))
+
 
 if 'PANTHERE' in filename:
 
@@ -163,9 +176,10 @@ else:
     colors = plt.cm.YlGnBu(norm(np.nan_to_num(radar.values)))
 
 fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
-#ax.view_init(elev=50., azim=135)  # POV NW
-ax.view_init(elev=50., azim=245)
+ax.view_init(elev=50., azim=135)  # POV NW
+#ax.view_init(elev=50., azim=245)
 surf = ax.plot_surface(X=X, Y=Y, Z=Z, linewidth=0, antialiased=False, facecolors=colors)
+add_north_arrow(ax)
 ax.xaxis.pane.fill = False
 ax.xaxis.pane.set_edgecolor('white')
 ax.yaxis.pane.fill = False
@@ -177,19 +191,19 @@ ax.set_xlabel('Longitude', labelpad=20)
 ax.set_ylabel('Latitude', labelpad=20)
 ax.set_zlabel('Elevation (m)')
 ax.set_zlim(0., np.max(Z))
-#ax.set_zlim(0., 3500.)
-ax.set_zlim(1000., 4800.)
+ax.set_zlim(0., 3500.)
+#ax.set_zlim(1000., 4800.)
 #fig.colorbar(surf, shrink=0.5, aspect=5)
 #fig.colorbar(colorbar=colors, shrink=0.5, aspect=5)
-fig.colorbar(cm.ScalarMappable(norm=norm, cmap=plt.cm.YlGnBu), ax=ax, shrink=0.75, aspect=8, label=f'{product} cumulated precipitation \n between {datebegin} and {dateend} (mm)')
+fig.colorbar(cm.ScalarMappable(norm=norm, cmap=plt.cm.YlGnBu), ax=ax, shrink=0.8, aspect=8, label=f'{product} accumulated precipitation \n between {datebegin} and {dateend} (mm)')
 #plt.show()
 
 # Static image
-#plt.tight_layout()
-#plt.savefig(f'{savedir}/CUMUL3D_{product}_{datebegin}_{dateend}_{domain}.pdf', format='pdf')
+plt.tight_layout()
+plt.savefig(f'{savedir}/CUMUL3D_{product}_{datebegin}_{dateend}_{domain}.pdf', format='pdf')
 
 # For an animation
-rot_animation = animation.FuncAnimation(fig, rotate, frames=np.arange(0,361,5),interval=100)
-rot_animation.save(f'{savedir}/CUMUL3D_{product}_{datebegin}_{dateend}.gif', dpi=100, writer='imagemagick')
+#rot_animation = animation.FuncAnimation(fig, rotate, frames=np.arange(0,361,5),interval=100)
+#rot_animation.save(f'{savedir}/CUMUL3D_{product}_{datebegin}_{dateend}.gif', dpi=100, writer='imagemagick')
 
 
