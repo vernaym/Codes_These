@@ -27,9 +27,9 @@ datadir = '/home/vernaym/These/DATA'
 savedir = '/home/vernaym/These/figures'
 
 #filename = sys.argv[1]
-filename = 'CUMUL_ANTILOPEH_alp_2021103000_2022060200.nc'
+#filename = 'CUMUL_ANTILOPEH_alp_2021103000_2022060200.nc'
 #filename = 'CUMUL_ANTILOPEQ_2021110106_2022043006_alp.nc'
-#filename = 'CUMUL_ANTILOPEQ_GrandesRousses_2021080106_2022070106.nc'
+filename = 'CUMUL_ANTILOPEQ_GrandesRousses_2021080106_2022070106.nc'
 
 datebegin = filename.split('.')[0].split('_')[-2]
 dateend   = filename.split('.')[0].split('_')[-1]
@@ -38,7 +38,7 @@ print(f'Dateend={dateend}')
 
 
 # Domaine des Grandes Rousses
-domain = "GrandesRousse"
+domain = "GrandesRousses"
 extract_dom = dict(
     latmax = 45.240,
     latmin = 44.990,
@@ -54,8 +54,18 @@ inProj = Proj(init='epsg:2154')
 
 #norm = plt.Normalize(vmin=300, vmax=1200)
 #norm = plt.Normalize(vmin=300, vmax=1300)
-norm = plt.Normalize(vmin=150, vmax=1000)
+#norm = plt.Normalize(vmin=150, vmax=1000)
+norm = plt.Normalize(vmin=500, vmax=1300)
 #norm = plt.Normalize()
+
+landmarks = {
+        #"Alpe d'Huez" : dict(lon=6.070, lat=45.092, alt=1800, marker='o'),
+        #"Les 2 Alpes" : dict(lon=6.127, lat=45.013, alt=1800, marker='o'),
+        #"Lautaret"    : dict(lon=6.408, lat=45.038, alt=2058, marker='X'),
+        "La Meije"    : dict(lon=6.311, lat=45.008, alt=3600, marker='^'),  # real alt = 3984
+        "Pic Blanc"   : dict(lon=6.131, lat=45.128, alt=3750, marker='^'),  # real alt = 3333
+        #"Mont-Blanc"  : dict(lon=6.87, lat=45.84, alt=4807, marker='^'),
+    }
 
 if not os.path.isfile(filename):
     print(f'WARNING : no such file or directory {filename}')
@@ -65,17 +75,64 @@ if not os.path.isfile(filename):
 def rotate(angle):
     ax.view_init(azim=angle)
 
+def add_landmarks(ax):
+    # Add landmarks
+    for landmark, infos in landmarks.items():
+        if landmark == "La Meije":
+            ax.text(infos['lon'], infos['lat'], infos['alt']+200, landmark, color='k', fontsize=14)
+        else:
+            # Bricolage !
+            ax.text(infos['lon']-0.05, infos['lat']-0.135, infos['alt'], landmark, color='k', fontsize=14)
+            ax.quiver(
+                infos['lon']-0.05, infos['lat']-0.135, infos['alt'],  # <-- starting point of vector
+                0, 0.16, 0,  # <-- directions of vector
+                color = 'k',
+                linewidths=1,
+                arrow_length_ratio = 0.1,
+                # BUG ? --> https://github.com/matplotlib/matplotlib/issues/11746
+            )
+
+
+
 def add_north_arrow(ax):
 
-  #py = 0.8 * ax.figure.bbox.height
-  #px = 0.05 * ax.figure.bbox.width
-  py = 45.2
-  px = 7.0
+    #py = 0.8 * ax.figure.bbox.height
+    #px = 0.05 * ax.figure.bbox.width
+    py = 45.25
+    px = 6.05
+    pz = 0
 
-  # Draw an arrow with a text "N" above it using annotation
-  ax.annotate("N", xy=(px, py), fontsize=16, xycoords="figure pixels")
-  ax.annotate("",  xy=(px+10,  py+10), xytext=(px+30, py+30), xycoords="figure pixels",
-          arrowprops=dict(arrowstyle="-|>", facecolor="black", linewidth=3))
+   # Draw an arrow with a text "N" above it using annotation
+    #ax.annotate("N", xy=(px, py), fontsize=16, xycoords="figure pixels")
+    #ax.annotate("",  xy=(px+10,  py+10), xytext=(px+30, py+30), xycoords="figure pixels",
+    #        arrowprops=dict(arrowstyle="-|>", facecolor="black", linewidth=3))
+
+    ax.text(px, py, pz, 'N')
+    ax.quiver(
+        px, py-0.06, pz,  # <-- starting point of vector
+        0, 0.04, 0,  # <-- directions of vector
+        color = 'k',
+        linewidths=3,
+        arrow_length_ratio = 0.1,
+        # BUG ? --> https://github.com/matplotlib/matplotlib/issues/11746
+    )
+    # Draw arrow head manually...
+    ax.quiver(
+        px, py-0.021, pz,  # <-- starting point of vector
+        0.02, -0.02, 0,  # <-- directions of vector
+        color = 'k',
+        linewidths=3,
+        arrow_length_ratio = 0.1,
+        # BUG ? --> https://github.com/matplotlib/matplotlib/issues/11746
+    )
+    ax.quiver(
+        px, py-0.021, pz,  # <-- starting point of vector
+        -0.02, -0.02, 0,  # <-- directions of vector
+        color = 'k',
+        linewidths=3,
+        arrow_length_ratio = 0.1,
+        # BUG ? --> https://github.com/matplotlib/matplotlib/issues/11746
+    )
 
 
 if 'PANTHERE' in filename:
@@ -175,11 +232,10 @@ else:
     #colors = plt.cm.coolwarm(norm(np.nan_to_num(radar.values)))
     colors = plt.cm.YlGnBu(norm(np.nan_to_num(radar.values)))
 
-fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
+fig, ax = plt.subplots(figsize=(8,6), subplot_kw={"projection": "3d"})
 ax.view_init(elev=50., azim=135)  # POV NW
 #ax.view_init(elev=50., azim=245)
 surf = ax.plot_surface(X=X, Y=Y, Z=Z, linewidth=0, antialiased=False, facecolors=colors)
-add_north_arrow(ax)
 ax.xaxis.pane.fill = False
 ax.xaxis.pane.set_edgecolor('white')
 ax.yaxis.pane.fill = False
@@ -195,11 +251,16 @@ ax.set_zlim(0., 3500.)
 #ax.set_zlim(1000., 4800.)
 #fig.colorbar(surf, shrink=0.5, aspect=5)
 #fig.colorbar(colorbar=colors, shrink=0.5, aspect=5)
-fig.colorbar(cm.ScalarMappable(norm=norm, cmap=plt.cm.YlGnBu), ax=ax, shrink=0.8, aspect=8, label=f'{product} accumulated precipitation \n between {datebegin} and {dateend} (mm)')
+fig.subplots_adjust(left=0.01, top=0.99, right=0.8, bottom=0.1)
+cax = plt.axes((0.85, 0.08, 0.04, 0.8))
+fig.colorbar(cm.ScalarMappable(norm=norm, cmap=plt.cm.YlGnBu), ax=ax, shrink=0.8, aspect=8, label=f'Total {product} precipitation\nbetween {datebegin} and {dateend} (mm)', cax=cax)
 #plt.show()
 
+add_north_arrow(ax)
+add_landmarks(ax)
+
 # Static image
-plt.tight_layout()
+#plt.tight_layout()
 plt.savefig(f'{savedir}/CUMUL3D_{product}_{datebegin}_{dateend}_{domain}.pdf', format='pdf')
 
 # For an animation
