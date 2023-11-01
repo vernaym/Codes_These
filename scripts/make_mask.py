@@ -273,11 +273,13 @@ def add_scores(scores, ax, mycmap=None, vmin=None, vmax=None):
         onlypostes = [poste for poste in info.index if poste not in blacklist]
         info = info[info.index.isin(onlypostes)]
         if mycmap is None:
-            sc = ax.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=350, edgecolors='black', linewidth=3, alpha=1)
+            #sc = ax.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=350, edgecolors='black', linewidth=3, alpha=1)
+            sc = ax.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=150, edgecolors='black', linewidth=3, alpha=1)
             #sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=50, edgecolors='black', alpha=0.5)
             #sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=300, edgecolors='black', alpha=1)
         else:
-            sc = ax.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, vmin=vmin, vmax=vmax, marker=marker, s=300, edgecolors='black', alpha=1)
+            #sc = ax.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, vmin=vmin, vmax=vmax, marker=marker, s=300, edgecolors='black', alpha=1)
+            sc = ax.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, vmin=vmin, vmax=vmax, marker=marker, s=150, edgecolors='black', alpha=1)
             #sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, vmin=vmin, vmax=vmax, marker=marker, s=50, edgecolors='black', alpha=0.5)
 
         #labels = [str(num_poste) for num_poste in info['num_poste']]
@@ -285,8 +287,9 @@ def add_scores(scores, ax, mycmap=None, vmin=None, vmax=None):
         # TODO : add score value
         #for idx, label in enumerate(labels):
         for idx in info.index:
-            txt = ax.text(info['lons'][idx]+0.02, info['lats'][idx]-0.01, np.around(info['ratio'][idx], decimals=2), fontsize=16)
+            #txt = ax.text(info['lons'][idx]+0.02, info['lats'][idx]-0.01, np.around(info['ratio'][idx], decimals=2), fontsize=16)
             #txt = plt.text(info['lons'][idx], info['lats'][idx], info['num_poste'][idx])
+            pass
     #cb = ax.colorbar(sc, label=legend)
     #ax.colorbar(sc, label=legend, shrink=shrink, anchor=anchor)
     return sc
@@ -510,6 +513,11 @@ def to_xarray(array, field, varname='rr'):
 
 def plot_and_save(field, name, cmap=plt.cm.Greys, vmin=None, vmax=None, scores=None, dom=None, dirsave=None):
 
+    latmin = np.min(field.lat.data)
+    latmax = np.max(field.lat.data)
+    lonmin = np.min(field.lon.data)
+    lonmax = np.max(field.lon.data)
+
     if dom is None:
         dom = domain
 
@@ -528,7 +536,8 @@ def plot_and_save(field, name, cmap=plt.cm.Greys, vmin=None, vmax=None, scores=N
         fig, ax = plt.subplots(figsize=(12,11))
     elif dom == 'alp':
         #fig, ax = plt.subplots(figsize=(16,16))
-        fig, ax = plt.subplots(figsize=(14,16))
+        fig, ax = plt.subplots(figsize=(14,16), subplot_kw=dict(projection=ccrs.PlateCarree()))
+        ax.set_extent([lonmin, lonmax, latmin, latmax], crs=ccrs.PlateCarree())
     elif dom == 'pyr':
         #fig, ax = plt.subplots(figsize=(16,16))
         fig, ax = plt.subplots(figsize=(33, 10))
@@ -568,17 +577,42 @@ def plot_field(fig, ax, field, cmap=None, vmin=None, vmax=None, scores=None, col
 
     add_radar_positions(ax)
     add_boundaries(ax)
-    add_massifs()
+    #add_massifs()
     #add_cities(latmin, latmax, lonmin, lonmax)
 
+    # Add elevation lines
+    mnt = xr.open_dataset('/home/vernaym/QGIS/MNT/DEM_ALPES_WGS84_250m_bilinear.nc')
+    if 'elevation' not in mnt.keys():
+        mnt = mnt.rename({'Band1':'elevation'})
+    mnt=mnt.where((mnt['lat']>=latmin) & (mnt['lat']<=latmax) & (mnt['lon']>=lonmin) & (mnt['lon']<=lonmax), drop=True)
+    lons, lats = np.meshgrid(mnt.lon.data, mnt.lat.data)
+    levels = [1000, 2250, 3500]
+    levels = [2000, 3000]
+    levels = [1500, 2500, 3500]
+    levels = [1200, 2400, 3600]
+    c = ax.contour(lons, lats, mnt.elevation.data, colors='dimgray', levels=levels, transform=ccrs.PlateCarree(), alpha=0.9)
+    ax.clabel(c, inline=1, fontsize=14)
+
     if colorbar:
-        plt.subplots_adjust(bottom=0.05, left=0.05, right=0.93, top=0.95)
-        cax = plt.axes((0.95, 0.05, 0.02, 0.9))
+        plt.subplots_adjust(bottom=0.05, left=0.1, right=0.88, top=0.95)
+        cax = plt.axes((0.89, 0.055, 0.03, 0.89))
         cb = fig.colorbar(cml, cax=cax)
         #cb.set_label(field.name, fontsize=24)
         #cb.ax.tick_params(labelsize=20)
-        cb.set_label(field.name, fontsize=12)
-        cb.ax.tick_params(labelsize=12)
+        cb.set_label(field.name, fontsize=24)
+        cb.ax.tick_params(labelsize=20)
+
+    xticks = np.arange(5.5, 7.5, 0.5)
+    yticks = np.arange(44.5, 46.5, 0.5)
+    lon_formatter = LongitudeFormatter(zero_direction_label=True)
+    lat_formatter = LatitudeFormatter()
+    ax.set_yticks(yticks, crs=ccrs.PlateCarree())
+    ax.yaxis.set_major_formatter(lat_formatter)
+    ax.set_ylabel('latitude', fontsize=24)
+    ax.set_xticks(xticks, crs=ccrs.PlateCarree())
+    ax.xaxis.set_major_formatter(lon_formatter)
+    ax.tick_params(axis='both', which='major', labelsize=18)
+    ax.set_xlabel('longitude', fontsize=24)
 
     return cml
 
@@ -1220,7 +1254,7 @@ if __name__ == "__main__":
         # TODO : prendre un cumul sur la même période que ANTILOPE pour éviter de fausser la méthode avec des situations spécifiques
         model = model.where((model.lon>=lonmin) & (model.lon<=lonmax) & (model.lat<=latmax) & (model.lat>latmin-0.01), drop=True)
 
-    plot_antilope = True
+    plot_antilope = False
 
     if plot_antilope:
         #fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_{domain}_obs_auto.csv')
