@@ -67,9 +67,9 @@ for i,threshold in enumerate([0, 10]):
         #ax.set_ylabel('Frequency of error below 20%')
         ax.set_ylabel('Root mean square error (mm)')
         if subdir == 'onlysnow':
-            ax.set_title('All solid precipitation events')
+            ax.set_title('a) All solid precipitation events')
         else:
-            ax.set_title('All precipitation events')
+            ax.set_title('a) All precipitation events')
     else:
         # Remove y axislabel
         ax.tick_params(
@@ -79,9 +79,9 @@ for i,threshold in enumerate([0, 10]):
             right=False,         # ticks along the top edge are off
             labelleft=False) # labels along the bottom edge are off
         if subdir == 'onlysnow':
-            ax.set_title('Solid precipitation events above 10mm / 24h')
+            ax.set_title('b) Solid precipitation events above 10mm / 24h')
         else:
-            ax.set_title('Precipitation events above 10mm / 24h')
+            ax.set_title('b) Precipitation events above 10mm / 24h')
 
     ax.set_ylim(bottom=0, top=50)
     # Remove xaxis labels

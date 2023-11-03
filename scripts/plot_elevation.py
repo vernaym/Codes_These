@@ -119,9 +119,10 @@ def add_landmarks(ax):
     for landmark, infos in landmarks.items():
         ax.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='white', markersize=20, transform=ccrs.PlateCarree())
         if landmark == 'Pic Blanc':
-            ax.annotate(landmark, (infos['lon']+0.03, infos['lat']-0.02), weight='bold', color='k', fontsize=22, transform=ccrs.PlateCarree())
+            ab = ax.annotate(landmark, (infos['lon']+0.03, infos['lat']-0.02), weight='bold', color='k', fontsize=22, transform=ccrs.PlateCarree())
         else:
-            ax.annotate(landmark, (infos['lon']-0.1, infos['lat']-0.07), weight='bold', color='k', fontsize=22, transform=ccrs.PlateCarree())
+            ab = ax.annotate(landmark, (infos['lon']-0.1, infos['lat']-0.07), weight='bold', color='k', fontsize=22, transform=ccrs.PlateCarree())
+        ab.set_bbox(dict(facecolor='white', alpha=0.3, edgecolor='white'))
 
 def add_rectangle(ax):
     # Create a Rectangle patch
@@ -206,15 +207,17 @@ def add_radar_positions(ax):
     radars = dict(
         moucherotte = dict(lat=45.14776, lon=5.63933, alt=1920,name='Moucherotte'),
         colombis    = dict(lat=44.49664, lon=6.21729, alt=1742, name='Colombis'),
-        ladole      = dict(lat=46.42565, lon=6.10001, alt=1677, name='La Dole'),
+        ladole      = dict(lat=46.42565, lon=6.10001, alt=1677, name='La Dôle'),
     )
     def getImage(path):
-       return OffsetImage(plt.imread(path, format="png"), zoom=.05)
+        return OffsetImage(plt.imread(path, format="png"), zoom=.05)
 
     symbole_radar = '/home/vernaym/These/figures/symbole_radar_violet.png'
     for radar, infos in radars.items():
-       ab = AnnotationBbox(getImage(symbole_radar), (infos['lon'], infos['lat']), frameon=False, label='radar')
-       ax.add_artist(ab)
+        ab = AnnotationBbox(getImage(symbole_radar), (infos['lon'], infos['lat']), frameon=False, label='radar')
+        ax.add_artist(ab)
+        ab = ax.annotate(infos['name'], (infos['lon']-0.05, infos['lat']-0.15), weight='bold', color='darkviolet', fontsize=24, transform=ccrs.PlateCarree())
+        ab.set_bbox(dict(facecolor='white', alpha=0.3, edgecolor='white'))
 
 def codistances(coords):
     """
