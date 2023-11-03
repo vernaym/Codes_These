@@ -399,10 +399,12 @@ def plot(antilope, datebegin, dateend, categories=True, biascorrection=False, sc
         #cml = ax.contourf(lons, lats, antilope.rr_cumul.data, cmap=cmap, levels=50, transform=ccrs.PlateCarree(), alpha=1, antialiased=True)
         if biascorrection:
             cml = axes[0].contourf(lons, lats, antilope.rr_cumul.data, cmap=cmap, levels=bounds, transform=ccrs.PlateCarree(), alpha=1, antialiased=True, extend='both')
+            axes[0].set_title('a) Raw ANTILOPE', fontsize=30)
             # Remove lines
             for c in cml.collections:
                 c.set_edgecolor("face")
             cml2 = axes[1].contourf(lons, lats, antilope.rr_cumul_debiased.data, cmap=cmap, levels=bounds, transform=ccrs.PlateCarree(), alpha=1, antialiased=True, extend='both')
+            axes[1].set_title('b) De-biased ANTILOPE', fontsize=30)
             # Remove lines
             for c in cml2.collections:
                 c.set_edgecolor("face")
@@ -456,7 +458,7 @@ def plot(antilope, datebegin, dateend, categories=True, biascorrection=False, sc
             cax2 = plt.axes((0.84, 0.04, 0.02, 0.92))
             cb = fig.colorbar(sc, cax1)
             cb.ax.tick_params(labelsize=20)
-            cb.set_label(label='Mean ANTILOPE / gauge ratio', fontsize=24)
+            cb.set_label(label='Mean ANTILOPE / gauge ratio', fontsize=28)
         else:
             plt.subplots_adjust(bottom=0.04, left=0.085, right=0.77, top=0.99)
             cax1 = plt.axes((0.90, 0.065, 0.03, 0.895))
@@ -464,7 +466,7 @@ def plot(antilope, datebegin, dateend, categories=True, biascorrection=False, sc
             cb = fig.colorbar(sc, cax1)
             #cb.set_label(label='ANTILOPE / rain-gauges ratio', fontsize=22)
             cb.ax.tick_params(labelsize=20)
-            cb.set_label(label='Mean ANTILOPE / gauge ratio', fontsize=24)
+            cb.set_label(label='Mean ANTILOPE / gauge ratio', fontsize=28)
             #cb.set_label(label='ANTILOPE / rain-gauges ratio', fontsize=14)
     else:
         plt.subplots_adjust(bottom=0.05, left=0.03, right=0.90, top=0.95)
@@ -1254,7 +1256,7 @@ if __name__ == "__main__":
         # TODO : prendre un cumul sur la même période que ANTILOPE pour éviter de fausser la méthode avec des situations spécifiques
         model = model.where((model.lon>=lonmin) & (model.lon<=lonmax) & (model.lat<=latmax) & (model.lat>latmin-0.01), drop=True)
 
-    plot_antilope = False
+    plot_antilope = True
 
     if plot_antilope:
         #fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_{domain}_obs_auto.csv')
