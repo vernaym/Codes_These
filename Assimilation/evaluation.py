@@ -1135,9 +1135,9 @@ class Evaluation(object):
                 spread = np.array(scores_dict[product]['spread'])
                 spreadvar = np.array(spreadvar)
                 print(product)
-                tools.plot_scatter(rmse, spread, 'RMSE (mm)', 'Mean spread (mm)', f"spread_skill_{product}_by_station.pdf", savedir, addtext=liste_postes)
-                rr = np.nanmean(self.data.obs.data, axis=1)
-                tools.plot_scatter(rr, spread/rmse, 'Mean precipitation (mm)', 'Spread/RMSE', f"spread_skill_vs_rr_{product}_by_station.pdf", savedir, addtext=liste_postes)
+                #tools.plot_scatter(rmse, spread, 'RMSE (mm)', 'Mean spread (mm)', f"spread_skill_{product}_by_station.pdf", savedir, addtext=liste_postes)
+                #rr = np.nanmean(self.data.obs.data, axis=1)
+                #tools.plot_scatter(rr, spread/rmse, 'Mean precipitation (mm)', 'Spread/RMSE', f"spread_skill_vs_rr_{product}_by_station.pdf", savedir, addtext=liste_postes)
             scores_dict[product].pop('spread')
         scores_list.remove('spread')
 
@@ -1194,9 +1194,33 @@ class Evaluation(object):
         # Spread skill
         products = [xpid for xpid in experiments.keys()]
         if 'raw' in data.keys(): products = products + ['raw']
+        fig, axes = plt.subplots(nrows=2, ncols=2, sharex=True, sharey=True, figsize=(11,10))
+        xaxis = False
         for product in products:  # Only for ensemble simulations
             spread, error, rr = self.spread_skill(self.data[product].data.reshape(-1, 16), self.data.obs.data.flatten())
-            tools.plot_scatter(error, spread, 'Error (mm)', 'Spread (mm)', f"spread_skill_{product}.pdf", savedir, color=rr)
+            if product == 'raw':
+                i = 0
+                j = 0
+                title = 'a'
+            elif product == 'RS21':
+                i = 0
+                j = 1
+                title = 'b'
+            elif product == 'PF31':
+                i = 1
+                j = 0
+                title= 'c'
+            elif product == 'KD35':
+                i = 1
+                j = 1
+                title= 'd'
+            sc = tools.plot_scatter(axes[i,j], error, spread, 'Absolute error of the ensemble mean (mm)', 'Ensemble spread (mm)', f"spread_skill_{product}.pdf", savedir, color=rr)
+                    #savedir, color=rr, xaxis=xaxis, yaxis=yaxis)
+            axes[i,j].set_title(f'{title}) {xpid_label[product]}', fontsize=16)
+            j = j + 1
+            if j==2:
+                j = 0
+                i = i + 1
             #tools.plot_scatter(rr, error, 'Precipitation (mm)', 'Error (mm)', f"error_vs_intensity_{product}.pdf", savedir)
             #tools.plot_scatter(rr, spread, 'Precipitation (mm)', 'Spread (mm)', f"spread_vs_intensity_{product}.pdf", savedir)
             #tools.plot_scatter(rr, spread/error, 'Precipitation (mm)', 'Spread / Error', f"spread_over_error_vs_intensity_{product}.pdf", savedir)
@@ -1208,6 +1232,17 @@ class Evaluation(object):
 #            ax.set_xlim(top=vmax)
 #            fig.savefig(os.path.join(savedir, f"spread_skill_{product}.pdf"), format='pdf')
 #            plt.close(fig)
+        plt.subplots_adjust(bottom=0.08, left=0.08, right=0.88, top=0.95, wspace=0.05, hspace=0.12)
+        fig.text(0.5, 0.02, 'Absolute error of the ensemble mean (mm)', ha='center', fontsize=18)
+        fig.text(0.02, 0.4, 'Ensemble spread (mm)', ha='center', rotation='vertical', fontsize=18)
+        cax = plt.axes((0.89, 0.08, 0.03, 0.87))
+        cb = fig.colorbar(sc, cax=cax)
+        cb.set_label(label='Precipitation (mm / 24h)', size=18)
+        cb.ax.tick_params(labelsize=16)
+        #fig.tight_layout()
+        #fig.subplots_adjust(left=0.005, top=0.98, right=0.99, bottom=0.1)
+        fig.savefig(os.path.join(savedir, f"spread_skill.pdf"), format='pdf')
+        plt.close(fig)
 
         fig1,ax1 = plt.subplots()
         if 'raw' in data.keys():
