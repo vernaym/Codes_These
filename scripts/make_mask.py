@@ -273,13 +273,13 @@ def add_scores(scores, ax, mycmap=None, vmin=None, vmax=None):
         onlypostes = [poste for poste in info.index if poste not in blacklist]
         info = info[info.index.isin(onlypostes)]
         if mycmap is None:
-            #sc = ax.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=350, edgecolors='black', linewidth=3, alpha=1)
-            sc = ax.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=150, edgecolors='black', linewidth=3, alpha=1)
+            sc = ax.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=300, edgecolors='black', linewidth=3, alpha=1)
+            #sc = ax.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=150, edgecolors='black', linewidth=3, alpha=1)
             #sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=50, edgecolors='black', alpha=0.5)
             #sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, norm=norm, marker=marker, s=300, edgecolors='black', alpha=1)
         else:
-            #sc = ax.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, vmin=vmin, vmax=vmax, marker=marker, s=300, edgecolors='black', alpha=1)
-            sc = ax.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, vmin=vmin, vmax=vmax, marker=marker, s=150, edgecolors='black', alpha=1)
+            sc = ax.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, vmin=vmin, vmax=vmax, marker=marker, s=300, edgecolors='black', alpha=1)
+            #sc = ax.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, vmin=vmin, vmax=vmax, marker=marker, s=150, edgecolors='black', alpha=1)
             #sc = plt.scatter(info['lons'], info['lats'], c=info['ratio'], cmap=cmap, vmin=vmin, vmax=vmax, marker=marker, s=50, edgecolors='black', alpha=0.5)
 
         #labels = [str(num_poste) for num_poste in info['num_poste']]
@@ -912,7 +912,7 @@ def ratio_estimation(field, model=None, moving_window=25):
 
     W[np.isnan(W)] = 0
     tmp = to_xarray(W, field, varname='mean_ratio')
-    plot_and_save(tmp, "Total_weight", cmap=plt.cm.viridis, vmin=0.)
+    plot_and_save(tmp, "Total_weight", cmap=plt.cm.viridis, vmin=0., vmax=1000)
     mean_ratio = np.divide(np.sum(weights*ratios, axis=0), W)
 
     #mean_ratio = mean_ratio / ratio_arome.data  # TODO : TMP !!!!
@@ -953,23 +953,30 @@ def ratio_estimation(field, model=None, moving_window=25):
     w0 = 1 - w1
 
     #w1 = W/(1+D) --> doesn't work
-    X = W/D  # Identifies ridges !
-    X = 1/D
+    #X = W/D  # Identifies ridges !
+    #X = 1/D  # Identifies ridges !
     #X = np.mean(weights, axis=0)/D  # Identifies ridges !
-    w1 = X
-    w1 = X / np.nanmean(X)
-    #w1 = np.exp(-(D+D/W))
     #w1 = X
-    w1[D==0] = 1
+    #w1 = X / np.nanmean(X)  # WARNING : depends on the domain !!!
+    w1 = np.exp(-D/(np.abs(mean_ratio-1)/np.log(10)))
+    #w1 = X
+    #w1[D==0] = 1
     #w1 = w1 / (np.nanmax(w1)-np.nanmin(w1))
     tmp = to_xarray(w1, field, varname='w1')
     plot_and_save(tmp, "Relative_weight", cmap=plt.cm.viridis)
-    w1 = w1/(1+w1)
+    #w1 = w1/(1+w1)
     #w0 = N/W  # = 1/np.mean(W)
     #w1 = w1/(w0+w1)
     w0 = 1 - w1
-    w0[W==0] = 1
+    #w0[W==0] = 1  # Security
     #w1 = 1 - w0
+
+    ############################################################
+    # TMP --> to take into account the weight in the ponderation
+    #w0 = D+1/Wm
+    #w1 = 1 / (w0 + 1)
+    #w0 = 1 - w1
+    ############################################################
 
     tmp = to_xarray(1/D, field, varname='D')
     plot_and_save(tmp, "1_over_D", cmap=plt.cm.viridis)
@@ -1034,15 +1041,21 @@ def ratio_estimation(field, model=None, moving_window=25):
     #observation_error[np.where(observation_error<1)] = 1/observation_error[np.where(observation_error<1)]
     #observation_error = ratio_field - 1
     observation_error = ratio_field - 1
+    #mean_ratio[np.where(mean_ratio>2)] = 2
+    mean_error = mean_ratio - 1
     #observation_error = mean_ratio - 1
     neg = np.where(observation_error.data<0)
     pos= np.where(observation_error.data>=0)
+    neg2 = np.where(mean_error.data<0)
+    pos2= np.where(mean_error.data>=0)
     #observation_error.data[neg] = 21.391*observation_error.data[neg]  # r=0.5 ==> err=-10.7  # 2018/2019
     observation_error.data[neg] = 20.137 * observation_error.data[neg] - 1  # <0
+    mean_error.data[neg2] = 20.137 * mean_error.data[neg2] - 1  # <0
     #observation_error.data[neg] = 20.137 * (observation_error.data[neg]-D[neg]/2) - 0.1  # <0
     #observation_error.data[neg] = 20*np.square(observation_error.data[neg]-1)  # <0
     #observation_error.data[neg] = 4*observation_error.data[neg]  # r=0.5 ==> err=-2
     observation_error.data[pos] = 16.787 * observation_error.data[pos] + 1  # r=1.5 ==> err=7.574  " 2018/2019
+    mean_error.data[pos2] = 16.787 * mean_error.data[pos2] + 1  # r=1.5 ==> err=7.574  " 2018/2019
     #observation_error.data[pos] = 16.787 * (observation_error.data[pos]+D[pos]/2) + 0.1  # r=1.5 ==> err=8.574  " 2021/2022
     #observation_error.data[pos] = 16*np.square(observation_error.data[pos]+1)  # r=1.5 ==> err=8.574  " 2021/2022
     #observation_error.data[pos] = 2*observation_error.data[pos]  # r=1.5 ==> err = 1
@@ -1052,6 +1065,7 @@ def ratio_estimation(field, model=None, moving_window=25):
     #observation_error.data[neg] = 5/4*observation_error.data[neg]
     #observation_error = np.square(np.abs(observation_error)+1)
     observation_error.data = np.abs(observation_error.data)
+    mean_error.data = np.abs(mean_error.data)
     observation_error = observation_error.rename('error')
     #observation_error.data = uniform_filter(observation_error.data, size=3)
     ###################################################################################################################################
@@ -1065,7 +1079,8 @@ def ratio_estimation(field, model=None, moving_window=25):
     #uncertainty = w1 * observation_error  # WARNING : error no longer > 1 !!
     #uncertainty = observation_error
     #uncertainty = observation_error * (1 + np.abs(estimated_ratio-1) + D)
-    uncertainty = (1+w1) * observation_error + (1+D) * (np.abs(mean_ratio - 1))
+    #uncertainty = (1+w1) * observation_error + (1+D) * (np.abs(mean_ratio - 1))
+    uncertainty = (1+w1) * observation_error + (1+D) * mean_error
 
     #uncertainty = (1+w1) * observation_error + (1+D) * (np.abs(mean_ratio - 1) + np.exp(-np.abs(mean_ratio - 1)))
     #uncertainty = 1 + observation_error*w1+D/W
@@ -1099,7 +1114,7 @@ def ratio_estimation(field, model=None, moving_window=25):
     #plot_and_save(np.abs(observation_error), errorname, vmin=0, vmax=15, cmap=plt.cm.Greys, scores=scores)
     #plot_and_save(observation_error, errorname, vmin=1, vmax=15, cmap=plt.cm.YlOrBr, scores=scores)
     plot_and_save(confidence, confidencename, vmin=0, cmap=plt.cm.Greens)
-    plot_and_save(uncertainty, uncertaintyname, vmin=1, vmax=20, cmap=plt.cm.YlOrBr)
+    plot_and_save(uncertainty, uncertaintyname, vmin=1, vmax=40, cmap=plt.cm.YlOrBr, scores=scores)
 #    elif domain == 'GrandesRousses':
 #        plot_and_save(ratio_field, rationame, vmin=0.6, vmax=1.4, cmap=plt.cm.coolwarm, scores=scores)
 #        #plot_and_save(observation_error, errorname, vmin=-6, vmax=6, cmap=plt.cm.coolwarm, scores=scores)
@@ -1256,7 +1271,7 @@ if __name__ == "__main__":
         # TODO : prendre un cumul sur la même période que ANTILOPE pour éviter de fausser la méthode avec des situations spécifiques
         model = model.where((model.lon>=lonmin) & (model.lon<=lonmax) & (model.lat<=latmax) & (model.lat>latmin-0.01), drop=True)
 
-    plot_antilope = True
+    plot_antilope = False
 
     if plot_antilope:
         #fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_{domain}_obs_auto.csv')
