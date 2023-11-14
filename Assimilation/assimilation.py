@@ -1930,6 +1930,8 @@ class RandomSampling(Assimilation):
             #ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='normal')
             analysis.loc[{'member':member}] = ana
 
+            self.newlocalfield[member][:,:,idd] = analysis.sel({'member':member}).data
+
             #print('!!!! WARNING : TMP !!!!')
             #ana, toto, tutu = Preprocessing_ANTILOPE.dynamic_correction(ana.flatten(), pond)
             #analysis.loc[{'member':member}] = ana.reshape((len(parameters.lat), len(parameters.lon)))
