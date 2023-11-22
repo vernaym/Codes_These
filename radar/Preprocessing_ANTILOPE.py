@@ -54,6 +54,7 @@ datadir = '/home/vernaym/These/DATA'
 domain = 'alp'
 ld = 0.1
 max_dist = ld*2
+d0 = max_dist
 
 
 def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False, qq_adjustment=False, gradient=None, uncertainty=None):
@@ -78,6 +79,8 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
     if weight is None:
         pond.data[np.isnan(pond.data)] = 0.0
         weight = pond.sum(axis=1).A1  # The sum of the weights (axis=1 <==> sum over rows)
+
+    # TODO : try sd=weight (Measures the confidence in both the pixel and its neighbours values)
 
     # multiply field by AROME gradient
     if gradient is not None:
@@ -282,7 +285,13 @@ def dynamic_error_estimation(antilope, obs_auto, arome_clim=None, delta=0.1):
 #                    ratio_arome[mask] = 1  # Do not introduce precipitation on pixel with no precipitation and no reference
 
         dist = np.sqrt((lats-tmp.lats)**2+(lons-tmp.lons)**2)  # Euclidian horizontal distance
-        w = 1/(0.01+dist)**2  # Distance weighting  --> adding 0.01 instead of 1 ensures that the value at the reference point is preserved
+        #w = 1/(0.01+dist)**2  # Distance weighting  --> adding 0.01 instead of 1 ensures that the value at the reference point is preserved
+        #w = 1 - dist / d0  # Distance weighting
+        #w[w<0] = 0
+        #dist[dist==0] = 0.001
+        #w = 1 / dist
+        w = d0 / (d0+dist)  # IDW
+        w = 1 / (0.01+dist)**2  # Idem XP25.7
 
         #ratio = (rr_antilope.rr.data+0.1) / (tmp.rr+0.1)  # WARNING : division by 0
         #error = rr_antilope.rr.data - tmp.rr
@@ -300,9 +309,9 @@ def dynamic_error_estimation(antilope, obs_auto, arome_clim=None, delta=0.1):
     Wd = np.sqrt(np.mean((weights-Wm)**2, axis=0))
 
     mean_ratio = np.divide(np.sum(weights*ratios, axis=0), W)
+    mean_ratio[W==0] = 1
     D = np.sqrt(np.sum(weights*(ratios-mean_ratio)**2, axis=0)/W)
     D[W==0] = 0
-
     ratios = np.array(ratios)
 
     # Compute estimated ratio by weighting between 1 and the mean estimated ratio
@@ -319,21 +328,29 @@ def dynamic_error_estimation(antilope, obs_auto, arome_clim=None, delta=0.1):
     #K = Wm * (1 - D / (D + X))
     #K[Wm==0.5] = 0.5  # W=1/2 valeur singulière de X
     #K[Wm==0] = 0
-    X = 1/(2*W-1)  # Facteur pour assurer la condition D=1 ==> w1=1/2. WARNING : W=1/2 valeur singulière
-    K = W * (1 - D / (D + X))
-    K[W==0.5] = 0.5  # W=1/2 valeur singulière de X
-    K[W==0] = 0
-    w1 = np.exp(-1/K)
-    w0 = 1 - w1
+###################################
+# XP25.7:
+#    X = 1/(2*W-1)  # Facteur pour assurer la condition D=1 ==> w1=1/2. WARNING : W=1/2 valeur singulière
+#    K = W * (1 - D / (D + X))
+#    K[W==0.5] = 0.5  # W=1/2 valeur singulière de X
+#    K[W==0] = 0
+#    w1 = np.exp(-1/K)
+#    w0 = 1 - w1
     #w1 = W / (1 + W)
     #w0 = 1 - w1
+###################################
+
+    w1 = np.exp(-D/(np.abs(mean_ratio-1)/np.log(10)))
+    w0 = 1 - w1
     new_ratio = 1 * w0 + w1 * mean_ratio
+    new_ratio[mean_ratio==1] = 1
     #estimated_ratio[np.isnan(estimated_ratio)] = 1
 
     errors = np.array(errors)
     errors[np.isnan(errors)] = 0  # Security
     errors[np.isinf(errors)] = 0  # No precipitation in reference
     new_error = np.divide(np.sum(weights*errors, axis=0), W)
+    new_error[W==0] = antilope.data[W==0] * 0.3  # Default error ~ 30%
 
     # Conversion to xarray
     new_ratio = tools.to_xarray(new_ratio, antilope, varname='Ratio')
@@ -371,19 +388,24 @@ def get_std(data, mean, pond, weight=None, super_ensemble=None):
 
     return sd
 
-def codistances(coords, domain='alp', ld=0.1):  # TMP for illustration. TODO : test different correlation distances
+def codistances(coords, domain='alp', ld=0.1, Zdist=True):  # TMP for illustration. TODO : test different correlation distances
     """
     Solution pour le calcul des inter-distances trouvée sur : https://stackoverflow.com/questions/35296935/python-calculate-lots-of-distances-quickly
     """
 
     # 1. Horizontal inter-dtances
     #max_dist = ld*3  # exp(-2)=0.14, exp(-3)=0.05 ==> facteur 3 pour ignorer les pixels avec un poid < 5%
-    max_dist = ld*2  # exp(-2^2)=0.018 ==> facteur 2 pour ignorer les pixels avec un poid < 2%
+    #max_dist = ld*2  # exp(-2^2)=0.018 ==> facteur 2 pour ignorer les pixels avec un poid < 2%
     #max_dist = ld
     tree = cKDTree(coords)
     dist = tree.sparse_distance_matrix(tree, max_distance=max_dist, p=2, output_type='coo_matrix')
     dist = csr_matrix(dist)
+    #d0 = 0.2
+    #dist.data = d0 / (d0+dist.data)  # IDW
     dist.data=1/(1+dist.data)  # IDW
+    #dist.data = 1 - dist.data/d0  # Pondération de Franke-Little
+    #dist.data[dist.data<0] = 0
+    #dist.data = (max_dist-dist.data)/(max_dist*dist.data)^2  # Modified Shepard's ponderation
     #dist.data=1/(1+dist.data)**2  # IDW
     #dist.data=1/(0.01+dist.data)**2  # IDW
     #dist.data=1/(0.1+dist.data)**2  # IDW
@@ -394,31 +416,32 @@ def codistances(coords, domain='alp', ld=0.1):  # TMP for illustration. TODO : t
     #np.exp(1/(1+dist.data), out=dist.data )
 
     # 2. Elevation inter-distance
-    #mnt1km = xr.open_dataset('/home/vernaym/These/DATA/DEM_ALPESFR_WGS84_1km.nc')  # Open 1km DEM
-    #mnt250m = xr.open_dataset('/home/vernaym/QGIS/MNT/DEM_FRANCE_L93_250m_bilinear.nc')  # Open 1km DEM
-    #mnt1km = xr.open_dataset(f'/home/vernaym/These/DATA/DEM_{domain.upper()}_WGS84_1km.nc')  # Open 1km DEM
-    try:
-        mnt1km = xr.open_dataset(os.path.join(datadir, f'DEM_{domain.upper()}_WGS84_1km.nc'))  # Open 1km DEM
-    except:
-        mnt1km = xr.open_dataset(os.path.join(datadir, f'DEM_ALP_WGS84_1km.nc'))  # Default
-    lons = np.unique([coord[0] for coord in coords])
-    lats = np.unique([coord[1] for coord in coords])
-    mnt1km = mnt1km.sel({'lat':np.intersect1d(lats, mnt1km.lat), 'lon':np.intersect1d(lons, mnt1km.lon)})
-    Z = mnt1km.elevation.data.flatten()
-    # WARNING : dZ=0 not taken into account ==> ponderation at central point = 0 !!!!
-    # Solution : avoid to have exactly 0 at central point ==> Add 1m difference
-    Z1 = diags(Z, 0)
-    Z2 = diags(Z+1, 0)
-    tmppond = dist.copy()
-    tmppond[tmppond.nonzero()] = 1
-    dZ = tmppond.dot(Z2) - Z1.dot(tmppond)  # Compute elevation inter-distance
-    dZ = np.abs(dZ)
-    #dZ.data=1/(1000+dZ.data)**2
-    #np.exp(-dZ.data/1000, out=dZ.data)
-    dZ.data = 1/(1+dZ.data/500)
+    if Zdist:
+        #mnt1km = xr.open_dataset('/home/vernaym/These/DATA/DEM_ALPESFR_WGS84_1km.nc')  # Open 1km DEM
+        #mnt250m = xr.open_dataset('/home/vernaym/QGIS/MNT/DEM_FRANCE_L93_250m_bilinear.nc')  # Open 1km DEM
+        #mnt1km = xr.open_dataset(f'/home/vernaym/These/DATA/DEM_{domain.upper()}_WGS84_1km.nc')  # Open 1km DEM
+        try:
+            mnt1km = xr.open_dataset(os.path.join(datadir, f'DEM_{domain.upper()}_WGS84_1km.nc'))  # Open 1km DEM
+        except:
+            mnt1km = xr.open_dataset(os.path.join(datadir, f'DEM_ALP_WGS84_1km.nc'))  # Default
+        lons = np.unique([coord[0] for coord in coords])
+        lats = np.unique([coord[1] for coord in coords])
+        mnt1km = mnt1km.sel({'lat':np.intersect1d(lats, mnt1km.lat), 'lon':np.intersect1d(lons, mnt1km.lon)})
+        Z = mnt1km.elevation.data.flatten()
+        # WARNING : dZ=0 not taken into account ==> ponderation at central point = 0 !!!!
+        # Solution : avoid to have exactly 0 at central point ==> Add 1m difference
+        Z1 = diags(Z, 0)
+        Z2 = diags(Z+1, 0)
+        tmppond = dist.copy()
+        tmppond[tmppond.nonzero()] = 1
+        dZ = tmppond.dot(Z2) - Z1.dot(tmppond)  # Compute elevation inter-distance
+        dZ = np.abs(dZ)
+        #dZ.data=1/(1000+dZ.data)**2
+        #np.exp(-dZ.data/1000, out=dZ.data)
+        dZ.data = 1/(1+dZ.data/500)
 
-    dist = dist.multiply(dZ)
-    #dist=dZ
+        dist = dist.multiply(dZ)
+        #dist=dZ
 
     return dist
 

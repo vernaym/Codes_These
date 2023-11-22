@@ -270,14 +270,15 @@ algo = dict(
         #RS22          = 'RandomSampling/XP22/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         #RS23          = 'RandomSampling/XP23/Random_Sampling_2021120106_2022050106_daily_alp.nc',  # commit f0d6615fe98865a0c87c88dca4dda7e70a1725a1
         #RS23          = 'RandomSampling/XP23/Random_Sampling_2021120106_2022043006_daily_alp.nc',  # commit 
-        #RS24          = 'RandomSampling/XP24/Random_Sampling_2021120106_2022043006_daily_alp.nc',  # commit 
+        RS24          = 'RandomSampling/XP24/Random_Sampling_2021120106_2022043006_daily_alp.nc',  # commit 
         #RS25          = 'RandomSampling/XP25/Random_Sampling_2021120106_2022043006_daily_alp.nc',  # commit 
         ################################################################################################
         # PHD committeei / article :
         RS21          = 'RandomSampling/XP21/Random_Sampling_2021120106_2022050106_daily_alp.nc',
-        PF31          = 'XP31/Assimilation_locale_2021120106_2022050106_daily_alp_mask9_debiasing3.nc',
-        KD35          = 'EnsembleKalmanFilter/XP35/EnKF_2021120106_2022050106_daily_alp.nc',
+        #PF31          = 'XP31/Assimilation_locale_2021120106_2022050106_daily_alp_mask9_debiasing3.nc',
+        #KD35          = 'EnsembleKalmanFilter/XP35/EnKF_2021120106_2022050106_daily_alp.nc',
         ################################################################################################
+        RS26          = 'RandomSampling/XP26/Random_Sampling_2021120106_2022043006_daily_alp.nc',
     )
 
 
@@ -419,6 +420,7 @@ xpid_label = dict(
         RS23          = 'RS - dynamic error/ratio estimation',  # Test dynamic ratio/error estimation
         RS24          = 'RS24',
         RS25          = 'RS25',
+        RS26          = 'RS26',
     )
 
 colors = dict(
@@ -430,6 +432,7 @@ colors = dict(
     RS23      = 'k',
     RS24      = 'maroon',
     RS25      = 'green',
+    RS26      = 'green',
     #PF31      = 'green',
     PF31      = 'green',
     #KD35      = 'blue',
@@ -1000,7 +1003,8 @@ class Evaluation(object):
             print(xpid)
             #if xpid.startswith('RS'):
             #if xpid == 'RS12':
-            if xpid == 'RS25':
+            #if xpid == 'RS25':
+            if xpid == 'RS26':
                 antilopec = tmp.loc[{'member':0}]
                 antilopec = antilopec.loc[{'time':dates}]
                 antc = True
@@ -1196,6 +1200,9 @@ class Evaluation(object):
         if 'raw' in data.keys(): products = products + ['raw']
         fig, axes = plt.subplots(nrows=2, ncols=2, sharex=True, sharey=True, figsize=(11,10))
         xaxis = False
+        i = 0
+        j = 0
+        title = ''
         for product in products:  # Only for ensemble simulations
             spread, error, rr = self.spread_skill(self.data[product].data.reshape(-1, 16), self.data.obs.data.flatten())
             if product == 'raw':

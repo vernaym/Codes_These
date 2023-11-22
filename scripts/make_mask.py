@@ -852,7 +852,13 @@ def ratio_estimation(field, model=None, moving_window=25):
                 w = np.exp(-(dist/d0))*np.exp(-(np.abs(elevation_dist)/h0))
             else:
                 #w = 1/(0.1+dist)**2
-                w = 1/(0.01+dist)**2
+                #w = 1/(0.01+dist)**2
+                #w = 1 - dist / d0
+                #dist[dist==0] = 0.001
+                #w = 1 / dist
+                #w = d0 / (d0 + dist)
+                w = 1/(0.01+dist)**2  # XP25
+                #w[w<0] = 0
                 #w = np.round(1/(1+dist)**2, 3)
                 #w = np.round(np.exp(-(dist/d0)), 3)  # Propagates reference score further
                 #w = np.round(np.exp(-(dist**2/d0)), 3)
@@ -958,6 +964,9 @@ def ratio_estimation(field, model=None, moving_window=25):
     #X = np.mean(weights, axis=0)/D  # Identifies ridges !
     #w1 = X
     #w1 = X / np.nanmean(X)  # WARNING : depends on the domain !!!
+    # Arbitrary choice :
+    # if D=M, the estimated ratio is 10 times closer to 1 than to M in order to avoid over-corrections
+    # D==M ==> w1=0.1
     w1 = np.exp(-D/(np.abs(mean_ratio-1)/np.log(10)))
     #w1 = X
     #w1[D==0] = 1
@@ -1086,7 +1095,7 @@ def ratio_estimation(field, model=None, moving_window=25):
     #uncertainty = 1 + observation_error*w1+D/W
     #uncertainty = 1 + w1*observation_error/(1+w1)
     uncertainty.data[np.isnan(field.rr_cumul.data)] = np.nanmax(uncertainty.data)
-    uncertainty.data = uniform_filter(uncertainty.data, size=3)
+    #uncertainty.data = uniform_filter(uncertainty.data, size=3)
     uncertainty = uncertainty.rename('Uncertainty')
     confidence = uncertainty.copy()
     confidence.data = 1/confidence.data
@@ -1114,7 +1123,8 @@ def ratio_estimation(field, model=None, moving_window=25):
     #plot_and_save(np.abs(observation_error), errorname, vmin=0, vmax=15, cmap=plt.cm.Greys, scores=scores)
     #plot_and_save(observation_error, errorname, vmin=1, vmax=15, cmap=plt.cm.YlOrBr, scores=scores)
     plot_and_save(confidence, confidencename, vmin=0, cmap=plt.cm.Greens)
-    plot_and_save(uncertainty, uncertaintyname, vmin=1, vmax=40, cmap=plt.cm.YlOrBr, scores=scores)
+    #plot_and_save(uncertainty, uncertaintyname, vmin=1, vmax=40, cmap=plt.cm.YlOrBr, scores=scores)
+    plot_and_save(uncertainty, uncertaintyname, vmin=1, vmax=40, cmap=plt.cm.YlOrBr)
 #    elif domain == 'GrandesRousses':
 #        plot_and_save(ratio_field, rationame, vmin=0.6, vmax=1.4, cmap=plt.cm.coolwarm, scores=scores)
 #        #plot_and_save(observation_error, errorname, vmin=-6, vmax=6, cmap=plt.cm.coolwarm, scores=scores)

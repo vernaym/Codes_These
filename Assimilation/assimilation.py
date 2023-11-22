@@ -1263,7 +1263,10 @@ class Assimilation(object):
         Rstat = diags(std.flatten())
         #pond = self.pond.dot(diags(np.exp(-std).flatten(), 0))  # Pondération par la distance et l'erreur statique !! ATTENTION A L'ORDRE !!
         #pond = self.pond.dot(diags(1/std.flatten(), 0))  # std>1 par construction
-        uncertainty = std + parameters.error.data
+        if 'error' in parameters.keys():
+            uncertainty = std + parameters.error.data
+        else:
+            uncertainty = std
         pond = self.pond.dot(diags(1/uncertainty.flatten(), 0))  # WARNING : error NOT >1 par construction
         #pond = self.pond.dot(diags(1/(std.flatten()*(1+parameters.error.data.flatten())), 0))  # WARNING : error NOT >1 par construction
         #pond = self.pond.dot(diags(np.exp(-parameters.error.data).flatten(), 0))  # WARNING : error NOT >1 par construction
@@ -1695,12 +1698,16 @@ class RandomSampling(Assimilation):
                 #plt.close('all')
 
             # Fill parameters Dataset with dynamic fields
-            parameters['error'] = err
-            parameters['ratio'] = rat
-            parameters['db'] = (parameters[var]+delta) / parameters['ratio'] - delta  # Add delta to introduce precipitation in "missed precipitation" pixels
-            #parameters['db'] = parameters[var] / parameters['ratio']
-            mask = parameters[var].data > 0
-            parameters['db'].data[mask] = parameters[var].data[mask] / parameters['ratio'].data[mask]
+            dynamic_error = True
+            if dynamic_error:
+                parameters['error'] = err
+                parameters['ratio'] = rat
+                parameters['db'] = (parameters[var]+delta) / parameters['ratio'] - delta  # Add delta to introduce precipitation in "missed precipitation" pixels
+                #parameters['db'] = parameters[var] / parameters['ratio']
+                mask = parameters[var].data > 0
+                parameters['db'].data[mask] = parameters[var].data[mask] / parameters['ratio'].data[mask]
+            else:
+                parameters['db'] = parameters[var]
 
             ####################  TMP  #####################
             # Plot distributions before / after conversion
