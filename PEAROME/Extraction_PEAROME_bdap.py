@@ -58,10 +58,11 @@ pearome_desc = {member:'PG1PEAROM{0:03d}'.format(member) for member in range(1,1
 coords = dict(
     #alp = ['47000', '43000', '4500', '8500'],
     #alp = ['46450', '44100', '5400', '7200'],  # extaction ANTILOPE
-    alp = ['46800', '43000', '4500', '8000'],  # To take into account localisation
+    #alp = ['46800', '43000', '4500', '8000'],  # To take into account localisation
+    alp = ['46800', '43700', '5000', '7600'],
     pyr = ['43500', '42000', '-2000', '3500'],
     cor = ['43000', '41000', '8000', '11500'],
-    GrandesRousses = ['45250', '44750', '6000', '6500']
+    GrandesRousses = ['45640', '44590', '5610', '7100'],  # With 0.2 margin (final domain : ['45440', '44790', '5810', '6690'],)
 )
 
 # Pas en lat/lon de la grille cible en 1/1000 de °
@@ -75,7 +76,7 @@ paramID = dict(
     aarome    = 228228,
     parome    = 85029,
     pearome   = 0,
-    aspearome = 0,
+    aspearome = 85029,
     stats     = 0,
 )
 indicatorOfParameter = dict(
@@ -475,7 +476,7 @@ if __name__ == "__main__":
         workdir = os.path.join(args.workdir, domain, args.model)
         goto(workdir)
         #timecoord = date_range(args.datebegin, args.dateend, dt=args.pdt)
-        datespivot, timecoord = datespivot(args.datebegin, args.dateend)
+        datespivot, timecoord = datespivot(args.datebegin, args.dateend, dt=args.pdt)
 
         if args.model in ['aspearome', 'stats']:
             if args.pdt == 24:
