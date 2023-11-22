@@ -493,7 +493,10 @@ def finalize_fig(figure, imm, label, outname):
 @speedtest
 def read_obs(args):
     #filename = f'ANTILOPE{suffix[args.frequency]}_{args.datebegin.strftime("%Y%m%d%H")}_{args.dateend.strftime("%Y%m%d%H")}_alp.nc'
-    filename = f'ANTILOPEQ_2021102900_2022060200_alp.nc'
+    if args.domain == 'GrandesRousses':
+        filename = 'ANTILOPED_2021080106_2022080106_GrandesRousses.nc'
+    else:
+        filename = f'ANTILOPEQ_2021102900_2022060200_alp.nc'
     if not os.path.exists(filename):
         print(f'WARNING : file {filename} does not exist, looking for it under {datadir}')
         filename = os.path.join(datadir, filename)
@@ -1617,7 +1620,11 @@ class RandomSampling(Assimilation):
         # 1. Select automatic stations
         obs_auto = Preprocessing_ANTILOPE.filter_gauges(obs_auto, parameters[var], delta=delta)
 
-        new_ratio, new_error = Preprocessing_ANTILOPE.dynamic_error_estimation(parameters[var], obs_auto, self.arome_clim, delta=delta)
+        if len(obs_auto)>0:
+            new_ratio, new_error = Preprocessing_ANTILOPE.dynamic_error_estimation(parameters[var], obs_auto, self.arome_clim, delta=delta)
+        else:
+            new_ratio = None
+            new_error = None
 
         return new_ratio, new_error, obs_auto
 
@@ -1699,7 +1706,7 @@ class RandomSampling(Assimilation):
 
             # Fill parameters Dataset with dynamic fields
             dynamic_error = True
-            if dynamic_error:
+            if dynamic_error and (rat is not None and err is not None):
                 parameters['error'] = err
                 parameters['ratio'] = rat
                 parameters['db'] = (parameters[var]+delta) / parameters['ratio'] - delta  # Add delta to introduce precipitation in "missed precipitation" pixels
@@ -1797,11 +1804,13 @@ class RandomSampling(Assimilation):
         #analysis.loc[{'member':0}] = np.square(obs)
 
         # Extract reference points and corresponding values
-        nivometeo = self.nivometeo.sel({'date':date}).dropna(dim='num_poste').drop('date')
-
-        df = nivometeo.to_dataframe().rename(columns={'nom':'poste', 'obs':'rr'})
         obs_auto.drop(columns=['date', 'reseau_poste'], inplace=True)
-        allobs = pd.concat([obs_auto, df])
+        if date in self.nivometeo.date:
+            nivometeo = self.nivometeo.sel({'date':date}).dropna(dim='num_poste').drop('date')
+            df = nivometeo.to_dataframe().rename(columns={'nom':'poste', 'obs':'rr'})
+            allobs = pd.concat([obs_auto, df])
+        else:
+            allobs = obs_auto.copy()
         allobs = allobs[~np.isnan(allobs.rr)]
 
         # Get data over evaluation points and compute errors
