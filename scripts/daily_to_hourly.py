@@ -58,15 +58,20 @@ if not dailyfiles:
         output = xr.Dataset(
             #name     = 'Precipitation',
             #data     = array,
-            data_vars = dict(Precipitation=(["yy", "xx", "time"], array, dict(coordinates="latitude longitude"))),
+            data_vars = dict(Precipitation=(["yy", "xx", "time"], array)),
+            #data_vars = dict(Precipitation=(["yy", "xx", "time"], array, dict(coordinates="latitude longitude", grid_mapping="spatial_ref"))),
+            #data_vars = dict(Precipitation=(["yy", "xx", "time"], array, dict(coordinates="latitude longitude"))),
             #dims      = ["yy", "xx", "time"],
             coords    = dict(longitude=('xx', analysis.lon.data), latitude=('yy', analysis.lat.data), time=sel_time),
             #attrs     = dict(coordinates="latitude longitude"),
             #attrs    = dict(description="Difference between each pixel cumul and the max of its neighbours"),
             )
-        output = output.rio.write_crs("EPSG:4326", inplace=True)
+        #output.rio.write_grid_mapping(inplace=True)
+        #output = output.rio.write_crs("EPSG:4326", "grid_mapping", inplace=True)
+        #output.rio.write_crs("EPSG:4326", inplace=True)
+        output['Precipitation'].attrs = dict(coordinates="latitude longitude", grid_mapping="spatial_ref")
         outname = f'/home/vernaym/workdir/hourly_precipitation_analysis/precipitation_{start.ymd6h}_{stop.ymd6h}_mb{member:03d}.nc'
-        output.to_netcdf(outname)
+        output.to_netcdf(outname, mode='w')
 
     tbout = toolbox.output(
         role           = 'Precipitation analysis',
@@ -136,7 +141,7 @@ else:
                 #attrs     = dict(coordinates="latitude longitude"),
                 #attrs    = dict(description="Difference between each pixel cumul and the max of its neighbours"),
                 )
-            output = output.rio.write_crs("EPSG:4326", inplace=True)
+            output = output.rio.write_crs("EPSG:4326", "grid_mapping", inplace=True)
             outname = f'/home/vernaym/workdir/hourly_precipitation_analysis/precipitation_{datebegin.ymd6h}_{dateend.ymd6h}_mb{member:03d}.nc'
             output.to_netcdf(outname)
 
