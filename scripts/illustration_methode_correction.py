@@ -25,6 +25,8 @@ from scipy.sparse import csc_matrix, csr_matrix, dia_matrix, diags
 from scipy.ndimage import uniform_filter
 from sklearn.linear_model import LinearRegression
 
+import cartopy.crs as ccrs
+
 from These.radar import Preprocessing_ANTILOPE
 import make_mask
 import scores
@@ -64,6 +66,10 @@ datadir = '/home/vernaym/These/DATA'
 
 extract_lat = np.round(np.arange(domain_coords[domain]['latmin'], domain_coords[domain]['latmax'], 0.01, dtype=float), 2)
 extract_lon = np.round(np.arange(domain_coords[domain]['lonmin'], domain_coords[domain]['lonmax'], 0.01, dtype=float), 2)
+lonmin = domain_coords[domain]['lonmin']
+lonmax = domain_coords[domain]['lonmax']
+latmin = domain_coords[domain]['latmin']
+latmax = domain_coords[domain]['latmax']
 # Coordonnées du Mont Blanc :
 lat = 45.83
 lon = 6.87
@@ -81,7 +87,8 @@ def plot(field, name, cmap=plt.cm.YlGnBu, vmin=None, vmax=None, scores=None):
         vmin = np.min(field)
     if vmax is None:
         vmax = np.max(field)
-    fig, ax = plt.subplots(figsize=figsize[domain])
+    fig, ax = plt.subplots(figsize=figsize[domain], subplot_kw=dict(projection=ccrs.PlateCarree()))
+    ax.set_extent([lonmin, lonmax, latmin, latmax], crs=ccrs.PlateCarree())
     #fig, ax = plt.subplots()
     make_mask.plot_field(fig, ax, field, cmap=cmap, vmin=vmin, vmax=vmax, scores=scores)
     circle = plt.Circle((lon, lat), 0.18, color='red', fill=False, linewidth=3)
@@ -194,11 +201,13 @@ if __name__ == "__main__":
     field = xr.open_dataarray(filename)
     # Extract domain and date
     #date=np.datetime64('2022-04-08T06:00')  # TODO : Check artefacts in observation error (--> increase correlation length)
-    date=np.datetime64('2022-04-09T06:00')
+    #date=np.datetime64('2022-04-09T06:00')
+    date=np.datetime64('2021-12-28T06:00')
     #field = field.sel({'lat':np.intersect1d(extract_lat, field.lat), 'lon':np.intersect1d(extract_lon, field.lon), 'time':date})
     field = field.sel({'time':date})
 
     vmax = np.nanmax(field.data)*1.1
+    vmax = 35
     field = field.rename('Precipitation (mm)')
     plot(field, 'initial_field', vmax=vmax)
 

@@ -553,7 +553,7 @@ def plot_and_save(field, name, cmap=plt.cm.Greys, vmin=None, vmax=None, scores=N
     field.to_netcdf(os.path.join(dirsave, f'{name}.nc').encode('utf-8'))
     plt.close(fig)
 
-def plot_field(fig, ax, field, cmap=None, vmin=None, vmax=None, scores=None, colorbar=True):
+def plot_field(fig, ax, field, cmap=None, vmin=None, vmax=None, scores=None, colorbar=True, elevation=False, coords=False):
 
     if vmin is None:
         vmin = np.nanmin(field)
@@ -582,18 +582,19 @@ def plot_field(fig, ax, field, cmap=None, vmin=None, vmax=None, scores=None, col
     #add_massifs()
     #add_cities(latmin, latmax, lonmin, lonmax)
 
-    # Add elevation lines
-    mnt = xr.open_dataset('/home/vernaym/QGIS/MNT/DEM_ALPES_WGS84_250m_bilinear.nc')
-    if 'elevation' not in mnt.keys():
-        mnt = mnt.rename({'Band1':'elevation'})
-    mnt=mnt.where((mnt['lat']>=latmin) & (mnt['lat']<=latmax) & (mnt['lon']>=lonmin) & (mnt['lon']<=lonmax), drop=True)
-    lons, lats = np.meshgrid(mnt.lon.data, mnt.lat.data)
-    levels = [1000, 2250, 3500]
-    levels = [2000, 3000]
-    levels = [1500, 2500, 3500]
-    levels = [1200, 2400, 3600]
-    c = ax.contour(lons, lats, mnt.elevation.data, colors='dimgray', levels=levels, transform=ccrs.PlateCarree(), alpha=0.9)
-    ax.clabel(c, inline=1, fontsize=14)
+    if elevation:
+        # Add elevation lines
+        mnt = xr.open_dataset('/home/vernaym/QGIS/MNT/DEM_ALPES_WGS84_250m_bilinear.nc')
+        if 'elevation' not in mnt.keys():
+            mnt = mnt.rename({'Band1':'elevation'})
+        mnt=mnt.where((mnt['lat']>=latmin) & (mnt['lat']<=latmax) & (mnt['lon']>=lonmin) & (mnt['lon']<=lonmax), drop=True)
+        lons, lats = np.meshgrid(mnt.lon.data, mnt.lat.data)
+        levels = [1000, 2250, 3500]
+        levels = [2000, 3000]
+        levels = [1500, 2500, 3500]
+        levels = [1200, 2400, 3600]
+        c = ax.contour(lons, lats, mnt.elevation.data, colors='dimgray', levels=levels, transform=ccrs.PlateCarree(), alpha=0.9)
+        ax.clabel(c, inline=1, fontsize=14)
 
     if colorbar:
         plt.subplots_adjust(bottom=0.05, left=0.1, right=0.88, top=0.95)
@@ -604,17 +605,18 @@ def plot_field(fig, ax, field, cmap=None, vmin=None, vmax=None, scores=None, col
         cb.set_label(field.name, fontsize=24)
         cb.ax.tick_params(labelsize=20)
 
-    xticks = np.arange(5.5, 7.5, 0.5)
-    yticks = np.arange(44.5, 46.5, 0.5)
-    lon_formatter = LongitudeFormatter(zero_direction_label=True)
-    lat_formatter = LatitudeFormatter()
-    ax.set_yticks(yticks, crs=ccrs.PlateCarree())
-    ax.yaxis.set_major_formatter(lat_formatter)
-    ax.set_ylabel('latitude', fontsize=24)
-    ax.set_xticks(xticks, crs=ccrs.PlateCarree())
-    ax.xaxis.set_major_formatter(lon_formatter)
-    ax.tick_params(axis='both', which='major', labelsize=18)
-    ax.set_xlabel('longitude', fontsize=24)
+    if coords:
+        xticks = np.arange(5.5, 7.5, 0.5)
+        yticks = np.arange(44.5, 46.5, 0.5)
+        lon_formatter = LongitudeFormatter(zero_direction_label=True)
+        lat_formatter = LatitudeFormatter()
+        ax.set_yticks(yticks, crs=ccrs.PlateCarree())
+        ax.yaxis.set_major_formatter(lat_formatter)
+        ax.set_ylabel('latitude', fontsize=24)
+        ax.set_xticks(xticks, crs=ccrs.PlateCarree())
+        ax.xaxis.set_major_formatter(lon_formatter)
+        ax.tick_params(axis='both', which='major', labelsize=18)
+        ax.set_xlabel('longitude', fontsize=24)
 
     return cml
 
