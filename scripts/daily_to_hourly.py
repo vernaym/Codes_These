@@ -47,7 +47,8 @@ if not dailyfiles:
     tmp = antilope.resample(time='D').sum(dim='time')  # !!! VERY SLOW !!!
     tmp = tmp.transpose('lat','lon','time')  # reorder data
     tmp = tmp.reindex_like(antilope).ffill('time')  # Fill hourly time steps with daily precipitation (https://stackoverflow.com/questions/54452336/xarray-resample-time-series-data-from-daily-to-hourly)
-    chronology = antilope.rr.data / tmp.rr.data
+    chronology = antilope.rr.data / (tmp.rr.data+0.00001)  # Avoid division by 0 Warnings
+    chronology[tmp.rr.data==0] = 1/24.  # Avoid to remove precipitation when/where the analysis transformed null precipitation into >0 ones. TODO : Find a better solution
 
     analysis['time'] = analysis.time-np.timedelta64(6, 'h')-np.timedelta64(1, 'D')
     # Is it really necessary to duplicate daily precipitation 24 times ?
