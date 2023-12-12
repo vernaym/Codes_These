@@ -20,16 +20,19 @@ t.env.setvar('WORKDIR', '/home/vernaym/workdir')
 
 local_tz = pytz.timezone("Europe/Paris")
 
-start = Date(2021, 12, 27, 7)
-stop = Date(2021, 12, 30, 6)
+start = Date(2021, 8, 2, 7)
+stop = Date(2022, 8, 1, 6)
 
 # Read ensemble analysis
-filename = os.path.join('/home/vernaym/workdir/ASSIMILATION/RandomSampling/XP25', 'Random_Sampling_2021122806_2021123006_daily_GrandesRousses.nc')
+#filename = os.path.join('/home/vernaym/workdir/ASSIMILATION/RandomSampling/XP25', 'Random_Sampling_2021122806_2021123006_daily_GrandesRousses.nc')
+filename = os.path.join('/home/vernaym/workdir/ASSIMILATION/RandomSampling/XP26', 'Random_Sampling_2021080206_2022080106_daily_GrandesRousses.nc')
 analysis = xr.open_dataset(filename)
 analysis = analysis.sel(member=range(1,17))
 
 # Read ANTILOPE raw hourly precipitation
-filename = 'ANTILOPEH_2021103000_2022060200_alp.nc'
+#filename = 'ANTILOPEH_2021103000_2022060200_alp.nc'
+filename = 'ANTILOPEH_2021080106_2022080106_GrandesRousses.nc'
+#filename = 'ANTILOPEH_2021073106_2022070106_GrandesRousses.nc'
 antilope = xr.open_dataset(os.path.join('/home/vernaym/These/DATA', filename))
 antilope = antilope.sel(lat=analysis.lat.data, lon=analysis.lon.data)
 
@@ -70,7 +73,7 @@ if not dailyfiles:
         #output = output.rio.write_crs("EPSG:4326", "grid_mapping", inplace=True)
         #output.rio.write_crs("EPSG:4326", inplace=True)
         output['Precipitation'].attrs = dict(coordinates="latitude longitude", grid_mapping="spatial_ref")
-        outname = f'/home/vernaym/workdir/hourly_precipitation_analysis/precipitation_{start.ymd6h}_{stop.ymd6h}_mb{member:03d}.nc'
+        outname = f'/home/vernaym/workdir/EDELWEISS/hourly_precipitation_analysis/precipitation_{start.ymd6h}_{stop.ymd6h}_mb{member:03d}.nc'
         output.to_netcdf(outname, mode='w')
 
     tbout = toolbox.output(
@@ -81,7 +84,7 @@ if not dailyfiles:
         source_app     = 'antilope',
         source_conf    = 'RandomSampling',
         cutoff         = 'assimilation',
-        filename       = f'/home/vernaym/workdir/hourly_precipitation_analysis/precipitation_[datebegin:ymd6h]_[dateend:ymd6h]_mb[member].nc',
+        filename       = f'/home/vernaym/workdir/EDELWEISS/hourly_precipitation_analysis/precipitation_[datebegin:ymd6h]_[dateend:ymd6h]_mb[member].nc',
         #filename       = f'precipitation_[datebegin]_[dateend]_mb[member:03d].nc',
         experiment     = 'XP25',
         geometry       = 'GrandesRousses1km',
@@ -142,7 +145,7 @@ else:
                 #attrs    = dict(description="Difference between each pixel cumul and the max of its neighbours"),
                 )
             output = output.rio.write_crs("EPSG:4326", "grid_mapping", inplace=True)
-            outname = f'/home/vernaym/workdir/hourly_precipitation_analysis/precipitation_{datebegin.ymd6h}_{dateend.ymd6h}_mb{member:03d}.nc'
+            outname = f'/home/vernaym/workdir/EDELWEISS/hourly_precipitation_analysis/precipitation_{datebegin.ymd6h}_{dateend.ymd6h}_mb{member:03d}.nc'
             output.to_netcdf(outname)
 
         tbout = toolbox.output(
@@ -153,7 +156,7 @@ else:
             source_app     = 'antilope',
             source_conf    = 'RandomSampling',
             cutoff         = 'assimilation',
-            filename       = f'/home/vernaym/workdir/hourly_precipitation_analysis/precipitation_[datebegin:ymd6h]_[dateend:ymd6h]_mb[member].nc',
+            filename       = f'/home/vernaym/workdir/EDELWEISS/hourly_precipitation_analysis/precipitation_[datebegin:ymd6h]_[dateend:ymd6h]_mb[member].nc',
             #filename       = f'precipitation_[datebegin]_[dateend]_mb[member:03d].nc',
             experiment     = 'XP25',
             geometry       = 'GrandesRousses1km',
