@@ -14,7 +14,7 @@ from scipy.spatial import cKDTree
 from scipy.sparse import csr_matrix, csc_matrix, diags
 from scipy.spatial import distance_matrix
 import shapefile
-from metpy.interpolate import cross_section
+#from metpy.interpolate import cross_section
 import cartopy.crs as ccrs
 from cartopy.mpl.ticker import LongitudeFormatter, LatitudeFormatter
 
@@ -119,7 +119,7 @@ def add_landmarks(ax):
     for landmark, infos in landmarks.items():
         ax.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='white', markersize=20, transform=ccrs.PlateCarree())
         if landmark == 'Pic Blanc':
-            ab = ax.annotate(landmark, (infos['lon']+0.03, infos['lat']-0.02), weight='bold', color='k', fontsize=22, transform=ccrs.PlateCarree())
+            ab = ax.annotate(landmark, (infos['lon']+0.03, infos['lat']-0.01), weight='bold', color='k', fontsize=22, transform=ccrs.PlateCarree())
         else:
             ab = ax.annotate(landmark, (infos['lon']-0.1, infos['lat']-0.07), weight='bold', color='k', fontsize=22, transform=ccrs.PlateCarree())
         ab.set_bbox(dict(facecolor='white', alpha=0.3, edgecolor='white'))
@@ -216,7 +216,7 @@ def add_radar_positions(ax):
     for radar, infos in radars.items():
         ab = AnnotationBbox(getImage(symbole_radar), (infos['lon'], infos['lat']), frameon=False, label='radar')
         ax.add_artist(ab)
-        ab = ax.annotate(infos['name'], (infos['lon']-0.05, infos['lat']-0.15), weight='bold', color='darkviolet', fontsize=24, transform=ccrs.PlateCarree())
+        ab = ax.annotate(f'{infos["name"]}\n{infos["alt"]}m', (infos['lon']-0.05, infos['lat']-0.22), weight='bold', color='darkviolet', fontsize=24, transform=ccrs.PlateCarree())
         ab.set_bbox(dict(facecolor='white', alpha=0.3, edgecolor='white'))
 
 def codistances(coords):
