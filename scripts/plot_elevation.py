@@ -119,7 +119,7 @@ def add_landmarks(ax):
     for landmark, infos in landmarks.items():
         ax.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='white', markersize=20, transform=ccrs.PlateCarree())
         if landmark == 'Pic Blanc':
-            ab = ax.annotate(landmark, (infos['lon']+0.03, infos['lat']-0.01), weight='bold', color='k', fontsize=22, transform=ccrs.PlateCarree())
+            ab = ax.annotate(landmark, (infos['lon']+0.03, infos['lat']+0.01), weight='bold', color='k', fontsize=22, transform=ccrs.PlateCarree())
         else:
             ab = ax.annotate(landmark, (infos['lon']-0.1, infos['lat']-0.07), weight='bold', color='k', fontsize=22, transform=ccrs.PlateCarree())
         ab.set_bbox(dict(facecolor='white', alpha=0.3, edgecolor='white'))
@@ -391,6 +391,10 @@ else:
     add_radar_positions(ax)
     add_postes(ax, type_poste='automatic stations')
     add_postes(ax, type_poste='nivometeo stations')
+    # Add cross section line
+    start = (45.14776, 5.63933)  # Radar Moucherotte
+    end   = (45.11872, 6.27540)  # Passe par le Pic Blanc : 50 km
+    plt.plot([start[1], end[1]], [start[0], end[0]], color='grey', linestyle='-', linewidth=5, transform=ccrs.PlateCarree())
 
     ax.set_frame_on(False)
     # Add scalebar (https://stackoverflow.com/questions/39786714/how-to-insert-scale-bar-in-a-map-in-matplotlib)
