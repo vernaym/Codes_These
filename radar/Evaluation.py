@@ -351,7 +351,7 @@ def rmse_vs_ratio(workdf, datebegin, dateend, threshold=None, **kw):
     nbpoint = len(workdf['elevation'].to_numpy())
 
     # 1. scatterplot
-    ax.scatter(workdf['ratio'], workdf['rmse'], marker='D', s=10)
+    ax.scatter(workdf['ratio']+1, workdf['rmse'], marker='D', s=10)
 
     # The scatterplot has a "V" shape (rmse min for ratio=1) so we make 2 separate regression
     #2. linear regression for ratio<=1
@@ -359,21 +359,23 @@ def rmse_vs_ratio(workdf, datebegin, dateend, threshold=None, **kw):
     reg = LinearRegression().fit(tmp['ratio'].to_numpy().reshape((-1, 1)), tmp['rmse'].to_numpy())
     model = reg.predict(tmp['ratio'].to_numpy().reshape((-1,1)))
     r2 = reg.score(tmp['ratio'].to_numpy().reshape((-1, 1)), tmp['rmse'].to_numpy())
-    ax.plot(tmp['ratio'].to_numpy(), model, color='blue', linewidth=2)
-    ax.text(-0.2, max(workdf['rmse'].to_numpy()), f'Slope={reg.coef_[0]:.3f}, Intercept={reg.intercept_:.3f}, R²={r2:.4}', fontsize=18, color='blue')
-    ax.text(-0.2, max(workdf['rmse'].to_numpy()) * 0.95, f'{nbpoint} stations', fontsize=18, color='blue')
+    ax.plot(tmp['ratio'].to_numpy()+1, model, color='blue', linewidth=2)
+    ax.text(0.7, max(workdf['rmse'].to_numpy())*0.8, f'Slope={reg.coef_[0]:.3f}', fontsize=18, color='blue')
+    #ax.text(-0.2, max(workdf['rmse'].to_numpy()), f'Slope={reg.coef_[0]:.3f}, Intercept={reg.intercept_:.3f}, R²={r2:.4}', fontsize=18, color='blue')
+    #ax.text(-0.2, max(workdf['rmse'].to_numpy()) * 0.95, f'{nbpoint} stations', fontsize=18, color='blue')
 
     #3. linear regression for ratio>=1
     tmp = workdf[workdf['ratio']>=0]
     reg = LinearRegression().fit(tmp['ratio'].to_numpy().reshape((-1, 1)), tmp['rmse'].to_numpy())
     model = reg.predict(tmp['ratio'].to_numpy().reshape((-1,1)))
     r2 = reg.score(tmp['ratio'].to_numpy().reshape((-1, 1)), tmp['rmse'].to_numpy())
-    ax.plot(tmp['ratio'].to_numpy(), model, color='red', linewidth=2)
-    ax.text(-0.2, max(workdf['rmse'].to_numpy())*0.85, f'Slope={reg.coef_[0]:.3f}, Intercept={reg.intercept_:.3f}, R²={r2:.4}', fontsize=18, color='red')
-    ax.text(-0.2, max(workdf['rmse'].to_numpy())*0.8, f'{nbpoint} stations', fontsize=18, color='red')
+    ax.plot(tmp['ratio'].to_numpy()+1, model, color='red', linewidth=2)
+    ax.text(1.3, max(workdf['rmse'].to_numpy())*0.75, f'Slope={reg.coef_[0]:.3f}', fontsize=18, color='red')
+    #ax.text(-0.2, max(workdf['rmse'].to_numpy())*0.85, f'Slope={reg.coef_[0]:.3f}, Intercept={reg.intercept_:.3f}, R²={r2:.4}', fontsize=18, color='red')
+    #ax.text(-0.2, max(workdf['rmse'].to_numpy())*0.8, f'{nbpoint} stations', fontsize=18, color='red')
 
-    ax.set_xlabel(f'ANTILOPE / rain gauge ratio', fontsize=12)
-    ax.set_ylabel('Mean daily rmse (mm)', fontsize=12)
+    ax.set_xlabel(f'Mean ANTILOPE / gauge ratio', fontsize=12)
+    ax.set_ylabel('ANTILOPE RMSE (kg/m²)', fontsize=12)
     plt.tight_layout()
     if threshold is not None:
         fig.savefig(f'rmse_vs_ratio_scatterplot_{datebegin.strftime("%Y%m%d")}_{dateend.strftime("%Y%m%d")}_{threshold}.pdf', format='pdf', bbox_inches='tight')
