@@ -76,7 +76,7 @@ figsize = dict(
         alp            = dict(singleplot=(14,16), ensembleplot=(32,20)),
         GrandesRousses = dict(singleplot=(15,7), ensembleplot=(16,7)),
         HauteSavoie    = dict(singleplot=(12,12), ensembleplot=(12,12)),
-        MontBlanc      = dict(singleplot=(15,10), ensembleplot=(15,10)),
+        MontBlanc      = dict(singleplot=(15,10), ensembleplot=(16,10)),
         Savoie         = dict(singleplot=(16,8), ensembleplot=(16,7)),
         HautesAlpes    = dict(singleplot=(15,10), ensembleplot=(15,10)),
         Vercors        = dict(singleplot=(15,12), ensembleplot=(15,12)),
@@ -439,6 +439,7 @@ def plot_field(field, ax, vmin, vmax, domain, title=None, cmap=plt.cm.YlGnBu):
     field = field.sel({'lat':np.intersect1d(sel_lat, field.lat.data), 'lon':np.intersect1d(sel_lon, field.lon.data)})
 
     im = field.plot(ax=ax, add_colorbar=False, vmin=vmin, vmax=vmax, cmap=cmap)
+    im.set_edgecolor('face')  # Remove grid lines (works !)
 #    for landmark, infos in landmarks.items():
 #        ax.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='red', markersize=4)
 #    add_boundaries(ax)
@@ -698,6 +699,7 @@ class Assimilation(object):
                 im = field[var].plot(ax=ax, add_colorbar=False, cmap=plt.cm.coolwarm)  # quadmesh object
             else:
                 im = field[var].plot(ax=ax, vmin=0, vmax=self.rrmax, add_colorbar=False, cmap=plt.cm.YlGnBu)  # quadmesh object
+            im.set_edgecolor('face')  # Remove grid lines (works !)
 
             figure = px.imshow(field[var].data, color_continuous_scale='YlGnBu', origin='lower')  # https://plotly.com/python/2D-Histogram/
 #            fig.add_scattermapbox(lat=field.lat, lon=field.lon,marker_size=field['sigma'],marker_symbol='x',showlegend = False)  # https://stackoverflow.com/questions/68762104/plotly-adding-scatter-geo-points-and-traces-on-top-of-density-mapbox
@@ -1811,6 +1813,7 @@ class RandomSampling(Assimilation):
             allobs = pd.concat([obs_auto, df])
         else:
             allobs = obs_auto.copy()
+            nivometeo = None
         allobs = allobs[~np.isnan(allobs.rr)]
 
         # Get data over evaluation points and compute errors
@@ -1909,27 +1912,28 @@ class RandomSampling(Assimilation):
             i = 0
             j = 0
             ymax = list()
-            for poste in nivometeo.num_poste.data:
-                ref = nivometeo.sel(num_poste=poste)
-                lat = ref.lat.data
-                lon = ref.lon.data
-                reference = ref.obs.data
-                ax[i,j].bar(reference, 1, width=0.3, label='Reference observation', color='Green', alpha=1)
-                original_obs = parameters.sel(lat=lat, lon=lon, method='nearest').rr.data
-                #original_obs = parameters.rr.data[point]
-                ax[i,j].bar(original_obs, 1, width=0.3, label='Original observation', color='k', alpha=0.5)
-                #obs = Y[point][0]
-                new_obs = analysis.sel(lat=lat, lon=lon, member=0, method='nearest').data
-                ax[i,j].bar(new_obs, 1, width=0.3, color='red', alpha=1, label='Corrected observation')
-                #sd = sd[point][0]
-                std = error.sel(lat=lat, lon=lon, method='nearest').data
-                #ax = plot_distribution(ax, np.square(obs), np.square(sd), label=f'New observation distribution (sd={np.square(sd)})', color='red')
-                #ax[i,j] = plot_distribution(ax[i,j], new_obs, std, label=f'New observation distribution (std={np.round(std, 2)})', color='red')  # sigma --> sigma² dans loi normale
-                ymax.append(max(reference, original_obs, new_obs))
-                j = j + 1
-                if j==ncol:
-                    j = 0
-                    i = i + 1
+            if nivometeo is not None:
+                for poste in nivometeo.num_poste.data:
+                    ref = nivometeo.sel(num_poste=poste)
+                    lat = ref.lat.data
+                    lon = ref.lon.data
+                    reference = ref.obs.data
+                    ax[i,j].bar(reference, 1, width=0.3, label='Reference observation', color='Green', alpha=1)
+                    original_obs = parameters.sel(lat=lat, lon=lon, method='nearest').rr.data
+                    #original_obs = parameters.rr.data[point]
+                    ax[i,j].bar(original_obs, 1, width=0.3, label='Original observation', color='k', alpha=0.5)
+                    #obs = Y[point][0]
+                    new_obs = analysis.sel(lat=lat, lon=lon, member=0, method='nearest').data
+                    ax[i,j].bar(new_obs, 1, width=0.3, color='red', alpha=1, label='Corrected observation')
+                    #sd = sd[point][0]
+                    std = error.sel(lat=lat, lon=lon, method='nearest').data
+                    #ax = plot_distribution(ax, np.square(obs), np.square(sd), label=f'New observation distribution (sd={np.square(sd)})', color='red')
+                    #ax[i,j] = plot_distribution(ax[i,j], new_obs, std, label=f'New observation distribution (std={np.round(std, 2)})', color='red')  # sigma --> sigma² dans loi normale
+                    ymax.append(max(reference, original_obs, new_obs))
+                    j = j + 1
+                    if j==ncol:
+                        j = 0
+                        i = i + 1
 
             fig1,ax1 = plt.subplots(nrows=4, ncols=4, figsize=figsize[domain]['ensembleplot'])
             #fig2,ax2 = plt.subplots(nrows=2, ncols=8, figsize=(16,10))
@@ -1955,6 +1959,7 @@ class RandomSampling(Assimilation):
 
             if self.plot and member>0:
                 # TODO : Add reference values
+                field = analysis.loc[{'member':member}]
                 im1 = plot_field(analysis.loc[{'member':member}], ax1[i,j], self.rrmin, self.rrmax, self.domain)
                 #scatter(d['lons'], d['lats'], c=d[f'{score}'], cmap=cmap, norm=norm, marker=marker, s=150, edgecolors='black')
                 ax1[i,j].set_title(None)
@@ -1967,30 +1972,31 @@ class RandomSampling(Assimilation):
             # Plot analysis distribution
             i = 0
             j = 0
-            for poste in nivometeo.num_poste.data:
-                ref = nivometeo.sel(num_poste=poste)
-                lat = ref.lat.data
-                lon = ref.lon.data
-                #ens = analysis.isel(lat=point[0], lon=point[1]).data.flatten()
-                ens = analysis.sel(lat=ref.lat.data, lon=ref.lon.data, method='nearest').data.flatten()
-                mu = np.mean(ens)
-                #std = np.sqrt(np.sum((ens-mu)**2)/16)
-                std = np.sqrt(np.mean((ens-mu)**2))
-                ax[i,j] = plot_distribution(ax[i,j], mu, std, ensemble=ens, label='Analysis', color='blue', linewidth=1)
-                #ax = plot_distribution(ax, mu, np.square(sd[point]), label='Analysis theoretical PDF', color='k', linewidth=1)
-                std = error.sel(lat=ref.lat.data, lon=ref.lon.data, method='nearest').data
-                #ax[i,j] = plot_distribution(ax[i,j], mu, std, label='Analysis theoretical PDF', color='k', linewidth=1)
-                ax[i,j].legend()
-                #ax[i,j].set_xlim(left=0, right=np.max(ens)*2)
-                ax[i,j].set_xlim(left=0, right=80)
-                #ax[i,j].set_ylim(top=norm.pdf(mu, loc=mu, scale=std)*1.2)
-                ax[i,j].set_ylim(top=0.06)
-                ax[i,j].set_xlabel('Precipitation (mm/24h)')
-                ymax[i+j] = max(ymax[i+j], np.max(ens))*1.1
-                j = j + 1
-                if j==ncol:
-                    j = 0
-                    i = i + 1
+            if nivometeo is not None:
+                for poste in nivometeo.num_poste.data:
+                    ref = nivometeo.sel(num_poste=poste)
+                    lat = ref.lat.data
+                    lon = ref.lon.data
+                    #ens = analysis.isel(lat=point[0], lon=point[1]).data.flatten()
+                    ens = analysis.sel(lat=ref.lat.data, lon=ref.lon.data, method='nearest').data.flatten()
+                    mu = np.mean(ens)
+                    #std = np.sqrt(np.sum((ens-mu)**2)/16)
+                    std = np.sqrt(np.mean((ens-mu)**2))
+                    ax[i,j] = plot_distribution(ax[i,j], mu, std, ensemble=ens, label='Analysis', color='blue', linewidth=1)
+                    #ax = plot_distribution(ax, mu, np.square(sd[point]), label='Analysis theoretical PDF', color='k', linewidth=1)
+                    std = error.sel(lat=ref.lat.data, lon=ref.lon.data, method='nearest').data
+                    #ax[i,j] = plot_distribution(ax[i,j], mu, std, label='Analysis theoretical PDF', color='k', linewidth=1)
+                    ax[i,j].legend()
+                    #ax[i,j].set_xlim(left=0, right=np.max(ens)*2)
+                    ax[i,j].set_xlim(left=0, right=80)
+                    #ax[i,j].set_ylim(top=norm.pdf(mu, loc=mu, scale=std)*1.2)
+                    ax[i,j].set_ylim(top=0.06)
+                    ax[i,j].set_xlabel('Precipitation (mm/24h)')
+                    ymax[i+j] = max(ymax[i+j], np.max(ens))*1.1
+                    j = j + 1
+                    if j==ncol:
+                        j = 0
+                        i = i + 1
             if not os.path.exists(f'{self.date_str}/distributions'):
                 os.makedirs(f'{self.date_str}/distributions')
             fig.savefig(f'{self.date_str}/distributions/DISTRIBUTION_ANALYSE_{domain}.pdf')

@@ -486,7 +486,8 @@ def plot(antilope, datebegin, dateend, categories=True, biascorrection=False, sc
     axes[0].yaxis.set_major_formatter(lat_formatter)
     axes[0].set_ylabel('latitude', fontsize=22)
     for ax in axes:
-        ax.grid(False)  # Remove grid lines (does not work !)
+        if not categories:
+            cml.set_edgecolor('face')  # Remove grid lines (works !)
         # Set x/y axes ticks and labels
         ax.set_xticks(xticks, crs=ccrs.PlateCarree())
         ax.xaxis.set_major_formatter(lon_formatter)
