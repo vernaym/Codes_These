@@ -301,7 +301,7 @@ def add_boundaries(ax):
 def add_cities(latmin, latmax, lonmin, lonmax):
     cities = pd.read_csv(os.path.join('/home/vernaym/safran/monitoring/', 'cities.csv'), sep=',')
     tmp = cities[(cities.population>10000) & (cities.lat>=latmin) & (cities.lat<=latmax) & (cities.lng>=lonmin) & (cities.lng<=lonmax)]
-    plt.plot(tmp.lng, tmp.lat, marker='.', linestyle='')
+    plt.plot(tmp.lng.values, tmp.lat.values, marker='.', linestyle='')
     for idx in tmp.index:
         plt.text(tmp.lng[idx], tmp.lat[idx], tmp.city[idx], alpha=0.5)
 
