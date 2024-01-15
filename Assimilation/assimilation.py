@@ -289,7 +289,7 @@ def add_boundaries(ax, linewidth=1):
     for shape in massifs.shapeRecords():
         x = [i[0] for i in shape.shape.points[:]]
         y = [i[1] for i in shape.shape.points[:]]
-        ax.plot(x, y, color='k', linewidth=linewidth)
+        ax.plot(x, y, color='grey', linewidth=linewidth)
 
 def add_cities(latmin, latmax, lonmin, lonmax):
     cities = pd.read_csv(os.path.join('/home/vernaym/safran/monitoring/', 'cities.csv'), sep=',')
@@ -2904,19 +2904,10 @@ class ParticleFilter(Assimilation):
         time_localisation = 3  # TODO : à passer en paramètre
 
         actual_parameters = self.parameters
-        if self.localisation is not None:
-            codistances = os.path.join('/home/vernaym/These/DATA', f'codistance_max_dist_{self.max_dist}_alp.npz')
-#            if not os.path.exists(codistances):
-#                # Compute inter-distances
-#                coords=[(lon,lat) for lat in actual_parameters.lat.data for lon in actual_parameters.lon.data]
-#                self.pond = self.codistances(coords)
-#            else:
-#                self.pond = scipy.sparse.load_npz(codistances)
-            coords=[(lon,lat) for lat in actual_parameters.lat.data for lon in actual_parameters.lon.data]
-            #self.pond = self.codistances(coords)
-            self.pond = Preprocessing_ANTILOPE.codistances(coords, self.domain)
-        else:
-            self.pond = scipy.sparse.eye(len(actual_parameters.lat)*len(actual_parameters.lon))
+
+        coords=[(lon,lat) for lat in actual_parameters.lat.data for lon in actual_parameters.lon.data]
+        #self.pond = self.codistances(coords)
+        self.pond = Preprocessing_ANTILOPE.codistances(coords, self.domain)
 
         for idd,date in enumerate(self.period):
             print(date)
@@ -2939,6 +2930,8 @@ class ParticleFilter(Assimilation):
             if self.plot:
                 if not os.path.exists(self.date_str):
                     os.makedirs(self.date_str)
+
+            parameters_date['db'] = parameters_date['mu'].copy()
 
             if self.gridded:
                 self.gridded_assimilation(date, idd, localized_period, parameters_date)
