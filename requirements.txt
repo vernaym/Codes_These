@@ -202,7 +202,7 @@ opt-einsum==3.3.0
 OWSLib==0.25.0
 packaging==21.3
 palettable==3.3.3
-pandas==2.0.3
+pandas==1.5.3
 pandocfilters==1.5.0
 paramiko==2.9.3
 parso==0.8.1
@@ -387,7 +387,7 @@ wrapt==1.13.3
 wsaccel==0.6.3
 wurlitzer==3.0.2
 wxPython==4.0.7
-xarray==2022.3.0
+xarray==2023.1.0
 xdg==5
 xkit==0.0.0
 xlrd==1.2.0

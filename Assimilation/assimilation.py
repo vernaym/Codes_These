@@ -83,14 +83,6 @@ figsize = dict(
         Isere          = dict(singleplot=(16,8), ensembleplot=(16,7)),
 )
 
-landmarks = {
-        "Alpe d'Huez" : dict(lon=6.070, lat=45.092, alt=1800, marker='o'),
-        "Les 2 Alpes" : dict(lon=6.127, lat=45.013, alt=1800, marker='o'),
-        "Lautaret"    : dict(lon=6.408, lat=45.038, alt=2058, marker='X'),
-        "La Meije"    : dict(lon=6.311, lat=45.008, alt=3500, marker='^'),  # real alt = 3984
-        "Pic Blanc"   : dict(lon=6.131, lat=45.128, alt=3000, marker='^'),  # real alt = 3333
-    }
-
 suffix = dict(hourly='H', daily='Q')
 timestep = dict(hourly=1, daily=24)
 
@@ -107,6 +99,7 @@ landmarks = {
         "La Meije"    : dict(lon=6.311, lat=45.008, alt=3500, marker='^'),  # real alt = 3984
         "Pic Blanc"   : dict(lon=6.131, lat=45.128, alt=3000, marker='^'),  # real alt = 3333
         "Valloire"    : dict(lon=6.463500, lat=45.160833, alt=3000, marker='p'),
+        "Mont-Blanc"  : dict(lon=6.87, lat=45.84, alt=4807, marker='^'),
     }
 
 # Parameters to compute Euclidian distance between all points in the domain
@@ -284,7 +277,7 @@ def read_nivometeo_obs(domain='alp'):
 
     return nivometeo.to_xarray()
 
-def add_boundaries(ax):
+def add_boundaries(ax, linewidth=1):
 #    shapefile_name = os.path.join("/home/vernaym/QGIS/FondDeCarte/", "world-administrative-boundaries.shp")
 #    borders = shapefile.Reader(shapefile_name)
 #    for shape in borders.shapeRecords():
@@ -296,7 +289,7 @@ def add_boundaries(ax):
     for shape in massifs.shapeRecords():
         x = [i[0] for i in shape.shape.points[:]]
         y = [i[1] for i in shape.shape.points[:]]
-        ax.plot(x,y,color='k')
+        ax.plot(x, y, color='k', linewidth=linewidth)
 
 def add_cities(latmin, latmax, lonmin, lonmax):
     cities = pd.read_csv(os.path.join('/home/vernaym/safran/monitoring/', 'cities.csv'), sep=',')
@@ -442,7 +435,7 @@ def plot_field(field, ax, vmin, vmax, domain, title=None, cmap=plt.cm.YlGnBu):
     im.set_edgecolor('face')  # Remove grid lines (works !)
 #    for landmark, infos in landmarks.items():
 #        ax.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='red', markersize=4)
-#    add_boundaries(ax)
+    add_boundaries(ax, linewidth=0.3)
     ax.set_aspect('equal')
     ax.axis('off')
     if title is not None:
@@ -666,7 +659,8 @@ class Assimilation(object):
         if domain is None:
             domain = self.domain
 
-        if not os.path.exists(savename) or var in ['obs', 'diff']:
+        #if not os.path.exists(savename) or var in ['obs', 'diff']:
+        if True:
 
             latmin = domain_coords[domain]['latmin']
             latmax = domain_coords[domain]['latmax']
@@ -701,34 +695,17 @@ class Assimilation(object):
                 im = field[var].plot(ax=ax, vmin=0, vmax=self.rrmax, add_colorbar=False, cmap=plt.cm.YlGnBu)  # quadmesh object
             im.set_edgecolor('face')  # Remove grid lines (works !)
 
-            figure = px.imshow(field[var].data, color_continuous_scale='YlGnBu', origin='lower')  # https://plotly.com/python/2D-Histogram/
-#            fig.add_scattermapbox(lat=field.lat, lon=field.lon,marker_size=field['sigma'],marker_symbol='x',showlegend = False)  # https://stackoverflow.com/questions/68762104/plotly-adding-scatter-geo-points-and-traces-on-top-of-density-mapbox
-            lat, lon = np.meshgrid(range(len(field.lat.data)), range(len(field.lon.data)))
-            figure.add_scatter(
-                    x=lon.flatten(),
-                    y=lat.flatten(),
-                    mode = 'markers',
-                    marker = dict(
-                        symbol='x-thin',
-                        size=np.abs(np.transpose(field['sigma'].data).flatten()),
-                        color='grey'
-                    ),
-#                    color_discrete_sequence=['grey']
-                    )
-#                    ).update_traces(marker=dict(color='grey'))
-#            figure.show()
-
             if correlation_area:
                 # Add correlation area
                 ax = plot_correlation(ax, field, corr, point=1200)
 
             # Add landmarks
-            if domain == 'GrandesRousses':
+            if domain in ['GrandesRousses', 'MontBlanc']:
                 for landmark, infos in landmarks.items():
-                    plt.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='red', markersize=10)
-                    plt.annotate(landmark, (infos['lon']+0.003, infos['lat']+0.003), color='red', fontsize=20)
+                    plt.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='white', markersize=10)
+                    #plt.annotate(landmark, (infos['lon']+0.003, infos['lat']+0.003), color='red', fontsize=20)
             add_boundaries(ax)
-            add_cities(latmin, latmax, lonmin, lonmax)
+            #add_cities(latmin, latmax, lonmin, lonmax)
 
             if text1 is not None:
                 for lon, lat, text in text1:
@@ -737,7 +714,9 @@ class Assimilation(object):
                         ax.text(lon, lat, text, fontsize=14)
 
             # Add colorbar
-            cbar_ax = fig.add_axes([0.92, 0.15, 0.02, 0.7])
+            fig.subplots_adjust(right=0.91)
+            #cbar_ax = fig.add_axes([0.90, 0.04, 0.03, 0.92])
+            cbar_ax = fig.add_axes([0.93, 0.04, 0.025, 0.91])
             cb = fig.colorbar(im, cax=cbar_ax)
             cb.ax.tick_params(labelsize=18)
             cb.set_label("24h precipitation(mm)", size=18)
@@ -1146,14 +1125,14 @@ class Assimilation(object):
             # the original value but can become >0 if the original value is 0 (exactly what we want !)
 
             # Plot data
-            if self.plot:
+#            if self.plot:
                 #point = 2059  #max obs 20220110
                 #point = 1988  #max std 20220110
                 #point = 887 #max obs 20210825
                 #point = 78 # min obs 20211230
                 #point = 2065 # max obs 20211230
-                point = 1200 # To match the illustrastion of the localization area
-                self.plot_super_ensemble(point, X, mean[point], std[mb][point], pond, f'Background ({mb})')
+#                point = 1200 # To match the illustrastion of the localization area
+#                self.plot_super_ensemble(point, obs, X, mean[point], std[mb][point], pond, f'Background ({mb})')
 
             # !! WARNING : modification des champs !!
             # Choisir entre les 3 solutions suivantes :
@@ -1801,6 +1780,16 @@ class RandomSampling(Assimilation):
         obs = Y.reshape((len(parameters.lat), len(parameters.lon)))  # Get observation field
         obs = np.round(obs, 1)  # Round precipitation <0.1 at 0 (different distribution used in this case) TODO : convertir dans l'espace r^1/2
 
+        self.rrmin = 0.
+        self.rrmax = min(80, max(
+                #np.nanmax(np.square(parameters.obs.data)),
+                #np.nanmax(np.square(parameters.rr.data)),
+                #np.nanmax(np.square(parameters.mu.data)),
+                np.nanmax(parameters.rr.data),
+                np.nanmax(parameters.mu.data),
+                np.nanmax(obs),
+                )*(1.05))
+
         # Fill first member with corrected observation
         analysis.loc[{'member':0}] = obs
         #analysis.loc[{'member':0}] = np.square(obs)
@@ -2165,20 +2154,8 @@ class EnsembleKalmanFilter(Assimilation):
         actual_ensemble = self.ensemble
         actual_parameters = self.parameters
 
-        if covariance:
-            codistances = os.path.join('/home/vernaym/These/DATA', f'codistance_max_dist_{self.max_dist}_{domain}.npz')
-#            if not os.path.exists(codistances):
-#                # Compute inter-distances
-#                coords=[(lon,lat) for lat in actual_parameters.lat.data for lon in actual_parameters.lon.data]
-#                self.pond = self.codistances(coords)
-#            else:
-#                self.pond = scipy.sparse.load_npz(codistances)
-            coords=[(lon,lat) for lat in actual_parameters.lat.data for lon in actual_parameters.lon.data]
-            #self.pond = self.codistances(coords)
-            self.pond = Preprocessing_ANTILOPE.codistances(coords, self.domain)
-        else:
-            self.pond = scipy.sparse.eye(len(actual_parameters.lat)*len(actual_parameters.lon))
-            self.pond = csr_matrix(self.pond)
+        coords=[(lon,lat) for lat in actual_parameters.lat.data for lon in actual_parameters.lon.data]
+        self.pond = Preprocessing_ANTILOPE.codistances(coords, self.domain)
 
 #        print('DBUG0')
 #        tmp=0.0000001*scipy.sparse.identity(np.shape(self.pond)[0])
@@ -2203,6 +2180,8 @@ class EnsembleKalmanFilter(Assimilation):
 
             ensemble   = actual_ensemble.sel({'time':date}).compute()  # Load data into memory now
             parameters = actual_parameters.sel({'time':date}).compute()
+
+            parameters['db'] = parameters['mu'].copy()
 
             ####################  TMP  #####################
             # Plot distributions before / after conversion
@@ -2307,7 +2286,7 @@ class EnsembleKalmanFilter(Assimilation):
         R, Rstat, Rdyn, updated_obs = self.observation_ECM_new(parameters, date)
         Y = updated_obs.data  # Observation vector. WARNING : Use mu to take debiasing into account !
         #R = R + diags(Y.flatten(), 0)*0.3  # Increase observation error by 30% of the observation value to match RS
-        R = R + diags((Y+0.1).flatten(), 0)*0.3  # Increase observation error by 30% of the observation value to match RS + avoid singular matrix
+        R = R + diags((Y+0.01).flatten(), 0)*0.3  # Increase observation error by 30% of the observation value to match RS + avoid singular matrix
         parameters = parameters.update({'obs':updated_obs})
         B, updated_ensemble = self.background_error_covariance_new(ensemble, updated_obs, R)  # Background error covariance matrix
         ensemble = updated_ensemble
@@ -2334,7 +2313,6 @@ class EnsembleKalmanFilter(Assimilation):
             std = np.sum((ens-mu)**2)/len(ens)
             ax = plot_distribution(ax, mu, std, ensemble=ens, label='Background', color='k')
 
-        # TODO : reconvertir en précipitation (R --> R^2) avant de plotter !
         self.rrmin = 0.
         self.rrmax = min(80, max(
                 #np.nanmax(np.square(ensemble.raw.data)),
@@ -2476,6 +2454,7 @@ class EnsembleKalmanFilter(Assimilation):
             if self.debiasing:
                 self.plot_obs(parameters, var='mu', domain=domain)
                 self.plot_obs(parameters, var='obs', domain=domain)
+                self.plot_obs(parameters, var='db', domain=domain)
                 parameters['diff'] = parameters.obs-parameters.mu
                 #parameters['diff'] = parameters.obs-parameters.rr  # !! TODO : TMP !!
                 self.plot_obs(parameters, var='diff', domain=domain)
