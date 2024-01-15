@@ -109,10 +109,10 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
     # Do not try to preserve values of pixels with low errors on average : the dynamic correction must account
     # for temporary failures as well as uncertainties due to the error estimation method
     #newfield = (initial_field * pixel_weight + mean * meanweight) / (pixel_weight + meanweight)  # Stay closer to the original value (spatial structures can still be visible)
-    newfield = (initial_field * pixel_weight + mean * meanweight/pixel_weight) / (pixel_weight + meanweight/pixel_weight)  # Smoother fields --> underestimation of extreme values
-    #newfield = (initial_field * pixel_weight + mean * weight/pixel_weight) / (pixel_weight + weight/pixel_weight)  # Smoother fields --> underestimation of extreme values
+    #newfield = (initial_field * pixel_weight + mean * meanweight/pixel_weight) / (pixel_weight + meanweight/pixel_weight)  # Smoother fields --> underestimation of extreme values
+    newfield = (initial_field * pixel_weight + mean * weight/pixel_weight) / (pixel_weight + weight/pixel_weight)  # Smoother fields --> underestimation of extreme values
     #newfield = (initial_field * pixel_weight + mean * meanweight/(meanweight+pixel_weight)) / (pixel_weight + meanweight/(meanweight+pixel_weight))
-    newfield = np.round(newfield, 1)
+    #newfield = np.round(newfield, 1)
 
 #    if gradient is not None:
 #        # TODO : apply AROME vertical gradient only for pixels with large uncertainties to avoid to introduce underestimaiton in valleys
@@ -388,7 +388,7 @@ def get_std(data, mean, pond, weight=None, super_ensemble=None):
 
     return sd
 
-def codistances(coords, domain='alp', ld=0.1, Zdist=True):  # TMP for illustration. TODO : test different correlation distances
+def codistances(coords, domain='alp', ld=0.1, Zdist=False):  # TMP for illustration. TODO : test different correlation distances
     """
     Solution pour le calcul des inter-distances trouvée sur : https://stackoverflow.com/questions/35296935/python-calculate-lots-of-distances-quickly
     """
@@ -400,10 +400,10 @@ def codistances(coords, domain='alp', ld=0.1, Zdist=True):  # TMP for illustrati
     tree = cKDTree(coords)
     dist = tree.sparse_distance_matrix(tree, max_distance=max_dist, p=2, output_type='coo_matrix')
     dist = csr_matrix(dist)
-    #d0 = 0.2
+    d0 = 0.2
     #dist.data = d0 / (d0+dist.data)  # IDW
-    dist.data=1/(1+dist.data)  # IDW
-    #dist.data = 1 - dist.data/d0  # Pondération de Franke-Little
+    #dist.data=1/(1+dist.data)  # IDW
+    dist.data = 1 - dist.data/d0  # Pondération de Franke-Little
     #dist.data[dist.data<0] = 0
     #dist.data = (max_dist-dist.data)/(max_dist*dist.data)^2  # Modified Shepard's ponderation
     #dist.data=1/(1+dist.data)**2  # IDW

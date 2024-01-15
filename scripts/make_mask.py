@@ -856,11 +856,11 @@ def ratio_estimation(field, model=None, moving_window=25):
             else:
                 #w = 1/(0.1+dist)**2
                 #w = 1/(0.01+dist)**2
-                #w = 1 - dist / d0
+                w = 1 - dist / d0
                 #dist[dist==0] = 0.001
                 #w = 1 / dist
                 #w = d0 / (d0 + dist)
-                w = 1/(0.01+dist)**2  # XP25
+                #w = 1/(0.01+dist)**2  # XP25
                 #w[w<0] = 0
                 #w = np.round(1/(1+dist)**2, 3)
                 #w = np.round(np.exp(-(dist/d0)), 3)  # Propagates reference score further

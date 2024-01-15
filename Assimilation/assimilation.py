@@ -1310,9 +1310,10 @@ class Assimilation(object):
         #Rdyn = diags(error.flatten(), 0)
         error = np.abs(new_obs.data - parameters.mu.data)
         #error = np.abs(new_obs.data - parameters.rr.data)  # TODO : try this error formulation
-        error = uniform_filter(error, 5)  # TODO : try without error smoothing
+        #error = uniform_filter(error, 5)  # TODO : try without error smoothing
         Rdyn = diags(error.flatten(), 0)
-        R = dia_matrix(Rdyn+Rstat)
+        #R = dia_matrix(Rdyn+Rstat)
+        R = dia_matrix(Rstat)
 
         # Plot data
         if plot is not None:
@@ -1675,39 +1676,42 @@ class RandomSampling(Assimilation):
 
             parameters = actual_parameters.sel({'time':date}).compute()
 
-            obs_auto = self.obs_auto[self.obs_auto.date==date]  # Select date
             var = 'mu'
-            delta = 1
-            rat, err, obs_auto = self.dynamic_error_estimation(parameters, obs_auto, var=var, delta=delta)
+            obs_auto = self.obs_auto[self.obs_auto.date==date]  # Select date
 
-            if self.plot:
-                # Reduce the data to the actual domain (remove the potential correlation length edge)
-                latmin = domain_coords[domain]['latmin']
-                latmax = domain_coords[domain]['latmax']
-                lonmin = domain_coords[domain]['lonmin']
-                lonmax = domain_coords[domain]['lonmax']
-                sel_lat = np.round(np.arange(latmin, latmax, 0.01), 2)
-                sel_lon = np.round(np.arange(lonmin, lonmax, 0.01), 2)
-                #sel_lat = rat.lat.data  # TODO : TMP !!!
-                #sel_lon = rat.lon.data  # TODO : TMP !!!
+            dynamic_error = False  # Switch dynamic error on/off
 
-                self.plot_array(rat.data, rat, 'ratio', f'{self.date_str}/Ratio_{self.domain}.pdf', cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=0.2, vmax=1.8, domain=self.domain)
-                self.plot_array(err.data, err, 'error (mm)', f'{self.date_str}/Error_dyn_{self.domain}.pdf', cmap=plt.cm.YlOrBr, domain=self.domain, vmin=0)
-                self.plot_array(err.data+parameters.sigma, err, 'error (mm)', f'{self.date_str}/Error_{self.domain}.pdf', cmap=plt.cm.YlOrBr, domain=self.domain, vmin=0)
-                #fig, ax = plt.subplots(figsize=figsize[self.domain]['singleplot'])
-                #tmp = rat.sel({'lat':np.intersect1d(sel_lat, rat.lat.data), 'lon':np.intersect1d(sel_lon, rat.lon.data)})
-                #im = plot_field(tmp, ax, 0.5, 1.5, self.domain, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap)
-                #im = make_mask.plot_field(fig, ax, tmp, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=0.5, vmax=1.5, scores=obs_auto)
-                #fig.savefig(f'{self.date_str}/Ratio_{self.domain}.pdf', format='pdf')
-                #fig, ax = plt.subplots(figsize=figsize[self.domain]['singleplot'])
-                #tmp = err.sel({'lat':np.intersect1d(sel_lat, err.lat.data), 'lon':np.intersect1d(sel_lon, err.lon.data)})
-                #im = make_mask.plot_field(fig, ax, tmp, cmap=plt.cm.YlOrBr, scores=obs_auto)
-                #im = plot_field(tmp, ax, 0, 20, self.domain, cmap=plt.cm.YlOrBr)
-                #fig.savefig(f'{self.date_str}/Error_{self.domain}.pdf', format='pdf')
-                #plt.close('all')
+            if dynamic_error:
+                delta = 1
+                rat, err, obs_auto = self.dynamic_error_estimation(parameters, obs_auto, var=var, delta=delta)
+
+                if self.plot:
+                    # Reduce the data to the actual domain (remove the potential correlation length edge)
+                    latmin = domain_coords[domain]['latmin']
+                    latmax = domain_coords[domain]['latmax']
+                    lonmin = domain_coords[domain]['lonmin']
+                    lonmax = domain_coords[domain]['lonmax']
+                    sel_lat = np.round(np.arange(latmin, latmax, 0.01), 2)
+                    sel_lon = np.round(np.arange(lonmin, lonmax, 0.01), 2)
+                    #sel_lat = rat.lat.data  # TODO : TMP !!!
+                    #sel_lon = rat.lon.data  # TODO : TMP !!!
+
+                    self.plot_array(rat.data, rat, 'ratio', f'{self.date_str}/Ratio_{self.domain}.pdf', cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=0.2, vmax=1.8, domain=self.domain)
+                    self.plot_array(err.data, err, 'error (mm)', f'{self.date_str}/Error_dyn_{self.domain}.pdf', cmap=plt.cm.YlOrBr, domain=self.domain, vmin=0)
+                    self.plot_array(err.data+parameters.sigma, err, 'error (mm)', f'{self.date_str}/Error_{self.domain}.pdf', cmap=plt.cm.YlOrBr, domain=self.domain, vmin=0)
+                    #fig, ax = plt.subplots(figsize=figsize[self.domain]['singleplot'])
+                    #tmp = rat.sel({'lat':np.intersect1d(sel_lat, rat.lat.data), 'lon':np.intersect1d(sel_lon, rat.lon.data)})
+                    #im = plot_field(tmp, ax, 0.5, 1.5, self.domain, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap)
+                    #im = make_mask.plot_field(fig, ax, tmp, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=0.5, vmax=1.5, scores=obs_auto)
+                    #fig.savefig(f'{self.date_str}/Ratio_{self.domain}.pdf', format='pdf')
+                    #fig, ax = plt.subplots(figsize=figsize[self.domain]['singleplot'])
+                    #tmp = err.sel({'lat':np.intersect1d(sel_lat, err.lat.data), 'lon':np.intersect1d(sel_lon, err.lon.data)})
+                    #im = make_mask.plot_field(fig, ax, tmp, cmap=plt.cm.YlOrBr, scores=obs_auto)
+                    #im = plot_field(tmp, ax, 0, 20, self.domain, cmap=plt.cm.YlOrBr)
+                    #fig.savefig(f'{self.date_str}/Error_{self.domain}.pdf', format='pdf')
+                    #plt.close('all')
 
             # Fill parameters Dataset with dynamic fields
-            dynamic_error = True
             if dynamic_error and (rat is not None and err is not None):
                 parameters['error'] = err
                 parameters['ratio'] = rat
@@ -1944,9 +1948,9 @@ class RandomSampling(Assimilation):
         #pond = self.pond.dot(diags(1/std.flatten(), 0))
 
         for member in analysis.member.data:
-            #ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='gamma')
+            ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='gamma')
             #ana = Preprocessing_ANTILOPE.random_draw(obs, sd1, distribution='gamma')
-            ana = Preprocessing_ANTILOPE.random_draw(obs, sd1, sd2=sd2, distribution='gamma')
+            #ana = Preprocessing_ANTILOPE.random_draw(obs, sd1, sd2=sd2, distribution='gamma')
             #ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='normal')
             analysis.loc[{'member':member}] = ana
 
@@ -2115,9 +2119,9 @@ class RandomSampling(Assimilation):
 
             # Fill other members with random draw arround the corrected observation
             for member in range(1, nmembers+1):
-                #ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='gamma')
+                ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='gamma')
                 #ana = Preprocessing_ANTILOPE.random_draw(obs, sd1, distribution='gamma')
-                ana = Preprocessing_ANTILOPE.random_draw(obs, sd1, sd2=sd2, distribution='gamma')
+                #ana = Preprocessing_ANTILOPE.random_draw(obs, sd1, sd2=sd2, distribution='gamma')
                 #ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='normal')
                 analysis.loc[{'member':member}] = ana
 
