@@ -21,8 +21,12 @@ toolbox.active_now = True
 datebegin = '2021080206'
 dateend   = '2022080106'
 
-#datadir =  '/home/vernaym/workdir/EDELWEISS'  # local
-datadir =  '/home/mrns/vernaym/workdir/EDELWEISS'  # soprano
+home = '/home/vernaym'  #local/sxcen
+#home = '/home/mrns/vernaym'  # soprano
+#home = '/home/cnrm_other/cen/mrns/vernaym'  # HPC
+
+datadir =  os.path.join(home, 'workdir/EDELWEISS')
+
 
 # 1. Radiation variables come from SAFRAN reanalysis in the initial stage (similar for all ensemble members)
 # TODO : à récupérer avec Vortex
@@ -62,7 +66,8 @@ tbin = toolbox.input(
 # Concatenation of all FORCING variables into the final FORCING files
 outname = 'FORCING_2021080206_2022080106_gr250ls.nc'
 for member in range(1,17):
-    if not os.path.exists(os.path.join(datadir, 'meteo', f'mb{member:03d}', outname)):
+    fullname = os.path.join(datadir, 'meteo', f'mb{member:03d}', outname)
+    if not os.path.exists(fullname):
         #precipitation = xr.open_dataset(os.path.join(datadir, 'hourly_precipitation_analysis', 'precipitation.antilope-randomsampling_2021122706_2021123006.nc'))
         precipitation = xr.open_dataset(os.path.join(dirname, f'mb{member:03d}', filename))
         precipitation=precipitation.rename({'xx':'x', 'yy':'y'})
@@ -71,7 +76,7 @@ for member in range(1,17):
         forcing['Rainf'] = precipitation['Rainf_ds']
         forcing['Snowf'] = precipitation['Snowf_ds']
 
-        forcing.to_netcdf(os.path.join(datadir, 'meteo', f'mb{member:03d}', outname))
+        forcing.to_netcdf(fullname)
 
 tbin = toolbox.input(
         role        = 'Forcing file',
@@ -99,5 +104,3 @@ tbin = toolbox.input(
         intent      = 'inout',
     )
 
-import pdb
-pdb.set_trace()
