@@ -2227,14 +2227,13 @@ class EnsembleKalmanFilter(Assimilation):
                 sel_lon = np.round(np.arange(nearest_lon-self.max_dist, nearest_lon+self.max_dist, 0.01), 2)
                 ensemble_loc = ensemble.sel({'lat':np.intersect1d(sel_lat, ensemble.lat), 'lon':np.intersect1d(sel_lon, ensemble.lon)})
                 parameters_loc = parameters.sel({'lat':np.intersect1d(sel_lat, parameters.lat), 'lon':np.intersect1d(sel_lon, parameters.lon)})
-                # Compute inter-distances
-                coords=[(lon,lat) for lat in parameters_loc.lat for lon in parameters_loc.lon]
-                #self.pond = self.codistances(coords)
-                self.pond = Preprocessing_ANTILOPE.codistances(coords, self.domain)
             else:  # Verrue !
                 ensemble_loc = ensemble.sel({'lat':np.round([nearest_lat], 2), 'lon':np.round([nearest_lon], 2)})
                 parameters_loc = parameters.sel({'lat':np.round([nearest_lat], 2), 'lon':np.round([nearest_lon], 2)})
-                self.pond = scipy.sparse.eye(1)
+            # Compute inter-distances
+            coords=[(lon,lat) for lat in parameters_loc.lat for lon in parameters_loc.lon]
+            #self.pond = self.codistances(coords)
+            self.pond = Preprocessing_ANTILOPE.codistances(coords, self.domain)
 
             R, Rstat, Rdyn, updated_obs = self.observation_ECM_new(parameters_loc, date)  # WARNING : prameters loc est un point unique !
             Y = updated_obs.data  # Observation vector. WARNING : Use mu to take debiasing into account !
