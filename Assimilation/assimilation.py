@@ -1780,16 +1780,6 @@ class RandomSampling(Assimilation):
         obs = Y.reshape((len(parameters.lat), len(parameters.lon)))  # Get observation field
         obs = np.round(obs, 1)  # Round precipitation <0.1 at 0 (different distribution used in this case) TODO : convertir dans l'espace r^1/2
 
-        self.rrmin = 0.
-        self.rrmax = min(80, max(
-                #np.nanmax(np.square(parameters.obs.data)),
-                #np.nanmax(np.square(parameters.rr.data)),
-                #np.nanmax(np.square(parameters.mu.data)),
-                np.nanmax(parameters.rr.data),
-                np.nanmax(parameters.mu.data),
-                np.nanmax(obs),
-                )*(1.05))
-
         # Fill first member with corrected observation
         analysis.loc[{'member':0}] = obs
         #analysis.loc[{'member':0}] = np.square(obs)
