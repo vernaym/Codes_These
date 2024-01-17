@@ -78,7 +78,7 @@ for member in range(1,17):
 
         forcing.to_netcdf(fullname)
 
-tbin = toolbox.input(
+tbout = toolbox.output(
         role        = 'Forcing file',
         kind        = 'MeteorologicalForcing',
         vapp        = 'edelweiss',
