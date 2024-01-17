@@ -568,6 +568,7 @@ def plot_field(fig, ax, field, cmap=None, vmin=None, vmax=None, scores=None, col
         cml = field.plot(ax=ax, cmap=cmap, norm=norm, add_colorbar=False)
     else:
         cml = field.plot(ax=ax, cmap=cmap, vmin=vmin, vmax=vmax, add_colorbar=False)
+    cml.set_edgecolor('face')
 
     if scores is not None:
         if cmap is not None:
