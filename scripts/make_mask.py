@@ -514,7 +514,7 @@ def to_xarray(array, field, varname='rr'):
     )
     return output
 
-def plot_and_save(field, name, cmap=plt.cm.Greys, vmin=None, vmax=None, scores=None, dom=None, dirsave=None, elevation=False):
+def plot_and_save(field, name, cmap=plt.cm.Greys, vmin=None, vmax=None, scores=None, dom=None, dirsave=None, elevation=False, coords=False):
 
     latmin = np.min(field.lat.data)
     latmax = np.max(field.lat.data)
@@ -547,7 +547,7 @@ def plot_and_save(field, name, cmap=plt.cm.Greys, vmin=None, vmax=None, scores=N
     else:
         fig, ax = plt.subplots()
 
-    im = plot_field(fig, ax, field, cmap=cmap, vmin=vmin, vmax=vmax, scores=scores, elevation=elevation)
+    im = plot_field(fig, ax, field, cmap=cmap, vmin=vmin, vmax=vmax, scores=scores, elevation=elevation, coords=coords)
     #fig.savefig(os.path.join(dirsave, f'{name}.pdf'), format='pdf', layout='tight')
     #fig.savefig(os.path.join(dirsave, f'{name}.pdf'), format='pdf', bbox_inches='tight')
     fig.savefig(os.path.join(dirsave, f'{name}.pdf'), format='pdf')
@@ -1119,7 +1119,7 @@ def ratio_estimation(field, model=None, moving_window=25):
     #if domain == 'alp':
     # From https://qiita.com/tsukada_cs/items/d282f27f4024d00d7022 :
     #plot_and_save(ratio_field, rationame, vmin=0.2, vmax=1.8, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, scores=scores)  # Albane's choice !
-    plot_and_save(ratio_field, rationame, vmin=0.6, vmax=1.4, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, scores=scores, elevation=True)  # Albane's choice !
+    plot_and_save(ratio_field, rationame, vmin=0.6, vmax=1.4, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, scores=scores, elevation=True, coords=True)  # Albane's choice !
     #plot_and_save(ratio_field, rationame + '_free_scale', vmin=0, vmax=2, cmap=plt.cm.coolwarm, scores=scores)
     #plot_and_save(np.abs(observation_error), errorname, vmin=0, vmax=12, cmap=plt.cm.viridis, scores=scores)
     #plot_and_save(np.abs(observation_error), errorname, vmin=0, vmax=15, cmap=plt.cm.Reds, scores=scores)
@@ -1127,7 +1127,7 @@ def ratio_estimation(field, model=None, moving_window=25):
     #plot_and_save(observation_error, errorname, vmin=1, vmax=15, cmap=plt.cm.YlOrBr, scores=scores)
     plot_and_save(confidence, confidencename, vmin=0, cmap=plt.cm.Greens)
     #plot_and_save(uncertainty, uncertaintyname, vmin=1, vmax=40, cmap=plt.cm.YlOrBr, scores=scores)
-    plot_and_save(uncertainty, uncertaintyname, vmin=1, vmax=40, cmap=plt.cm.YlOrBr, elevation=True)
+    plot_and_save(uncertainty, uncertaintyname, vmin=1, vmax=40, cmap=plt.cm.YlOrBr, elevation=True, coords=True)
 #    elif domain == 'GrandesRousses':
 #        plot_and_save(ratio_field, rationame, vmin=0.6, vmax=1.4, cmap=plt.cm.coolwarm, scores=scores)
 #        #plot_and_save(observation_error, errorname, vmin=-6, vmax=6, cmap=plt.cm.coolwarm, scores=scores)
