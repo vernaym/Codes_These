@@ -51,6 +51,7 @@ configobj==5.0.6
 constantly==15.1.0
 cov-core==1.15.0
 coverage==6.2
+CRPS==2.0.4
 cryptography==3.4.8
 cupshelpers==1.0
 cycler==0.11.0

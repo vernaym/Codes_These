@@ -270,15 +270,21 @@ algo = dict(
         #RS22          = 'RandomSampling/XP22/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         #RS23          = 'RandomSampling/XP23/Random_Sampling_2021120106_2022050106_daily_alp.nc',  # commit f0d6615fe98865a0c87c88dca4dda7e70a1725a1
         #RS23          = 'RandomSampling/XP23/Random_Sampling_2021120106_2022043006_daily_alp.nc',  # commit 
-        RS24          = 'RandomSampling/XP24/Random_Sampling_2021120106_2022043006_daily_alp.nc',  # commit 
+        #RS24          = 'RandomSampling/XP24/Random_Sampling_2021120106_2022043006_daily_alp.nc',  # commit 
         #RS25          = 'RandomSampling/XP25/Random_Sampling_2021120106_2022043006_daily_alp.nc',  # commit 
         ################################################################################################
-        # PHD committeei / article :
-        RS21          = 'RandomSampling/XP21/Random_Sampling_2021120106_2022050106_daily_alp.nc',
+        # PHD committee :
+        #RS21          = 'RandomSampling/XP21/Random_Sampling_2021120106_2022050106_daily_alp.nc',
         #PF31          = 'XP31/Assimilation_locale_2021120106_2022050106_daily_alp_mask9_debiasing3.nc',
         #KD35          = 'EnsembleKalmanFilter/XP35/EnKF_2021120106_2022050106_daily_alp.nc',
         ################################################################################################
-        RS26          = 'RandomSampling/XP26/Random_Sampling_2021120106_2022043006_daily_alp.nc',
+        #RS26          = 'RandomSampling/XP26/Random_Sampling_2021120106_2022043006_daily_alp.nc',
+        ################################################################################################
+        # Paper1 :
+        RS27          = 'RandomSampling/XP27/Random_Sampling_2021120106_2022043006_daily_alp.nc',
+        PF32          = 'XP32/Assimilation_locale_2021120106_2022050106_daily_alp_mask9_debiasing3.nc',
+        KD36          = 'EnsembleKalmanFilter/XP36/EnKF_2021120106_2022050106_daily_alp.nc',
+        ################################################################################################
     )
 
 
@@ -421,6 +427,9 @@ xpid_label = dict(
         RS24          = 'RS24',
         RS25          = 'RS25',
         RS26          = 'RS26',
+        RS27          = 'RS',  # paper1
+        PF32          = 'PF',  # paper1
+        KD36          = 'EnKF',  # paper1
     )
 
 colors = dict(
@@ -432,11 +441,14 @@ colors = dict(
     RS23      = 'k',
     RS24      = 'maroon',
     RS25      = 'green',
+    RS27      = 'darkblue',
     RS26      = 'green',
     #PF31      = 'green',
     PF31      = 'green',
+    PF32      = 'green',
     #KD35      = 'blue',
     KD35      = 'red',
+    KD36      = 'red',
 )
 
 def nearest(array, value):
@@ -1209,15 +1221,15 @@ class Evaluation(object):
                 i = 0
                 j = 0
                 title = 'a'
-            elif product == 'RS21':
+            elif product.startswith('RS'):
                 i = 0
                 j = 1
                 title = 'b'
-            elif product == 'PF31':
+            elif product.startswith('PF'):
                 i = 1
                 j = 0
                 title= 'c'
-            elif product == 'KD35':
+            elif product.startswith('KD'):
                 i = 1
                 j = 1
                 title= 'd'
