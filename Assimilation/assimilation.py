@@ -418,7 +418,7 @@ def plot3D(X, Y, Z, colors, date):
 
     #ax.set_zlim(0., np.nanmax(Z))
     ax.set_zlim(0., 3500.)
-    fig.colorbar(cm.ScalarMappable(norm=pltnorm, cmap=plt.cm.coolwarm), ax=ax, shrink=0.75, aspect=8, label=f'ANTILOPE precipitation (mm)')
+    fig.colorbar(cm.ScalarMappable(norm=pltnorm, cmap=plt.cm.coolwarm), ax=ax, shrink=0.75, aspect=8, label=f'ANTILOPE precipitation (kg/m²)')
     plt.savefig(f'{date}/OBS_3D_{date}.pdf', format='pdf')
 
 
@@ -621,7 +621,7 @@ class Assimilation(object):
 #            ax.fill_between(x=y, y1=gamma, where=(delta < y) & (y < 0), color='lightgrey')
             #ax.bar(0, scgd0, width=0.2, align='edge', color=color)
             #ax.bar(0, scgd0, width=0.2, color=color)
-            plt.xlabel('24-hour precipitation (mm)')
+            plt.xlabel('24-hour precipitation (kg/m²)')
             plt.ylabel('Weight')
             plt.legend(loc ="upper right")
             fig.savefig(f"PDF00.pdf", format='pdf')
@@ -719,7 +719,7 @@ class Assimilation(object):
             cbar_ax = fig.add_axes([0.93, 0.04, 0.025, 0.91])
             cb = fig.colorbar(im, cax=cbar_ax)
             cb.ax.tick_params(labelsize=18)
-            cb.set_label("24h precipitation(mm)", size=18)
+            cb.set_label("24h precipitation(kg/m²)", size=18)
 
             plt.xticks(fontsize=16)
             plt.yticks(fontsize=16)
@@ -852,14 +852,14 @@ class Assimilation(object):
         fig, ax = plt.subplots(figsize=figsize[self.domain]['singleplot'])
         #cmap = plt.cm.YlGnBu
         cmap = plt.cm.Greys
-        im = field['sigma'].plot(ax=ax, cmap=cmap, cbar_kwargs=dict(label='Standard deviation (mm)'))
+        im = field['sigma'].plot(ax=ax, cmap=cmap, cbar_kwargs=dict(label='Standard deviation (kg/m²)'))
         for landmark, infos in landmarks.items():
                 ax.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='red', markersize=4)
         fig.tight_layout()
         fig.savefig(f"{self.date_str}/PDF_std_{self.date_str}.pdf", format='pdf')
 
     def plot_parameters(self):
-        label_map = dict(sigma='Standard deviation sigma (mm)', k='Shape parameter (k)', theta='Scale parameter (theta)', delta='Shift parameter (delta)')
+        label_map = dict(sigma='Standard deviation sigma (kg/m²)', k='Shape parameter (k)', theta='Scale parameter (theta)', delta='Shift parameter (delta)')
         fig, ax = plt.subplots(nrows=2, ncols=2, figsize=figsize[self.domain]['singleplot'])
         i = 0
         j = 0
@@ -993,7 +993,7 @@ class Assimilation(object):
             ax.set_ylim(bottom=0, top=0.5)
             ax.set_xlim(left=np.nanmin(oldfield)-std, right=np.nanmax(oldfield)+std)
             #ax.set_xlim(left=0, right=3)
-            ax.set_xlabel('Precipitation (mm)')
+            ax.set_xlabel('Precipitation (kg/m²)')
             ax.set_ylabel('Probability')
             ax.legend()
 #            if not os.path.exists(f'{self.date_str}/distributions'):
@@ -1676,8 +1676,8 @@ class RandomSampling(Assimilation):
                     #sel_lon = rat.lon.data  # TODO : TMP !!!
 
                     self.plot_array(rat.data, rat, 'ratio', f'{self.date_str}/Ratio_{self.domain}.pdf', cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=0.2, vmax=1.8, domain=self.domain)
-                    self.plot_array(err.data, err, 'error (mm)', f'{self.date_str}/Error_dyn_{self.domain}.pdf', cmap=plt.cm.YlOrBr, domain=self.domain, vmin=0)
-                    self.plot_array(err.data+parameters.sigma, err, 'error (mm)', f'{self.date_str}/Error_{self.domain}.pdf', cmap=plt.cm.YlOrBr, domain=self.domain, vmin=0)
+                    self.plot_array(err.data, err, 'error (kg/m²)', f'{self.date_str}/Error_dyn_{self.domain}.pdf', cmap=plt.cm.YlOrBr, domain=self.domain, vmin=0)
+                    self.plot_array(err.data+parameters.sigma, err, 'error (kg/m²)', f'{self.date_str}/Error_{self.domain}.pdf', cmap=plt.cm.YlOrBr, domain=self.domain, vmin=0)
                     #fig, ax = plt.subplots(figsize=figsize[self.domain]['singleplot'])
                     #tmp = rat.sel({'lat':np.intersect1d(sel_lat, rat.lat.data), 'lon':np.intersect1d(sel_lon, rat.lon.data)})
                     #im = plot_field(tmp, ax, 0.5, 1.5, self.domain, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap)
@@ -1844,13 +1844,13 @@ class RandomSampling(Assimilation):
             text = zip(bias.lon.values, bias.lat.values, bias.values)
             #text = zip(ratio.lon.data, ratio.lat.data, ratio.data)
             self.plot_array(analysis.sel(member=0), parameters.rr, 'Corrected field', f'{self.date_str}/Corrected_field_{self.date_str}_{self.domain}.pdf', vmin=0, vmax=self.rrmax, cmap=plt.cm.YlGnBu, text1=text)
-            self.plot_array(error, parameters.rr, 'Error (mm)', f'{self.date_str}/ERROR_{self.domain}.pdf', vmin=0, vmax=np.max(error), cmap=plt.cm.Reds, text1=text)
+            self.plot_array(error, parameters.rr, 'Error (kg/m²)', f'{self.date_str}/ERROR_{self.domain}.pdf', vmin=0, vmax=np.max(error), cmap=plt.cm.Reds, text1=text)
             #self.plot_array(reference_field, parameters.rr, 'Precipitation (mm)', f'{self.date_str}/Reference_{self.date_str}_{self.domain}.pdf', vmin=0, vmax=self.rrmax, cmap=plt.cm.YlGnBu, bias=nivometeo.obs)
             if kriging:
                 #obs_auto = obs_auto[(obs_auto.lon<=np.max(parameters.lon.data)) & (obs_auto.lon>=np.min(parameters.lon.data)) & (obs_auto.lat<=np.max(parameters.lat.data)) & (obs_auto.lat>=np.min(parameters.lat.data))]
                 text1 = zip(obs_auto.lon.values, obs_auto.lat.values, obs_auto.rr.values)
                 text2 = zip(df.lon.values, df.lat.values, df.rr.values)  # nivometeo observations
-                self.plot_array(reference_field, parameters, 'Precipitation (mm)', f'{self.date_str}/Reference_{self.date_str}_{self.domain}.pdf', vmin=0, vmax=self.rrmax, cmap=plt.cm.YlGnBu, text1=text1, text2=text2)
+                self.plot_array(reference_field, parameters, 'Precipitation (kg/m²)', f'{self.date_str}/Reference_{self.date_str}_{self.domain}.pdf', vmin=0, vmax=self.rrmax, cmap=plt.cm.YlGnBu, text1=text1, text2=text2)
 
             npoints = len(evaluation_points)
             if npoints <=3:
@@ -1974,7 +1974,7 @@ class RandomSampling(Assimilation):
                     ax[i,j].set_xlim(left=0, right=80)
                     #ax[i,j].set_ylim(top=norm.pdf(mu, loc=mu, scale=std)*1.2)
                     ax[i,j].set_ylim(top=0.06)
-                    ax[i,j].set_xlabel('Precipitation (mm/24h)')
+                    ax[i,j].set_xlabel('Precipitation (kg/m²/24h)')
                     ymax[i+j] = max(ymax[i+j], np.max(ens))*1.1
                     j = j + 1
                     if j==ncol:
@@ -2018,7 +2018,7 @@ class RandomSampling(Assimilation):
                 #self.plot_obs(parameters, var='diff', domain=domain)
 
             mean = self.ensemble_mean(analysis)
-            self.plot_array(mean, parameters.rr, 'Mean precipitation (mm)', f'{self.date_str}/Analysis_mean_{self.domain}.pdf', cmap=plt.cm.YlGnBu, vmin=self.rrmin, vmax=self.rrmax)
+            self.plot_array(mean, parameters.rr, 'Mean precipitation (kg/m²)', f'{self.date_str}/Analysis_mean_{self.domain}.pdf', cmap=plt.cm.YlGnBu, vmin=self.rrmin, vmax=self.rrmax)
 
             disp = self.ensemble_dispersion(analysis)
             disp = xr.DataArray(
@@ -2030,9 +2030,9 @@ class RandomSampling(Assimilation):
             )
             evaluation_points = disp.sel(lat=xr.DataArray(allobs.lat.values, dims="poste"), lon=xr.DataArray(allobs.lon.values, dims="poste"), method='nearest')
             text = zip(evaluation_points.lon.data, evaluation_points.lat.data, evaluation_points.data)
-            self.plot_array(disp, parameters.rr, 'Dispersion (mm)', f'{self.date_str}/Analysis_dispersion_{self.domain}.pdf', vmin=0, vmax=np.nanmax(disp), cmap=plt.cm.YlGnBu, text1=text)
+            self.plot_array(disp, parameters.rr, 'Dispersion (kg/m²)', f'{self.date_str}/Analysis_dispersion_{self.domain}.pdf', vmin=0, vmax=np.nanmax(disp), cmap=plt.cm.YlGnBu, text1=text)
 
-            finalize_fig(fig1, im1, label='24-hour precipitation (mm)', outname=f'{self.date_str}/ANALYSIS_{self.date_str}_{self.domain}.pdf')
+            finalize_fig(fig1, im1, label='24-hour precipitation (kg/m²)', outname=f'{self.date_str}/ANALYSIS_{self.date_str}_{self.domain}.pdf')
 
     @speedtest
     def ponctual_random_draw(self, date, idd, parameters, nmembers=16):
@@ -2410,7 +2410,7 @@ class EnsembleKalmanFilter(Assimilation):
             ax.legend()
             ax.set_xlim(right=10)
             ax.set_ylim(top=1)
-            ax.set_xlabel('Precipitation (mm)')
+            ax.set_xlabel('Precipitation (kg/m²)')
             if not os.path.exists(f'{self.date_str}/distributions'):
                 os.makedirs(f'{self.date_str}/distributions')
             fig.savefig(f'{self.date_str}/distributions/DISTRIBUTION_ANALYSE.pdf')
@@ -2453,27 +2453,27 @@ class EnsembleKalmanFilter(Assimilation):
                 self.plot_obs(parameters, var='diff', domain=domain)
 
             mean = self.ensemble_mean(analysis)
-            self.plot_array(mean, parameters.rr, 'Mean precipitation (mm)', f'{self.date_str}/Analysis_mean_{self.domain}.pdf', cmap=plt.cm.YlGnBu, vmin=self.rrmin, vmax=self.rrmax)
+            self.plot_array(mean, parameters.rr, 'Mean precipitation (kg/m²)', f'{self.date_str}/Analysis_mean_{self.domain}.pdf', cmap=plt.cm.YlGnBu, vmin=self.rrmin, vmax=self.rrmax)
             # TODO : comprendre pourquoi la dispersion est plus importante sur les bords du domaine (distance de coorélation moins impactante ?
             disp = self.ensemble_dispersion(analysis)
-            self.plot_array(disp, parameters.rr, 'Dispersion (mm)', f'{self.date_str}/Analysis_dispersion_{self.domain}.pdf', vmin=0, cmap=plt.cm.YlGnBu)
+            self.plot_array(disp, parameters.rr, 'Dispersion (kg/m²)', f'{self.date_str}/Analysis_dispersion_{self.domain}.pdf', vmin=0, cmap=plt.cm.YlGnBu)
 
             rawmean = self.ensemble_mean(ensemble.raw)
             rawdisp = self.ensemble_dispersion(ensemble.raw)
-            self.plot_array(rawmean, parameters.rr, 'Mean precipitation (mm)', f'{self.date_str}/Raw_mean_{self.domain}.pdf', cmap=plt.cm.YlGnBu, vmin=self.rrmin, vmax=self.rrmax)
-            self.plot_array(rawdisp, parameters.rr, 'Dispersion (mm)', f'{self.date_str}/Raw_dispersion_{self.domain}.pdf', vmin=0, cmap=plt.cm.YlGnBu)
+            self.plot_array(rawmean, parameters.rr, 'Mean precipitation (kg/m²)', f'{self.date_str}/Raw_mean_{self.domain}.pdf', cmap=plt.cm.YlGnBu, vmin=self.rrmin, vmax=self.rrmax)
+            self.plot_array(rawdisp, parameters.rr, 'Dispersion (kg/m²)', f'{self.date_str}/Raw_dispersion_{self.domain}.pdf', vmin=0, cmap=plt.cm.YlGnBu)
 
             backgroundmean = self.ensemble_mean(ensemble.rr)
             backgrounddisp = self.ensemble_dispersion(ensemble.rr)
-            self.plot_array(backgroundmean, parameters.rr, 'Mean precipitation (mm)', f'{self.date_str}/Background_mean_{self.domain}.pdf', cmap=plt.cm.YlGnBu, vmin=self.rrmin, vmax=self.rrmax)
-            self.plot_array(backgrounddisp, parameters.rr, 'Dispersion (mm)', f'{self.date_str}/Background_dispersion_{self.domain}.pdf', vmin=0, cmap=plt.cm.YlGnBu)
+            self.plot_array(backgroundmean, parameters.rr, 'Mean precipitation (kg/m²)', f'{self.date_str}/Background_mean_{self.domain}.pdf', cmap=plt.cm.YlGnBu, vmin=self.rrmin, vmax=self.rrmax)
+            self.plot_array(backgrounddisp, parameters.rr, 'Dispersion (kg/m²)', f'{self.date_str}/Background_dispersion_{self.domain}.pdf', vmin=0, cmap=plt.cm.YlGnBu)
 
             if not os.path.exists(f'{self.date_str}/RAW_{self.date_str}_{self.domain}.pdf'):
-                finalize_fig(fig1, im1, label='24-hour precipitation (mm)', outname=f'{self.date_str}/RAW_{self.date_str}_{self.domain}.pdf')
+                finalize_fig(fig1, im1, label='24-hour precipitation (kg/m²)', outname=f'{self.date_str}/RAW_{self.date_str}_{self.domain}.pdf')
             if not os.path.exists(f'{self.date_str}/BACKGROUND_{self.date_str}_{self.domain}.pdf'):
-                finalize_fig(fig4, im4, label='24-hour precipitation (mm)', outname=f'{self.date_str}/BACKGROUND_{self.date_str}_{self.domain}.pdf')
-            finalize_fig(fig2, im2, label='24-hour precipitation (mm)', outname=f'{self.date_str}/ANALYSIS_{self.date_str}_{self.domain}.pdf')
-            finalize_fig(fig3, im3, label='24-hour precipitation difference (mm)', outname=f'{self.date_str}/INNOVATION_{self.date_str}_{self.domain}.pdf')
+                finalize_fig(fig4, im4, label='24-hour precipitation (kg/m²)', outname=f'{self.date_str}/BACKGROUND_{self.date_str}_{self.domain}.pdf')
+            finalize_fig(fig2, im2, label='24-hour precipitation (kg/m²)', outname=f'{self.date_str}/ANALYSIS_{self.date_str}_{self.domain}.pdf')
+            finalize_fig(fig3, im3, label='24-hour precipitation difference (kg/m²)', outname=f'{self.date_str}/INNOVATION_{self.date_str}_{self.domain}.pdf')
 
             plt.close('all')
 
@@ -2544,7 +2544,7 @@ class ParticleFilter(Assimilation):
                         label=f'gamma(mu={mu:0.2},sigma={sigma:0.2})', color=color)
             plt.axvline(x=0, color='k', linestyle='-', linewidth=0.5)
             plt.axvline(x=obs, color='k', linestyle='--', label=f'Observation : {obs:0.2}')
-            plt.xlabel('Precipitation (mm)')
+            plt.xlabel('Precipitation (kg/m²)')
             plt.ylabel('Weight')
             plt.legend(loc ="upper right")
             filename = "distribution"
@@ -2675,11 +2675,11 @@ class ParticleFilter(Assimilation):
                     )
             fig, ax = plt.subplots(figsize=figsize[self.domain]['singleplot'])
             im = plot_field(parameters_date.rr, ax, rrmin, rrmax, self.domain)
-            finalize_fig(fig, im, label='24-hour precipitation (mm)', outname=f'{self.date_str}/RAW_observation_{self.date_str}.pdf')
+            finalize_fig(fig, im, label='24-hour precipitation (kg/m²)', outname=f'{self.date_str}/RAW_observation_{self.date_str}.pdf')
 
             fig, ax = plt.subplots(figsize=figsize[self.domain]['singleplot'])
             im = plot_field(parameters_date.obs, ax, rrmin, rrmax, self.domain)
-            finalize_fig(fig, im, label='24-hour precipitation (mm)', outname=f'{self.date_str}/ASSIMILATED_observation_{self.date_str}.pdf')
+            finalize_fig(fig, im, label='24-hour precipitation (kg/m²)', outname=f'{self.date_str}/ASSIMILATED_observation_{self.date_str}.pdf')
 
             #self.rrmax = np.nanmax(parameters_date.rr.data)
             for member in range(1,17):
@@ -2702,8 +2702,8 @@ class ParticleFilter(Assimilation):
                     i = i + 1
             if not os.path.exists(f'{self.date_str}'):
                 os.makedirs(f'{self.date_str}')
-            finalize_fig(fig1, im1, label='24-hour precipitation (mm)', outname=f'{self.date_str}/RAW_{self.date_str}.pdf')
-            finalize_fig(fig2, im2, label='24-hour precipitation (mm)', outname=f'{self.date_str}/ASSIM_{self.date_str}.pdf')
+            finalize_fig(fig1, im1, label='24-hour precipitation (kg/m²)', outname=f'{self.date_str}/RAW_{self.date_str}.pdf')
+            finalize_fig(fig2, im2, label='24-hour precipitation (kg/m²)', outname=f'{self.date_str}/ASSIM_{self.date_str}.pdf')
 #            fig1.savefig(f"{self.date_str}/RAW_{self.date_str}.pdf", format='pdf', layout='tight')
 #            fig2.savefig(f"{self.date_str}/ASSIM_{self.date_str}.pdf", format='pdf', layout='tight')
             #plot_weights(date, weights)
@@ -3160,20 +3160,20 @@ if __name__ == "__main__":
                 name   = 'rr',
                 dims   = ["lat", "lon", "time", "member"],
                 coords = dict(lon=antilope.lon, lat=antilope.lat, time=extract_period, member=range(0,17)),
-                attrs  = dict(description="24 hour precipitation",units="mm"),
+                attrs  = dict(description="24 hour precipitation",units="kg/m²"),
             )
         globalfields = xr.DataArray(
                 name   = 'rr',
                 dims   = ["lat", "lon", "time", "member"],
                 coords = dict(lon=antilope.lon, lat=antilope.lat, time=extract_period, member=range(1,17)),
-                attrs  = dict(description="24 hour precipitation",units="mm"),
+                attrs  = dict(description="24 hour precipitation",units="kg/m²"),
             )
     else:
         localfields = xr.DataArray(
                 name   = 'rr',
                 dims   = ["num_poste", "time", "member"],
                 coords = dict(num_poste=nivometeo.num_poste.data, time=extract_period, member=range(0,17)),
-                attrs  = dict(description="24 hour precipitation",units="mm"),
+                attrs  = dict(description="24 hour precipitation",units="kg/m²"),
             )
         globalfields = None
 

@@ -1233,7 +1233,7 @@ class Evaluation(object):
                 i = 1
                 j = 1
                 title= 'd'
-            sc = tools.plot_scatter(axes[i,j], error, spread, 'Absolute error of the ensemble mean (mm)', 'Ensemble spread (mm)', f"spread_skill_{product}.pdf", savedir, color=rr)
+            sc = tools.plot_scatter(axes[i,j], error, spread, 'Absolute error of the ensemble mean (kg/m²)', 'Ensemble spread (kg/m²)', f"spread_skill_{product}.pdf", savedir, color=rr)
                     #savedir, color=rr, xaxis=xaxis, yaxis=yaxis)
             axes[i,j].set_title(f'{title}) {xpid_label[product]}', fontsize=16)
             j = j + 1
@@ -1252,11 +1252,11 @@ class Evaluation(object):
 #            fig.savefig(os.path.join(savedir, f"spread_skill_{product}.pdf"), format='pdf')
 #            plt.close(fig)
         plt.subplots_adjust(bottom=0.08, left=0.08, right=0.88, top=0.95, wspace=0.05, hspace=0.12)
-        fig.text(0.5, 0.02, 'Absolute error of the ensemble mean (mm)', ha='center', fontsize=18)
-        fig.text(0.02, 0.4, 'Ensemble spread (mm)', ha='center', rotation='vertical', fontsize=18)
+        fig.text(0.5, 0.02, 'Absolute error of the ensemble mean (kg/m²)', ha='center', fontsize=18)
+        fig.text(0.02, 0.4, 'Ensemble spread (kg/m²)', ha='center', rotation='vertical', fontsize=18)
         cax = plt.axes((0.89, 0.08, 0.03, 0.87))
         cb = fig.colorbar(sc, cax=cax)
-        cb.set_label(label='Precipitation (mm / 24h)', size=18)
+        cb.set_label(label='Precipitation (kg/m²)', size=18)
         cb.ax.tick_params(labelsize=16)
         #fig.tight_layout()
         #fig.subplots_adjust(left=0.005, top=0.98, right=0.99, bottom=0.1)
@@ -1298,7 +1298,7 @@ class Evaluation(object):
 
         for threshold in [0, 1, 10, 20]:
             fig,ax = plt.subplots()
-            ax.set_title(f'Threshold={threshold}mm')
+            ax.set_title(f'Threshold={threshold} kg/m²')
             if 'raw' in data.keys():
                 for product in ['raw'] + [xpid for xpid in experiments.keys()]:
                     # TODO : vérifier les données (virer les dates où obs=nan,...)
@@ -1418,7 +1418,7 @@ class Evaluation(object):
                 ax.set_ylabel(f'{score}', fontsize=16)
                 ax.set_ylim(0, 2)
             else:
-                ax.set_ylabel(f'{score} (mm)', fontsize=16)
+                ax.set_ylabel(f'{score} (kg/m²)', fontsize=16)
 
             #ax.set_xticklabels([''] + products, fontsize=28)
             #ax.set_xticks(range(len(products)+2))
@@ -1456,7 +1456,7 @@ class Evaluation(object):
             #ax.semilogx(self.thresholds, brier, label=xpid_label[product], linewidth=3)
         ax.legend(fontsize=18)
         ax.set_ylabel('Brier Score', fontsize=16)
-        ax.set_xlabel('Threshold (mm)', fontsize=16)
+        ax.set_xlabel('Threshold (kg/m²)', fontsize=16)
         #ax.set_xticklabels(self.thresholds, fontsize=18)
         ax.xaxis.set_tick_params(labelsize=14)
         ax.yaxis.set_tick_params(labelsize=14)
@@ -1533,7 +1533,7 @@ class Evaluation(object):
             #add_label(plt.violinplot(np.transpose(simu2), positions=positions), 'Daily assimilation', color='skyblue')
             self.add_label(plt.violinplot(np.transpose(simu2), positions=positions), 'Daily assimilation')
         ax.set_xlabel('Date')
-        ax.set_ylabel('24 hour precipitation (mm)')
+        ax.set_ylabel('24 hour precipitation (kg/m²)')
         ax.legend(*zip(*self.labels), fontsize=32)
         ax.axhline(y=0, linewidth=1, color='k')
         #rrmax = int(np.ceil(max([np.nanmax(obs), np.nanmax(simu), np.nanmax(raw), np.nanmax(antilope)])))+10
