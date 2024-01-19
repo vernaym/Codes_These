@@ -30,9 +30,9 @@ datadir =  os.path.join(home, 'workdir/EDELWEISS')
 
 # 1. Radiation variables come from SAFRAN reanalysis in the initial stage (similar for all ensemble members)
 # TODO : à récupérer avec Vortex
-#forcing = xr.open_dataset(os.path.join(datadir, 'SAFRAN_to_grid', 'meteo', 'SAFRAN_RADIATION_2021122706_2021123006_gr250ls.nc'))
-#forcing = xr.open_dataset(os.path.join(datadir, 'SAFRAN_to_grid', 'meteo', 'FORCING_2021122706_2021123006_gr250ls.nc'))
-forcing = xr.open_dataset(os.path.join(datadir, 'SAFRAN_to_grid', 'meteo', 'FORCING_2021080106_2022080106_gr250ls.nc'))
+#forcing = xr.open_dataset(os.path.join(datadir, 'SAFRAN_to_grid', 'meteo', 'SAFRAN_RADIATION_2021122706_2021123006_gr250m.nc'))
+#forcing = xr.open_dataset(os.path.join(datadir, 'SAFRAN_to_grid', 'meteo', 'FORCING_2021122706_2021123006_gr250m.nc'))
+forcing = xr.open_dataset(os.path.join(datadir, 'SAFRAN_to_grid', 'meteo', 'FORCING_2021080106_2022080106_gr250m.nc'))
 
 # 2. Precipitation come from MV's ensemble analysis, downscaled by SR with the method from VV
 dirname = os.path.join(datadir, 'meteo')
@@ -64,7 +64,7 @@ tbin = toolbox.input(
     )
 
 # Concatenation of all FORCING variables into the final FORCING files
-outname = 'FORCING_2021080206_2022080106_gr250ls.nc'
+outname = 'FORCING_2021080206_2022080106_gr250m.nc'
 for member in range(1,17):
     fullname = os.path.join(datadir, 'meteo', f'mb{member:03d}', outname)
     if not os.path.exists(fullname):
