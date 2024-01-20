@@ -8,6 +8,7 @@ import shutil
 
 import xarray as xr
 import numpy as np
+import pandas as pd
 
 import vortex
 from cen.data import flow
@@ -89,6 +90,8 @@ def update_wind(windname):
         forcing = xr.open_dataset(filename)
 
         dates = np.intersect1d(forcing.time, wind.time)
+        datedeb = pd.to_datetime(str(dates[0]))
+        datefin = pd.to_datetime(str(dates[-1]))
         forcing = forcing.sel({'time':dates})
         wind = wind.sel({'time':dates})
 
@@ -96,6 +99,8 @@ def update_wind(windname):
         forcing['Wind_DIR'].data = wind['Wind_dir'].data
         forcing.to_netcdf(outname, mode='w')
         forcing.close()
+
+    return datedeb, datefin
 
 def get_forcings():
 
@@ -154,7 +159,7 @@ def get_wind():
     )
     return windname
 
-def save():
+def save(datebegin, dateend):
 
     tbout = toolbox.output(
             role        = 'Forcing file',
@@ -173,9 +178,9 @@ def save():
             #date        = enddate.ymd6h,
             #datebegin   = startdate.ymd6h,
             #dateend     = enddate.ymd6h,
-            date        = '2022080106',
-            datebegin   = '2021080206',
-            dateend     = '2022080106',
+            date        = dateend.strftime('%Y%m%d%H'),  # dateend is a pandas 'Timestamp' object
+            datebegin   = datebegin.strftime('%Y%m%d%H'),  # datebegin is a pandas 'Timestamp' object
+            dateend     = dateend.strftime('%Y%m%d%H'),  # dateend is a pandas 'Timestamp' object
             namespace   = 'vortex.multi.fr',
             member      = footprints.util.rangex(1, 16, 1),
             block       = 'analysis',
@@ -197,9 +202,9 @@ if __name__ == '__main__':
 
     windname = get_wind()
 
-    update_wind(windname)  # Update 16 FORCING files
+    datedeb, datefin = update_wind(windname)  # Update 16 FORCING files
 
-    save()
+    save(datedeb, datefin)
 
     clean()
 
