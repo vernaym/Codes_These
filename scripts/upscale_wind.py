@@ -33,7 +33,8 @@ toolbox.active_now = True
 # 6. Archive output netcdf file on hendrix with Vortex
 
 datadir = '/home/merzisenh/NO_SAVE/arome_2021_2022_downscaled_devine/downscaled'  # Extraction HM de decembre 2023 from 2021070106 to 2022073123
-workdir = '/home/vernaym/workdir/EDELWEISS/wind'
+#workdir = '/home/vernaym/workdir/EDELWEISS/wind'
+workdir = '/cnrm/cen/users/NO_SAVE/vernaym/workdir/EDELWEISS/wind'
 
 # Fonction LLT*
 def wind2comp(uv, dir, unit_direction="radian"):
@@ -151,7 +152,6 @@ if __name__ == '__main__':
         wind250m = wind250m.merge(wdir250m)
         wind250m.to_netcdf(outname)
 
-    # TODO :archive with Vortex
     tbout = toolbox.output(
         role        = 'Wind',
         kind        = 'Wind',
