@@ -183,7 +183,7 @@ def save(datebegin, dateend):
             dateend     = dateend.strftime('%Y%m%d%H'),  # dateend is a pandas 'Timestamp' object
             namespace   = 'vortex.multi.fr',
             member      = footprints.util.rangex(1, 16, 1),
-            block       = 'analysis',
+            block       = 'meteo',
             #intent      = 'inout',
         )
 
