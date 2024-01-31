@@ -87,18 +87,22 @@ def update_wind(windname):
         print(f'Member {member}')
         filename = os.path.join(datadir, 'meteo', f'mb{member:03d}', f'{forcingname}_in.nc')
         outname = os.path.join(datadir, 'meteo', f'mb{member:03d}', f'{forcingname}_out.nc')
+
         forcing = xr.open_dataset(filename)
 
         dates = np.intersect1d(forcing.time, wind.time)
         datedeb = pd.to_datetime(str(dates[0]))
         datefin = pd.to_datetime(str(dates[-1]))
-        forcing = forcing.sel({'time':dates})
-        wind = wind.sel({'time':dates})
 
-        forcing['Wind'].data = wind['Wind'].data
-        forcing['Wind_DIR'].data = wind['Wind_dir'].data
-        forcing.to_netcdf(outname, mode='w')
-        forcing.close()
+        if not os.path.exists(outname):
+
+            forcing = forcing.sel({'time':dates})
+            wind = wind.sel({'time':dates})
+
+            forcing['Wind'].data = wind['Wind'].data
+            forcing['Wind_DIR'].data = wind['Wind_dir'].data
+            forcing.to_netcdf(outname, mode='w')
+            forcing.close()
 
     return datedeb, datefin
 
