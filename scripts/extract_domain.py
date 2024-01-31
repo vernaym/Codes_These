@@ -10,6 +10,7 @@ import xarray as xr
 import matplotlib
 import matplotlib.pyplot as plt
 import palettable
+import cartopy.crs as ccrs
 
 import make_mask
 import plot_elevation
@@ -35,6 +36,11 @@ domain_coords = dict(
         alp            = dict(latmax=46.450, latmin=44.100, lonmin=5.400, lonmax=7.200),
 )
 
+lonmin = domain_coords[domain]['lonmin']
+lonmax = domain_coords[domain]['lonmax']
+latmin = domain_coords[domain]['latmin']
+latmax = domain_coords[domain]['latmax']
+
 figsize = dict(
         alp            = (14,16),
         GrandesRousses = (15,7),
@@ -59,11 +65,12 @@ extract_lat = np.round(np.arange(domain_coords[domain]['latmin'], domain_coords[
 extract_lon = np.round(np.arange(domain_coords[domain]['lonmin'], domain_coords[domain]['lonmax'], 0.01, dtype=float), 2)
 
 def plot_and_save(field, name, cmap=plt.cm.Greys, vmin=None, vmax=None, scores=None, subdir=''):
-    fig, ax = plt.subplots(figsize=figsize[domain])
+    fig, ax = plt.subplots(figsize=figsize[domain], subplot_kw=dict(projection=ccrs.PlateCarree()))
+    ax.set_extent([lonmin, lonmax, latmin, latmax], crs=ccrs.PlateCarree())
     #ax = plot_field(fig, ax, field, cmap=cmap, vmin=vmin, vmax=vmax, scores=scores)
     ax = make_mask.plot_field(fig, ax, field, cmap=cmap, vmin=vmin, vmax=vmax, scores=scores)
     #fig.savefig(os.path.join(savedir, f'{name}.pdf'), format='pdf', layout='tight')
-    fig.tight_layout()
+    #fig.tight_layout()
     fig.savefig(os.path.join(savedir, subdir, f'{name}.pdf'), format='pdf')
     field.to_netcdf(os.path.join(savedir, subdir, f'{name}.nc').encode('utf-8'))  # WARNING : encode ncessary if name contains a formatted flot
 
@@ -108,7 +115,8 @@ if __name__ == "__main__":
     extract_lat = field.lat.data[(field.lat.data>=domain_coords[domain]['latmin']) & (field.lat.data<=domain_coords[domain]['latmax'])]
     extract_lon = field.lon.data[(field.lon.data>=domain_coords[domain]['lonmin']) & (field.lon.data<=domain_coords[domain]['lonmax'])]
     reduced_field = field.sel({'lat':np.intersect1d(extract_lat, field.lat), 'lon':np.intersect1d(extract_lon, field.lon)})
-    fig,ax = plt.subplots(figsize=figsize[domain])
+    fig,ax = plt.subplots(figsize=figsize[domain], subplot_kw=dict(projection=ccrs.PlateCarree()))
+    ax.set_extent([lonmin, lonmax, latmin, latmax], crs=ccrs.PlateCarree())
     #https://discourse.holoviz.org/t/cannot-remove-grid-for-hv-quadmesh/2211/8
     #im = mnt.elevation.plot(ax=ax, cmap=plt.cm.terrain, subplot_kws={'frame_on':False}, linewidth=0, label='Elevation (m)', add_colorbar=False)
     im = reduced_field.Band1.plot(ax=ax, cmap=plt.cm.terrain, linewidth=0, label='Elevation (m)', add_colorbar=False)
@@ -125,8 +133,6 @@ if __name__ == "__main__":
     ax.set_ylabel(None)
     ax.tick_params(axis='both', which='major', labelsize=14)
     fig.savefig(os.path.join('/home/vernaym/These/figures', f'DEM_WGS84_250m_{domain}.pdf'), format='pdf')
-    import pdb
-    pdb.set_trace()
 
     for subdir in ['', 'nivometeo']:
         if not os.path.exists(os.path.join(savedir, subdir)):
@@ -136,6 +142,8 @@ if __name__ == "__main__":
         # Extract AROME precipitation accumulation
         fic = os.path.join('/home/vernaym/These/DATA', f'CUMUL_AROME.nc')
         cumul = xr.open_dataset(fic)
+        extract_lat = cumul.lat.data[(cumul.lat.data>=domain_coords[domain]['latmin']) & (cumul.lat.data<=domain_coords[domain]['latmax'])]
+        extract_lon = cumul.lon.data[(cumul.lon.data>=domain_coords[domain]['lonmin']) & (cumul.lon.data<=domain_coords[domain]['lonmax'])]
         reduced_cumul = cumul.sel({'lat':np.intersect1d(extract_lat, cumul.lat), 'lon':np.intersect1d(extract_lon, cumul.lon)})
         make_mask.plot(reduced_cumul, '2021103000', '2022060200', categories=False, biascorrection=False, scores=False, dom=domain, product='AROME')
 
@@ -151,6 +159,6 @@ if __name__ == "__main__":
         ratio = xr.open_dataarray(fic_ratio)
         reduced_error = error.sel({'lat':np.intersect1d(extract_lat, error.lat), 'lon':np.intersect1d(extract_lon, error.lon)})
         reduced_ratio = ratio.sel({'lat':np.intersect1d(extract_lat, ratio.lat), 'lon':np.intersect1d(extract_lon, ratio.lon)})
-        plot_and_save(reduced_error, f'Observation_error', vmin=1, vmax=10, cmap=plt.cm.YlOrBr, subdir=subdir)
+        plot_and_save(reduced_error, f'Observation_error', vmin=1, vmax=40, cmap=plt.cm.YlOrBr, subdir=subdir)
         plot_and_save(reduced_ratio, f'Estimated_ratio', vmin=0.5, vmax=1.5, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, subdir=subdir)
 

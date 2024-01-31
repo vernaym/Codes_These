@@ -360,22 +360,28 @@ def plot(antilope, datebegin, dateend, categories=True, biascorrection=False, sc
             fig, axes = plt.subplots(1, 2, figsize=(30,16), subplot_kw=dict(projection=ccrs.PlateCarree()))
         else:
             fig, axes = plt.subplots(1, 1, figsize=(16,16), subplot_kw=dict(projection=ccrs.PlateCarree()))
-            axes.set_extent([lonmin, lonmax, latmin, latmax], crs=ccrs.PlateCarree())
-        for ax in axes:
-            ax.set_extent([lonmin, lonmax, latmin, latmax], crs=ccrs.PlateCarree())
+            axes = [axes,]
         #fig, ax = plt.subplots(figsize=(14,16), subplot_kw=dict(projection=ccrs.PlateCarree()))
     elif dom =='pyr':
         fig, ax = plt.subplots(figsize=(33,10), subplot_kw=dict(projection=ccrs.PlateCarree()))
+        axes = [ax,]
     elif dom == 'GrandesRousses':
         fig, ax = plt.subplots(figsize=(19,8), subplot_kw=dict(projection=ccrs.PlateCarree()))
+        axes = [ax,]
     elif dom == 'HautesAlpes':
         fig, ax = plt.subplots(figsize=(14,7), subplot_kw=dict(projection=ccrs.PlateCarree()))
+        axes = [ax,]
     elif dom == 'Savoie':
         fig, ax = plt.subplots(figsize=(14,7), subplot_kw=dict(projection=ccrs.PlateCarree()))
+        axes = [ax,]
     elif dom == 'MontBlanc':
         fig, ax = plt.subplots(figsize=(20,10), subplot_kw=dict(projection=ccrs.PlateCarree()))
+        axes = [ax,]
     else:
         fig, ax = plt.subplots(subplot_kw=dict(projection=ccrs.PlateCarree()))
+        axes = [ax,]
+    for ax in axes:
+        ax.set_extent([lonmin, lonmax, latmin, latmax], crs=ccrs.PlateCarree())
 
     if biascorrection:
         #filename = os.path.join('/home/vernaym/These/DATA/mask', 'Estimated_ratio.nc')
@@ -1293,7 +1299,8 @@ if __name__ == "__main__":
 
         #plot(antilope, datebegin, dateend, categories=True, biascorrection=True)
         #plot(antilope, datebegin, dateend, categories=False, biascorrection=True)
-        plot(antilope, datebegin, dateend, categories=True, biascorrection=True, scores=True)
+        #plot(antilope, datebegin, dateend, categories=True, biascorrection=True, scores=True)
+        plot(antilope, datebegin, dateend, categories=False, biascorrection=False, scores=True)
         #plot(antilope, datebegin, dateend, categories=True)
         #plot(antilope, datebegin, dateend, categories=False)
         #plot(antilope, datebegin, dateend, categories=False, scores=True)
