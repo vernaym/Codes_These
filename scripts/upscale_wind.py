@@ -7,6 +7,7 @@ import os
 import glob
 
 import xarray as xr
+import pandas as pd
 import rioxarray
 import rasterio
 import numpy as np
@@ -65,39 +66,39 @@ def upscale(filename):
     Upscale 30m resolution wind fields from LTT to 250m Wind/Wind_dir FORCING-like variables
     """
 
-    #if not (os.path.exists(os.path.join(workdir, 'u30m.zarr')) and os.path.exists(os.path.join(workdir, 'v30m.zarr'))):
-    # 1. Open monthly 30m wind Netcdf files produced by HM into 1 single xarray dataset and add projection
-    suffix = '_'.join(file.split('.')[0].split('_')[-2:])
-    wind30m = xr.open_dataset(filename)
-    #wind30m = xr.open_mfdataset(os.path.join(datadir, '*'))
-    #wind30m = xr.open_mfdataset(os.path.join(datadir, '*'), chunks={'x': 500, 'y': 500})
-    wind30m = wind30m.rio.write_crs(2154)  # 3857 ?
-    #wind30m = wind30m.chunk({'time':100, 'x': 10, 'y': 10})
-    wind30m = wind30m.chunk({'time':100})
-    # TODO : optimisation of chunk sizes necessary
-    #wind30m.to_zarr(os.path.join(workdir, 'wind30m.zarr'), mode='w')
+    suffix = '_'.join(filename.split('.')[0].split('_')[-2:])
+    if not (os.path.exists(os.path.join(workdir, f'Wind_gr250m_{suffix}.nc')) or os.path.exists(os.path.join(workdir, f'Wind_dir_gr250m_{suffix}.nc'))):
+        # 1. Open monthly 30m wind Netcdf files produced by HM into 1 single xarray dataset and add projection
+        wind30m = xr.open_dataset(filename)
+        #wind30m = xr.open_mfdataset(os.path.join(datadir, '*'))
+        #wind30m = xr.open_mfdataset(os.path.join(datadir, '*'), chunks={'x': 500, 'y': 500})
+        wind30m = wind30m.rio.write_crs(2154)  # 3857 ?
+        #wind30m = wind30m.chunk({'time':100, 'x': 10, 'y': 10})
+        wind30m = wind30m.chunk({'time':100})
+        # TODO : optimisation of chunk sizes necessary
+        #wind30m.to_zarr(os.path.join(workdir, 'wind30m.zarr'), mode='w')
 
-    # 2. Compute U and V wind components
-    u30m, v30m = wind2comp(wind30m.speed, wind30m.direction, unit_direction="degree")
+        # 2. Compute U and V wind components
+        u30m, v30m = wind2comp(wind30m.speed, wind30m.direction, unit_direction="degree")
 
-    #u30m.to_zarr(os.path.join(workdir, 'u30m.zarr'))
-    #v30m.to_zarr(os.path.join(workdir, 'v30m.zarr'))
+        #u30m.to_zarr(os.path.join(workdir, 'u30m.zarr'))
+        #v30m.to_zarr(os.path.join(workdir, 'v30m.zarr'))
 
-    #print('Read u30m')
-    #u30m = xr.open_zarr(os.path.join(workdir, 'u30m.zarr'), chunks={'time':1000, 'x': 500, 'y': 500})
-    #u30m = xr.open_zarr(os.path.join(workdir, 'u30m.zarr'))
-    #print('Read v30m')
-    #v30m = xr.open_zarr(os.path.join(workdir, 'v30m.zarr'), chunks={'time':1000, 'x': 500, 'y': 500})
-    #v30m = xr.open_zarr(os.path.join(workdir, 'v30m.zarr'))
+        #print('Read u30m')
+        #u30m = xr.open_zarr(os.path.join(workdir, 'u30m.zarr'), chunks={'time':1000, 'x': 500, 'y': 500})
+        #u30m = xr.open_zarr(os.path.join(workdir, 'u30m.zarr'))
+        #print('Read v30m')
+        #v30m = xr.open_zarr(os.path.join(workdir, 'v30m.zarr'), chunks={'time':1000, 'x': 500, 'y': 500})
+        #v30m = xr.open_zarr(os.path.join(workdir, 'v30m.zarr'))
 
-    # 3. Project 30m U and V wind components on the 250m grid
+        # 3. Project 30m U and V wind components on the 250m grid
 
-    # Open 250m grid reference file
-    #gr250m = xr.open_dataarray('/home/vernaym/workdir/EDELWEISS/SAFRAN_to_grid/meteo/FORCING_2021080106_2022080106_gr250m.nc')  # FORCING projected from SAFRAN reanalysis
-    gr250m = xr.open_dataset('/home/vernaym/These/DATA/MNTLouisGRoussecorrected.nc')  # Ange's MNT with elevation adapted to SARAN geometry
-    gr250m = gr250m.rio.write_crs(2154)
+        # Open 250m grid reference file
+        #gr250m = xr.open_dataarray('/home/vernaym/workdir/EDELWEISS/SAFRAN_to_grid/meteo/FORCING_2021080106_2022080106_gr250m.nc')  # FORCING projected from SAFRAN reanalysis
+        gr250m = xr.open_dataset('/home/vernaym/These/DATA/MNTLouisGRoussecorrected.nc')  # Ange's MNT with elevation adapted to SARAN geometry
+        gr250m = gr250m.rio.write_crs(2154)
 
-    # With pyresample (NOT WORKING)
+        # With pyresample (NOT WORKING)
 #    source_area = pyresample.geometry.AreaDefinition(  # https://pyresample.readthedocs.io/en/latest/api/pyresample.html#module-pyresample.geometry
 #            'gr30m',  # area_id
 #            'Grandes Rousses domain at 30m resolution',  # description
@@ -118,31 +119,34 @@ def upscale(filename):
 #            (gr250m.x.data[0], gr250m.y.data[0], gr250m.x.data[-1], gr250m.y.data[-1]),  #area_extent
 #        )
 
-    # Project 30m fields on 250m grid
-    #lons, lats = source_area.get_lonlats()
-    #resampler = BucketResampler(target_area, lons, lats)  # https://pyresample.readthedocs.io/en/latest/api/pyresample.html
-    print(f'Projection U {suffix}')
-    u250m = u30m.rio.reproject_match(gr250m, resamplin="average")  # rioxarray does not support dask : https://github.com/corteva/rioxarray/issues/119 --> memory limit
-    #u250m = resampler.get_average(u30m)
-    print(f'Projection V {suffix}')
-    v250m = v30m.rio.reproject_match(gr250m, resamplin="average")
+        # Project 30m fields on 250m grid
+        #lons, lats = source_area.get_lonlats()
+        #resampler = BucketResampler(target_area, lons, lats)  # https://pyresample.readthedocs.io/en/latest/api/pyresample.html
+        print(f'Projection U {suffix}')
+        u250m = u30m.rio.reproject_match(gr250m, resamplin="average")  # rioxarray does not support dask : https://github.com/corteva/rioxarray/issues/119 --> memory limit
+        #u250m = resampler.get_average(u30m)
+        print(f'Projection V {suffix}')
+        v250m = v30m.rio.reproject_match(gr250m, resamplin="average")
 
-    # 4. Convert U/V into Wind/Wind_dir
-    wind250m = comp2speed(u250m, v250m)
-    wind250m.to_netcdf(os.path.join(workdir, f'Wind_gr250m_{suffix}.nc'))
-    wind250m.close()
-    wdir250m = comp2dir(u250m, v250m)
-    wdir250m.to_netcdf(os.path.join(workdir, f'Wind_dir_gr250m_{suffix}.nc'))
-    wdir250m.close()
+        # 4. Convert U/V into Wind/Wind_dir
+        wind250m = comp2speed(u250m, v250m)
+        wind250m.to_netcdf(os.path.join(workdir, f'Wind_gr250m_{suffix}.nc'))
+        wind250m.close()
+        wdir250m = comp2dir(u250m, v250m)
+        wdir250m.to_netcdf(os.path.join(workdir, f'Wind_dir_gr250m_{suffix}.nc'))
+        wdir250m.close()
 
 if __name__ == '__main__':
 
-    outname = os.path.join(workdir, 'Wind_gr250m_2021070106_2022073123.nc')
+    datebegin = '2021073106'
+    dateend   = '2022080106'
+    outname = os.path.join(workdir, f'Wind_gr250m_{datebegin}_{dateend}.nc')
     if not os.path.exists(outname):
 
         # 1. Upscale 30m resolution wind fields from LTT to 250m Wind/Wind_dir FORCING-like variables
-        #for file in glob.glob(os.path.join(datadir, '*')):  # Loop over files to avoid memory limitations
-        #    upscale(file)
+        for file in glob.glob(os.path.join(datadir, '*')):  # Loop over files to avoid memory limitations
+            if not os.path.basename(file) == 'arome_downscaled_completion_2022_07.nc':
+                upscale(file)
 
         # 2. Read the (multiple) files created and concatenate data into 1 single netcf file
         wind250m = xr.open_mfdataset(glob.glob(os.path.join(workdir, 'Wind_gr250m*.nc')))
@@ -150,6 +154,10 @@ if __name__ == '__main__':
         wdir250m = xr.open_mfdataset(glob.glob(os.path.join(workdir, 'Wind_dir_gr250m*.nc')))
         wdir250m = wdir250m.rename({'__xarray_dataarray_variable__':'Wind_dir'})
         wind250m = wind250m.merge(wdir250m)
+        start = pd.to_datetime(datebegin, format='%Y%m%d%H').to_numpy()
+        end = pd.to_datetime(dateend, format='%Y%m%d%H').to_numpy()
+        dates = xr.date_range(start=start, end=end, freq='H')
+        wind250m = wind250m.sel({'time':np.intersect1d(dates, wind250m.time)})
         wind250m.to_netcdf(outname)
 
     tbout = toolbox.output(
@@ -166,12 +174,9 @@ if __name__ == '__main__':
         nativefmt   = 'netcdf',
         namebuild   = 'flat@cen',
         model       = 'devine',
-        #date        = enddate.ymd6h,
-        #datebegin   = startdate.ymd6h,
-        #dateend     = enddate.ymd6h,
-        date        = '2022080106',
-        datebegin   = '2021070106',
-        dateend     = '2022073123',
+        date        = dateend,
+        datebegin   = datebegin,
+        dateend     = dateend,
         namespace   = 'vortex.multi.fr',
         block       = 'analysis',
         intent      = 'inout',

@@ -136,7 +136,9 @@ def get_forcings():
 
 def get_wind():
 
-    windname = 'Wind_gr250m_2021070106_2022073123.nc'
+    datebegin = '2021073106'
+    dateend = '2022080106'
+    windname = f'Wind_gr250m_{datebegin}_{dateend}.nc'
     tbin = toolbox.input(
         role        = 'Wind',
         kind        = 'Wind',
@@ -154,9 +156,9 @@ def get_wind():
         #date        = enddate.ymd6h,
         #datebegin   = startdate.ymd6h,
         #dateend     = enddate.ymd6h,
-        date        = '2022080106',
-        datebegin   = '2021070106',
-        dateend     = '2022073123',
+        date        = dateend,
+        datebegin   = datebegin,
+        dateend     = dateend,
         namespace   = 'vortex.multi.fr',
         block       = 'analysis',
         #intent      = 'inout',
