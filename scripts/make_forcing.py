@@ -101,7 +101,7 @@ def update_wind(windname):
 
             forcing['Wind'].data = wind['Wind'].data
             forcing['Wind_DIR'].data = wind['Wind_dir'].data
-            forcing.to_netcdf(outname, mode='w')
+            forcing.to_netcdf(outname, mode='w', unlimited_dims={'time': True})
             forcing.close()
 
     return datedeb, datefin
