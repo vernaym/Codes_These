@@ -31,14 +31,14 @@ home = '/cnrm/cen/users/NO_SAVE/vernaym'  # sxcen
 #home = '/home/cnrm_other/cen/mrns/vernaym'  # HPC
 
 datadir =  os.path.join(home, 'workdir/EDELWEISS')
-forcingname = 'FORCING_2021080206_2022080106_gr250m'
+forcingname = f'FORCING_{datebegin}_{dateend}_gr250m'
 
 
 def update_precipitation(forcing):
 
     # 2. Precipitation come from MV's ensemble analysis, downscaled by SR with the method from VV
     dirname = os.path.join(datadir, 'meteo')
-    filename = 'Precipitation_2021080206_2022080106.nc'
+    filename = 'Precipitation_{datebegin}_{dateend}.nc'
     tbin = toolbox.input(
             role        = 'Precipitation analysis',
             kind        = 'Precipitation',
@@ -125,9 +125,9 @@ def get_forcings():
             #date        = enddate.ymd6h,
             #datebegin   = startdate.ymd6h,
             #dateend     = enddate.ymd6h,
-            date        = '2022080106',
-            datebegin   = '2021080206',
-            dateend     = '2022080106',
+            date        = dateend,
+            datebegin   = datebegin,
+            dateend     = dateend,
             namespace   = 'vortex.multi.fr',
             member      = footprints.util.rangex(1, 16, 1),
             block       = 'analysis',
@@ -136,9 +136,9 @@ def get_forcings():
 
 def get_wind():
 
-    datebegin = '2021073106'
-    dateend = '2022080106'
-    windname = f'Wind_gr250m_{datebegin}_{dateend}.nc'
+    start = '2021073106'
+    stop = '2022080106'
+    windname = f'Wind_gr250m_{start}_{stop}.nc'
     tbin = toolbox.input(
         role        = 'Wind',
         kind        = 'Wind',
@@ -153,19 +153,16 @@ def get_wind():
         nativefmt   = 'netcdf',
         namebuild   = 'flat@cen',
         model       = 'devine',
-        #date        = enddate.ymd6h,
-        #datebegin   = startdate.ymd6h,
-        #dateend     = enddate.ymd6h,
-        date        = dateend,
-        datebegin   = datebegin,
-        dateend     = dateend,
+        date        = stop,
+        datebegin   = start,
+        dateend     = stop,
         namespace   = 'vortex.multi.fr',
         block       = 'analysis',
         #intent      = 'inout',
     )
     return windname
 
-def save(datebegin, dateend):
+def save(begin, end):
 
     tbout = toolbox.output(
             role        = 'Forcing file',
@@ -184,9 +181,9 @@ def save(datebegin, dateend):
             #date        = enddate.ymd6h,
             #datebegin   = startdate.ymd6h,
             #dateend     = enddate.ymd6h,
-            date        = dateend.strftime('%Y%m%d%H'),  # dateend is a pandas 'Timestamp' object
-            datebegin   = datebegin.strftime('%Y%m%d%H'),  # datebegin is a pandas 'Timestamp' object
-            dateend     = dateend.strftime('%Y%m%d%H'),  # dateend is a pandas 'Timestamp' object
+            date        = end.strftime('%Y%m%d%H'),  # end is a pandas 'Timestamp' object
+            datebegin   = begin.strftime('%Y%m%d%H'),  # begin is a pandas 'Timestamp' object
+            dateend     = end.strftime('%Y%m%d%H'),  # end is a pandas 'Timestamp' object
             namespace   = 'vortex.multi.fr',
             member      = footprints.util.rangex(1, 16, 1),
             block       = 'meteo',
@@ -200,11 +197,11 @@ def clean():
 
 if __name__ == '__main__':
 
-    #forcing = xr.open_dataset(os.path.join(datadir, 'SAFRAN_to_grid', 'meteo', 'FORCING_2021080106_2022080106_gr250m.nc'))
-    #update_precipitation()  # Single SAFRAN FORCING file --> 16 FORCINGs
-    #save()
+    forcing = xr.open_dataset(os.path.join(datadir, 'SAFRAN_to_grid', 'meteo', 'FORCING_2021080106_2022080106_gr250m.nc'))
+    update_precipitation(forcing)  # Single SAFRAN FORCING file --> 16 FORCINGs
+    save()
 
-    get_forcings()  # optionnal if previous steps uncommented
+    #get_forcings()  # optionnal if previous steps uncommented
 
     windname = get_wind()
 
