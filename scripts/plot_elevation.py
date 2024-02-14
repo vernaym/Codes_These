@@ -183,7 +183,7 @@ def add_postes(ax, type_poste='nivometeo'):
         fic_postes = os.path.join(postdir, f'postes_nivometeo.csv')
         marker = '*'
         color  = 'red'
-        label  = 'Nivometeo station'
+        label  = 'Ski-resort station'
     else:
         fic_postes = os.path.join(postdir, f'scores_2021110106_2022043006_alpes_obs_auto.csv')
         marker = 'v'
@@ -412,7 +412,7 @@ else:
 
     # Add colorbar
     #ax.legend(fontsize=20, loc=2)  # loc=2 --> upper-left
-    ax.legend(fontsize=20, loc=(0.01, 0.83))  # loc=2 --> upper-left
+    ax.legend(fontsize=20, loc=(0.0, 0.81))  # loc=2 --> upper-left
     #plot_correlation(ax, mnt)  # To add correlation area
     # Force colorbar size
     cb = fig.colorbar(im, fraction=0.058, pad=0.04)  # From https://stackoverflow.com/questions/18195758/set-matplotlib-colorbar-size-to-match-graph
