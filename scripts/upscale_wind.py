@@ -20,6 +20,8 @@ import cen
 
 toolbox.active_now = True
 
+DEFAULT_NETCDF_FORMAT = 'NETCDF3_CLASSIC'
+
 # This script upscales 30m wind fields produced by Louis Le Toumelin's method to an EDELWEISS's 250m grid
 # Input data are monthly Netcdf files at 30m resolution with wind 'speed' and 'direction' variables.
 # Output data is one single yearly Netcdf file at 250 resolution with FORCING-compatible 'Wind' and 'Wind_dir' variables
@@ -130,10 +132,10 @@ def upscale(filename):
 
         # 4. Convert U/V into Wind/Wind_dir
         wind250m = comp2speed(u250m, v250m)
-        wind250m.to_netcdf(os.path.join(workdir, f'Wind_gr250m_{suffix}.nc'))
+        wind250m.to_netcdf(os.path.join(workdir, f'Wind_gr250m_{suffix}.nc'), format=DEFAULT_NETCDF_FORMAT)
         wind250m.close()
         wdir250m = comp2dir(u250m, v250m)
-        wdir250m.to_netcdf(os.path.join(workdir, f'Wind_dir_gr250m_{suffix}.nc'))
+        wdir250m.to_netcdf(os.path.join(workdir, f'Wind_dir_gr250m_{suffix}.nc'), format=DEFAULT_NETCDF_FORMAT)
         wdir250m.close()
 
 if __name__ == '__main__':
@@ -158,13 +160,13 @@ if __name__ == '__main__':
         end = pd.to_datetime(dateend, format='%Y%m%d%H').to_numpy()
         dates = xr.date_range(start=start, end=end, freq='H')
         wind250m = wind250m.sel({'time':np.intersect1d(dates, wind250m.time)})
-        wind250m.to_netcdf(outname)
+        wind250m.to_netcdf(outname, format=DEFAULT_NETCDF_FORMAT)
 
     tbout = toolbox.output(
         role        = 'Wind',
         kind        = 'Wind',
         vapp        = 'edelweiss',
-        vconf       = '[geometry:area]',
+        vconf       = '[geometry:tag]',
         source_app  = 'arome',
         source_conf = '4dvarfr',
         cutoff      = 'assimilation',

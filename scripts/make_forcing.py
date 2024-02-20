@@ -18,6 +18,8 @@ from bronx.stdtypes.date import Date, Period
 
 toolbox.active_now = True
 
+DEFAULT_NETCDF_FORMAT = 'NETCDF3_CLASSIC'
+
 # Define VORTEX cache if not already in the environment (local only)
 #t = vortex.ticket()
 #t.env.setvar('WORKDIR', '/home/vernaym/workdir')
@@ -34,11 +36,33 @@ datadir =  os.path.join(home, 'workdir/EDELWEISS')
 forcingname = f'FORCING_{datebegin}_{dateend}_gr250m'
 
 
-def update_precipitation(forcing):
+def update(forcing):
+
+    # 1 Open wind produced by HM with LLT method
+    windname = get_wind()
+    wind = xr.open_dataset(os.path.join(datadir, 'wind', windname), chunks='auto')
+
+    dates = np.intersect1d(forcing.time, wind.time)
+    datedeb = pd.to_datetime(str(dates[0]))
+    datefin = pd.to_datetime(str(dates[-1]))
+    forcing = forcing.sel({'time':dates})
+    wind = wind.sel({'time':dates})
+
+    print(f'Update wind')
+    forcing['Wind'].data = wind['Wind'].data
+    forcing['Wind_DIR'].data = wind['Wind_dir'].data
+
+    wind.close()
+
+    forcing.time.encoding['dtype'] = 'int32'
 
     # 2. Precipitation come from MV's ensemble analysis, downscaled by SR with the method from VV
     dirname = os.path.join(datadir, 'meteo')
-    filename = 'Precipitation_{datebegin}_{dateend}.nc'
+    deb = '2021080206'
+    end = '2022080106'
+    #datedeb = pd.to_datetime(deb, format='%Y%m%d%H')
+    #datefin = pd.to_datetime(end, format='%Y%m%d%H')
+    filename = f'Precipitation_{deb}_{end}.nc'
     tbin = toolbox.input(
             role        = 'Precipitation analysis',
             kind        = 'Precipitation',
@@ -56,9 +80,9 @@ def update_precipitation(forcing):
             #date        = enddate.ymd6h,
             #datebegin   = startdate.ymd6h,
             #dateend     = enddate.ymd6h,
-            date        = '2022080106',
-            datebegin   = '2021080206',
-            dateend     = '2022080106',
+            date        = end,
+            datebegin   = deb,
+            dateend     = end,
             namespace   = 'vortex.multi.fr',
             member      = footprints.util.rangex(1, 16, 1),
             block       = 'analysis',
@@ -68,43 +92,32 @@ def update_precipitation(forcing):
     # Concatenation of all FORCING variables into the final FORCING files
     outname = f'{forcingname}_out.nc'
     for member in range(1,17):
+        print(f'Update precipitation : member {member}')
         fullname = os.path.join(datadir, 'meteo', f'mb{member:03d}', outname)
         if not os.path.exists(fullname):
             #precipitation = xr.open_dataset(os.path.join(datadir, 'hourly_precipitation_analysis', 'precipitation.antilope-randomsampling_2021122706_2021123006.nc'))
-            precipitation = xr.open_dataset(os.path.join(dirname, f'mb{member:03d}', filename))
-            precipitation=precipitation.rename({'xx':'x', 'yy':'y'})
+            precipitation = xr.open_dataset(os.path.join(dirname, f'mb{member:03d}', filename), drop_variables=['Precipitation', 'snowfrac_ds', 'z_snowlim_ds'], chunks='auto')
+
+            # Output file on common dates only
+            dates = np.intersect1d(forcing.time, precipitation.time)
+            datedeb = pd.to_datetime(str(dates[0]))
+            datefin = pd.to_datetime(str(dates[-1]))
+            forcing = forcing.sel({'time':dates})
+            # Set time variable attributes
+            forcing.time.encoding['units'] = f'hours since {forcing.time.data[0]}'
+
+            precipitation = precipitation.sel({'time':dates})
+            precipitation = precipitation.rename({'xx':'x', 'yy':'y'})
 
             # Replace Rainf/Snowf variables by the ones from the ensemble analysis
-            forcing['Rainf'] = precipitation['Rainf_ds']
-            forcing['Snowf'] = precipitation['Snowf_ds']
+            forcing['Rainf'] = precipitation['Rainf_ds'] / 3600.
+            forcing['Snowf'] = precipitation['Snowf_ds'] / 3600.
 
-            forcing.to_netcdf(fullname)
-
-def update_wind(windname):
-
-    wind = xr.open_dataset(os.path.join(datadir, 'wind', windname))
-    for member in range(1,17):
-        print(f'Member {member}')
-        filename = os.path.join(datadir, 'meteo', f'mb{member:03d}', f'{forcingname}_in.nc')
-        outname = os.path.join(datadir, 'meteo', f'mb{member:03d}', f'{forcingname}_out.nc')
-
-        forcing = xr.open_dataset(filename)
-
-        dates = np.intersect1d(forcing.time, wind.time)
-        datedeb = pd.to_datetime(str(dates[0]))
-        datefin = pd.to_datetime(str(dates[-1]))
-
-        if not os.path.exists(outname):
-
-            forcing = forcing.sel({'time':dates})
-            wind = wind.sel({'time':dates})
-
-            forcing['Wind'].data = wind['Wind'].data
-            forcing['Wind_DIR'].data = wind['Wind_dir'].data
-            forcing.to_netcdf(outname, mode='w', unlimited_dims={'time': True})
-            forcing.close()
+            forcing.to_netcdf(fullname, unlimited_dims={'time': True}, format=DEFAULT_NETCDF_FORMAT)
+            #forcing.to_netcdf(fullname, unlimited_dims={'time': True}, format=DEFAULT_NETCDF_FORMAT, encoding={"time":{"dtype": "int32"}})
 
     return datedeb, datefin
+
 
 def get_forcings():
 
@@ -112,9 +125,9 @@ def get_forcings():
             role        = 'Forcing file',
             kind        = 'MeteorologicalForcing',
             vapp        = 'edelweiss',
-            vconf       = '[geometry:area]',
-            source_app  = 'antilope',
-            source_conf = 'RandomSampling',
+            vconf       = '[geometry:tag]',
+            #source_app  = 'antilope',
+            #source_conf = 'RandomSampling',
             cutoff      = 'assimilation',
             filename    = f'{datadir}/meteo/mb[member]/{forcingname}_in.nc',
             experiment  = 'XP25@vernaym',
@@ -130,7 +143,7 @@ def get_forcings():
             dateend     = dateend,
             namespace   = 'vortex.multi.fr',
             member      = footprints.util.rangex(1, 16, 1),
-            block       = 'analysis',
+            block       = 'precipitation',
             #intent      = 'inout',
         )
 
@@ -143,7 +156,7 @@ def get_wind():
         role        = 'Wind',
         kind        = 'Wind',
         vapp        = 'edelweiss',
-        vconf       = '[geometry:area]',
+        vconf       = '[geometry:tag]',
         source_app  = 'arome',
         source_conf = '4dvarfr',
         cutoff      = 'assimilation',
@@ -162,13 +175,13 @@ def get_wind():
     )
     return windname
 
-def save(begin, end):
+def save(begin, end, block='meteo'):
 
     tbout = toolbox.output(
             role        = 'Forcing file',
             kind        = 'MeteorologicalForcing',
             vapp        = 'edelweiss',
-            vconf       = '[geometry:area]',
+            vconf       = '[geometry:tag]',
             #source_app  = 'antilope',
             #source_conf = 'RandomSampling',
             cutoff      = 'assimilation',
@@ -186,7 +199,7 @@ def save(begin, end):
             dateend     = end.strftime('%Y%m%d%H'),  # end is a pandas 'Timestamp' object
             namespace   = 'vortex.multi.fr',
             member      = footprints.util.rangex(1, 16, 1),
-            block       = 'meteo',
+            block       = block,
             #intent      = 'inout',
         )
 
@@ -197,15 +210,10 @@ def clean():
 
 if __name__ == '__main__':
 
-    forcing = xr.open_dataset(os.path.join(datadir, 'SAFRAN_to_grid', 'meteo', 'FORCING_2021080106_2022080106_gr250m.nc'))
-    update_precipitation(forcing)  # Single SAFRAN FORCING file --> 16 FORCINGs
-    save()
+    #forcing = xr.open_dataset(os.path.join(datadir, 'SAFRAN_to_grid', 'meteo', 'FORCING_2021080106_2022080106_gr250m.nc'), drop_variables=['ZS', 'aspect', 'slope', 'massif_number'], chunks='auto')
+    forcing = xr.open_dataset(os.path.join(datadir, 'SAFRAN_to_grid', 'meteo', 'FORCING_2021080106_2022080106_gr250m.nc'), drop_variables=['massif_number'], chunks='auto')
 
-    #get_forcings()  # optionnal if previous steps uncommented
-
-    windname = get_wind()
-
-    datedeb, datefin = update_wind(windname)  # Update 16 FORCING files
+    datedeb, datefin = update(forcing)  # Single SAFRAN FORCING file --> 16 FORCINGs
 
     save(datedeb, datefin)
 
