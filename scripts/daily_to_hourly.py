@@ -23,11 +23,13 @@ local_tz = pytz.timezone("Europe/Paris")
 start = Date(2021, 8, 2, 7)
 stop = Date(2022, 8, 1, 6)
 
+xpid = 'XP21'
+
 # Read ensemble analysis
-#filename = os.path.join('/home/vernaym/workdir/ASSIMILATION/RandomSampling/XP25', 'Random_Sampling_2021122806_2021123006_daily_GrandesRousses.nc')
-filename = os.path.join('/home/vernaym/workdir/ASSIMILATION/RandomSampling/XP26', 'Random_Sampling_2021080206_2022080106_daily_GrandesRousses.nc')
+#filename = os.path.join(f'/home/vernaym/workdir/ASSIMILATION/RandomSampling/{xpid}', 'Random_Sampling_2021122806_2021123006_daily_GrandesRousses.nc')
+filename = os.path.join(f'/home/vernaym/workdir/ASSIMILATION/RandomSampling/{xpid}', 'Random_Sampling_2021080206_2022080106_daily_GrandesRousses.nc')
 analysis = xr.open_dataset(filename)
-analysis = analysis.sel(member=range(1,17))
+#analysis = analysis.sel(member=range(1, 17))  # Exclude ANTILOPE pre-processing "member"
 
 # Read ANTILOPE raw hourly precipitation
 #filename = 'ANTILOPEH_2021103000_2022060200_alp.nc'
@@ -87,7 +89,7 @@ if not dailyfiles:
         cutoff         = 'assimilation',
         filename       = f'/home/vernaym/workdir/EDELWEISS/hourly_precipitation_analysis/precipitation_[datebegin:ymd6h]_[dateend:ymd6h]_mb[member].nc',
         #filename       = f'precipitation_[datebegin]_[dateend]_mb[member:03d].nc',
-        experiment     = 'XP25',
+        experiment     = xpid,
         geometry       = 'GrandesRousses1km',
         nativefmt      = 'netcdf',
         model          = 'edelweiss',
@@ -159,7 +161,7 @@ else:
             cutoff         = 'assimilation',
             filename       = f'/home/vernaym/workdir/EDELWEISS/hourly_precipitation_analysis/precipitation_[datebegin:ymd6h]_[dateend:ymd6h]_mb[member].nc',
             #filename       = f'precipitation_[datebegin]_[dateend]_mb[member:03d].nc',
-            experiment     = 'XP25',
+            experiment     = xpid,
             geometry       = 'GrandesRousses1km',
             nativefmt      = 'netcdf',
             model          = 'edelweiss',
