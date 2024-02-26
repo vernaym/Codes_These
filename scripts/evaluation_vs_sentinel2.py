@@ -5,7 +5,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-simu = xr.open_dataset('mb001/DIAG.nc')
+simu = xr.open_dataset('mb001/DIAG.nc', decode_times=False)
+simu = simu.rename({'xx':'x', 'yy':'y'})
 mntdir = '/home/vernaym/These/DATA'
 
 def compare(obs, var='LCSMOD'):
@@ -34,26 +35,28 @@ def plot(obs, var='LCSMOD'):
     mnt = read_mnt()
 
     filtered_obs = per_alt(obs.Band1, altitude_bands, mnt)
-    tmp = xr.DataArray(np.transpose(simu[var].data), dims=("x", "y"))
-    filtered_simu = per_alt(tmp, altitude_bands, mnt)
+    # TODO : résoudre le problème de décallage des coordonnées
+    simu['x']=mnt['x']
+    simu['y']=mnt['y']
+    filtered_simu = per_alt(simu[var], altitude_bands, mnt)
 
-    simu_df = filtered_simu.to_dataframe(name='simu').dropna().reset_index()
-    obs_df = filtered_obs.to_dataframe(name='obs').dropna().reset_index()
-    #dataplot = pd.concat([obs_df, simu_df], keys=['obs', 'simu'])  # unecessarilly large DataFrame (duplicate index) ?
+    simu_df = filtered_simu.to_dataframe(name=var).dropna().reset_index()
+    obs_df = filtered_obs.to_dataframe(name=var).dropna().reset_index()
+    dataplot = pd.concat([obs_df, simu_df], keys=['obs', 'simu']).drop(columns=['x','y'])  # unecessarilly large DataFrame (duplicate index) ?
     #dataplot = pd.concat([obs_df, simu_df], axis=1)  # TODO : drop duplicated x/y/middle_slices_ZS columns
-    dataplot = pd.concat([obs_df, simu_df['simu']], axis=1)  # WARNING : this does not ensure that x/y/middle_slices_ZS columns match !
-    #dataplot.columns = dataplot.columns.str.replace('middle_slices_ZS', 'Elevation Bands (m)')
-    dataplot.columns = dataplot.columns.str.replace('middle_slices_ZS', 'Z')
+    #dataplot = pd.concat([obs_df, simu_df['simu']], axis=1)  # WARNING : this does not ensure that x/y/middle_slices_ZS columns match !
+    dataplot.columns = dataplot.columns.str.replace('middle_slices_ZS', 'Elevation Bands (m)')
+    #dataplot.columns = dataplot.columns.str.replace('middle_slices_ZS', 'Z')
 
-    data = dataplot[dataplot['Z']==3250.0].drop(columns=['Z', 'x', 'y'])
-    data = data.melt()
-    #data['dummy'] = 3250.0
-    data['dummy'] = 0
 
-    fig, ax = plt.subplots()
+    sns.set(rc={"figure.figsize":(12, 15)})
+    sns.set_theme(style="whitegrid",font_scale=1.7)
+    g=sns.violinplot(dataplot.reset_index().rename(columns={'level_0': 'forcing'}) ,y='Elevation Bands (m)',x=var,inner='box',hue='forcing',scale='width',bw='scott',\
+               cut=0,orient='h',palette=("#6ACC64","silver",),facet_kws={'legend_out': True})
+    plt.ylim(reversed(plt.ylim()))
 
-    sns.violinplot(data=data, split=True, y='value', hue='variable', x='dummy', inner="stick", palette=['sandybrown', 'skyblue'])
     plt.show()
+
 
 
 def per_alt(data, ls_alt, mnt): # ls_alt = np.arange(0,4200,300) (for example)
@@ -76,7 +79,7 @@ def per_alt(data, ls_alt, mnt): # ls_alt = np.arange(0,4200,300) (for example)
     data_per_alt = []
     for i in range(0,len(ls_alt)-1):
         data_per_alt.append(data.where((mnt['ZS'] >= ls_alt[i]) & (mnt['ZS'] < ls_alt[i+1])))
-    data_per_alt = xr.concat(data_per_alt, dim = 'middle_slices_ZS')
+    data_per_alt = xr.concat(data_per_alt, dim='middle_slices_ZS')
     data_per_alt['middle_slices_ZS'] = ls_alt[1:] - (ls_alt[1] - ls_alt[0])/2
 
     return data_per_alt
@@ -85,6 +88,7 @@ def per_alt(data, ls_alt, mnt): # ls_alt = np.arange(0,4200,300) (for example)
 if __name__ == '__main__':
 
     var = 'LCSMOD'
+    #var = 'LCSCD'
 
     if var == 'LCSMOD':
         obs = xr.open_dataset('/home/vernaym/These/DATA/Sentinel2/20210901_L3B-SNOW_SMD_R2.nc')
