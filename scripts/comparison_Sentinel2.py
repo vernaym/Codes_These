@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import xarray as xr
 import vortex
@@ -41,6 +42,29 @@ def get_pro():
     print(t.prompt, 'tbpro =', tbpro)
     print()
 
+def save_diag():
+    tbpro = toolbox.output(
+        local          = f'mb[member]/DIAG.nc',
+        experiment     = xpid,
+        geometry       = geometry,
+        begindate      = datebegin,
+        enddate        = dateend,
+        scope          = 'SesonalSnowCoverDiagnostic',
+        date           = dateend,
+        nativefmt      = 'netcdf',
+        kind           = 'diagnostics',
+        vapp           = 'edelweiss',
+        vconf          = '[geometry:tag]',
+        model          = 'surfex',
+        namespace      = namespace,
+        namebuild      = 'flat@cen',
+        block          = 'pro',
+        member         = footprints.util.rangex(1, 16),
+        #member         = 1,
+        fatal          = True,
+    ),
+    print(t.prompt, 'tbpro =', tbpro)
+    print()
 
 def check_pro(pro, temporal_aggreg, out_aggreg):
     """
@@ -178,10 +202,14 @@ def decode_time(pro):
 
 
 if __name__ == '__main__':
+    os.chdir('/mnt/lfs/d10/mrns/users/NO_SAVE/vernaym/workdir/eval_with_Sentinel2')
     get_pro()
     for member in range(1, 17):
+        print(f'Member {member}')
         pro = xr.open_dataset(f'mb{member:03d}/{proname}', decode_times=False)
         pro = decode_time(pro)
         pro = Update_pro(pro, temporal_aggreg='1D', maskforest=False)
         pro = pro[['LCSCD', 'LCSMOD', 'LCSOD']]
         pro.to_netcdf(f'mb{member:03d}/DIAG.nc')
+        os.remove(f'mb{member:03d}/{proname}')
+    save_diag()
