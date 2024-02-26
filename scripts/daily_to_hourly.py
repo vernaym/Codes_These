@@ -28,13 +28,13 @@ if xpid.startswith('RS'):
     block = 'RandomSampling'
 elif xpid.startswith('EnKF'):
     block = 'EnsembleKalmanFilter'
-else:
-    block = ''
+elif xpid.startswith('PF'):
+    block = 'ParticleFilter'
 xp_number = xpid[-2:]
 
 # Read ensemble analysis
 #filename = os.path.join(f'/home/vernaym/workdir/ASSIMILATION/RandomSampling/{xpid}', 'Random_Sampling_2021122806_2021123006_daily_GrandesRousses.nc')
-filename = os.path.join(f'/home/vernaym/workdir/ASSIMILATION', block, f'XP{xp_number}', 'Random_Sampling_2021080106_2022080106_daily_GrandesRousses.nc')
+filename = os.path.join(f'/home/vernaym/workdir/EDELWEISS/precipitation_analysis', block, xpid, 'Random_Sampling_2021080206_2022080106_daily_GrandesRousses.nc')  # On sxcen !
 analysis = xr.open_dataset(filename)
 #analysis = analysis.sel(member=range(1, 17))  # Exclude ANTILOPE pre-processing "member"
 
@@ -42,7 +42,9 @@ analysis = xr.open_dataset(filename)
 #filename = 'ANTILOPEH_2021103000_2022060200_alp.nc'
 filename = 'ANTILOPEH_2021080106_2022080106_GrandesRousses.nc'
 #filename = 'ANTILOPEH_2021073106_2022070106_GrandesRousses.nc'
-antilope = xr.open_dataset(os.path.join('/home/vernaym/These/DATA', filename))
+# TODO : store ANTILOPE raw data on hendrix and retrieve it with Vortex
+#antilope = xr.open_dataset(os.path.join('/home/vernaym/These/DATA', filename))  # Local
+antilope = xr.open_dataset(os.path.join('/home/vernaym/workdir/EDELWEISS/precipitation_analysis/ANTILOPE', filename))  # sxcen
 antilope = antilope.sel(lat=analysis.lat.data, lon=analysis.lon.data)
 
 dailyfiles = False
@@ -65,6 +67,7 @@ if not dailyfiles:
     hourly_ana = daily_ana.reindex_like(antilope).ffill('time')  # Fill hourly time steps with daily precipitation (https://stackoverflow.com/questions/54452336/xarray-resample-time-series-data-from-daily-to-hourly)
     hourly_ana = hourly_ana.transpose('member', 'lat', 'lon', 'time')
 
+
     for member in hourly_ana.member.data:
         array = hourly_ana.sel({'member':member}).rr.data * chronology
         #array = hourly_ana.sel({'member':member}).rr.data * chronology
@@ -83,8 +86,13 @@ if not dailyfiles:
         #output = output.rio.write_crs("EPSG:4326", "grid_mapping", inplace=True)
         #output.rio.write_crs("EPSG:4326", inplace=True)
         output['Precipitation'].attrs = dict(coordinates="latitude longitude", grid_mapping="spatial_ref")
-        outname = f'/home/vernaym/workdir/EDELWEISS/hourly_precipitation_analysis/precipitation_{start.ymd6h}_{stop.ymd6h}_mb{member:03d}.nc'
+        outdir = f'/home/vernaym/workdir/EDELWEISS/precipitation_analysis/{block}/{xpid}/mb{member:03d}'
+        if not os.path.exists(outdir):
+            os.makedirs(outdir)
+        outname = f'{outdir}/hourly_precipitation_{start.ymd6h}_{stop.ymd6h}.nc'
         output.to_netcdf(outname, mode='w')
+
+    outdir = f'/home/vernaym/workdir/EDELWEISS/precipitation_analysis/{block}/{xpid}'
 
     tbout = toolbox.output(
         role           = 'Precipitation analysis',
@@ -94,8 +102,8 @@ if not dailyfiles:
         source_app     = 'antilope',
         source_conf    = 'RandomSampling',
         cutoff         = 'assimilation',
-        filename       = f'/home/vernaym/workdir/EDELWEISS/hourly_precipitation_analysis/precipitation_[datebegin:ymd6h]_[dateend:ymd6h]_mb[member].nc',
-        #filename       = f'precipitation_[datebegin]_[dateend]_mb[member:03d].nc',
+        filename       = f'{outdir}/mb[member]/hourly_precipitation_[datebegin:ymd6h]_[dateend:ymd6h].nc',
+        #filename       = f'precipitation_[datebegin]_[dateend]_mb[member].nc',
         experiment     = xpid,
         geometry       = 'GrandesRousses1km',
         nativefmt      = 'netcdf',
@@ -117,9 +125,6 @@ else:
     date = start
     while date <= stop:
         print(date)
-        # Filter date
-        #deb = np.datetime64('2021-12-27T07:00:00')
-        #fin = np.datetime64('2021-12-30T06:00:00')
         datebegin = date.replace(hour=6)
         dateend = date + Period(days=1)
         deb = np.datetime64(date)  # D (7h)
@@ -167,7 +172,7 @@ else:
             source_conf    = 'RandomSampling',
             cutoff         = 'assimilation',
             filename       = f'/home/vernaym/workdir/EDELWEISS/hourly_precipitation_analysis/precipitation_[datebegin:ymd6h]_[dateend:ymd6h]_mb[member].nc',
-            #filename       = f'precipitation_[datebegin]_[dateend]_mb[member:03d].nc',
+            #filename       = f'precipitation_[datebegin]_[dateend]_mb[member].nc',
             experiment     = xpid,
             geometry       = 'GrandesRousses1km',
             nativefmt      = 'netcdf',
