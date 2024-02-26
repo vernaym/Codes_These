@@ -28,8 +28,20 @@ def read_mnt():
     mnt = xr.open_dataset(os.path.join(mntdir, "MNTLouisGRoussecorrected.nc"))
     return mnt
 
+def plot_error_fields(obs, var='LCSMOD'):
+    simu = xr.open_mfdataset(f'mb*/DIAG.nc', combine='nested', concat_dim='member', decode_times=False)
+    simu['member'] = range(1,17)
+    simu = simu.rename({'xx':'x', 'yy':'y'})
+    simu['x'] = obs['x']
+    simu['y'] = obs['y']
+    tmp = simu.mean(dim='member')
+    tmp = tmp.compute()
+    diff = tmp[var]-obs['Band1']
+    plt.imshow(np.flipud(diff.data), cmap='RdBu')
+    plt.colorbar()
+    plt.show()
 
-def plot(obs, var='LCSMOD'):
+def plot_ange(obs, var='LCSMOD'):
     altitude_bands = np.arange(1900, 3600, 300)  # Define altitude bands (1900-3600m with 300m intervals)
     mnt = read_mnt()
 
@@ -41,8 +53,8 @@ def plot(obs, var='LCSMOD'):
         simu = xr.open_dataset(f'mb{member:03d}/DIAG.nc', decode_times=False)
         simu = simu.rename({'xx':'x', 'yy':'y'})
         # TODO : résoudre le problème de décallage des coordonnées
-        simu['x']=mnt['x']
-        simu['y']=mnt['y']
+        simu['x'] = mnt['x']
+        simu['y'] = mnt['y']
         filtered_simu = per_alt(simu[var], altitude_bands, mnt)
         df = filtered_simu.to_dataframe(name=var).dropna().reset_index()
         if simu_df is not None:
@@ -63,8 +75,7 @@ def plot(obs, var='LCSMOD'):
                cut=0,orient='h',palette=("#6ACC64", "silver"),facet_kws={'legend_out': True})
     plt.ylim(reversed(plt.ylim()))
 
-    plt.show()
-
+    plt.savefig(f'{var}.pdf', format='pdf')
 
 
 def per_alt(data, ls_alt, mnt): # ls_alt = np.arange(0,4200,300) (for example)
@@ -95,8 +106,8 @@ def per_alt(data, ls_alt, mnt): # ls_alt = np.arange(0,4200,300) (for example)
 
 if __name__ == '__main__':
 
-    var = 'LCSMOD'
-    #var = 'LCSCD'
+    #var = 'LCSMOD'
+    var = 'LCSCD'
 
     os.chdir(prodir)
 
@@ -105,7 +116,8 @@ if __name__ == '__main__':
     elif var == 'LCSCD':
         obs = xr.open_dataset('/home/vernaym/These/DATA/Sentinel2/20210901_L3B-SNOW_SCD_R2.nc')
     #compare(obs, var=var)
-    plot(obs, var=var)
+    #plot_ange(obs, var=var)
+    plot_error_fields(obs, var=var)
 
 
 
