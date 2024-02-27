@@ -77,6 +77,7 @@ def plot_ange(obs, var='LCSMOD', mask=True):
             y = 'Elevation Bands (m)',  # y-axis
             x = var,  # X-axis
             inner = 'box',  # ?
+            #inner = 'stick',  # To plot each individual data of the violinplot
             hue = 'forcing',  # Legend 'title'
             scale = 'width',  # ?
             bw = 'scott',  # ?
