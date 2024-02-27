@@ -4,9 +4,10 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+import vortexIO
 
 mntdir = '/home/vernaym/These/DATA'
-prodir = '/home/vernaym/workdir/EDELWEISS/pro'
+workdir = '/home/vernaym/workdir/EDELWEISS/diag'
 
 def compare(obs, var='LCSMOD'):
     plt.imshow(np.flipud(simu[var].data))
@@ -41,7 +42,7 @@ def plot_error_fields(obs, var='LCSMOD'):
     plt.colorbar()
     plt.show()
 
-def plot_ange(obs, var='LCSMOD'):
+def plot_ange(obs, var='LCSMOD', mask=True):
     altitude_bands = np.arange(1900, 3600, 300)  # Define altitude bands (1900-3600m with 300m intervals)
     mnt = read_mnt()
 
@@ -51,8 +52,8 @@ def plot_ange(obs, var='LCSMOD'):
     simu_df= None
     for member in range(1, 17):
         simu = xr.open_dataset(f'mb{member:03d}/DIAG.nc', decode_times=False)
-        simu = simu.rename({'xx':'x', 'yy':'y'})
-        # TODO : résoudre le problème de décallage des coordonnées
+        #simu = simu.rename({'xx':'x', 'yy':'y'})
+        # TODO : résoudre le problème de décallage des coordonnées en amont
         simu['x'] = mnt['x']
         simu['y'] = mnt['y']
         filtered_simu = per_alt(simu[var], altitude_bands, mnt)
@@ -71,11 +72,27 @@ def plot_ange(obs, var='LCSMOD'):
 
     sns.set(rc={"figure.figsize":(12, 15)})
     sns.set_theme(style="whitegrid",font_scale=1.7)
-    g=sns.violinplot(dataplot.reset_index().rename(columns={'level_0': 'forcing'}) ,y='Elevation Bands (m)',x=var,inner='box',hue='forcing',scale='width',bw='scott',\
-               cut=0,orient='h',palette=("#6ACC64", "silver"),facet_kws={'legend_out': True})
+    g=sns.violinplot(
+            dataplot.reset_index().rename(columns={'level_0': 'forcing'}),  # data
+            y = 'Elevation Bands (m)',  # y-axis
+            x = var,  # X-axis
+            inner = 'box',  # ?
+            hue = 'forcing',  # Legend 'title'
+            scale = 'width',  # ?
+            bw = 'scott',  # ?
+            cut = 0,  # ?
+            orient = 'h',  # Horizontal violinplots
+            palette = ("#6ACC64", "silver"),  # color palette (1 per DF column)
+            #facet_kws = {'legend_out': True},  # Does not work on sxcen
+        )
     plt.ylim(reversed(plt.ylim()))
 
-    plt.savefig(f'{var}.pdf', format='pdf')
+    if mask:
+        plt.savefig(f'{var}_mask.pdf', format='pdf')
+    else:
+        plt.savefig(f'{var}_nomask.pdf', format='pdf')
+
+    plt.close('all')
 
 
 def per_alt(data, ls_alt, mnt): # ls_alt = np.arange(0,4200,300) (for example)
@@ -106,18 +123,29 @@ def per_alt(data, ls_alt, mnt): # ls_alt = np.arange(0,4200,300) (for example)
 
 if __name__ == '__main__':
 
+    os.chdir(workdir)
+
+    datebegin = '2021080207'  # TODO : passer en argument
+    dateend = '2022080106'  # TODO : passer en argument
+    xpid = 'XP00@vernaym'  # TODO : passer en argument
+    geometry = 'GrandesRousses250m'
+    mask = True
+    if mask:
+        vortexIO.get_diag(datebegin, dateend, xpid, geometry, members=16, block='mask')
+    else:
+        vortexIO.get_diag(datebegin, dateend, xpid, geometry, members=16, block='nomask')
+
     #var = 'LCSMOD'
-    var = 'LCSCD'
+    #var = 'LCSCD'
+    for var in ['LCSCD', 'LCSMOD']:
+        if var == 'LCSMOD':
+            obs = xr.open_dataset('/home/vernaym/These/DATA/Sentinel2/20210901_L3B-SNOW_SMD_R2.nc')
+        elif var == 'LCSCD':
+            obs = xr.open_dataset('/home/vernaym/These/DATA/Sentinel2/20210901_L3B-SNOW_SCD_R2.nc')
+        #compare(obs, var=var)
+        plot_ange(obs, var=var)
+        #plot_error_fields(obs, var=var)
 
-    os.chdir(prodir)
-
-    if var == 'LCSMOD':
-        obs = xr.open_dataset('/home/vernaym/These/DATA/Sentinel2/20210901_L3B-SNOW_SMD_R2.nc')
-    elif var == 'LCSCD':
-        obs = xr.open_dataset('/home/vernaym/These/DATA/Sentinel2/20210901_L3B-SNOW_SCD_R2.nc')
-    #compare(obs, var=var)
-    #plot_ange(obs, var=var)
-    plot_error_fields(obs, var=var)
 
 
 

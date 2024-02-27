@@ -1,70 +1,39 @@
 import os
 import numpy as np
 import xarray as xr
-import vortex
-import cen
-from vortex import toolbox
-from bronx.stdtypes.date import Date, Period
 
-import footprints
+import vortexIO
 
-toolbox.active_now = True
 
-t = vortex.ticket()
-
-datebegin = Date('2021080207')  # TODO : passer en argument
-dateend = Date('2022080106')  # TODO : passer en argument
+datebegin = '2021080207'  # TODO : passer en argument
+dateend = '2022080106'  # TODO : passer en argument
 xpid = 'XP00@vernaym'  # TODO : passer en argument
 geometry = 'GrandesRousses250m'
-namespace = 'vortex.multi.fr'
-proname = f'PRO_{datebegin.ymdh}_{dateend.ymdh}.nc'
 
-def get_pro():
-    tbpro = toolbox.input(
-        local          = f'mb[member]/{proname}',
-        experiment     = xpid,
-        geometry       = geometry,
-        datebegin      = datebegin,
-        dateend        = dateend,
-        date           = dateend,
-        nativefmt      = 'netcdf',
-        kind           = 'SnowpackSimulation',
-        vapp           = 'edelweiss',
-        vconf          = '[geometry:tag]',
-        model          = 'surfex',
-        namespace      = namespace,
-        namebuild      = 'flat@cen',
-        block          = 'pro',
-        member         = footprints.util.rangex(1, 16),
-        #member         = 1,
-        fatal          = True,
-    ),
-    print(t.prompt, 'tbpro =', tbpro)
-    print()
+def maskgf(pro, method='nearest'):
+    """
+      Masks an input array (pro) using a reference mask dataset.
 
-def save_diag():
-    tbpro = toolbox.output(
-        local          = f'mb[member]/DIAG.nc',
-        experiment     = xpid,
-        geometry       = geometry,
-        begindate      = datebegin,
-        enddate        = dateend,
-        scope          = 'SesonalSnowCoverDiagnostic',
-        date           = dateend,
-        nativefmt      = 'netcdf',
-        kind           = 'diagnostics',
-        vapp           = 'edelweiss',
-        vconf          = '[geometry:tag]',
-        model          = 'surfex',
-        namespace      = namespace,
-        namebuild      = 'flat@cen',
-        block          = 'pro',
-        member         = footprints.util.rangex(1, 16),
-        #member         = 1,
-        fatal          = True,
-    ),
-    print(t.prompt, 'tbpro =', tbpro)
-    print()
+      Args:
+          pro: The input array to be masked.
+          method: The interpolation method to use when resampling the glacier mask
+                  to the same resolution as the input array. Valid options are
+                  'nearest', 'linear', 'cubic', etc. (default: 'nearest').
+
+      Returns:
+          A new array with the same shape as the input array, where values are masked
+          out based on the glacier mask. Masked values are set to NaN.
+    """
+
+  # Load the glacier mask dataset
+    #masque=xr.open_dataset('/home/vernaym/These/DATA/mask/masque_foret_glacier.nc').Band1.interp_like(pro,method=method)
+    masque = xr.open_dataset('/home/vernaym/These/DATA/mask/masque_glacier2017_foret_ville_riviere.nc')['Band1']
+
+  # Interpolate the glacier mask to the same resolution as the input array
+    masque = masque.interp_like(pro, method=method)
+
+  # Mask the input array based on the glacier mask
+    return pro.where(masque == 0)
 
 def check_pro(pro, temporal_aggreg, out_aggreg):
     """
@@ -122,8 +91,7 @@ def LCSCD_core(t):
         else :
             return (run_starts[argmax], run_starts[argmax] + run_lengths[argmax])
 
-#def LCSCD(pro, temporal_aggreg='1H', out_aggreg = '1D', maskforest=True):
-def Update_pro(pro, temporal_aggreg='1H', out_aggreg = '1D', maskforest=True):
+def Update_pro(pro, temporal_aggreg='1H', out_aggreg = '1D'):
     """
     Add the following variables in the PRO file:
     * LCSCD  : Longest Concurent Snow Cover Duration period
@@ -137,8 +105,6 @@ def Update_pro(pro, temporal_aggreg='1H', out_aggreg = '1D', maskforest=True):
             LCSOD  = "Snow onset date of the Longest Concurent Snow Cover Duration in days, time aggregated in 1 hour steps",
         )
 
-    if out_aggreg=='1H':
-        maskforest=False
     pro = check_pro(pro, temporal_aggreg, out_aggreg)
 
     # Identify snow-covered pixels
@@ -162,14 +128,12 @@ def Update_pro(pro, temporal_aggreg='1H', out_aggreg = '1D', maskforest=True):
         # TODO : Mettre les données au format ("y", "x") et gérer la projection + ajouter un le MNT
         pro[key] = xr.DataArray(
                 data  = value,
-                dims  = ["yy", "xx"],
+                dims  = ["y", "x"],
                 attrs = dict(
                     description = description_map[key],
                     units = units,
                 ),
             )
-        if maskforest==True :
-            pro[key] = foretmask(pro[key])
 
     return pro
 
@@ -183,14 +147,6 @@ def SCA(pro, h_lim=.2):
     pro['SCA']=(xr.where(pro.DSN_T_ISBA<=h_lim,False,True))
     return pro
 
-def foretmask(pro):
-    filename = 'A DEFINIR'  # TODO
-    fm = xr.open_dataset(filename).mask
-    try :
-        return xr.where(fm,np.nan,pro)
-    except :
-        return xr.where(fm.reindex(y=list(reversed(fm.y))),np.nan,pro)
-
 def decode_time(pro):
     """
     Manually decode time variable since other variables can not be decoded automatically
@@ -203,13 +159,25 @@ def decode_time(pro):
 
 if __name__ == '__main__':
     os.chdir('/mnt/lfs/d10/mrns/users/NO_SAVE/vernaym/workdir/eval_with_Sentinel2')
-    get_pro()
+    vortexIO.get_pro(datebegin, dateend, xpid, geometry, members=16)
     for member in range(1, 17):
         print(f'Member {member}')
-        pro = xr.open_dataset(f'mb{member:03d}/{proname}', decode_times=False)
+        pro = xr.open_dataset(f'mb{member:03d}/PRO.nc', decode_times=False)
         pro = decode_time(pro)
-        pro = Update_pro(pro, temporal_aggreg='1D', maskforest=False)
-        pro = pro[['LCSCD', 'LCSMOD', 'LCSOD']]
-        pro.to_netcdf(f'mb{member:03d}/DIAG.nc')
-        os.remove(f'mb{member:03d}/{proname}')
-    save_diag()
+        pro = Update_pro(pro, temporal_aggreg='1D')
+        diag = pro[['LCSCD', 'LCSMOD', 'LCSOD']]
+
+        mask = True
+        if mask:
+            # mask glacier/forest covered pixels
+            diag = maskgf(diag)
+            block = 'mask'
+        else:
+            block = 'nomask'
+        diag.to_netcdf(f'mb{member:03d}/DIAG.nc')
+        os.remove(f'mb{member:03d}/PRO.nc')
+
+    vortexIO.put_diag(datebegin, dateend, xpid, geometry, members=16, block=block)
+
+    for member in range(1, 17):
+        os.remove(f'mb{member:03d}/DIAG.nc')
