@@ -11,6 +11,7 @@ max_dist = 0.2
 
 def dynamic_correction(field):
     tmp = field.data.flatten()
+    print('Date=', field.time.data)
     new, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(tmp, pond)
     out = field.copy()
     out.data = new.reshape(out.data.shape)
@@ -18,6 +19,13 @@ def dynamic_correction(field):
     return out
 
 antilope = xr.open_dataset(os.path.join(workdir, 'ANTILOPEQ_2006070306_2023080106_HauteSavoie.nc'))
+
+# Cut period into 2 sub-periods to avoid memory overflow
+ndates = len(antilope.time)
+dates = antilope.time[:ndates//2]
+#dates = antilope.time[ndates//2:]
+
+antilope = antilope.sel({'time':dates})
 
 ratio = xr.open_dataset(os.path.join(workdir, f"Estimated_ratio.nc"))
 ratio = ratio.sel(lat=np.intersect1d(antilope.lat, ratio.lat), lon=np.intersect1d(antilope.lon, ratio.lon))
@@ -45,6 +53,7 @@ pond = pond.dot(diags(1/std.flatten(), 0))  # std is in [1, inf[
 obs = antilope[var1].sel({'lat':np.intersect1d(error.lat.data, antilope.lat.data), 'lon':np.intersect1d(error.lon.data, antilope.lon.data)})
 
 out = obs.groupby('time').apply(dynamic_correction)
-
-out.to_netcdf(os.path.join(workdir, 'ANTILOPE_post-processed_HauteSavoie.nc'))
+deb = dates.data[0].astype(str)[:10]
+end = dates.data[-1].astype(str)[:10]
+out.to_netcdf(os.path.join(workdir, f'ANTILOPE_post-processed_HauteSavoie_{deb}_{end}.nc'))
 
