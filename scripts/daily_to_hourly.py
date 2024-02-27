@@ -39,10 +39,9 @@ analysis = xr.open_dataset(filename)
 #analysis = analysis.sel(member=range(1, 17))  # Exclude ANTILOPE pre-processing "member"
 
 # Read ANTILOPE raw hourly precipitation
-#filename = 'ANTILOPEH_2021103000_2022060200_alp.nc'
 filename = 'ANTILOPEH_2021080106_2022080106_GrandesRousses.nc'
-#filename = 'ANTILOPEH_2021073106_2022070106_GrandesRousses.nc'
 # TODO : store ANTILOPE raw data on hendrix and retrieve it with Vortex
+
 #antilope = xr.open_dataset(os.path.join('/home/vernaym/These/DATA', filename))  # Local
 antilope = xr.open_dataset(os.path.join('/home/vernaym/workdir/EDELWEISS/precipitation_analysis/ANTILOPE', filename))  # sxcen
 antilope = antilope.sel(lat=analysis.lat.data, lon=analysis.lon.data)
@@ -103,8 +102,7 @@ if not dailyfiles:
         source_conf    = 'RandomSampling',
         cutoff         = 'assimilation',
         filename       = f'{outdir}/mb[member]/hourly_precipitation_[datebegin:ymd6h]_[dateend:ymd6h].nc',
-        #filename       = f'precipitation_[datebegin]_[dateend]_mb[member].nc',
-        experiment     = xpid,
+        experiment     = f'{xpid}@vernaym',
         geometry       = 'GrandesRousses1km',
         nativefmt      = 'netcdf',
         model          = 'edelweiss',
@@ -114,11 +112,34 @@ if not dailyfiles:
         datebegin      = start.ymd6h,
         dateend        = stop.ymd6h,
         namespace      = 'vortex.multi.fr',
-        member         = footprints.util.rangex(1,16,1),
+        member         = footprints.util.rangex(0, len(hourly_ana.member)-1),  # footprints.util.rangex(16)
         block          = 'analysis',
         intent         = 'inout',
     ),
     print(tbout)
+
+#    # Archive raw ANTILOPE data (only once !)
+#    tbout = toolbox.output(
+#        role           = 'Precipitation analysis',
+#        kind           = 'Precipitation',
+#        vapp           = 'edelweiss',
+#        vconf          = '[geometry:tag]',
+#        source_app     = 'antilope',
+#        cutoff         = 'assimilation',
+#        filename       = f'/home/vernaym/workdir/EDELWEISS/precipitation_analysis/ANTILOPE/ANTILOPEH_2021080106_2022080106_GrandesRousses.nc',
+#        experiment     = 'RawData@vernaym',
+#        geometry       = 'GrandesRousses1km',
+#        nativefmt      = 'netcdf',
+#        model          = 'edelweiss',
+#        namebuild      = 'flat@cen',
+#        date           = stop.ymd6h,
+#        datebegin      = start.ymd6h,
+#        dateend        = stop.ymd6h,
+#        namespace      = 'vortex.multi.fr',
+#        block          = 'analysis',
+#        intent         = 'inout',
+#    ),
+#    print(tbout)
 
 else:
 
