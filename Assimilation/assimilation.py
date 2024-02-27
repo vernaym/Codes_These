@@ -224,10 +224,12 @@ def read_ensemble(datebegin, dateend, frequency, domain, antilope):
     #filenames = [os.path.join(datadir, f"aspearome_{mb:03d}_{datebegin}_{dateend}_{domain}_{frequency}.nc") for mb in range(1,17)]
     #filenames = [os.path.join(datadir, f"aspearome_{mb:03d}_2021073106_2022070106_{domain}_{frequency}.nc") for mb in range(1,17)]
     if domain == 'GrandesRousses':
-        filenames = [os.path.join(datadir, f"aspearome_{mb:03d}_2021073106_2022070106_{domain}_hourly.nc") for mb in range(1,17)]
+        filenames = [os.path.join(datadir, f"aspearome_{mb:03d}_2021073106_2022080106_GrandesRousses.nc") for mb in range(1,17)]
+        pea_freq = 'daily'
     else:
         filenames = [os.path.join(datadir, f"aspearome_{mb:03d}_2021102806_2022060206_alp_hourly.nc") for mb in range(1,17)]
-    filenames = [os.path.join(datadir, f"aspearome_{mb:03d}_2021102806_2022060206_alp_hourly.nc") for mb in range(1,17)]
+        pea_freq = 'hourly'
+    #filenames = [os.path.join(datadir, f"aspearome_{mb:03d}_2021102806_2022060206_alp_hourly.nc") for mb in range(1,17)]
 
 
     # open_mfdataset returns a dask.array<chunksize=(...), meta=np.ndarray> object that divides arrays into many small pieces, called chunks, 
@@ -246,14 +248,17 @@ def read_ensemble(datebegin, dateend, frequency, domain, antilope):
 
     pearome['member'] = np.arange(1,17)
     if frequency == 'daily':
-        # Convert hourly precipitation into 24h precipitation between 6h J-1 and 6h J
-        # Problem : the xarray tools to do that allows only accumulations between
-        # 0h and 23h.
-        # solution : shift time serie by 7h, compute 24h accumulations and
-        # shift back !
-        pearome['time'] = pearome.time-np.timedelta64(7, 'h')
-        pearome = pearome.resample(time='D').sum(dim='time')  # !!! VERY SLOW !!!
-        pearome['time'] = pearome.time+np.timedelta64(30, 'h')
+        if pea_freq == 'hourly':
+            # Convert hourly precipitation into 24h precipitation between 6h J-1 and 6h J
+            # Problem : the xarray tools to do that allows only accumulations between
+            # 0h and 23h.
+            # solution : shift time serie by 7h, compute 24h accumulations and
+            # shift back !
+            pearome['time'] = pearome.time-np.timedelta64(7, 'h')
+            pearome = pearome.resample(time='D').sum(dim='time')  # !!! VERY SLOW !!!
+            pearome['time'] = pearome.time+np.timedelta64(30, 'h')
+        else:
+            pearome['time'] = pearome.time-np.timedelta64(1, 'h')
 
     return pearome
 
