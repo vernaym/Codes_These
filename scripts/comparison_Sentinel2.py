@@ -1,6 +1,9 @@
 import os
 import numpy as np
+import pandas as pd
 import xarray as xr
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 import vortexIO
 
@@ -9,6 +12,10 @@ datebegin = '2021080207'  # TODO : passer en argument
 dateend = '2022080106'  # TODO : passer en argument
 xpid = 'XP00@vernaym'  # TODO : passer en argument
 geometry = 'GrandesRousses250m'
+
+mntdir = '/home/vernaym/These/DATA'
+workdir = '/home/vernaym/workdir/EDELWEISS/diag'
+
 
 def maskgf(arr, method='nearest'):
     """
@@ -60,19 +67,134 @@ def decode_time(pro):
     pro['time'] = ds.time
     return pro
 
+def compare(obs, var='LCSMOD'):
+    plt.imshow(np.flipud(simu[var].data))
+    plt.colorbar()
+    plt.show()
+    plt.imshow(np.flipud(obs.Band1.data))
+    plt.colorbar()
+    plt.show()
+    diff=simu.LCSMOD.data-obs.Band1.data
+    plt.imshow(np.flipud(diff))
+    plt.colorbar()
+    plt.show()
+
+def read_mnt():
+    latmax = 45.240
+    latmin = 44.990
+    lonmin = 6.010
+    lonmax = 6.490
+    mnt = xr.open_dataset(os.path.join(mntdir, "MNTLouisGRoussecorrected.nc"))
+    return mnt
+
+def plot_error_fields(obs, var):
+    simu = xr.open_mfdataset(f'mb*/DIAG.nc', combine='nested', concat_dim='member', decode_times=False)
+    simu['member'] = range(1,17)
+    #simu = simu.rename({'xx':'x', 'yy':'y'})
+    # TODO : résoudre le problème de décallage des coordonnées en amont
+    simu['x'] = obs['x']
+    simu['y'] = obs['y']
+    tmp = simu.mean(dim='member')
+    tmp = tmp.compute()
+    diff = tmp[var]-obs['Band1']
+    plt.imshow(np.flipud(diff.data), cmap='RdBu')
+    plt.colorbar()
+    plt.savefig(f'diff_{var}.pdf', format='pdf')
+
+def plot_ange(obs, var, mask=True):
+    altitude_bands = np.arange(1900, 3600, 300)  # Define altitude bands (1900-3600m with 300m intervals)
+    mnt = read_mnt()
+
+    filtered_obs = per_alt(obs.Band1, altitude_bands, mnt)
+    obs_df = filtered_obs.to_dataframe(name=var).dropna().reset_index()
+
+    simu_df= None
+    for member in range(1, 17):
+        simu = xr.open_dataset(f'mb{member:03d}/DIAG.nc', decode_times=False)
+        #simu = simu.rename({'xx':'x', 'yy':'y'})
+        # TODO : résoudre le problème de décallage des coordonnées en amont
+        simu['x'] = mnt['x']
+        simu['y'] = mnt['y']
+        filtered_simu = per_alt(simu[var], altitude_bands, mnt)
+        df = filtered_simu.to_dataframe(name=var).dropna().reset_index()
+        if simu_df is not None:
+            simu_df = pd.concat([simu_df, df])
+        else:
+            simu_df = df
+
+    dataplot = pd.concat([simu_df, obs_df], keys=['simu', 'obs']).drop(columns=['x','y'])  # unecessarilly large DataFrame (duplicate index) ?
+    #dataplot = pd.concat([obs_df, simu_df], axis=1)  # TODO : drop duplicated x/y/middle_slices_ZS columns
+    #dataplot = pd.concat([obs_df, simu_df['simu']], axis=1)  # WARNING : this does not ensure that x/y/middle_slices_ZS columns match !
+    dataplot.columns = dataplot.columns.str.replace('middle_slices_ZS', 'Elevation Bands (m)')
+    #dataplot.columns = dataplot.columns.str.replace('middle_slices_ZS', 'Z')
+
+
+    sns.set(rc={"figure.figsize":(12, 15)})
+    sns.set_theme(style="whitegrid",font_scale=1.7)
+    g=sns.violinplot(
+            dataplot.reset_index().rename(columns={'level_0': 'forcing'}),  # data
+            y = 'Elevation Bands (m)',  # y-axis
+            x = var,  # X-axis
+            inner = 'box',  # ?
+            #inner = 'stick',  # To plot each individual data of the violinplot
+            hue = 'forcing',  # Legend 'title'
+            scale = 'width',  # ?
+            bw = 'scott',  # ?
+            cut = 0,  # ?
+            orient = 'h',  # Horizontal violinplots
+            palette = ("#6ACC64", "silver"),  # color palette (1 per DF column)
+            #facet_kws = {'legend_out': True},  # Does not work on sxcen
+        )
+    plt.ylim(reversed(plt.ylim()))
+    plt.xlim([0, 375])
+
+    if mask:
+        plt.savefig(f'{var}_mask.pdf', format='pdf')
+    else:
+        plt.savefig(f'{var}_nomask.pdf', format='pdf')
+
+    plt.close('all')
+
+
+def per_alt(data, ls_alt, mnt): # ls_alt = np.arange(0,4200,300) (for example)
+    """
+      Groups data into slices based on altitude ranges.
+
+      Args:
+          data: The input dataset containing the data to be grouped.
+          ls_alt: A list of altitude values defining the boundaries of each slice.
+                  Values should be in ascending order.
+          elevation_label: The name of the variable in the dataset containing
+                  elevation values (default: 'ZS').
+
+      Returns:
+          A new dataset with the same variables as the input data, but with an
+          additional dimension 'middle_slices_ZS' corresponding to the mean altitude
+          slices. Each element along this dimension represents data within a
+          specific altitude range.
+    """
+    data_per_alt = []
+    for i in range(0,len(ls_alt)-1):
+        data_per_alt.append(data.where((mnt['ZS'] >= ls_alt[i]) & (mnt['ZS'] < ls_alt[i+1])))
+    data_per_alt = xr.concat(data_per_alt, dim='middle_slices_ZS')
+    data_per_alt['middle_slices_ZS'] = ls_alt[1:] - (ls_alt[1] - ls_alt[0])/2
+
+    return data_per_alt
+
 
 if __name__ == '__main__':
-    os.chdir('/mnt/lfs/d10/mrns/users/NO_SAVE/vernaym/workdir/eval_with_Sentinel2')
+
+    os.chdir(workdir)
+
+    # Retrieve PRO files with Vortex
     vortexIO.get_pro(datebegin, dateend, xpid, geometry, members=16)
+
     for member in range(1, 17):
         print(f'Member {member}')
         pro = xr.open_dataset(f'mb{member:03d}/PRO.nc', decode_times=False)
         pro = decode_time(pro)
-        diag = lcscd(pro.DSN_T_ISBA)
-        diag.rename({'xx':'x', 'yy':'y'})
-
-        #pro = update_pro(pro, temporal_aggreg='1D')
-        #diag = pro[['LCSCD', 'LCSMOD', 'LCSOD']]
+        diag = lcscd(pro.DSN_T_ISBA.resample(time='1D').mean())
+        diag = diag.rename({'xx':'x', 'yy':'y'})
 
         mask = True
         if mask:
@@ -81,10 +203,26 @@ if __name__ == '__main__':
             block = 'mask'
         else:
             block = 'nomask'
+
+        # Write DIAG file and remove PRO
         diag.to_netcdf(f'mb{member:03d}/DIAG.nc')
         os.remove(f'mb{member:03d}/PRO.nc')
 
+    # Compare simulated with Sentinel2 data
+    for var in ['scd_concurent', 'mod']:
+        # open Sentinel2 data
+        if var == 'mod':
+            obs = xr.open_dataset('/home/vernaym/These/DATA/Sentinel2/20210901_L3B-SNOW_SMD_R2.nc')
+        elif var == 'scd_concurent':
+            obs = xr.open_dataset('/home/vernaym/These/DATA/Sentinel2/20210901_L3B-SNOW_SCD_R2.nc')
+
+        #compare(obs, var=var)
+        plot_ange(obs, var)  # Violinplots by elevation range
+        plot_error_fields(obs, var)  # Field difference
+
+    # Archive DIAG files with Vortex
     vortexIO.put_diag(datebegin, dateend, xpid, geometry, members=16, block=block)
 
+    # Clean data
     for member in range(1, 17):
         os.remove(f'mb{member:03d}/DIAG.nc')
