@@ -1,9 +1,17 @@
-import os
+import os, sys
 import pandas as pd
 import numpy as np
 import xarray as xr
 import rioxarray
 import pytz
+
+if len(sys.argv) == 3:
+    basename = sys.argv[1]
+    xpid = sys.argv[2]
+else:
+    print('ERROR : missing arguments')
+    print('USAGE : daily_to_hourly.py filename xpid')
+    sys.exit()
 
 import vortex
 from cen.data import flow
@@ -17,13 +25,11 @@ toolbox.active_now = True
 t = vortex.ticket()
 t.env.setvar('WORKDIR', '/home/vernaym/workdir')
 
-
 local_tz = pytz.timezone("Europe/Paris")
 
 start = Date(2021, 8, 2, 7)
 stop = Date(2022, 8, 1, 6)
 
-xpid = 'RS27'
 if xpid.startswith('RS'):
     block = 'RandomSampling'
 elif xpid.startswith('EnKF'):
@@ -34,7 +40,8 @@ xp_number = xpid[-2:]
 
 # Read ensemble analysis
 #filename = os.path.join(f'/home/vernaym/workdir/ASSIMILATION/RandomSampling/{xpid}', 'Random_Sampling_2021122806_2021123006_daily_GrandesRousses.nc')
-filename = os.path.join(f'/home/vernaym/workdir/EDELWEISS/precipitation_analysis', block, xpid, 'Random_Sampling_2021080206_2022080106_daily_GrandesRousses.nc')  # On sxcen !
+#filename = os.path.join(f'/home/vernaym/workdir/EDELWEISS/precipitation_analysis', block, xpid, 'Random_Sampling_2021080206_2022080106_daily_GrandesRousses.nc')  # On sxcen !
+filename = os.path.join(f'/home/vernaym/workdir/EDELWEISS/precipitation_analysis', block, xpid, basename)  # On sxcen !
 analysis = xr.open_dataset(filename)
 #analysis = analysis.sel(member=range(1, 17))  # Exclude ANTILOPE pre-processing "member"
 
@@ -99,14 +106,12 @@ if not dailyfiles:
         vapp           = 'edelweiss',
         vconf          = '[geometry:tag]',
         source_app     = 'antilope',
-        source_conf    = 'RandomSampling',
         cutoff         = 'assimilation',
         filename       = f'{outdir}/mb[member]/hourly_precipitation_[datebegin:ymd6h]_[dateend:ymd6h].nc',
         experiment     = f'{xpid}@vernaym',
         geometry       = 'GrandesRousses1km',
         nativefmt      = 'netcdf',
         model          = 'edelweiss',
-        #date           = dateend.ymd6h,
         namebuild      = 'flat@cen',
         date           = stop.ymd6h,
         datebegin      = start.ymd6h,
