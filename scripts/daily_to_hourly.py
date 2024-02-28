@@ -32,10 +32,15 @@ stop = Date(2022, 8, 1, 6)
 
 if xpid.startswith('RS'):
     block = 'RandomSampling'
+    source_conf = 'RandomSampling'
 elif xpid.startswith('EnKF'):
     block = 'EnsembleKalmanFilter'
+    source_conf = 'EnsembleKalmanFilter'
 elif xpid.startswith('PF'):
     block = 'ParticleFilter'
+    source_conf = 'ParticleFilter'
+else:
+    source_conf = None
 xp_number = xpid[-2:]
 
 # Read ensemble analysis
@@ -106,6 +111,7 @@ if not dailyfiles:
         vapp           = 'edelweiss',
         vconf          = '[geometry:tag]',
         source_app     = 'antilope',
+        source_conf    = source_conf,
         cutoff         = 'assimilation',
         filename       = f'{outdir}/mb[member]/hourly_precipitation_[datebegin:ymd6h]_[dateend:ymd6h].nc',
         experiment     = f'{xpid}@vernaym',
@@ -124,7 +130,7 @@ if not dailyfiles:
     print(tbout)
 
     for member in hourly_ana.member.data:
-        os.remove(os.path.join(outdir, 'mb{member:03d}', 'hourly_precipitation_{start.ymd6h}_{stop.ymd6h}.nc'))
+        os.remove(os.path.join(outdir, f'mb{member:03d}', f'hourly_precipitation_{start.ymd6h}_{stop.ymd6h}.nc'))
 
 #    # Archive raw ANTILOPE data (only once !)
 #    tbout = toolbox.output(
