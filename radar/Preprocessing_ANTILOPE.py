@@ -13,12 +13,7 @@ import numpy as np
 import xarray as xr
 import geopandas as gpd  # To install
 import json
-import plotly.express as px
-from plotly.offline import plot
 import pandas as pd
-import plotly.graph_objects as go
-import plotly.figure_factory as ff
-from pyproj import Proj, transform
 
 import matplotlib
 import matplotlib.pyplot as plt
