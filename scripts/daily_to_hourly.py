@@ -123,6 +123,9 @@ if not dailyfiles:
     ),
     print(tbout)
 
+    for member in hourly_ana.member.data:
+        os.remove(os.path.join(outdir, 'mb{member:03d}', 'hourly_precipitation_{start.ymd6h}_{stop.ymd6h}.nc'))
+
 #    # Archive raw ANTILOPE data (only once !)
 #    tbout = toolbox.output(
 #        role           = 'Precipitation analysis',
