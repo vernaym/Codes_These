@@ -61,7 +61,7 @@ def put_pro(datebegin, dateend, xpid, geometry, namespace='vortex.multi.fr', fil
     print(t.prompt, 'PRO output =', tbpro)
     print()
 
-def put_diag(datebegin, dateend, xpid, geometry, namespace='vortex.multi.fr', filename='DIAG.nc', members=None, vapp='edelweiss', block=None, abspath=None):
+def put_diag(datebegin, dateend, xpid, geometry, namespace='vortex.multi.fr', filename='DIAG.nc', members=None, vapp='edelweiss', block='', abspath=None):
 
     tbdiag = toolbox.output(
         local          = f'mb[member]/{filename}' if members is not None else filename ,
@@ -85,7 +85,7 @@ def put_diag(datebegin, dateend, xpid, geometry, namespace='vortex.multi.fr', fi
     print(t.prompt, 'DIAG ouput =', tbdiag)
     print()
 
-def get_diag(datebegin, dateend, xpid, geometry, namespace='vortex.multi.fr', filename='DIAG.nc', members=None, vapp='edelweiss', block=None, abspath=None):
+def get_diag(datebegin, dateend, xpid, geometry, namespace='vortex.multi.fr', filename='DIAG.nc', members=None, vapp='edelweiss', block='', abspath=None):
 
     tbdiag = toolbox.input(
         local          = f'mb[member]/{filename}' if members is not None else filename ,
