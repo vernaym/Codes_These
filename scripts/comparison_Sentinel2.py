@@ -8,13 +8,20 @@ import seaborn as sns
 import vortexIO
 
 
-datebegin = '2021080207'  # TODO : passer en argument
+datebegin = '2021080106'  # TODO : passer en argument
+#datebegin = '2021080207'  # TODO : passer en argument
 dateend = '2022080106'  # TODO : passer en argument
-xpid = 'XP00@vernaym'  # TODO : passer en argument
+#xpid = 'RS25_no_pappus@vernaym'  # TODO : passer en argument
+xpid = 'safran@vernaym'  # TODO : passer en argument
+members = 17  # TODO : passer en argument
+members = None  # TODO : passer en argument
 geometry = 'GrandesRousses250m'
+
 
 mntdir = '/home/vernaym/These/DATA'
 workdir = '/home/vernaym/workdir/EDELWEISS/diag'
+
+altitude_bands = np.arange(1900, 3600, 300)  # Define altitude bands (1900-3600m with 300m intervals)
 
 
 def maskgf(arr, method='nearest'):
@@ -88,39 +95,56 @@ def read_mnt():
     return mnt
 
 def plot_error_fields(obs, var):
-    simu = xr.open_mfdataset(f'mb*/DIAG.nc', combine='nested', concat_dim='member', decode_times=False)
-    simu['member'] = range(1,17)
+    if members is None:
+        simu = xr.open_dataset(f'DIAG.nc', decode_times=False)
+    else:
+        simu = xr.open_mfdataset(f'mb*/DIAG.nc', combine='nested', concat_dim='member', decode_times=False)
     #simu = simu.rename({'xx':'x', 'yy':'y'})
     # TODO : résoudre le problème de décallage des coordonnées en amont
     simu['x'] = obs['x']
     simu['y'] = obs['y']
-    tmp = simu.mean(dim='member')
+
+    if members is not None:
+        simu['member'] = range(members)
+        tmp = simu.mean(dim='member')
+    else:
+        tmp = simu
     tmp = tmp.compute()
     diff = tmp[var]-obs['Band1']
     plt.imshow(np.flipud(diff.data), cmap='RdBu')
     plt.colorbar()
     plt.savefig(f'diff_{var}.pdf', format='pdf')
 
+    plt.close('all')
+
+def filter_simu(subdir, mnt):
+    diagname = os.path.join(subdir, 'DIAG.nc')
+    simu = xr.open_dataset(diagname, decode_times=False)
+    #simu = simu.rename({'xx':'x', 'yy':'y'})
+    # TODO : résoudre le problème de décallage des coordonnées en amont
+    simu['x'] = mnt['x']
+    simu['y'] = mnt['y']
+    filtered_simu = per_alt(simu[var], altitude_bands, mnt)
+    df = filtered_simu.to_dataframe(name=var).dropna().reset_index()
+    return df
+
 def plot_ange(obs, var, mask=True):
-    altitude_bands = np.arange(1900, 3600, 300)  # Define altitude bands (1900-3600m with 300m intervals)
     mnt = read_mnt()
 
     filtered_obs = per_alt(obs.Band1, altitude_bands, mnt)
     obs_df = filtered_obs.to_dataframe(name=var).dropna().reset_index()
 
     simu_df= None
-    for member in range(1, 17):
-        simu = xr.open_dataset(f'mb{member:03d}/DIAG.nc', decode_times=False)
-        #simu = simu.rename({'xx':'x', 'yy':'y'})
-        # TODO : résoudre le problème de décallage des coordonnées en amont
-        simu['x'] = mnt['x']
-        simu['y'] = mnt['y']
-        filtered_simu = per_alt(simu[var], altitude_bands, mnt)
-        df = filtered_simu.to_dataframe(name=var).dropna().reset_index()
-        if simu_df is not None:
-            simu_df = pd.concat([simu_df, df])
-        else:
-            simu_df = df
+    if members is None:
+        subdir = ''
+        simu_df = filter_simu(subdir, mnt)
+    else:
+        for member in range(members):
+            subdir = f'mb{member:03d}'
+            if simu_df is not None:
+                simu_df = pd.concat([simu_df, filter_simu(subdir, mnt)])
+            else:
+                simu_df = df
 
     dataplot = pd.concat([simu_df, obs_df], keys=['simu', 'obs']).drop(columns=['x','y'])  # unecessarilly large DataFrame (duplicate index) ?
     #dataplot = pd.concat([obs_df, simu_df], axis=1)  # TODO : drop duplicated x/y/middle_slices_ZS columns
@@ -181,34 +205,46 @@ def per_alt(data, ls_alt, mnt): # ls_alt = np.arange(0,4200,300) (for example)
 
     return data_per_alt
 
+def diag(subdir):
+    proname = os.path.join(subdir, 'PRO.nc')
+    pro = xr.open_dataset(proname, decode_times=False)
+    pro = decode_time(pro)
+    diag = lcscd(pro.DSN_T_ISBA.resample(time='1D').mean())
+    diag = diag.rename({'xx':'x', 'yy':'y'})
+
+    mask = True
+    if mask:
+        # mask glacier/forest covered pixels
+        diag = maskgf(diag)
+        block = 'mask'
+    else:
+        block = 'nomask'
+
+    # Write DIAG file and remove PRO
+    diag.to_netcdf(os.path.join(subdir, 'DIAG.nc'))
+    os.remove(os.path.join(subdir, 'PRO.nc'))
+
+    return block
+
 
 if __name__ == '__main__':
 
     os.chdir(workdir)
 
     # Retrieve PRO files with Vortex
-    vortexIO.get_pro(datebegin, dateend, xpid, geometry, members=16)
+    vortexIO.get_pro(datebegin, dateend, xpid, geometry, members=members)
 
-    for member in range(1, 17):
-        print(f'Member {member}')
-        pro = xr.open_dataset(f'mb{member:03d}/PRO.nc', decode_times=False)
-        pro = decode_time(pro)
-        diag = lcscd(pro.DSN_T_ISBA.resample(time='1D').mean())
-        diag = diag.rename({'xx':'x', 'yy':'y'})
-
-        mask = True
-        if mask:
-            # mask glacier/forest covered pixels
-            diag = maskgf(diag)
-            block = 'mask'
-        else:
-            block = 'nomask'
-
-        # Write DIAG file and remove PRO
-        diag.to_netcdf(f'mb{member:03d}/DIAG.nc')
-        os.remove(f'mb{member:03d}/PRO.nc')
+    if members is None:
+        subdir = ''
+        block =diag(subdir)
+    else:
+        for member in range(17):
+            print(f'Member {member}')
+            subdir = f'mb{member:03d}'
+            block = diag(subdir)
 
     # Compare simulated with Sentinel2 data
+    # TODO : put/get Sentinel2 data from hendrix
     for var in ['scd_concurent', 'mod']:
         # open Sentinel2 data
         if var == 'mod':
@@ -221,8 +257,11 @@ if __name__ == '__main__':
         plot_error_fields(obs, var)  # Field difference
 
     # Archive DIAG files with Vortex
-    vortexIO.put_diag(datebegin, dateend, xpid, geometry, members=16, block=block)
+    vortexIO.put_diag(datebegin, dateend, xpid, geometry, members=members, block=block)
 
     # Clean data
-    for member in range(1, 17):
-        os.remove(f'mb{member:03d}/DIAG.nc')
+    if members is None:
+        os.remove('DIAG.nc')
+    else:
+        for member in range(members):
+            os.remove(f'mb{member:03d}/DIAG.nc')
