@@ -19,8 +19,11 @@ toolbox.active_now = True
 
 from bronx.stdtypes.date import Date, Period
 
-from These.radar.Preprocessing_ANTILOPE import AntilopePreprocessing
-from These.visualisation.plot_precip_map import PrecipitationAnalysis
+#from These.radar.Preprocessing_ANTILOPE import AntilopePreprocessing
+#from These.visualisation.plot_precip_map import PrecipitationAnalysis
+# Use local files to avoid overwrites
+from Preprocessing_ANTILOPE import AntilopePreprocessing
+from plot_precip_map import PrecipitationAnalysis
 
 
 def usage():
@@ -159,6 +162,10 @@ for domain in ['alp', 'pyr']:
 myplot = PrecipitationAnalysis(date, antilope=antilope, nivometeo=nivometeo, auto=auto, safran=safran, var='analysis')  # Plot corrected field
 myplot.plot()
 myplot.save()
+try:
+    myplot.put_ftp()
+except:
+    print('WARNING : Failed to put the json file on the server')
 myplot = PrecipitationAnalysis(date, antilope=antilope, nivometeo=nivometeo, auto=auto, safran=safran, var='rr')  # Plot raw ANTILOPE field
 myplot.plot()
 myplot.save()

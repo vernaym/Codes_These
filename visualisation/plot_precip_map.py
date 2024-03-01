@@ -24,6 +24,8 @@ from scipy.sparse import csr_matrix, diags
 from scipy.spatial.distance import cdist
 from scipy.spatial import cKDTree
 
+from netrc import netrc
+
 
 ######   DOC UTILE PLOTLY  ######
 # https://zacks.one/python-plotly/
@@ -113,12 +115,20 @@ class PrecipitationAnalysis(object):
         self.fig.show()
 
     def save(self):
-        self.fig.write_json(os.path.join(rootdir, 'figures', f"precipitation_{self.date.strftime('%Y%m%d')}.json"))
+        self.jsonfile = os.path.join(rootdir, 'figures', "as_antilope.json")
+        self.fig.write_json(self.jsonfile)
         if self.var == 'analysis':
             self.fig.write_html(os.path.join(rootdir, 'figures', f"precipitation_{self.date.strftime('%Y%m%d')}.html"))
         else:
             self.fig.write_html(os.path.join(rootdir, 'figures', f"precipitation_{self.var}_{self.date.strftime('%Y%m%d')}.html"))
 
+    def put_ftp(self):
+        import pysftp
+        host = "coalpm31-sidev.meteo.fr"
+        username, account, password = netrc().authenticators(host)
+        with pysftp.Connection(host=host, username=username, password=password) as sftp:
+            with sftp.cd('/home/users/coalp-adm/external/antilope'):  # temporarily chdir to public
+                sftp.put(self.jsonfile)  # put json file
 
     def plot_antilope(self):
         """
