@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 import argparse
+import matplotlib
 import matplotlib.pyplot as plt
 import seaborn as sns
 
@@ -42,6 +43,7 @@ def read_mnt():
 
 def plot_error_fields(xpids, obs, var):
     for xpid in xpids:
+        fig, ax = plt.subplots(figsize=(16,10))
         shortid = xpid.split('@')[0]
         members = members_map[shortid]
         if members is None:
@@ -60,9 +62,11 @@ def plot_error_fields(xpids, obs, var):
             tmp = simu
         tmp = tmp.compute()
         diff = tmp[var]-obs['Band1']
-        plt.imshow(np.flipud(diff.data), cmap='RdBu')
-        plt.colorbar()
-        plt.savefig(f'diff_{var}_{shortid}.pdf', format='pdf')
+        cmap = matplotlib.cm.RdBu
+        cmap.set_bad('grey', 1.)
+        im = ax.imshow(np.flipud(diff.data), cmap=cmap, vmin=-100, vmax=100)
+        fig.colorbar(im)
+        fig.savefig(f'diff_{var}_{shortid}.pdf', format='pdf')
 
         plt.close('all')
 
