@@ -34,6 +34,7 @@ home = '/cnrm/cen/users/NO_SAVE/vernaym'  # sxcen
 
 datadir =  os.path.join(home, 'workdir/EDELWEISS')
 forcingname = f'FORCING_{datebegin}_{dateend}_gr250m'
+precipitation_xpid = 'RS27@radanovicss'
 
 
 def update(forcing):
@@ -67,12 +68,13 @@ def update(forcing):
             role        = 'Precipitation analysis',
             kind        = 'Precipitation',
             vapp        = 'edelweiss',
-            vconf       = '[geometry:area]',
+            #vconf       = '[geometry:area]',
+            vconf       = '[geometry:tag]',
             source_app  = 'antilope',
             source_conf = 'RandomSampling',
             cutoff      = 'assimilation',
             filename    = f'{dirname}/mb[member]/{filename}',
-            experiment  = 'XP25@radanovicss',
+            experiment  = precipitation_xpid,
             geometry    = 'GrandesRousses250m',
             nativefmt   = 'netcdf',
             namebuild   = 'flat@cen',
@@ -130,7 +132,8 @@ def get_forcings():
             #source_conf = 'RandomSampling',
             cutoff      = 'assimilation',
             filename    = f'{datadir}/meteo/mb[member]/{forcingname}_in.nc',
-            experiment  = 'XP25@vernaym',
+            experiment  = xpid,
+            #experiment  = 'XP25@vernaym',
             geometry    = 'GrandesRousses250m',
             nativefmt   = 'netcdf',
             namebuild   = 'flat@cen',
