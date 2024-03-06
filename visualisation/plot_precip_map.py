@@ -67,8 +67,8 @@ class PrecipitationAnalysis(object):
 
     def __init__(self, date, antilope=None, safran=None, nivometeo=None, auto=None, var='obs'):
         self.antilope = antilope
-        #self.rrmax = min([max([np.nanmax(antilope.rr.data.flatten()) for antilope in self.antilope.values() if antilope is not None]), 80])
-        self.rrmax = max([np.nanmax(antilope.analysis.data.flatten()) for antilope in self.antilope.values() if antilope is not None])
+        self.rrmax = min([max([np.nanmax(antilope.rr.data.flatten()) for antilope in self.antilope.values() if antilope is not None]), 80])
+        #self.rrmax = max([np.nanmax(antilope.analysis.data.flatten()) for antilope in self.antilope.values() if antilope is not None])
         self.var = var
         self.safran = safran
         self.nivometeo = nivometeo
