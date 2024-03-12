@@ -108,25 +108,26 @@ if __name__ == '__main__':
     datebegin = '2021073106'
     dateend   = '2022080106'
     outname = os.path.join(workdir, f'Wind_gr250m_{datebegin}_{dateend}.nc')
-    if not os.path.exists(outname):
+    if os.path.exists(outname):
+        os.remove(outname)
 
-        # 1. Upscale 30m resolution wind fields from LTT to 250m Wind/Wind_dir FORCING-like variables
-        for file in glob.glob(os.path.join(datadir, '*')):  # Loop over files to avoid memory limitations
-            if not os.path.basename(file) == 'arome_downscaled_completion_2022_07.nc':
-                upscale(file)
+    # 1. Upscale 30m resolution wind fields from LTT to 250m Wind/Wind_dir FORCING-like variables
+    for file in glob.glob(os.path.join(datadir, '*')):  # Loop over files to avoid memory limitations
+        if not os.path.basename(file) == 'arome_downscaled_completion_2022_07.nc':
+            upscale(file)
 
-        # 2. Read the (multiple) files created and concatenate data into 1 single netcf file
-        wind250m = xr.open_mfdataset(glob.glob(os.path.join(workdir, 'Wind_gr250m*.nc')))
-        wind250m = wind250m.rename({'__xarray_dataarray_variable__': 'Wind'})
-        wdir250m = xr.open_mfdataset(glob.glob(os.path.join(workdir, 'Wind_dir_gr250m*.nc')))
-        wdir250m = wdir250m.rename({'__xarray_dataarray_variable__': 'Wind_dir'})
-        wind250m = wind250m.merge(wdir250m)
-        start = pd.to_datetime(datebegin, format='%Y%m%d%H').to_numpy()
-        end = pd.to_datetime(dateend, format='%Y%m%d%H').to_numpy()
-        dates = xr.date_range(start=start, end=end, freq='H')
-        wind250m = wind250m.sel({'time': np.intersect1d(dates, wind250m.time)})
-        wind250m.to_netcdf(outname, format=DEFAULT_NETCDF_FORMAT)
+    # 2. Read the (multiple) files created and concatenate data into 1 single netcf file
+    wind250m = xr.open_mfdataset(glob.glob(os.path.join(workdir, 'Wind_gr250m_????_??.nc')))
+    wind250m = wind250m.rename({'__xarray_dataarray_variable__': 'Wind'})
+    wdir250m = xr.open_mfdataset(glob.glob(os.path.join(workdir, 'Wind_dir_gr250m_????_??.nc')))
+    wdir250m = wdir250m.rename({'__xarray_dataarray_variable__': 'Wind_dir'})
+    wind250m = wind250m.merge(wdir250m)
+    start = pd.to_datetime(datebegin, format='%Y%m%d%H').to_numpy()
+    end = pd.to_datetime(dateend, format='%Y%m%d%H').to_numpy()
+    dates = xr.date_range(start=start, end=end, freq='H')
+    wind250m = wind250m.sel({'time': np.intersect1d(dates, wind250m.time)})
+    wind250m.to_netcdf(outname, format=DEFAULT_NETCDF_FORMAT)
 
     wind_xpid = 'WHM01@vernaym',  # First experiment produced with Hugo.M wind
     geometry  = 'GrandesRousses250m'
-    vortexIO.put_wind(datebegin, dateend, wind_xpid, geometry)
+    vortexIO.put_wind(datebegin, dateend, wind_xpid, geometry, filename=outname)
