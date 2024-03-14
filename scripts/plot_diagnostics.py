@@ -7,13 +7,14 @@ import matplotlib
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-import vortexIO
-
+from snowtools.scripts.extract.vortex import vortexIO
 
 members_map = dict(
         safran        = None,
         safran_pappus = None,
         RS25          = 16,
+        RS27          = 1,  # post-processed ANTILOPE only
+        RS27_pappus   = 1, # post-processed ANTILOPE only
     )
 geometry = 'GrandesRousses250m'
 
@@ -84,7 +85,7 @@ def plot_ange(xpids, obs, var, mask=True):
             df = filter_simu(shortid, subdir, mnt)
         else:
             df = None
-            for member in range(1, members+1):
+            for member in range(members):
                 subdir = f'mb{member:03d}'
                 dfm = filter_simu(shortid, subdir, mnt)
                 if df is not None:
@@ -170,6 +171,10 @@ if __name__ == '__main__':
 
     # 1. Get all input data
     for xpid in xpids:
+        # TODO : gérer ça plus proprement
+        if '@' not in xpid:
+            user = os.environ["USER"]
+            xpid = f'{xpid}@{user}'
         shortid = xpid.split('@')[0]
         # VERRUE
         if shortid.startswith('safran'):
@@ -189,7 +194,7 @@ if __name__ == '__main__':
         elif var == 'scd_concurent':
             obs = xr.open_dataset('/home/vernaym/These/DATA/Sentinel2/20210901_L3B-SNOW_SCD_R2.nc')
 
-        #compare(obs, var=var)
+        # compare(obs, var=var)
         plot_ange(xpids, obs, var)  # Violinplots by elevation range
         plot_error_fields(xpids, obs, var)  # Field difference
 
@@ -200,5 +205,5 @@ if __name__ == '__main__':
         if members is None:
             os.remove(f'DIAG_{shortid}.nc')
         else:
-            for member in range(1, members+1):
+            for member in range(members):
                 os.remove(f'mb{member:03d}/DIAG_{shortid}.nc')
