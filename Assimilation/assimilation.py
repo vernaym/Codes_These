@@ -19,7 +19,7 @@ from scipy.sparse import diags
 from scipy.stats import norm, gamma
 import math
 import xarray as xr
-from pykrige.uk import UniversalKriging
+#from pykrige.uk import UniversalKriging  # pykrige not install on soprano
 import glob
 import shapefile
 from shapely.geometry import Point, Polygon
@@ -37,8 +37,6 @@ from matplotlib.text import Annotation
 from matplotlib import offsetbox
 import seaborn as sns
 import palettable
-
-import plotly.express as px
 
 #plt.rcParams["figure.autolayout"] = True
 
@@ -121,7 +119,7 @@ def parse_command_line():
     parser.add_argument('-c', '--debiasing', help='Apply bias correction to observation (0=constant bias, 1=pseudo-kriging, 2=estimation based on homogeneity,3=smoothing+scores)', default=None, type=int, choices=[0,1,2,3])
     parser.add_argument('-t', '--threshold', default=None, help='Threshold of precipitation (mm) to apply in the data to consider', type=int)
     parser.add_argument('-p', '--plot', action='store_true', default=False, help='Plot assimilated fields')
-    parser.add_argument('-f', '--frequency', choices=['hourly', 'daily'], help='Assimilation frequency')
+    parser.add_argument('-f', '--frequency', choices=['hourly', 'daily'], default='daily', help='Assimilation frequency')
     parser.add_argument('-l', '--localisation', default=None, help='Spatial localisation distance (switch localisation on).', type=int)
     parser.add_argument('-g', '--gridded', default=False, action='store_true', help='Gridded assimilation if True, or assimilation only at nivometeo locations if False')
     parser.add_argument('-y', '--likelyhood', default='normal', choices=['normal', 'gamma'], help='Likelihood distribution')
@@ -265,23 +263,27 @@ def read_ensemble(datebegin, dateend, frequency, domain, antilope):
 @speedtest
 def read_nivometeo_obs(domain='alp'):
 
-    nivometeo = pd.read_csv(os.path.join(datadir, 'obs_nivometeo_daily_RR_20211201_20220430.csv'), sep=';', parse_dates=['date'], header=0,
-            names=['date', 'num_poste', 'nom', 'alti', 'lat', 'lon', 'massif', 'obs', 'unused'],
-            usecols=['date', 'num_poste', 'nom', 'alti', 'lat', 'lon', 'obs'],
-            dtype={'num_poste':int, 'nom':str, 'alti':int, 'lat':float, 'lon':float, 'obs':float},
-        )
+    filename = os.path.join(datadir, 'obs_nivometeo_daily_RR_20211201_20220430.csv')
+    if os.path.exists(filename):
+        nivometeo = pd.read_csv(filename, sep=';', parse_dates=['date'], header=0,
+                names=['date', 'num_poste', 'nom', 'alti', 'lat', 'lon', 'massif', 'obs', 'unused'],
+                usecols=['date', 'num_poste', 'nom', 'alti', 'lat', 'lon', 'obs'],
+                dtype={'num_poste':int, 'nom':str, 'alti':int, 'lat':float, 'lon':float, 'obs':float},
+            )
 
-    latmax = domain_coords[domain]['latmax']
-    latmin = domain_coords[domain]['latmin']
-    lonmin = domain_coords[domain]['lonmin']
-    lonmax = domain_coords[domain]['lonmax']
-    nivometeo = nivometeo.loc[(nivometeo['lat']>=latmin) & (nivometeo['lat']<=latmax) & (nivometeo['lon']>=lonmin) & (nivometeo['lon']<=lonmax)]  # Select area
-    nivometeo.date = nivometeo.date + pd.Timedelta("1d6h")   #BDClim extraction for date ymd is the observation from ymd6h to ym(d+1)6h
-    #nivometeo.groupby('num_poste')['nom', 'lat', 'lon', 'alti'].agg(set)
-    #nivometeo = nivometeo.set_index(['num_poste', 'lat', 'lon', 'nom', 'alti', 'date'])  # Utilité de passer en index ?
-    nivometeo.set_index(['num_poste','date'], inplace=True)
+        latmax = domain_coords[domain]['latmax']
+        latmin = domain_coords[domain]['latmin']
+        lonmin = domain_coords[domain]['lonmin']
+        lonmax = domain_coords[domain]['lonmax']
+        nivometeo = nivometeo.loc[(nivometeo['lat']>=latmin) & (nivometeo['lat']<=latmax) & (nivometeo['lon']>=lonmin) & (nivometeo['lon']<=lonmax)]  # Select area
+        nivometeo.date = nivometeo.date + pd.Timedelta("1d6h")   #BDClim extraction for date ymd is the observation from ymd6h to ym(d+1)6h
+        #nivometeo.groupby('num_poste')['nom', 'lat', 'lon', 'alti'].agg(set)
+        #nivometeo = nivometeo.set_index(['num_poste', 'lat', 'lon', 'nom', 'alti', 'date'])  # Utilité de passer en index ?
+        nivometeo.set_index(['num_poste','date'], inplace=True)
 
-    return nivometeo.to_xarray()
+        return nivometeo.to_xarray()
+    else:
+        return None
 
 def add_boundaries(ax, linewidth=1):
 #    shapefile_name = os.path.join("/home/vernaym/QGIS/FondDeCarte/", "world-administrative-boundaries.shp")
@@ -492,31 +494,32 @@ def finalize_fig(figure, imm, label, outname):
 
 @speedtest
 def read_obs(args):
-    #filename = f'ANTILOPE{suffix[args.frequency]}_{args.datebegin.strftime("%Y%m%d%H")}_{args.dateend.strftime("%Y%m%d%H")}_alp.nc'
-    if args.domain == 'GrandesRousses':
-        filename = 'ANTILOPED_2021080106_2022080106_GrandesRousses.nc'
-    else:
-        filename = f'ANTILOPEQ_2021102900_2022060200_alp.nc'
+    filename = f'ANTILOPEH_{args.datebegin.strftime("%Y%m%d%H")}_{args.dateend.strftime("%Y%m%d%H")}_{args.domain}.nc'
     if not os.path.exists(filename):
-        print(f'WARNING : file {filename} does not exist, looking for it under {datadir}')
-        filename = os.path.join(datadir, filename)
-    if not os.path.exists(filename):
-        print(f'WARNING : no file named {filename} under {datadir}, using default file ANTILOPEH_2021103000_2022060200_alp.nc')
-        filename = os.path.join(datadir, f'ANTILOPEH_2021103000_2022060200_alp.nc')
+        if args.domain == 'GrandesRousses':
+            filename = 'ANTILOPED_2021080106_2022080106_GrandesRousses.nc'
+        else:
+            filename = f'ANTILOPEQ_2021102900_2022060200_alp.nc'
+        if not os.path.exists(filename):
+            print(f'WARNING : file {filename} does not exist, looking for it under {datadir}')
+            filename = os.path.join(datadir, filename)
+        if not os.path.exists(filename):
+            print(f'WARNING : no file named {filename} under {datadir}, using default file ANTILOPEH_2021103000_2022060200_alp.nc')
+            filename = os.path.join(datadir, f'ANTILOPEH_2021103000_2022060200_alp.nc')
 
+    if args.frequency == 'daily' and  'ANTILOPEH' in filename:
         antilope = xr.open_dataset(filename, chunks={'time': 24})  # WARNING : works with xarray-2022.3.0 but not xarray-2023.1.0
         #antilope = antilope.where((antilope.lon>=lonmin) & (antilope.lon<=lonmax) & (antilope.lat>=latmin) & (antilope.lat<=latmax), drop=True)
         # Pour une assimilation quotidienne, sommer les cumuls horaires
-        if args.frequency == 'daily' and  'ANTILOPEH' in filename:
-            # Convert hourly precipitation into 24h precipitation between 6h UTC J-1 and 6h UTC J
-            # Problem : the xarray tools to do that allows only accumulations between
-            # 0h and 24h.
-            # solution : shift time serie by 6h, compute 24h accumulations and
-            # shift back !
-            antilope['time'] = antilope.time-np.timedelta64(7, 'h')
-            #antilope['time'] = antilope.time-np.timedelta64(6, 'h')
-            antilope = antilope.resample(time='D').sum(dim='time')  # !!! VERY SLOW !!!
-            antilope['time'] = antilope.time+np.timedelta64(30, 'h')
+        # Convert hourly precipitation into 24h precipitation between 6h UTC J-1 and 6h UTC J
+        # Problem : the xarray tools to do that allows only accumulations between
+        # 0h and 24h.
+        # solution : shift time serie by 6h, compute 24h accumulations and
+        # shift back !
+        antilope['time'] = antilope.time-np.timedelta64(7, 'h')
+        #antilope['time'] = antilope.time-np.timedelta64(6, 'h')
+        antilope = antilope.resample(time='D').sum(dim='time')  # !!! VERY SLOW !!!
+        antilope['time'] = antilope.time+np.timedelta64(30, 'h')
     else:
         antilope = xr.open_dataset(filename)
 
@@ -1272,9 +1275,10 @@ class Assimilation(object):
         # read AROME mean vertical gradient (TEST !)
         #fic_gradient = os.path.join('/home/vernaym/workdir/ASSIMILATION/mask/alp', f'arome_gradient.nc')
         fic_gradient = os.path.join('/home/vernaym/These/DATA', f'CUMUL_AROME.nc')
-        gradient = xr.open_dataarray(fic_gradient)
-        gradient.data = uniform_filter(gradient.data, 10)
-        gradient = gradient.sel({'lat':np.intersect1d(parameters.lat, gradient.lat), 'lon':np.intersect1d(parameters.lon, gradient.lon)})
+        if os.path.exists(fic_gradient):
+            gradient = xr.open_dataarray(fic_gradient)
+            gradient.data = uniform_filter(gradient.data, 10)
+            gradient = gradient.sel({'lat':np.intersect1d(parameters.lat, gradient.lat), 'lon':np.intersect1d(parameters.lon, gradient.lon)})
 
         newfield, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(obs, pond)
         #newfield, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(obs, pond, gradient=gradient.data.flatten(), uncertainty=uncertainty)  # Use AROME mean vertical gradient
@@ -1313,7 +1317,7 @@ class Assimilation(object):
             num_poste = plot['num_poste']
             date = plot['date']
             nivometeo = read_nivometeo_obs()
-            if np.datetime64(date) in nivometeo.date:
+            if nivometeo is not None and np.datetime64(date) in nivometeo.date:
                 ref = nivometeo.loc[{'num_poste':num_poste, 'date':np.datetime64(date)}].obs.data
                 if not np.isnan(ref):
                     lat,lon = np.meshgrid(parameters.lat, parameters.lon)
@@ -1588,14 +1592,17 @@ class RandomSampling(Assimilation):
     def read_obs_auto(self):
         datadir = '/home/vernaym/These/DATA'
         fic_score = os.path.join(datadir, f'obs_quotidienne_auto_RR_20211101_20220430.csv')
-        obs_auto = pd.read_csv(fic_score, sep=';', parse_dates=['date'], dtype={'num_poste':int, 'poste':str, 'lat':float, 'lon':float, 'alti':int, 'rr':float, 'reseau_poste':int})
-        #obs_auto.rename(columns={'dat':'date'}, inplace=True)
-        #obs_auto = obs_auto.set_index(['num_poste', 'date'])
-        obs_auto = obs_auto.set_index(['num_poste'])
+        if os.path.exists(fic_score):
+            obs_auto = pd.read_csv(fic_score, sep=';', parse_dates=['date'], dtype={'num_poste':int, 'poste':str, 'lat':float, 'lon':float, 'alti':int, 'rr':float, 'reseau_poste':int})
+            #obs_auto.rename(columns={'dat':'date'}, inplace=True)
+            #obs_auto = obs_auto.set_index(['num_poste', 'date'])
+            obs_auto = obs_auto.set_index(['num_poste'])
 
-        #obs_auto["rr"] = obs_auto["rr"].round(1)
+            #obs_auto["rr"] = obs_auto["rr"].round(1)
 
-        self.obs_auto = obs_auto
+            self.obs_auto = obs_auto
+        else:
+            self.obs_auto = None
 
     def dynamic_error_estimation(self, parameters, obs_auto, var='mu', delta=0.1):
         """
@@ -1662,7 +1669,10 @@ class RandomSampling(Assimilation):
             parameters = actual_parameters.sel({'time':date}).compute()
 
             var = 'mu'
-            obs_auto = self.obs_auto[self.obs_auto.date==date]  # Select date
+            if self.obs_auto is not None:
+                obs_auto = self.obs_auto[self.obs_auto.date==date]  # Select date
+            else:
+                obs_auto = None
 
             dynamic_error = False  # Switch dynamic error on/off
 
@@ -1795,36 +1805,37 @@ class RandomSampling(Assimilation):
         #analysis.loc[{'member':0}] = np.square(obs)
 
         # Extract reference points and corresponding values
-        obs_auto.drop(columns=['date', 'reseau_poste'], inplace=True)
-        if date in self.nivometeo.date:
-            nivometeo = self.nivometeo.sel({'date':date}).dropna(dim='num_poste').drop('date')
-            df = nivometeo.to_dataframe().rename(columns={'nom':'poste', 'obs':'rr'})
-            allobs = pd.concat([obs_auto, df])
-        else:
-            allobs = obs_auto.copy()
-            nivometeo = None
-        allobs = allobs[~np.isnan(allobs.rr)]
+        if obs_auto is not None:
+            obs_auto.drop(columns=['date', 'reseau_poste'], inplace=True)
+            if date in self.nivometeo.date:
+                nivometeo = self.nivometeo.sel({'date':date}).dropna(dim='num_poste').drop('date')
+                df = nivometeo.to_dataframe().rename(columns={'nom':'poste', 'obs':'rr'})
+                allobs = pd.concat([obs_auto, df])
+            else:
+                allobs = obs_auto.copy()
+                nivometeo = None
+            allobs = allobs[~np.isnan(allobs.rr)]
 
-        # Get data over evaluation points and compute errors
-        evaluation_points = analysis.sel(member=0, lat=xr.DataArray(allobs.lat.values, dims="poste"), lon=xr.DataArray(allobs.lon.values, dims="poste"), method='nearest')
-        bias  = evaluation_points - allobs.rr.values
-        ratio = (evaluation_points+0.01) / (allobs.rr.values+0.01)
-        # Kriging of reference values to get a reference field
-        kriging = False
-        #if len(nivometeo.num_poste) > 1:
-        if len(allobs) > 1 and kriging:
-            kriging = True
-            y    = allobs.lat.values
-            x    = allobs.lon.values
-            rr   = allobs.rr.values
-            kriging = UniversalKriging(x, y, rr, variogram_model='exponential')
-            rr_ref, ss = kriging.execute('grid', parameters.lon.data, parameters.lat.data)
-            reference_field = xr.DataArray(
-                name   = 'reference',
-                data   = rr_ref,
-                dims   = ["lat", "lon"],
-                coords = dict(lon=parameters.lon, lat=parameters.lat),
-            )
+            # Get data over evaluation points and compute errors
+            evaluation_points = analysis.sel(member=0, lat=xr.DataArray(allobs.lat.values, dims="poste"), lon=xr.DataArray(allobs.lon.values, dims="poste"), method='nearest')
+            bias  = evaluation_points - allobs.rr.values
+            ratio = (evaluation_points+0.01) / (allobs.rr.values+0.01)
+            # Kriging of reference values to get a reference field
+            kriging = False
+            #if len(nivometeo.num_poste) > 1:
+#        if len(allobs) > 1 and kriging:
+#            kriging = True
+#            y    = allobs.lat.values
+#            x    = allobs.lon.values
+#            rr   = allobs.rr.values
+#            kriging = UniversalKriging(x, y, rr, variogram_model='exponential')
+#            rr_ref, ss = kriging.execute('grid', parameters.lon.data, parameters.lat.data)
+#            reference_field = xr.DataArray(
+#                name   = 'reference',
+#                data   = rr_ref,
+#                dims   = ["lat", "lon"],
+#                coords = dict(lon=parameters.lon, lat=parameters.lat),
+#            )
 
         sd1 = Rstat.diagonal().reshape((len(parameters.lat), len(parameters.lon)))  # Get standard deviation field
         #sd1 = uniform_filter(sd1, 3)
@@ -1852,11 +1863,11 @@ class RandomSampling(Assimilation):
             self.plot_array(analysis.sel(member=0), parameters.rr, 'Corrected field', f'{self.date_str}/Corrected_field_{self.date_str}_{self.domain}.pdf', vmin=0, vmax=self.rrmax, cmap=plt.cm.YlGnBu, text1=text)
             self.plot_array(error, parameters.rr, 'Error (kg/m²)', f'{self.date_str}/ERROR_{self.domain}.pdf', vmin=0, vmax=np.max(error), cmap=plt.cm.Reds, text1=text)
             #self.plot_array(reference_field, parameters.rr, 'Precipitation (mm)', f'{self.date_str}/Reference_{self.date_str}_{self.domain}.pdf', vmin=0, vmax=self.rrmax, cmap=plt.cm.YlGnBu, bias=nivometeo.obs)
-            if kriging:
-                #obs_auto = obs_auto[(obs_auto.lon<=np.max(parameters.lon.data)) & (obs_auto.lon>=np.min(parameters.lon.data)) & (obs_auto.lat<=np.max(parameters.lat.data)) & (obs_auto.lat>=np.min(parameters.lat.data))]
-                text1 = zip(obs_auto.lon.values, obs_auto.lat.values, obs_auto.rr.values)
-                text2 = zip(df.lon.values, df.lat.values, df.rr.values)  # nivometeo observations
-                self.plot_array(reference_field, parameters, 'Precipitation (kg/m²)', f'{self.date_str}/Reference_{self.date_str}_{self.domain}.pdf', vmin=0, vmax=self.rrmax, cmap=plt.cm.YlGnBu, text1=text1, text2=text2)
+#            if kriging:
+#                #obs_auto = obs_auto[(obs_auto.lon<=np.max(parameters.lon.data)) & (obs_auto.lon>=np.min(parameters.lon.data)) & (obs_auto.lat<=np.max(parameters.lat.data)) & (obs_auto.lat>=np.min(parameters.lat.data))]
+#                text1 = zip(obs_auto.lon.values, obs_auto.lat.values, obs_auto.rr.values)
+#                text2 = zip(df.lon.values, df.lat.values, df.rr.values)  # nivometeo observations
+#                self.plot_array(reference_field, parameters, 'Precipitation (kg/m²)', f'{self.date_str}/Reference_{self.date_str}_{self.domain}.pdf', vmin=0, vmax=self.rrmax, cmap=plt.cm.YlGnBu, text1=text1, text2=text2)
 
             npoints = len(evaluation_points)
             if npoints <=3:
@@ -2001,31 +2012,8 @@ class RandomSampling(Assimilation):
             #parameters.mu.data = np.square(parameters.mu.data)
             #parameters.rr.data = np.square(parameters.rr.data)
 
-            evaluation_points = parameters.rr.sel(lat=xr.DataArray(allobs.lat.values, dims="poste"), lon=xr.DataArray(allobs.lon.values, dims="poste"), method='nearest')
-            bias  = evaluation_points - allobs.rr.values
-            text = zip(bias.lon.data, bias.lat.data, bias.data)  # Raw observation error
-            #text = zip(ratio.lon.data, ratio.lat.data, ratio.data)  # Raw observation ratio
-            self.plot_obs(parameters, domain=domain, text1=text)
-
-            if self.debiasing:
-                # Compute error against debiased field
-                evaluation_points = parameters.mu.sel(lat=xr.DataArray(allobs.lat.values, dims="poste"), lon=xr.DataArray(allobs.lon.values, dims="poste"), method='nearest')
-                bias  = evaluation_points - allobs.rr.values
-                text = zip(bias.lon.data, bias.lat.data, bias.data)
-                #text = zip(ratio.lon.data, ratio.lat.data, ratio.data)
-                self.plot_obs(parameters, var='mu', domain=domain, text1=text)
-                evaluation_points = parameters.db.sel(lat=xr.DataArray(allobs.lat.values, dims="poste"), lon=xr.DataArray(allobs.lon.values, dims="poste"), method='nearest')
-                bias  = evaluation_points - allobs.rr.values
-                text = zip(bias.lon.data, bias.lat.data, bias.data)
-                self.plot_obs(parameters, var='db', domain=domain, text1=text)
-                #self.plot_obs(parameters, var='obs', domain=domain)
-                #parameters['diff'] = parameters.obs-parameters.mu
-                #parameters['diff'] = parameters.obs-parameters.rr  # !! TODO : TMP !!
-                #self.plot_obs(parameters, var='diff', domain=domain)
-
             mean = self.ensemble_mean(analysis)
             self.plot_array(mean, parameters.rr, 'Mean precipitation (kg/m²)', f'{self.date_str}/Analysis_mean_{self.domain}.pdf', cmap=plt.cm.YlGnBu, vmin=self.rrmin, vmax=self.rrmax)
-
             disp = self.ensemble_dispersion(analysis)
             disp = xr.DataArray(
                 name   = 'spread',
@@ -2034,9 +2022,32 @@ class RandomSampling(Assimilation):
                 dims   = ["lat", "lon"],
                 coords = dict(lon=parameters.lon, lat=parameters.lat),
             )
-            evaluation_points = disp.sel(lat=xr.DataArray(allobs.lat.values, dims="poste"), lon=xr.DataArray(allobs.lon.values, dims="poste"), method='nearest')
-            text = zip(evaluation_points.lon.data, evaluation_points.lat.data, evaluation_points.data)
-            self.plot_array(disp, parameters.rr, 'Dispersion (kg/m²)', f'{self.date_str}/Analysis_dispersion_{self.domain}.pdf', vmin=0, vmax=np.nanmax(disp), cmap=plt.cm.YlGnBu, text1=text)
+            self.plot_array(disp, parameters.rr, 'Dispersion (kg/m²)', f'{self.date_str}/Analysis_dispersion_{self.domain}.pdf', vmin=0, vmax=np.nanmax(disp), cmap=plt.cm.YlGnBu)
+
+            if obs_auto is not None:
+                evaluation_points = parameters.rr.sel(lat=xr.DataArray(allobs.lat.values, dims="poste"), lon=xr.DataArray(allobs.lon.values, dims="poste"), method='nearest')
+                bias  = evaluation_points - allobs.rr.values
+                text = zip(bias.lon.data, bias.lat.data, bias.data)  # Raw observation error
+                #text = zip(ratio.lon.data, ratio.lat.data, ratio.data)  # Raw observation ratio
+                self.plot_obs(parameters, domain=domain, text1=text)
+
+                if self.debiasing:
+                    # Compute error against debiased field
+                    evaluation_points = parameters.mu.sel(lat=xr.DataArray(allobs.lat.values, dims="poste"), lon=xr.DataArray(allobs.lon.values, dims="poste"), method='nearest')
+                    bias  = evaluation_points - allobs.rr.values
+                    text = zip(bias.lon.data, bias.lat.data, bias.data)
+                    #text = zip(ratio.lon.data, ratio.lat.data, ratio.data)
+                    self.plot_obs(parameters, var='mu', domain=domain, text1=text)
+                    evaluation_points = parameters.db.sel(lat=xr.DataArray(allobs.lat.values, dims="poste"), lon=xr.DataArray(allobs.lon.values, dims="poste"), method='nearest')
+                    bias  = evaluation_points - allobs.rr.values
+                    text = zip(bias.lon.data, bias.lat.data, bias.data)
+                    self.plot_obs(parameters, var='db', domain=domain, text1=text)
+                    #self.plot_obs(parameters, var='obs', domain=domain)
+                    #parameters['diff'] = parameters.obs-parameters.mu
+                    #parameters['diff'] = parameters.obs-parameters.rr  # !! TODO : TMP !!
+                    #self.plot_obs(parameters, var='diff', domain=domain)
+
+
 
             finalize_fig(fig1, im1, label='24-hour precipitation (kg/m²)', outname=f'{self.date_str}/ANALYSIS_{self.date_str}_{self.domain}.pdf')
 

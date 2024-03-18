@@ -28,7 +28,10 @@ import matplotlib.pyplot as plt
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 import matplotlib.animation as animation
 import seaborn as sns
-import cmocean
+try:
+    import cmocean
+except:
+    pass
 import palettable
 import cartopy.crs as ccrs
 from cartopy.mpl.ticker import LongitudeFormatter, LatitudeFormatter
@@ -55,8 +58,6 @@ savedir = f'/home/vernaym/workdir/ASSIMILATION/mask/{domain}'
 rootdir = f'/home/vernaym/workdir/ASSIMILATION/mask/{domain}'
 #savedir = f'/home/vernaym/workdir/ASSIMILATION/mask/{domain}/nivometeo'
 
-if not os.path.exists(savedir):
-    os.makedirs(savedir)
 
 onlypostes = [5001400, 5085403]
 onlypostes = [5001400, 5085403, 5133400]
@@ -1266,6 +1267,9 @@ def krigeage_scores(field):
 #    fig.savefig(os.path.join(datadir, filename.replace('.nc', '.pdf')), format='pdf', layout='tight')
 
 if __name__ == "__main__":
+    if not os.path.exists(savedir):
+        os.makedirs(savedir)
+
     if domain == 'GrandesRousses':
         filename = 'CUMUL_ANTILOPEH_GrandesRousses_2021073106_2022070106.nc'
     else:
