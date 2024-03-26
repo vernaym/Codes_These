@@ -4,6 +4,7 @@ import numpy as np
 import xarray as xr
 import rioxarray
 import pytz
+from snowtools.scripts.extract.vortex import vortexIO as io
 
 if len(sys.argv) == 3:
     basename = sys.argv[1]
@@ -66,8 +67,10 @@ if not dailyfiles:
     antilope = antilope.sel(time=sel_time)
     antilope['time'] = antilope.time-np.timedelta64(7, 'h')
     # Compute daily ANTILOPE chronology
+    print('Resampling hourly ANTILOPE data in progress...')
     tmp = antilope.resample(time='D').sum(dim='time')  # !!! VERY SLOW !!!
-    tmp = tmp.transpose('lat','lon','time')  # reorder data
+    print('Resampling hourly ANTILOPE data over !')
+    tmp = tmp.transpose('lat', 'lon', 'time')  # reorder data
     tmp = tmp.reindex_like(antilope).ffill('time')  # Fill hourly time steps with daily precipitation (https://stackoverflow.com/questions/54452336/xarray-resample-time-series-data-from-daily-to-hourly)
     chronology = antilope.rr.data / (tmp.rr.data+0.00001)  # Avoid division by 0 Warnings
     chronology[tmp.rr.data==0] = 1/24.  # Avoid to remove precipitation when/where the analysis transformed null precipitation into >0 ones. TODO : Find a better solution
@@ -105,29 +108,41 @@ if not dailyfiles:
 
     outdir = f'/home/vernaym/workdir/EDELWEISS/precipitation_analysis/{block}/{xpid}'
 
-    tbout = toolbox.output(
-        role           = 'Precipitation analysis',
+    # Use put_meteo because this is not a FORCING-ready resource
+    tbout = io.put_meteo(
         kind           = 'Precipitation',
-        vapp           = 'edelweiss',
-        vconf          = '[geometry:tag]',
-        source_app     = 'antilope',
-        source_conf    = source_conf,
-        cutoff         = 'assimilation',
-        filename       = f'{outdir}/mb[member]/hourly_precipitation_[datebegin:ymd6h]_[dateend:ymd6h].nc',
-        experiment     = f'{xpid}@vernaym',
         geometry       = 'GrandesRousses1km',
-        nativefmt      = 'netcdf',
-        model          = 'edelweiss',
-        namebuild      = 'flat@cen',
-        date           = stop.ymd6h,
+        xpid           = f'{xpid}@vernaym',
+        members        = footprints.util.rangex(0, len(hourly_ana.member) - 1),
+        vapp           = 'edelweiss',
         datebegin      = start.ymd6h,
         dateend        = stop.ymd6h,
-        namespace      = 'vortex.multi.fr',
-        member         = footprints.util.rangex(0, len(hourly_ana.member)-1),  # footprints.util.rangex(16)
-        block          = 'analysis',
-        intent         = 'inout',
-    ),
-    print(tbout)
+
+    )
+
+#    tbout = toolbox.output(
+#        role           = 'Precipitation analysis',
+#        kind           = 'Precipitation',
+#        vapp           = 'edelweiss',
+#        vconf          = '[geometry:tag]',
+#        source_app     = 'antilope',
+#        source_conf    = source_conf,
+#        cutoff         = 'assimilation',
+#        filename       = f'{outdir}/mb[member]/hourly_precipitation_[datebegin:ymd6h]_[dateend:ymd6h].nc',
+#        experiment     = f'{xpid}@vernaym',
+#        geometry       = 'GrandesRousses1km',
+#        nativefmt      = 'netcdf',
+#        model          = 'edelweiss',
+#        namebuild      = 'flat@cen',
+#        date           = stop.ymd6h,
+#        datebegin      = start.ymd6h,
+#        dateend        = stop.ymd6h,
+#        namespace      = 'vortex.multi.fr',
+#        member         = footprints.util.rangex(0, len(hourly_ana.member) - 1),
+#        block          = 'precipitation',  # Warning : 
+#        intent         = 'inout',
+#    ),
+#    print(tbout)
 
     for member in hourly_ana.member.data:
         os.remove(os.path.join(outdir, f'mb{member:03d}', f'hourly_precipitation_{start.ymd6h}_{stop.ymd6h}.nc'))
