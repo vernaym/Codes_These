@@ -48,6 +48,9 @@ import time
 from These.radar import Preprocessing_ANTILOPE
 from These.scripts import make_mask
 
+from bronx.stdtypes.date import Date
+from snowtools.scripts.extract.vortex import vortexIO as io
+
 ##############################################################################################
 # TODO : Save number of selected members for each pixel
 ##############################################################################################
@@ -495,6 +498,16 @@ def finalize_fig(figure, imm, label, outname):
 @speedtest
 def read_obs(args):
     filename = f'ANTILOPEH_{args.datebegin.strftime("%Y%m%d%H")}_{args.dateend.strftime("%Y%m%d%H")}_{args.domain}.nc'
+    io.get_meteo(
+        kind           = 'Precipitation',
+        geometry       = 'GrandesRousses1km',
+        xpid           = 'RawData@vernaym',
+        vapp           = 'edelweiss',
+        datebegin      = Date(args.datebegin).ymd6h,
+        dateend        = Date(args.dateend).ymd6h,
+        filename       = filename,
+    )
+
     if not os.path.exists(filename):
         if args.domain == 'GrandesRousses':
             filename = 'ANTILOPED_2021080106_2022080106_GrandesRousses.nc'
@@ -3243,6 +3256,21 @@ if __name__ == "__main__":
         out = rs.output(localfields)
         outname = f"Random_Sampling_{args.datebegin.strftime('%Y%m%d%H')}_{args.dateend.strftime('%Y%m%d%H')}_{args.frequency}_{args.domain}"
         out.to_netcdf(f"{outname}.nc".encode('utf-8'))
+
+    xpid = os.getcwd().split('/')[-1]  # TODO : ajouter une sécurité pour éviter d'écraser une XP existante
+    if not xpid.startswith(args.assimilation.upper()):
+        xpid = f'{args.assimilation.upper()}{xpid[-2:]}'
+
+    io.put_meteo(
+        kind         = 'Precipitation',
+        geometry     = f'{args.domain}1km',
+        xpid         = f'{xpid}@vernaym',
+        vapp         = 'edelweiss',
+        datebegin    = args.datebegin.strftime('%Y%m%d%H'),
+        dateend      = args.dateend.strftime('%Y%m%d%H'),
+        block        = 'daily',
+        filename     = outname,
+    )
 
     tfin = time.time()
     print(f'Total execution time : {(tfin-t0)/60.} minutes')
