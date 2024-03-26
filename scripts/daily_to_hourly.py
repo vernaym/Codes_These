@@ -2,17 +2,10 @@ import os, sys
 import pandas as pd
 import numpy as np
 import xarray as xr
-import rioxarray
+#import rioxarray
 import pytz
-from snowtools.scripts.extract.vortex import vortexIO as io
 
-if len(sys.argv) == 3:
-    basename = sys.argv[1]
-    xpid = sys.argv[2]
-else:
-    print('ERROR : missing arguments')
-    print('USAGE : daily_to_hourly.py filename xpid')
-    sys.exit()
+from snowtools.scripts.extract.vortex import vortexIO as io
 
 import vortex
 from cen.data import flow
@@ -22,14 +15,16 @@ from bronx.stdtypes.date import Date, Period
 
 toolbox.active_now = True
 
-# Define VORTEX cache
-t = vortex.ticket()
-t.env.setvar('WORKDIR', '/home/vernaym/workdir')
+if len(sys.argv) == 4:
+    datebegin = Date(sys.argv[1])
+    dateend   = Date(sys.argv[2])
+    xpid      = sys.argv[3]
+else:
+    print('ERROR : missing arguments')
+    print('USAGE : daily_to_hourly.py datebegin dateend xpid')
+    sys.exit()
 
 local_tz = pytz.timezone("Europe/Paris")
-
-start = Date(2021, 8, 2, 7)
-stop = Date(2022, 8, 1, 6)
 
 if xpid.startswith('RS'):
     block = 'RandomSampling'
@@ -42,27 +37,44 @@ elif xpid.startswith('PF'):
     source_conf = 'ParticleFilter'
 else:
     source_conf = None
+
+workdir = f'{os.environ["HOME"]}/workdir/EDELWEISS/precipitation_analysis/{block}/{xpid}'
+if not os.path.exists(workdir):
+    os.makedirs(workdir)
+os.chdir(workdir)
+
 xp_number = xpid[-2:]
 
 # Read ensemble analysis
-#filename = os.path.join(f'/home/vernaym/workdir/ASSIMILATION/RandomSampling/{xpid}', 'Random_Sampling_2021122806_2021123006_daily_GrandesRousses.nc')
-#filename = os.path.join(f'/home/vernaym/workdir/EDELWEISS/precipitation_analysis', block, xpid, 'Random_Sampling_2021080206_2022080106_daily_GrandesRousses.nc')  # On sxcen !
-filename = os.path.join(f'/home/vernaym/workdir/EDELWEISS/precipitation_analysis', block, xpid, basename)  # On sxcen !
-analysis = xr.open_dataset(filename)
-#analysis = analysis.sel(member=range(1, 17))  # Exclude ANTILOPE pre-processing "member"
+io.get_meteo(
+    kind           = 'Precipitation',
+    geometry       = 'GrandesRousses1km',
+    xpid           = f'{xpid}@vernaym',
+    vapp           = 'edelweiss',
+    block          = 'daily',
+    datebegin      = datebegin.ymd6h,
+    dateend        = dateend.ymd6h,
+    filename       = 'ANALYSIS.nc',
+)
+analysis = xr.open_dataset('ANALYSIS.nc')
 
 # Read ANTILOPE raw hourly precipitation
-filename = 'ANTILOPEH_2021080106_2022080106_GrandesRousses.nc'
-# TODO : store ANTILOPE raw data on hendrix and retrieve it with Vortex
-
-#antilope = xr.open_dataset(os.path.join('/home/vernaym/These/DATA', filename))  # Local
-antilope = xr.open_dataset(os.path.join('/home/vernaym/workdir/EDELWEISS/precipitation_analysis/ANTILOPE', filename))  # sxcen
+io.get_meteo(
+    kind           = 'Precipitation',
+    geometry       = 'GrandesRousses1km',
+    xpid           = 'RawData@vernaym',
+    vapp           = 'edelweiss',
+    datebegin      = datebegin.ymd6h,
+    dateend        = dateend.ymd6h,
+    filename       = 'ANTILOPE.nc',
+)
+antilope = xr.open_dataset('ANTILOPE.nc')  # sxcen
 antilope = antilope.sel(lat=analysis.lat.data, lon=analysis.lon.data)
 
 dailyfiles = False
 
 if not dailyfiles:
-    sel_time = np.arange(start, stop+Period(hours=1), dtype='datetime64[h]')
+    sel_time = np.arange(datebegin, dateend + Period(hours=1), dtype='datetime64[h]')
 
     antilope = antilope.sel(time=sel_time)
     antilope['time'] = antilope.time-np.timedelta64(7, 'h')
@@ -86,89 +98,36 @@ if not dailyfiles:
         array = hourly_ana.sel({'member':member}).rr.data * chronology
         #array = hourly_ana.sel({'member':member}).rr.data * chronology
         output = xr.Dataset(
-            #name     = 'Precipitation',
             #data     = array,
             data_vars = dict(Precipitation=(["yy", "xx", "time"], array)),
-            #data_vars = dict(Precipitation=(["yy", "xx", "time"], array, dict(coordinates="latitude longitude", grid_mapping="spatial_ref"))),
-            #data_vars = dict(Precipitation=(["yy", "xx", "time"], array, dict(coordinates="latitude longitude"))),
-            #dims      = ["yy", "xx", "time"],
             coords    = dict(longitude=('xx', analysis.lon.data), latitude=('yy', analysis.lat.data), time=sel_time),
-            #attrs     = dict(coordinates="latitude longitude"),
-            #attrs    = dict(description="Difference between each pixel cumul and the max of its neighbours"),
             )
         #output.rio.write_grid_mapping(inplace=True)
         #output = output.rio.write_crs("EPSG:4326", "grid_mapping", inplace=True)
         #output.rio.write_crs("EPSG:4326", inplace=True)
         output['Precipitation'].attrs = dict(coordinates="latitude longitude", grid_mapping="spatial_ref")
-        outdir = f'/home/vernaym/workdir/EDELWEISS/precipitation_analysis/{block}/{xpid}/mb{member:03d}'
+        outdir = f'mb{member:03d}'
         if not os.path.exists(outdir):
             os.makedirs(outdir)
-        outname = f'{outdir}/hourly_precipitation_{start.ymd6h}_{stop.ymd6h}.nc'
+        outname = f'{outdir}/hourly_precipitation_{datebegin.ymd6h}_{dateend.ymd6h}.nc'
         output.to_netcdf(outname, mode='w')
 
-    outdir = f'/home/vernaym/workdir/EDELWEISS/precipitation_analysis/{block}/{xpid}'
-
+    print(len(hourly_ana.member))
     # Use put_meteo because this is not a FORCING-ready resource
-    tbout = io.put_meteo(
+    io.put_meteo(
         kind           = 'Precipitation',
         geometry       = 'GrandesRousses1km',
         xpid           = f'{xpid}@vernaym',
-        members        = footprints.util.rangex(0, len(hourly_ana.member) - 1),
+        member         = footprints.util.rangex(0, len(hourly_ana.member) - 1),
         vapp           = 'edelweiss',
-        datebegin      = start.ymd6h,
-        dateend        = stop.ymd6h,
-
+        datebegin      = datebegin.ymd6h,
+        dateend        = dateend.ymd6h,
+        block          = 'hourly',
+        filename       = 'hourly_precipitation_[datebegin:ymd6h]_[dateend:ymd6h].nc'
     )
 
-#    tbout = toolbox.output(
-#        role           = 'Precipitation analysis',
-#        kind           = 'Precipitation',
-#        vapp           = 'edelweiss',
-#        vconf          = '[geometry:tag]',
-#        source_app     = 'antilope',
-#        source_conf    = source_conf,
-#        cutoff         = 'assimilation',
-#        filename       = f'{outdir}/mb[member]/hourly_precipitation_[datebegin:ymd6h]_[dateend:ymd6h].nc',
-#        experiment     = f'{xpid}@vernaym',
-#        geometry       = 'GrandesRousses1km',
-#        nativefmt      = 'netcdf',
-#        model          = 'edelweiss',
-#        namebuild      = 'flat@cen',
-#        date           = stop.ymd6h,
-#        datebegin      = start.ymd6h,
-#        dateend        = stop.ymd6h,
-#        namespace      = 'vortex.multi.fr',
-#        member         = footprints.util.rangex(0, len(hourly_ana.member) - 1),
-#        block          = 'precipitation',  # Warning : 
-#        intent         = 'inout',
-#    ),
-#    print(tbout)
-
     for member in hourly_ana.member.data:
-        os.remove(os.path.join(outdir, f'mb{member:03d}', f'hourly_precipitation_{start.ymd6h}_{stop.ymd6h}.nc'))
-
-#    # Archive raw ANTILOPE data (only once !)
-#    tbout = toolbox.output(
-#        role           = 'Precipitation analysis',
-#        kind           = 'Precipitation',
-#        vapp           = 'edelweiss',
-#        vconf          = '[geometry:tag]',
-#        source_app     = 'antilope',
-#        cutoff         = 'assimilation',
-#        filename       = f'/home/vernaym/workdir/EDELWEISS/precipitation_analysis/ANTILOPE/ANTILOPEH_2021080106_2022080106_GrandesRousses.nc',
-#        experiment     = 'RawData@vernaym',
-#        geometry       = 'GrandesRousses1km',
-#        nativefmt      = 'netcdf',
-#        model          = 'edelweiss',
-#        namebuild      = 'flat@cen',
-#        date           = stop.ymd6h,
-#        datebegin      = start.ymd6h,
-#        dateend        = stop.ymd6h,
-#        namespace      = 'vortex.multi.fr',
-#        block          = 'analysis',
-#        intent         = 'inout',
-#    ),
-#    print(tbout)
+        os.remove(os.path.join(f'mb{member:03d}', f'hourly_precipitation_{datebegin.ymd6h}_{dateend.ymd6h}.nc'))
 
 else:
 
