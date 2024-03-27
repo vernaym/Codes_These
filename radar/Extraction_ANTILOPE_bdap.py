@@ -12,6 +12,8 @@ import xarray as xr
 import argparse
 
 import epygram
+from bronx.stdtypes.date import Date
+from snowtools.scripts.extract.vortex import vortexIO as io
 
 ##############################################################################################
 # Ce script sert à extraire les données ANTILOPE de la BDAP correspondant aux postes nivometeo
@@ -50,7 +52,7 @@ coords = dict(
     #GrandesRousses = ['45250', '44750', '6000', '6500'],
     GrandesRousses = ['45640', '44590', '5610', '7100'],  # With 0.2 margin (final domain : ['45440', '44790', '5810', '6690'],)
     #ange = ['45240', '44990', '6010', '6490']
-    ange = ['45440', '44990', '5810', '6690'],
+    ange = ['45440', '44990', '5810', '6690'],  # With 0.2 margin (final domain : ['45240', '44990', '6010', '6490'])
     HauteSavoie = ['46490', '45300', '5620', '7250'],  # WARNING : includes margin
 )
 
@@ -316,6 +318,15 @@ if __name__ == "__main__":
 #                attrs=dict(description="Total precipitation", units="mm"),
 #            )
 #            xcumul.to_netcdf('CUMUL_{0:s}_{1:s}_{2:s}_{3:s}.nc'.format(args.model, domain, args.datebegin.strftime("%Y%m%d%H"), args.dateend.strftime("%Y%m%d%H")))
+        tbout = io.put_meteo(
+            kind           = 'Precipitation',
+            geometry       = 'GrandesRousses1km',
+            xpid           = 'RawData@vernaym',
+            vapp           = 'edelweiss',
+            datebegin      = Date(args.datebegin).ymd6h,
+            dateend        = Date(args.dateend).ymd6h,
+            filename       = filename,
+        )
 
         antilope = xr.open_dataset(filename)
         # Extract specific values where evaluation data (obs nivometeo) is available
@@ -334,4 +345,3 @@ if __name__ == "__main__":
         goto(args.workdir)
         outname = f'{args.model}_{args.datebegin.strftime("%Y%m%d%H")}_{args.dateend.strftime("%Y%m%d%H")}_{domain}.csv'
         selection.to_csv(outname, index=False, sep=';')
-
