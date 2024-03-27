@@ -218,8 +218,10 @@ if __name__ == "__main__":
     args = parse_command_line()
     if args.model in ['ANTILOPEQ', 'ANTILOPEJP1Q']:
         dt = 24
+        block = 'daily'
     elif args.model in ['ANTILOPEH', 'ANTILOPEJP1H']:
         dt = 1
+        block = 'hourly'
     extract_period = date_range(args.datebegin, args.dateend, dt)
     workdir = os.getcwd()
     for domain in args.domain:
@@ -323,6 +325,7 @@ if __name__ == "__main__":
             geometry       = 'GrandesRousses1km',
             xpid           = 'RawData@vernaym',
             vapp           = 'edelweiss',
+            block          = block,
             datebegin      = Date(args.datebegin).ymd6h,
             dateend        = Date(args.dateend).ymd6h,
             filename       = filename,
