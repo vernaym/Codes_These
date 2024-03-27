@@ -1,9 +1,11 @@
-import os
+import os, sys
 import pandas as pd
 import numpy as np
 import xarray as xr
-import rioxarray
+#import rioxarray
 import pytz
+
+from snowtools.scripts.extract.vortex import vortexIO as io
 
 import vortex
 from cen.data import flow
@@ -13,39 +15,75 @@ from bronx.stdtypes.date import Date, Period
 
 toolbox.active_now = True
 
-# Define VORTEX cache
-t = vortex.ticket()
-t.env.setvar('WORKDIR', '/home/vernaym/workdir')
-
+if len(sys.argv) == 4:
+    datebegin = Date(sys.argv[1])
+    dateend   = Date(sys.argv[2])
+    xpid      = sys.argv[3]
+else:
+    print('ERROR : missing arguments')
+    print('USAGE : daily_to_hourly.py datebegin dateend xpid')
+    sys.exit()
 
 local_tz = pytz.timezone("Europe/Paris")
 
-start = Date(2021, 8, 2, 7)
-stop = Date(2022, 8, 1, 6)
+if xpid.startswith('RS'):
+    block = 'RandomSampling'
+    source_conf = 'RandomSampling'
+elif xpid.startswith('EnKF'):
+    block = 'EnsembleKalmanFilter'
+    source_conf = 'EnsembleKalmanFilter'
+elif xpid.startswith('PF'):
+    block = 'ParticleFilter'
+    source_conf = 'ParticleFilter'
+else:
+    source_conf = None
+
+workdir = f'{os.environ["HOME"]}/workdir/EDELWEISS/precipitation_analysis/{block}/{xpid}'
+if not os.path.exists(workdir):
+    os.makedirs(workdir)
+os.chdir(workdir)
+
+xp_number = xpid[-2:]
 
 # Read ensemble analysis
-#filename = os.path.join('/home/vernaym/workdir/ASSIMILATION/RandomSampling/XP25', 'Random_Sampling_2021122806_2021123006_daily_GrandesRousses.nc')
-filename = os.path.join('/home/vernaym/workdir/ASSIMILATION/RandomSampling/XP26', 'Random_Sampling_2021080206_2022080106_daily_GrandesRousses.nc')
-analysis = xr.open_dataset(filename)
-analysis = analysis.sel(member=range(1,17))
+io.get_meteo(
+    kind           = 'Precipitation',
+    geometry       = 'GrandesRousses1km',
+    xpid           = f'{xpid}@vernaym',
+    vapp           = 'edelweiss',
+    block          = 'daily',
+    datebegin      = datebegin.ymd6h,
+    dateend        = dateend.ymd6h,
+    filename       = 'ANALYSIS.nc',
+)
+analysis = xr.open_dataset('ANALYSIS.nc')
 
 # Read ANTILOPE raw hourly precipitation
-#filename = 'ANTILOPEH_2021103000_2022060200_alp.nc'
-filename = 'ANTILOPEH_2021080106_2022080106_GrandesRousses.nc'
-#filename = 'ANTILOPEH_2021073106_2022070106_GrandesRousses.nc'
-antilope = xr.open_dataset(os.path.join('/home/vernaym/These/DATA', filename))
+io.get_meteo(
+    kind           = 'Precipitation',
+    geometry       = 'GrandesRousses1km',
+    xpid           = 'RawData@vernaym',
+    vapp           = 'edelweiss',
+    block          = 'hourly',
+    datebegin      = datebegin.ymd6h,
+    dateend        = dateend.ymd6h,
+    filename       = 'ANTILOPE.nc',
+)
+antilope = xr.open_dataset('ANTILOPE.nc')  # sxcen
 antilope = antilope.sel(lat=analysis.lat.data, lon=analysis.lon.data)
 
 dailyfiles = False
 
 if not dailyfiles:
-    sel_time = np.arange(start, stop+Period(hours=1), dtype='datetime64[h]')
+    sel_time = np.arange(datebegin, dateend + Period(hours=1), dtype='datetime64[h]')
 
     antilope = antilope.sel(time=sel_time)
     antilope['time'] = antilope.time-np.timedelta64(7, 'h')
     # Compute daily ANTILOPE chronology
+    print('Resampling hourly ANTILOPE data in progress...')
     tmp = antilope.resample(time='D').sum(dim='time')  # !!! VERY SLOW !!!
-    tmp = tmp.transpose('lat','lon','time')  # reorder data
+    print('Resampling hourly ANTILOPE data over !')
+    tmp = tmp.transpose('lat', 'lon', 'time')  # reorder data
     tmp = tmp.reindex_like(antilope).ffill('time')  # Fill hourly time steps with daily precipitation (https://stackoverflow.com/questions/54452336/xarray-resample-time-series-data-from-daily-to-hourly)
     chronology = antilope.rr.data / (tmp.rr.data+0.00001)  # Avoid division by 0 Warnings
     chronology[tmp.rr.data==0] = 1/24.  # Avoid to remove precipitation when/where the analysis transformed null precipitation into >0 ones. TODO : Find a better solution
@@ -56,61 +94,46 @@ if not dailyfiles:
     hourly_ana = daily_ana.reindex_like(antilope).ffill('time')  # Fill hourly time steps with daily precipitation (https://stackoverflow.com/questions/54452336/xarray-resample-time-series-data-from-daily-to-hourly)
     hourly_ana = hourly_ana.transpose('member', 'lat', 'lon', 'time')
 
+
     for member in hourly_ana.member.data:
         array = hourly_ana.sel({'member':member}).rr.data * chronology
         #array = hourly_ana.sel({'member':member}).rr.data * chronology
         output = xr.Dataset(
-            #name     = 'Precipitation',
-            #data     = array,
-            data_vars = dict(Precipitation=(["yy", "xx", "time"], array)),
-            #data_vars = dict(Precipitation=(["yy", "xx", "time"], array, dict(coordinates="latitude longitude", grid_mapping="spatial_ref"))),
-            #data_vars = dict(Precipitation=(["yy", "xx", "time"], array, dict(coordinates="latitude longitude"))),
-            #dims      = ["yy", "xx", "time"],
-            coords    = dict(longitude=('xx', analysis.lon.data), latitude=('yy', analysis.lat.data), time=sel_time),
-            #attrs     = dict(coordinates="latitude longitude"),
-            #attrs    = dict(description="Difference between each pixel cumul and the max of its neighbours"),
+            data_vars = dict(Precipitation=(["latitude", "longitude", "time"], array)),
+            coords    = dict(longitude=('longitude', analysis.lon.data), latitude=('latitude', analysis.lat.data), time=sel_time),
             )
         #output.rio.write_grid_mapping(inplace=True)
         #output = output.rio.write_crs("EPSG:4326", "grid_mapping", inplace=True)
         #output.rio.write_crs("EPSG:4326", inplace=True)
         output['Precipitation'].attrs = dict(coordinates="latitude longitude", grid_mapping="spatial_ref")
-        outname = f'/home/vernaym/workdir/EDELWEISS/hourly_precipitation_analysis/precipitation_{start.ymd6h}_{stop.ymd6h}_mb{member:03d}.nc'
+        outdir = f'mb{member:03d}'
+        if not os.path.exists(outdir):
+            os.makedirs(outdir)
+        outname = f'{outdir}/hourly_precipitation_{datebegin.ymd6h}_{dateend.ymd6h}.nc'
         output.to_netcdf(outname, mode='w')
 
-    tbout = toolbox.output(
-        role           = 'Precipitation analysis',
+    print(len(hourly_ana.member))
+    # Use put_meteo because this is not a FORCING-ready resource
+    io.put_meteo(
         kind           = 'Precipitation',
-        vapp           = 'edelweiss',
-        vconf          = '[geometry:area]',
-        source_app     = 'antilope',
-        source_conf    = 'RandomSampling',
-        cutoff         = 'assimilation',
-        filename       = f'/home/vernaym/workdir/EDELWEISS/hourly_precipitation_analysis/precipitation_[datebegin:ymd6h]_[dateend:ymd6h]_mb[member].nc',
-        #filename       = f'precipitation_[datebegin]_[dateend]_mb[member:03d].nc',
-        experiment     = 'XP25',
         geometry       = 'GrandesRousses1km',
-        nativefmt      = 'netcdf',
-        model          = 'edelweiss',
-        #date           = dateend.ymd6h,
-        namebuild      = 'flat@cen',
-        date           = stop.ymd6h,
-        datebegin      = start.ymd6h,
-        dateend        = stop.ymd6h,
-        namespace      = 'vortex.multi.fr',
-        member         = footprints.util.rangex(1,16,1),
-        block          = 'analysis',
-        intent         = 'inout',
-    ),
-    print(tbout)
+        xpid           = f'{xpid}@vernaym',
+        member         = footprints.util.rangex(0, len(hourly_ana.member) - 1),
+        vapp           = 'edelweiss',
+        datebegin      = datebegin.ymd6h,
+        dateend        = dateend.ymd6h,
+        block          = 'hourly',
+        filename       = 'hourly_precipitation_[datebegin:ymd6h]_[dateend:ymd6h].nc'
+    )
+
+    for member in hourly_ana.member.data:
+        os.remove(os.path.join(f'mb{member:03d}', f'hourly_precipitation_{datebegin.ymd6h}_{dateend.ymd6h}.nc'))
 
 else:
 
     date = start
     while date <= stop:
         print(date)
-        # Filter date
-        #deb = np.datetime64('2021-12-27T07:00:00')
-        #fin = np.datetime64('2021-12-30T06:00:00')
         datebegin = date.replace(hour=6)
         dateend = date + Period(days=1)
         deb = np.datetime64(date)  # D (7h)
@@ -153,13 +176,13 @@ else:
             role           = 'Precipitation analysis',
             kind           = 'Precipitation',
             vapp           = 'edelweiss',
-            vconf          = '[geometry:area]',
+            vconf          = '[geometry:tag]',
             source_app     = 'antilope',
             source_conf    = 'RandomSampling',
             cutoff         = 'assimilation',
             filename       = f'/home/vernaym/workdir/EDELWEISS/hourly_precipitation_analysis/precipitation_[datebegin:ymd6h]_[dateend:ymd6h]_mb[member].nc',
-            #filename       = f'precipitation_[datebegin]_[dateend]_mb[member:03d].nc',
-            experiment     = 'XP25',
+            #filename       = f'precipitation_[datebegin]_[dateend]_mb[member].nc',
+            experiment     = xpid,
             geometry       = 'GrandesRousses1km',
             nativefmt      = 'netcdf',
             model          = 'edelweiss',
