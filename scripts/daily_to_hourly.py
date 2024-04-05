@@ -75,7 +75,7 @@ antilope = antilope.sel(lat=analysis.lat.data, lon=analysis.lon.data)
 dailyfiles = False
 
 if not dailyfiles:
-    sel_time = np.arange(datebegin, dateend + Period(hours=1), dtype='datetime64[h]')
+    sel_time = np.arange(datebegin-Period(hours=24), dateend + Period(hours=1), dtype='datetime64[h]')
 
     antilope = antilope.sel(time=sel_time)
     antilope['time'] = antilope.time-np.timedelta64(7, 'h')
@@ -112,7 +112,6 @@ if not dailyfiles:
         outname = f'{outdir}/hourly_precipitation_{datebegin.ymd6h}_{dateend.ymd6h}.nc'
         output.to_netcdf(outname, mode='w')
 
-    print(len(hourly_ana.member))
     # Use put_meteo because this is not a FORCING-ready resource
     io.put_meteo(
         kind           = 'Precipitation',
