@@ -521,6 +521,8 @@ def plot_and_save(field, name, cmap=plt.cm.Greys, vmin=None, vmax=None, scores=N
     latmax = np.max(field.lat.data)
     lonmin = np.min(field.lon.data)
     lonmax = np.max(field.lon.data)
+    width  = len(field.lon.data)
+    height = len(field.lat.data)
 
     if dom is None:
         dom = domain
@@ -528,29 +530,31 @@ def plot_and_save(field, name, cmap=plt.cm.Greys, vmin=None, vmax=None, scores=N
     if dirsave is None:
         dirsave = savedir
 
-    if dom == 'GrandesRousses':
-        fig, ax = plt.subplots(figsize=(12,6))
-    elif dom == 'HautesAlpes':
-        fig, ax = plt.subplots(figsize=(14,12))
-    elif dom == 'Savoie':
-        #fig, ax = plt.subplots(figsize=(12,6))
-        fig, ax = plt.subplots(figsize=(16,8))
-        #fig, ax = plt.subplots(figsize=(16,40))
-    elif dom == 'MontBlanc':
-        fig, ax = plt.subplots(figsize=(12,11))
-    elif dom == 'alp':
-        #fig, ax = plt.subplots(figsize=(16,16))
-        fig, ax = plt.subplots(figsize=(14,16), subplot_kw=dict(projection=ccrs.PlateCarree()))
-        ax.set_extent([lonmin, lonmax, latmin, latmax], crs=ccrs.PlateCarree())
-    elif dom == 'pyr':
-        #fig, ax = plt.subplots(figsize=(16,16))
-        fig, ax = plt.subplots(figsize=(33, 10))
-    else:
-        fig, ax = plt.subplots()
+#    if dom == 'GrandesRousses':
+#        fig, ax = plt.subplots(figsize=(12,6), subplot_kw=dict(projection=ccrs.PlateCarree()))
+#    elif dom == 'HautesAlpes':
+#        fig, ax = plt.subplots(figsize=(14,12))
+#    elif dom == 'Savoie':
+#        #fig, ax = plt.subplots(figsize=(12,6))
+#        fig, ax = plt.subplots(figsize=(16,8))
+#        #fig, ax = plt.subplots(figsize=(16,40))
+#    elif dom == 'MontBlanc':
+#        fig, ax = plt.subplots(figsize=(12,11))
+#    elif dom == 'alp':
+#        #fig, ax = plt.subplots(figsize=(16,16))
+#        fig, ax = plt.subplots(figsize=(14,16), subplot_kw=dict(projection=ccrs.PlateCarree()))
+#    elif dom == 'pyr':
+#        #fig, ax = plt.subplots(figsize=(16,16))
+#        fig, ax = plt.subplots(figsize=(33, 10))
+#    else:
+#        fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=(12 * width / height, 10), subplot_kw=dict(projection=ccrs.PlateCarree()))
+    ax.set_extent([lonmin, lonmax, latmin, latmax], crs=ccrs.PlateCarree())
 
     im = plot_field(fig, ax, field, cmap=cmap, vmin=vmin, vmax=vmax, scores=scores, elevation=elevation, coords=coords)
     #fig.savefig(os.path.join(dirsave, f'{name}.pdf'), format='pdf', layout='tight')
     #fig.savefig(os.path.join(dirsave, f'{name}.pdf'), format='pdf', bbox_inches='tight')
+    #plt.tight_layout()
     fig.savefig(os.path.join(dirsave, f'{name}.pdf'), format='pdf')
     field.to_netcdf(os.path.join(dirsave, f'{name}.nc').encode('utf-8'))
     plt.close(fig)
@@ -600,8 +604,9 @@ def plot_field(fig, ax, field, cmap=None, vmin=None, vmax=None, scores=None, col
         ax.clabel(c, inline=1, fontsize=14)
 
     if colorbar:
-        plt.subplots_adjust(bottom=0.05, left=0.1, right=0.88, top=0.95)
-        cax = plt.axes((0.89, 0.055, 0.03, 0.89))
+        #plt.subplots_adjust(bottom=0.05, left=0, right=0.8, top=0.95)
+        plt.subplots_adjust(bottom=0.05, left=0, top=0.95, wspace=0.05)
+        cax = plt.axes((0.9, 0.07, 0.03, 0.9))
         cb = fig.colorbar(cml, cax=cax)
         #cb.set_label(field.name, fontsize=24)
         #cb.ax.tick_params(labelsize=20)
