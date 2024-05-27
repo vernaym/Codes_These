@@ -62,7 +62,8 @@ analysis = xr.open_dataset('ANALYSIS.nc')
 io.get_meteo(
     kind           = 'Precipitation',
     geometry       = 'GrandesRousses1km',
-    xpid           = 'RawData@vernaym',
+    #xpid           = 'RawData@vernaym',
+    xpid           = 'ANTILOPE@vernaym',
     vapp           = 'edelweiss',
     block          = 'hourly',
     datebegin      = datebegin.ymd6h,
@@ -78,6 +79,7 @@ if not dailyfiles:
     sel_time = np.arange(datebegin-Period(hours=24), dateend + Period(hours=1), dtype='datetime64[h]')
 
     antilope = antilope.sel(time=sel_time)
+    antilope = antilope.fillna(0)  # Fill missing values with 0s. TODO : interpolate bettewen previous and next time step values ?
     antilope['time'] = antilope.time-np.timedelta64(7, 'h')
     # Compute daily ANTILOPE chronology
     print('Resampling hourly ANTILOPE data in progress...')
