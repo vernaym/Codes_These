@@ -95,104 +95,7 @@ def parse_command_line():
     return args
 
 
-def execute(xpid, obs, date, members, mask=True):
-
-    listfiles = list()  # List of simulation PRO files
-    shortid = xpid.split('@')[0]
-    proname = f'PRO_{shortid}.nc'
-    if members is not None:
-        for mb in members:
-            listfiles.append(f'mb{mb:03d}/{proname}')
-    else:
-        listfiles.append(f'{proname}')
-
-    # Open all simulation PRO files at once
-    simu = xr.open_mfdataset(listfiles, concat_dim='member', combine='nested').compute()
-    # <xarray.Dataset>
-    # Dimensions:     (time: 3, xx: 143, yy: 101, member: 16)
-    # Coordinates:
-    #   * time        (time) datetime64[ns] 2018-01-23 2018-03-16
-    #   * xx          (xx) float64 9.379e+05 9.381e+05 ... 9.731e+05 9.734e+05
-    #   * yy          (yy) float64 6.439e+06 6.439e+06 ... 6.464e+06 6.464e+06
-    # Dimensions without coordinates: xpid
-    # Data variables:
-    #     DSN_T_ISBA  (member, time, yy, xx) float64 1.997 1.918 ... 0.0001194 0.2854
-
-    # Get variable's DataArray
-    simu = simu.sel({'time': pd.to_datetime(date[:8], format='%Y%m%d')})
-    # <xarray.Dataset>
-    # Dimensions:     (xx: 143, yy: 101, member: 16)
-    # Coordinates:
-    #   time        datetime64[ns] 2018-01-23
-    #   * xx        (xx) float64 9.379e+05 9.381e+05 ... 9.731e+05 9.734e+05
-    #   * yy        (yy) float64 6.439e+06 6.439e+06 ... 6.464e+06 6.464e+06
-    # Dimensions without coordinates: xpid
-    # Data variables:
-    #     DSN_T_ISBA  (member, time, yy, xx) float64 1.997 1.918 ... 0.0001194 0.2854
-
-    # Set the 'xpid' dimension for simulation identification
-    if members is not None:
-        simu['member'] = members
-    else:
-        simu['member'] = [0]
-    # <xarray.Dataset>
-    # Dimensions:     (xx: 143, yy: 101, member: 16)
-    # Coordinates:
-    #   time        datetime64[ns] 2018-01-23
-    #   * xx        (xx) float64 9.379e+05 9.381e+05 ... 9.731e+05 9.734e+05
-    #   * yy        (yy) float64 6.439e+06 6.439e+06 ... 6.464e+06 6.464e+06
-    #   * member    (member) int64 1 2 3 ... 16
-    # Dimensions without coordinates: xpid
-    # Data variables:
-    #     DSN_T_ISBA  (member, time, yy, xx) float64 1.997 1.918 ... 0.0001194 0.2854
-
-    # Select common domains
-    obs  = obs.sel({'xx': np.intersect1d(obs.xx, simu.xx), 'yy': np.intersect1d(obs.yy, simu.yy)})
-    simu = simu.sel({'xx': np.intersect1d(obs.xx, simu.xx), 'yy': np.intersect1d(obs.yy, simu.yy)})
-    # Mask missing values from the observatin dataset in the simulation dataset
-    simu = simu.where(~np.isnan(obs))
-    # <xarray.Dataset>
-    # Dimensions:     (member: 16, yy: 79, xx: 63)
-    # Coordinates:
-    #  * xx          (xx) float64 9.579e+05 9.581e+05 ... 9.731e+05 9.734e+05
-    #  * yy          (yy) float64 6.439e+06 6.439e+06 ... 6.458e+06 6.459e+06
-    # Dimensions without coordinates: xpid
-    # Data variables:
-    #    DSN_T_ISBA  (member, yy, xx) float64 nan nan 1.132 1.234 ... 1.918 1.997  nan nan
-
-    # xskillscore.crps_ensemble only allows to compute the mean CRPS along 1 or several dimensions.
-    # We want a CRPS for each pixel of the domain, so we add a "fake" dimension to cmpute
-    # the CRPS along this dimension and get 1 value per pixel
-    simu = simu.expand_dims(dim="time")
-    obs  = obs.expand_dims(dim="time")
-    crps = xskillscore.crps_ensemble(obs.DSN_T_ISBA, simu.DSN_T_ISBA, dim='time')
-
-    return crps
-
-
-if __name__ == '__main__':
-
-    args = parse_command_line()
-    datebegin       = args.datebegin
-    dateend         = args.dateend
-    date            = args.date
-    xpids           = args.xpids
-    workdir         = args.workdir
-    geometry        = args.geometry
-    vapp            = args.vapp
-    uenv            = args.uenv
-    obs_geometry    = args.obs_geometry
-    clustering      = args.clustering
-    thresholds      = args.thresholds
-#    if ':' in args.members:
-#        first_mb, last_mb = args.members.split(':')
-#        members         = [mb for mb in range(int(first_mb), int(last_mb) + 1)]
-#    else:
-#        members = None
-
-    if not os.path.exists(workdir):
-        os.makedirs(workdir)
-    os.chdir(workdir)
+def execute():
 
     # 1. Get all input data
 
@@ -234,7 +137,13 @@ if __name__ == '__main__':
                 filename=f'PRO_{shortid}.nc', xpid=xpid, geometry=geometry)
         io.get_pro(**kw)
 
-        crps = execute(xpid, obs, date, members)
+        simu = read_simu(xpid, members, date)
+
+        if members is not None:
+            plot_ensemble(simu, obs.DSN_T_ISBA, shortid, date)
+
+        crps = compute_crps(simu, obs)
+
         savename = f'CRPS_{xpid}_{date}.pdf'
         vmin = 0
         vmax = 4
@@ -244,12 +153,7 @@ if __name__ == '__main__':
         df = tmp.to_dataframe(name=shortid).dropna().reset_index().drop(columns=['xx', 'yy', 'time'], errors='ignore')
         dataplot = pd.concat([dataplot, df])
 
-        # 3. Clean data
-        if members is not None:
-            for member in members:
-                os.remove(f'mb{member:03d}/PRO_{shortid}.nc')
-        else:
-            os.remove(f'PRO_{shortid}.nc')
+        clean(shortid, members)
 
     dataplot.columns = dataplot.columns.str.replace('slices', label_map[clustering])
     dataplot = dataplot.melt(label_map[clustering], var_name='experiment', value_name='CRPS (m)')
@@ -257,3 +161,135 @@ if __name__ == '__main__':
     title = f'Pleiades, {geometry}, {date[:8]}\n'
     violinplot.plot_ange(dataplot, 'CRPS (m)', figname=f'CRPS_by_{clustering}_{date}_' + '_'.join(xpids),
             title=title, yaxis=label_map[clustering], violinplot=False, xmax=4)
+
+
+def read_simu(xpid, members, date):
+    listfiles = list()  # List of simulation PRO files
+    shortid = xpid.split('@')[0]
+    proname = f'PRO_{shortid}.nc'
+    if members is not None:
+        for mb in members:
+            listfiles.append(f'mb{mb:03d}/{proname}')
+    else:
+        listfiles.append(f'{proname}')
+
+    # Open all simulation PRO files at once
+    simu = xr.open_mfdataset(listfiles, concat_dim='member', combine='nested').compute()
+    simu = xrp.update_varname(simu)
+    # <xarray.Dataset>
+    # Dimensions:     (time: 3, xx: 143, yy: 101, member: 16)
+    # Coordinates:
+    #   * time        (time) datetime64[ns] 2018-01-23 2018-03-16
+    #   * xx          (xx) float64 9.379e+05 9.381e+05 ... 9.731e+05 9.734e+05
+    #   * yy          (yy) float64 6.439e+06 6.439e+06 ... 6.464e+06 6.464e+06
+    # Dimensions without coordinates: xpid
+    # Data variables:
+    #     DSN_T_ISBA  (member, time, yy, xx) float64 1.997 1.918 ... 0.0001194 0.2854
+    # Get variable's DataArray
+    simu = simu.sel({'time': pd.to_datetime(date[:8], format='%Y%m%d')})
+    # <xarray.Dataset>
+    # Dimensions:     (xx: 143, yy: 101, member: 16)
+    # Coordinates:
+    #   time        datetime64[ns] 2018-01-23
+    #   * xx        (xx) float64 9.379e+05 9.381e+05 ... 9.731e+05 9.734e+05
+    #   * yy        (yy) float64 6.439e+06 6.439e+06 ... 6.464e+06 6.464e+06
+    # Dimensions without coordinates: xpid
+    # Data variables:
+    #     DSN_T_ISBA  (member, time, yy, xx) float64 1.997 1.918 ... 0.0001194 0.2854
+
+    # Set the 'xpid' dimension for simulation identification
+    if members is not None:
+        simu['member'] = members
+    else:
+        simu['member'] = [0]
+    # <xarray.Dataset>
+    # Dimensions:     (xx: 143, yy: 101, member: 16)
+    # Coordinates:
+    #   time        datetime64[ns] 2018-01-23
+    #   * xx        (xx) float64 9.379e+05 9.381e+05 ... 9.731e+05 9.734e+05
+    #   * yy        (yy) float64 6.439e+06 6.439e+06 ... 6.464e+06 6.464e+06
+    #   * member    (member) int64 1 2 3 ... 16
+    # Dimensions without coordinates: xpid
+    # Data variables:
+    #     DSN_T_ISBA  (member, time, yy, xx) float64 1.997 1.918 ... 0.0001194 0.2854
+
+    return simu
+
+
+def plot_ensemble(simu, obs, xpid, date):
+    mean = simu.DSN_T_ISBA.mean(dim='member')
+    savename = f'Mean_HTN_{xpid}_{date}.pdf'
+    vmin = 0
+    vmax = 3
+    plot2D.plot_field(mean, savename, vmin=vmin, vmax=vmax, cmap=plt.cm.Blues)
+
+    spread = simu.DSN_T_ISBA.std(dim='member')
+    savename = f'Spread_HTN_{xpid}_{date}.pdf'
+    vmin = 0
+    vmax = 0.2
+    plot2D.plot_field(spread, savename, vmin=vmin, vmax=vmax, cmap=plt.cm.Purples)
+
+    error = mean - obs
+    savename = f'Error_HTN_{xpid}_{date}.pdf'
+    plot2D.plot_field(error, savename, cmap=plt.cm.RdBu)
+
+
+def compute_crps(simu, obs):
+
+    # Select common domains
+    obs  = obs.sel({'xx': np.intersect1d(obs.xx, simu.xx), 'yy': np.intersect1d(obs.yy, simu.yy)})
+    simu = simu.sel({'xx': np.intersect1d(obs.xx, simu.xx), 'yy': np.intersect1d(obs.yy, simu.yy)})
+    # Mask missing values from the observatin dataset in the simulation dataset
+    simu = simu.where(~np.isnan(obs))
+    # <xarray.Dataset>
+    # Dimensions:     (member: 16, yy: 79, xx: 63)
+    # Coordinates:
+    #  * xx          (xx) float64 9.579e+05 9.581e+05 ... 9.731e+05 9.734e+05
+    #  * yy          (yy) float64 6.439e+06 6.439e+06 ... 6.458e+06 6.459e+06
+    # Dimensions without coordinates: xpid
+    # Data variables:
+    #    DSN_T_ISBA  (member, yy, xx) float64 nan nan 1.132 1.234 ... 1.918 1.997  nan nan
+
+    # xskillscore.crps_ensemble only allows to compute the mean CRPS along 1 or several dimensions.
+    # We want a CRPS for each pixel of the domain, so we add a "fake" dimension to cmpute
+    # the CRPS along this dimension and get 1 value per pixel
+    simu = simu.expand_dims(dim="time")
+    obs  = obs.expand_dims(dim="time")
+    crps = xskillscore.crps_ensemble(obs.DSN_T_ISBA, simu.DSN_T_ISBA, dim='time')
+
+    return crps
+
+
+def clean(xpid, members):
+    if members is not None:
+        for member in members:
+            os.remove(f'mb{member:03d}/PRO_{xpid}.nc')
+    else:
+        os.remove(f'PRO_{xpid}.nc')
+
+
+if __name__ == '__main__':
+
+    args = parse_command_line()
+    datebegin       = args.datebegin
+    dateend         = args.dateend
+    date            = args.date
+    xpids           = args.xpids
+    workdir         = args.workdir
+    geometry        = args.geometry
+    vapp            = args.vapp
+    uenv            = args.uenv
+    obs_geometry    = args.obs_geometry
+    clustering      = args.clustering
+    thresholds      = args.thresholds
+#    if ':' in args.members:
+#        first_mb, last_mb = args.members.split(':')
+#        members         = [mb for mb in range(int(first_mb), int(last_mb) + 1)]
+#    else:
+#        members = None
+
+    if not os.path.exists(workdir):
+        os.makedirs(workdir)
+    os.chdir(workdir)
+
+    execute()
