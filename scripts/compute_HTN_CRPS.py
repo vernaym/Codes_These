@@ -43,6 +43,7 @@ members_map = dict(
 label_map = dict(
     elevation   = 'Elevation (m)',
     uncertainty = 'Uncertainty',
+    landforms   = 'Geomorphon',
 )
 
 
@@ -70,7 +71,7 @@ def parse_command_line():
     parser.add_argument('-a', '--vapp', type=str, default='edelweiss', choices=['s2m', 'edelweiss'],
                         help="Application that produced the target file")
 
-    parser.add_argument('-u', '--uenv', type=str, default="uenv:edelweiss.1@vernaym",
+    parser.add_argument('-u', '--uenv', type=str, default="uenv:edelweiss.2@vernaym",
                         help="User environment for static resources (format 'uenv:name@user')")
 
     parser.add_argument('-c', '--clustering', type=str, default='uncertainty', choices=label_map.keys(),
@@ -105,25 +106,29 @@ def execute():
     io.get_snow_obs_date(xpid='CesarDB_AngeH', geometry=obs_geometry, date=date, vapp='Pleiades', filename=obsname)
     # Open observation file as DataArray
     obs = xr.open_dataset(obsname)
-    obs = xrp.update_varname(obs)
+    obs = xrp.preprocess(obs, decode_time=False)
 
     if clustering == 'elevation':
         # Get Domain's DEM in case ZS not in simulation file
         io.get_const(uenv, 'relief', geometry, filename='TARGET_RELIEF.nc', gvar='RELIEF_GRANDESROUSSES250M_L93')
         mnt = xr.open_dataset('TARGET_RELIEF.nc')  # Target domain's Digital Elevation Model
-        mnt = xrp.update_varname(mnt)
+        mnt = xrp.preprocess(mnt, decode_time=False)
         mask = mnt.ZS
     elif clustering == 'uncertainty':
         ds = xr.open_dataset('/home/vernaym/workdir/ASSIMILATION/mask/GrandesRousses/Observation_error_L93.nc')
-        ds = xrp.update_varname(ds)
-        ds = ds.interp({'xx': obs.xx, 'yy': obs.yy})
+        ds = xrp.preprocess(ds, decode_time=False)
         mask = ds.Uncertainty
-
-    # c) Mask
-    io.get_const(uenv, 'mask', geometry, filename='MASK.nc')
+    elif clustering == 'landforms':
+        # Get Domain's DEM in case ZS not in simulation file
+        io.get_const(uenv=uenv, kind='geomorph', geometry=geometry, filename='GEOMORPH.nc')
+        geomorph = xr.open_dataset('GEOMORPH.nc')  # Target domain's Geomorphons mask
+        mask = xrp.preprocess(geomorph.Band1, decode_time=False)
+    mask = mask.interp({'xx': obs.xx, 'yy': obs.yy})
+    mask = mask.rename(clustering)
 
     dataplot = pd.DataFrame()
-    # d) Simulations
+    # c) Simulations
+    pearson = dict()
     for xpid in xpids:
         # TODO : gérer ça plus proprement
         if '@' not in xpid:
@@ -142,25 +147,32 @@ def execute():
         if members is not None:
             plot_ensemble(simu, obs.DSN_T_ISBA, shortid, date)
 
-        crps = compute_crps(simu, obs)
+        pearson[shortid], crps = compute_scores(simu, obs)
 
         savename = f'CRPS_{xpid}_{date}.pdf'
         vmin = 0
         vmax = 4
         plot2D.plot_field(crps, savename, vmin=vmin, vmax=vmax, cmap=plt.cm.Reds)
 
-        tmp = clusters.by_slices(crps, mask, thresholds)
+        if clustering in ['elevation', 'uncertainty']:
+            tmp = clusters.by_slices(crps, mask, thresholds)
+        elif clustering == 'landforms':
+            tmp = clusters.per_landform_types(crps, mask)
         df = tmp.to_dataframe(name=shortid).dropna().reset_index().drop(columns=['xx', 'yy', 'time'], errors='ignore')
         dataplot = pd.concat([dataplot, df])
 
         clean(shortid, members)
 
-    dataplot.columns = dataplot.columns.str.replace('slices', label_map[clustering])
+    dataplot = dataplot.rename(columns={'slices': label_map[clustering], clustering: label_map[clustering]})
     dataplot = dataplot.melt(label_map[clustering], var_name='experiment', value_name='CRPS (m)')
 
     title = f'Pleiades, {geometry}, {date[:8]}\n'
     violinplot.plot_ange(dataplot, 'CRPS (m)', figname=f'CRPS_by_{clustering}_{date}_' + '_'.join(xpids),
             title=title, yaxis=label_map[clustering], violinplot=False, xmax=4)
+
+    print()
+    for shortid, pearson_corr in pearson.items():
+        print(f'Pearson coefficient for experiment {shortid} : ', pearson_corr.data)
 
 
 def read_simu(xpid, members, date):
@@ -175,7 +187,7 @@ def read_simu(xpid, members, date):
 
     # Open all simulation PRO files at once
     simu = xr.open_mfdataset(listfiles, concat_dim='member', combine='nested').compute()
-    simu = xrp.update_varname(simu)
+    simu = xrp.preprocess(simu, decode_time=False)
     # <xarray.Dataset>
     # Dimensions:     (time: 3, xx: 143, yy: 101, member: 16)
     # Coordinates:
@@ -234,11 +246,11 @@ def plot_ensemble(simu, obs, xpid, date):
     plot2D.plot_field(error, savename, cmap=plt.cm.RdBu)
 
 
-def compute_crps(simu, obs):
+def compute_scores(simu, obs):
 
     # Select common domains
-    obs  = obs.sel({'xx': np.intersect1d(obs.xx, simu.xx), 'yy': np.intersect1d(obs.yy, simu.yy)})
-    simu = simu.sel({'xx': np.intersect1d(obs.xx, simu.xx), 'yy': np.intersect1d(obs.yy, simu.yy)})
+    obs  = obs.sel({'xx': np.intersect1d(obs.xx, simu.xx), 'yy': np.intersect1d(obs.yy, simu.yy)})['DSN_T_ISBA']
+    simu = simu.sel({'xx': np.intersect1d(obs.xx, simu.xx), 'yy': np.intersect1d(obs.yy, simu.yy)})['DSN_T_ISBA']
     # Mask missing values from the observatin dataset in the simulation dataset
     simu = simu.where(~np.isnan(obs))
     # <xarray.Dataset>
@@ -253,11 +265,15 @@ def compute_crps(simu, obs):
     # xskillscore.crps_ensemble only allows to compute the mean CRPS along 1 or several dimensions.
     # We want a CRPS for each pixel of the domain, so we add a "fake" dimension to cmpute
     # the CRPS along this dimension and get 1 value per pixel
+
+    control_member = simu.sel({'member': 0})
+    pearson = xr.corr(control_member, obs)
+
     simu = simu.expand_dims(dim="time")
     obs  = obs.expand_dims(dim="time")
-    crps = xskillscore.crps_ensemble(obs.DSN_T_ISBA, simu.DSN_T_ISBA, dim='time')
+    crps = xskillscore.crps_ensemble(obs, simu, dim='time')
 
-    return crps
+    return pearson, crps
 
 
 def clean(xpid, members):
@@ -266,6 +282,16 @@ def clean(xpid, members):
             os.remove(f'mb{member:03d}/PRO_{xpid}.nc')
     else:
         os.remove(f'PRO_{xpid}.nc')
+
+
+def execution_info(workdir):
+    print()
+    print("===========================================================================================")
+    print("                                     Execution result                                      ")
+    print("===========================================================================================")
+    print()
+    print(f"Produced figures are available here : {workdir}")
+    print()
 
 
 if __name__ == '__main__':
@@ -293,3 +319,4 @@ if __name__ == '__main__':
     os.chdir(workdir)
 
     execute()
+    execution_info(workdir)
