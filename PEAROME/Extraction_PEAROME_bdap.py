@@ -62,7 +62,8 @@ coords = dict(
     alp = ['46800', '43700', '5000', '7600'],
     pyr = ['43500', '42000', '-2000', '3500'],
     cor = ['43000', '41000', '8000', '11500'],
-    GrandesRousses = ['45640', '44590', '5610', '7100'],  # With 0.2 margin (final domain : ['45440', '44790', '5810', '6690'],)
+    #GrandesRousses = ['45640', '44590', '5610', '7100'],  # With 0.2 margin (final domain : ['45440', '44790', '5810', '6690'],)
+    GrandesRousses = ['45440', '44790', '5810', '6690'],  # With 0.2 margin (final domain : ['45240', '44990', '6010', '6490'])
 )
 
 # Pas en lat/lon de la grille cible en 1/1000 de °
