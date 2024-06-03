@@ -40,11 +40,8 @@ members_map = dict(
     SAFRAN_pappus   = None,
 )
 
-label_map = dict(
-    elevation   = 'Elevation (m)',
-    uncertainty = 'Uncertainty',
-    landforms   = 'Geomorphon',
-)
+# Retrieve dictionnary to map clustering type to a proper label
+label_map = clusters.label_map
 
 
 def parse_command_line():
@@ -123,7 +120,7 @@ def execute():
         io.get_const(uenv=uenv, kind='geomorph', geometry=geometry, filename='GEOMORPH.nc')
         geomorph = xr.open_dataset('GEOMORPH.nc')  # Target domain's Geomorphons mask
         mask = xrp.preprocess(geomorph.Band1, decode_time=False)
-    mask = mask.interp({'xx': obs.xx, 'yy': obs.yy})
+    mask = mask.interp({'xx': obs.xx, 'yy': obs.yy}, method='nearest')
     mask = mask.rename(clustering)
 
     dataplot = pd.DataFrame()
