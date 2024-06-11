@@ -63,9 +63,8 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
     """
 
     field[np.isnan(field)] = 0.0
-    initial_field = field.flatten()
-    X = diags(field.flatten(), 0)
-
+    initial_field = field.flatten().compute()
+    X = diags(initial_field.flatten(), 0)
 
     # 1. Calcul de la moyenne pondérée par la distance ET l'erreur statique
     if super_ensemble is None:
@@ -232,7 +231,7 @@ def filter_gauges(df, antilope, delta=0.1):
     df["ratio"] = (df["rr_antilope"]+df["delta"]) / (df["rr"]+df["delta"])  # Add delta to avoid division by 0 issues  --> large modification of the ratio for low precipitation events !
     df["error"] = df["rr_antilope"] - df["rr"]
     # Remove observations with unrealistic ratios :
-    mask = (df['ratio']<1.2) & (df['ratio']>0.8)  # Gauges with larger errors must have been rejected by the ANTILOPE algorithm --> we trust it
+    mask = (df['ratio']<1.2) & (df['ratio']>0.8)  # Gauges with larger intial_errors must have been rejected by the ANTILOPE algorithm --> we trust it
     df = df[mask]
     #df["ratio"][df["rr"] == 0] = 1  # No precipitation in reference ==> keep ANTILOPE (gauge obstructed ?). Most of these situations are filtered out by the condition 0.1<ratio<1.9
 
