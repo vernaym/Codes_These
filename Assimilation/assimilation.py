@@ -51,6 +51,8 @@ from These.scripts import make_mask
 from bronx.stdtypes.date import Date
 from snowtools.scripts.extract.vortex import vortexIO as io
 
+from vortex.layout.dataflow import SectionFatalError
+
 ##############################################################################################
 # TODO : Save number of selected members for each pixel
 ##############################################################################################
@@ -498,16 +500,41 @@ def finalize_fig(figure, imm, label, outname):
 @speedtest
 def read_obs(args):
     filename = f'ANTILOPEH_{args.datebegin.strftime("%Y%m%d%H")}_{args.dateend.strftime("%Y%m%d%H")}_{args.domain}.nc'
-    io.get_meteo(
-        kind           = 'Precipitation',
-        geometry       = 'GrandesRousses1km',
-        xpid           = 'ANTILOPE@vernaym',
-        vapp           = 'edelweiss',
-        block          = 'hourly',
-        datebegin      = Date(args.datebegin).ymd6h,
-        dateend        = Date(args.dateend).ymd6h,
-        filename       = filename,
-    )
+    try:
+        io.get_meteo(
+            kind           = 'Precipitation',
+            geometry       = 'GrandesRousses1km',
+            xpid           = 'ANTILOPE@vernaym',
+            vapp           = 'edelweiss',
+            block          = 'hourly',
+            datebegin      = Date(args.datebegin).ymd6h,
+            dateend        = Date(args.dateend).ymd6h,
+            filename       = filename,
+            namespace      = 'vortex.cache.fr',
+        )
+    except SectionFatalError:
+        if Date(args.datebegin).month > 8:
+            datebegin = Date(args.datebegin).replace(month=8, day=1)
+        else:
+            year = Date(args.datebegin).year - 1
+            datebegin = Date(args.datebegin).replace(year=year, month=8, day=1)
+        if Date(args.dateend).month > 8:
+            year = Date(args.dateend).year + 1
+            dateend = Date(args.dateend).replace(year=year, month=8, day=1)
+        else:
+            dateend = Date(args.dateend).replace(month=8, day=1)
+
+        io.get_meteo(
+            kind           = 'Precipitation',
+            geometry       = 'GrandesRousses1km',
+            xpid           = 'ANTILOPE@vernaym',
+            vapp           = 'edelweiss',
+            block          = 'hourly',
+            datebegin      = datebegin.ymd6h,
+            dateend        = dateend.ymd6h,
+            filename       = filename,
+            namespace      = 'vortex.cache.fr',
+        )
 
     if not os.path.exists(filename):
         if args.domain == 'GrandesRousses':
@@ -1311,7 +1338,8 @@ class Assimilation(object):
         #error = parameters.error.data
         #error = uniform_filter(error, 10)
         #Rdyn = diags(error.flatten(), 0)
-        error = np.abs(new_obs.data - parameters.mu.data).compute()
+        error = np.abs(new_obs.data - parameters.mu.data)
+        #error = np.abs(new_obs.data - parameters.mu.data).compute()  # For PF experiments
         #error = np.abs(new_obs.data - parameters.rr.data)  # TODO : try this error formulation
         #error = uniform_filter(error, 5)  # TODO : try without error smoothing
         Rdyn = diags(error.flatten(), 0)
@@ -1957,21 +1985,19 @@ class RandomSampling(Assimilation):
         #std = np.abs(parameters.sigma.data)
         #pond = self.pond.dot(diags(1/std.flatten(), 0))
 
-        for member in analysis.member.data:
-            ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='gamma')
-            #ana = Preprocessing_ANTILOPE.random_draw(obs, sd1, distribution='gamma')
-            #ana = Preprocessing_ANTILOPE.random_draw(obs, sd1, sd2=sd2, distribution='gamma')
-            #ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='normal')
-            analysis.loc[{'member':member}] = ana
+        draw = Preprocessing_ANTILOPE.random_draw(distribution='gamma', members=len(analysis.member))
 
-            self.newlocalfield[member][:,:,idd] = analysis.sel({'member':member}).data
+        for idx,member in enumerate(analysis.member.data):
+            ana = Preprocessing_ANTILOPE.perturb(obs, sd, draw[idx])
+            analysis.loc[{'member': member}] = ana
+
+            self.newlocalfield[member][:, :, idd] = analysis.sel({'member': member}).data
 
             #print('!!!! WARNING : TMP !!!!')
             #ana, toto, tutu = Preprocessing_ANTILOPE.dynamic_correction(ana.flatten(), pond)
             #analysis.loc[{'member':member}] = ana.reshape((len(parameters.lat), len(parameters.lon)))
 
-
-            if self.plot and member>0:
+            if self.plot and member > 0:
                 # TODO : Add reference values
                 field = analysis.loc[{'member':member}]
                 im1 = plot_field(analysis.loc[{'member':member}], ax1[i,j], self.rrmin, self.rrmax, self.domain)
@@ -2127,12 +2153,11 @@ class RandomSampling(Assimilation):
             )
             self.error[idp, idd] = error.sel({'lat':nearest_lat, 'lon':nearest_lon})
 
-            # Fill other members with random draw arround the corrected observation
+            draw = Preprocessing_ANTILOPE.random_draw(distribution='gamma', members=len(analysis.member))
+
             for member in range(1, nmembers+1):
-                ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='gamma')
-                #ana = Preprocessing_ANTILOPE.random_draw(obs, sd1, distribution='gamma')
-                #ana = Preprocessing_ANTILOPE.random_draw(obs, sd1, sd2=sd2, distribution='gamma')
-                #ana = Preprocessing_ANTILOPE.random_draw(obs, sd, distribution='normal')
+                # Fill other members with random draw arround the corrected observation
+                ana = Preprocessing_ANTILOPE.perturb(obs, sd, draw[member-1])
                 analysis.loc[{'member':member}] = ana
 
                 self.newlocalfield[member][idp,idd] = analysis.sel({'lat':nearest_lat, 'lon':nearest_lon, 'member':member}).data
@@ -3288,6 +3313,7 @@ if __name__ == "__main__":
         dateend      = args.dateend.strftime('%Y%m%d%H'),
         block        = 'daily',
         filename     = outname,
+        #namespace    = 'vortex.cache.fr',
     )
 
     tfin = time.time()

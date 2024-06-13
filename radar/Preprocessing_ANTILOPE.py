@@ -63,7 +63,8 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
     """
 
     field[np.isnan(field)] = 0.0
-    initial_field = field.flatten().compute()
+    #initial_field = field.flatten().compute()  # For PF experiments
+    initial_field = field.flatten()
     X = diags(initial_field.flatten(), 0)
 
     # 1. Calcul de la moyenne pondérée par la distance ET l'erreur statique
@@ -439,60 +440,49 @@ def codistances(coords, domain='alp', ld=0.1, Zdist=False):  # TMP for illustrat
 
     return dist
 
-def random_draw(obs, sd, ratio=None, sd2=None, distribution='gamma'):
 
-    frac = 0.2
+def random_draw(distribution='gamma', members=16):
+    """
+    Return a sorted array (size=*members*) of randomly draw values from *distribution*
+    """
 
-    gauss = np.random.normal(loc=0.0, scale=1.0, size=1)[0]  # Draw random element from normal distribution
     if distribution == 'normal':
-        ana = obs+gauss*sd  # Gaussian perturbation around >0 obs
-        gauss = np.random.normal(loc=0.0, scale=1.0, size=1)[0]  # Draw random element from normal distribution
-        # Add a 2nd perturbation term:
-        ana= ana + obs*frac*gauss
-
+        draw = np.random.normal(loc=0.0, scale=1.0, size=members)  # Draw random element from normal distribution
     elif distribution == 'gamma':
         # TODO : essayer de faire dependre k de l'obs
         # PROBLEME : en tirant 1 valeur / pixel on perd la cohérence spatiale
-        #k = 3  # k must be >1. TODO : fixer k de façon automatique
         k = 2  # k must be >1. TODO : fixer k de façon automatique --> + forte asymétrie
-        theta = np.sqrt(1/k)  # Ensure a variance of 1 (var=k*theta^2)
-        #shift = (k-1)*theta  # shift = mode  --> introduce a >0 bias of theta
-        shift = k*theta  # shift = mean  --> no bias introduction
-        gamma = np.random.gamma(k, scale=theta)  # Draw random element from normal distribution (>0 only ==> shift necessary to convert into perturbations)
-
-        # Add 2 perturbations terms:
-        # - 1 gamma distributed proportionnal to the precipitation intensity
-        # - normal distributed around the estimated error --> especially important for error for small prexipitation values
-        # This 2 step perturbation reduces the dispersion but introduces spatial variability in the analysis fields
-        if ratio is not None:
-            ana = obs + obs*(frac+np.abs(1-np.sqrt(ratio)))*(gamma-shift) + gauss*sd
-        else:
-            # WARNING : the small ensemble size (16) lead to a large variability
-            # of the ensemble mean but this algorithm ensures that on average the ensemble
-            # mean is centered on the corrected observation
-            ana = obs + obs*frac*(gamma-shift) + gauss*sd
-            #ana = obs + obs*frac*(gamma-shift)
-            #gamma = np.random.gamma(k, scale=theta)  # Draw random element from normal distribution (>0 only ==> shift necessary to convert into perturbations)
-            #ana = ana + sd * (gamma-shift)
-            #ana = obs + gauss*sd
-
-        if sd2 is not None:
-            #gauss = np.random.normal(loc=0.0, scale=1.0, size=1)[0]  # Draw random element from normal distribution
-            #ana = ana + sd2*gauss
-            gamma = np.random.gamma(k, scale=theta)  # Draw random element from normal distribution (>0 only ==> shift necessary to convert into perturbations)
-            ana = ana + sd2*(gamma-shift)
-
+        theta = np.sqrt(1 / k)  # Ensure a variance of 1 (var=k*theta^2)
+        shift = k * theta  # shift = mean  --> no bias introduction
+        # Draw random element from gamma distribution (>0 only ==> shift necessary to convert into perturbations)
+        draw = np.random.gamma(k, scale=theta, size=members) - shift
     else:
         print('Error : unknown distribution')
         return None
 
-    #exp = np.random.default_rng().exponential(scale=1)  # TODO : set scale parameter using the density of pixels at 0mm in the vicinity ?
+    return np.sort(draw)
 
-    #ana[ana<0] = exp*sd[ana<0]  # Avoid "mass accumulation" in 0. !! WARNING : the analysis distribution is not Normal anymore !!
-    ana[ana<0] = 0  # WARNING : "mass accumulation" in 0 (analysis distribution not normal anymore)
-    #ana[np.where(sd<=1)] = obs[np.where(sd<=1)]+gauss*sd[np.where(sd<=1)]  # Gaussian perturbations around pixels with for small errors
-    #ana[obs==0] = obs[obs==0]+exp*sd[obs==0]  # Exponential perturbation arround 0. TODO : arround 0, use the density
-    #ana = np.round(ana, 1)
+
+def perturb(obs, sd, perturbation, ratio=None, sd2=None, frac=0.2):
+    """
+    Perturb an *obs* field with a previously randomly dranw value *perturbation* and an estimated error *sd*.
+    """
+
+    # Add 2 perturbations terms:
+    # - 1 gamma distributed proportionnal to the precipitation intensity
+    # - normal distributed around the estimated error --> especially important for error for small prexipitation values
+    # This 2 step perturbation reduces the dispersion but introduces spatial variability in the analysis fields
+    # WARNING : the small ensemble size (16) lead to a large variability
+    # of the ensemble mean but this algorithm ensures that on average the ensemble
+    # mean is centered on the corrected observation
+    gauss = np.random.normal(loc=0.0, scale=1.0)
+    ana = obs + obs * frac * perturbation + gauss * sd
+
+    if sd2 is not None:
+        gamma = random_draw(distribution='gamma', members=1)[0]
+        ana = ana + sd2 * gamma
+
+    ana[ana < 0] = 0  # WARNING : "mass accumulation" in 0 (analysis distribution not normal anymore)
 
     return ana
 
