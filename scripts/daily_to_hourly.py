@@ -46,6 +46,7 @@ os.chdir(workdir)
 xp_number = xpid[-2:]
 
 # Read ensemble analysis
+# All members are stored in the same netcdf file !
 io.get_meteo(
     kind           = 'Precipitation',
     geometry       = 'GrandesRousses1km',
@@ -115,6 +116,7 @@ if not dailyfiles:
         output.to_netcdf(outname, mode='w')
 
     # Use put_meteo because this is not a FORCING-ready resource
+    # TODO : do not archive on Hendrix !
     io.put_meteo(
         kind           = 'Precipitation',
         geometry       = 'GrandesRousses1km',
