@@ -1845,6 +1845,7 @@ class RandomSampling(Assimilation):
         # Fill first member with corrected observation
         analysis.loc[{'member':0}] = obs
         #analysis.loc[{'member':0}] = np.square(obs)
+        self.newlocalfield[0][:, :, idd] = analysis.sel({'member': 0}).data
 
         # Extract reference points and corresponding values
         if obs_auto is not None:
@@ -1987,7 +1988,7 @@ class RandomSampling(Assimilation):
 
         draw = Preprocessing_ANTILOPE.random_draw(distribution='gamma', members=len(analysis.member))
 
-        for idx,member in enumerate(analysis.member.data):
+        for idx, member in enumerate(analysis.member.data[1:]):
             ana = Preprocessing_ANTILOPE.perturb(obs, sd, draw[idx])
             analysis.loc[{'member': member}] = ana
 
@@ -2391,6 +2392,15 @@ class EnsembleKalmanFilter(Assimilation):
             dims   = ["member", "lat", "lon"],
             coords = dict(lon=ensemble.lon, lat=ensemble.lat, member=range(nmembers+1)),
         )
+
+        obs = Y.reshape((len(parameters.lat), len(parameters.lon)))  # Get observation field
+        obs = np.round(obs, 1)  # Round precipitation <0.1 at 0 (different distribution used in this case) TODO : convertir dans l'espace r^1/2
+
+        # Fill first member with corrected observation
+        analysis.loc[{'member': 0}] = obs
+        #analysis.loc[{'member':0}] = np.square(obs)
+        self.newlocalfield[0][:, :, idd] = analysis.sel({'member': 0}).data
+
         for member in ensemble.member.data:
 
             ##############################  TMP  ###############################
@@ -2418,6 +2428,7 @@ class EnsembleKalmanFilter(Assimilation):
 
             # On peut maintenant extraire les vrais domaines (on a plus besoind e la marge sur les bords)
             analysis.loc[{'member':member}] = A.reshape((len(ensemble.lat), len(ensemble.lon)))  # Go back in the real precipitation space
+            self.newlocalfield[member][:, :, idd] = analysis.sel({'member': member}).data
 
             # Reduction du domain en enlevant la marge en bordure
             # Inutile : la domain est réduit au moment de plotter les champs
@@ -2658,6 +2669,11 @@ class ParticleFilter(Assimilation):
 
         print(localized_period.rr.max().data)
 
+        obs = Y.reshape((len(parameters_date.lat), len(parameters_date.lon)))  # Get observation field
+        obs = np.round(obs, 1)  # Round precipitation <0.1 at 0 (different distribution used in this case) TODO : convertir dans l'espace r^1/2
+        # Fill first member with corrected observation
+        self.newlocalfield[0][:, :, idd] = obs
+
         if localized_period.rr.max() > 1:
 
             for idx,lon in enumerate(assim_lon):
@@ -2718,6 +2734,7 @@ class ParticleFilter(Assimilation):
                     self.inflation[idy,idx] += int(inflation)
 
                     # TODO : remplir une liste plutot que boucler
+                    # TODO : sort precipitation here ?
                     for member, field in self.newlocalfield.items():
                         field[idy,idx,idd]  = new[member-1]  # fill new member
 
@@ -3298,6 +3315,8 @@ if __name__ == "__main__":
         #    rs.save_corrected_field(extract_period, nivometeo.num_poste.data)
         out = rs.output(localfields)
         outname = f"Random_Sampling_{args.datebegin.strftime('%Y%m%d%H')}_{args.dateend.strftime('%Y%m%d%H')}_{args.frequency}_{args.domain}.nc"
+        if os.path.exists(outname):
+            os.remove(outname)
         out.to_netcdf(f"{outname}".encode('utf-8'))
 
     xpid = os.getcwd().split('/')[-1]  # TODO : ajouter une sécurité pour éviter d'écraser une XP existante
