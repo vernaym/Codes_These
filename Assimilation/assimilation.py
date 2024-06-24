@@ -1986,10 +1986,11 @@ class RandomSampling(Assimilation):
         #std = np.abs(parameters.sigma.data)
         #pond = self.pond.dot(diags(1/std.flatten(), 0))
 
-        draw = Preprocessing_ANTILOPE.random_draw(distribution='gamma', members=len(analysis.member))
+        draw_gamma = Preprocessing_ANTILOPE.random_draw(distribution='gamma', members=len(analysis.member))
+        draw_gauss = Preprocessing_ANTILOPE.random_draw(distribution='normal', members=len(analysis.member))
 
         for idx, member in enumerate(analysis.member.data[1:]):
-            ana = Preprocessing_ANTILOPE.perturb(obs, sd, draw[idx])
+            ana = Preprocessing_ANTILOPE.perturb(obs, sd, draw_gamma[idx - 1], draw_gauss[idx - 1])
             analysis.loc[{'member': member}] = ana
 
             self.newlocalfield[member][:, :, idd] = analysis.sel({'member': member}).data
@@ -2154,11 +2155,12 @@ class RandomSampling(Assimilation):
             )
             self.error[idp, idd] = error.sel({'lat':nearest_lat, 'lon':nearest_lon})
 
-            draw = Preprocessing_ANTILOPE.random_draw(distribution='gamma', members=len(analysis.member))
+            draw_gamma = Preprocessing_ANTILOPE.random_draw(distribution='gamma', members=len(analysis.member))
+            draw_gauss = Preprocessing_ANTILOPE.random_draw(distribution='normal', members=len(analysis.member))
 
             for member in range(1, nmembers+1):
                 # Fill other members with random draw arround the corrected observation
-                ana = Preprocessing_ANTILOPE.perturb(obs, sd, draw[member-1])
+                ana = Preprocessing_ANTILOPE.perturb(obs, sd, draw_gamma[member - 1], draw_gauss[member - 1])
                 analysis.loc[{'member':member}] = ana
 
                 self.newlocalfield[member][idp,idd] = analysis.sel({'lat':nearest_lat, 'lon':nearest_lon, 'member':member}).data
