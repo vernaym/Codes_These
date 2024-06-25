@@ -64,8 +64,8 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
 
     field[np.isnan(field)] = 0.0
     #initial_field = field.flatten().compute()  # For PF experiments
-    initial_field = field.flatten()
-    X = diags(initial_field.flatten(), 0)
+    initial_field = np.array(field.flatten())
+    X = diags(initial_field, 0)
 
     # 1. Calcul de la moyenne pondérée par la distance ET l'erreur statique
     if super_ensemble is None:

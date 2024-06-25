@@ -1342,7 +1342,7 @@ class Assimilation(object):
         #error = np.abs(new_obs.data - parameters.mu.data).compute()  # For PF experiments
         #error = np.abs(new_obs.data - parameters.rr.data)  # TODO : try this error formulation
         #error = uniform_filter(error, 5)  # TODO : try without error smoothing
-        Rdyn = diags(error.flatten(), 0)
+        Rdyn = diags(np.array(error.flatten()), 0)
         #R = dia_matrix(Rdyn+Rstat)
         R = dia_matrix(Rstat)
 
@@ -2737,11 +2737,13 @@ class ParticleFilter(Assimilation):
 
                     # TODO : remplir une liste plutot que boucler
                     # TODO : sort precipitation here ?
-                    for member, field in self.newlocalfield.items():
-                        field[idy,idx,idd]  = new[member-1]  # fill new member
+                    for member in localized_period.member.data:
+                        self.newlocalfield[member][idy, idx, idd]  = new[member - 1]  # fill new member
 
         else:
-            self.newlocalfield = localized_period.rr.data
+            # If all ensemble members are close to 0mm, keep the ensemble as it is to save computing time
+            for member in localized_period.member.data:
+                self.newlocalfield[member][:, :, idd] = localized_period.sel({'member': member, 'time': localized_period.time.data[0]}).rr.data
 
 
         if self.plot:
@@ -2981,7 +2983,7 @@ class ParticleFilter(Assimilation):
             #self.nb_out_raw = np.zeros(self.nposte)  # Count number of obs outside raw ensemble
             #self.nb_out_loc = np.zeros(self.nposte)  # Count number of obs outside localized ensemble
             self.inflation = np.zeros(self.nposte)  # Count number of time inflation was used
-        self.newlocalfield = {m:null.copy() for m in range(1, self.Ne+1)}
+        self.newlocalfield = {m:null.copy() for m in range(self.Ne+1)}
         self.erreur_obs = null.copy()
         time_selection_unique = 0
         time_selection_sequentielle = 0
@@ -3282,18 +3284,16 @@ if __name__ == "__main__":
         mask = pf.pdf_parameters()
         pf.run()  # Compute weight fields before normalisation + plot raw/interp fields
         #pf.selection()  # Global and local selections
-        localfields, globalfields = pf.output(localfields, globalfields)
+        out, globalfields = pf.output(localfields, globalfields)
 
 #    plot_chrono(extract_period, antilope, pearome, localfields)
-        outname = f"Assimilation_locale_{args.datebegin.strftime('%Y%m%d%H')}_{args.dateend.strftime('%Y%m%d%H')}_{args.frequency}_{args.domain}"
+        outname = f"Assimilation_locale_{args.datebegin.strftime('%Y%m%d%H')}_{args.dateend.strftime('%Y%m%d%H')}_{args.frequency}_{args.domain}.nc"
         if args.localisation is not None:
             outname = '_'.join([outname, f'localisation{args.localisation}'])
         if mask is not None:
             outname = '_'.join([outname, f'mask{mask}'])
         if args.debiasing is not None:
             outname = '_'.join([outname, f'debiasing{args.debiasing}'])
-        localfields.to_netcdf(f"{outname}.nc".encode('utf-8'))
-        #globalfields.to_netcdf(f"Assimilation_globale_{args.datebegin.strftime('%Y%m%d%H')}_{args.dateend.strftime('%Y%m%d%H')}_{args.frequency}.nc")
 
     elif args.assimilation == 'enkf':  # 2. Ensemble Kalman Filter
 
@@ -3305,8 +3305,7 @@ if __name__ == "__main__":
         else:
             enkf.run()
         out = enkf.output(localfields)
-        outname = f"EnKF_{args.datebegin.strftime('%Y%m%d%H')}_{args.dateend.strftime('%Y%m%d%H')}_{args.frequency}_{args.domain}"
-        out.to_netcdf(f"{outname}.nc".encode('utf-8'))
+        outname = f"EnKF_{args.datebegin.strftime('%Y%m%d%H')}_{args.dateend.strftime('%Y%m%d%H')}_{args.frequency}_{args.domain}.nc"
 
     elif args.assimilation == 'rs':  # Random Sampling
 
@@ -3317,9 +3316,10 @@ if __name__ == "__main__":
         #    rs.save_corrected_field(extract_period, nivometeo.num_poste.data)
         out = rs.output(localfields)
         outname = f"Random_Sampling_{args.datebegin.strftime('%Y%m%d%H')}_{args.dateend.strftime('%Y%m%d%H')}_{args.frequency}_{args.domain}.nc"
-        if os.path.exists(outname):
-            os.remove(outname)
-        out.to_netcdf(f"{outname}".encode('utf-8'))
+
+    if os.path.exists(outname):
+        os.remove(outname)
+    out.to_netcdf(f"{outname}".encode('utf-8'))
 
     xpid = os.getcwd().split('/')[-1]  # TODO : ajouter une sécurité pour éviter d'écraser une XP existante
     if not xpid.startswith(args.assimilation.upper()):
