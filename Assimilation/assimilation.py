@@ -1986,11 +1986,11 @@ class RandomSampling(Assimilation):
         #std = np.abs(parameters.sigma.data)
         #pond = self.pond.dot(diags(1/std.flatten(), 0))
 
-        draw_gamma = Preprocessing_ANTILOPE.random_draw(distribution='gamma', members=len(analysis.member))
-        draw_gauss = Preprocessing_ANTILOPE.random_draw(distribution='normal', members=len(analysis.member))
+        draw_gamma = Preprocessing_ANTILOPE.random_draw(distribution='gamma', members=len(analysis.member) - 1)
+        draw_gauss = Preprocessing_ANTILOPE.random_draw(distribution='normal', members=len(analysis.member) - 1)
 
         for idx, member in enumerate(analysis.member.data[1:]):
-            ana = Preprocessing_ANTILOPE.perturb(obs, sd, draw_gamma[idx - 1], draw_gauss[idx - 1])
+            ana = Preprocessing_ANTILOPE.perturb(obs, sd, draw_gamma[idx], draw_gauss[idx])
             analysis.loc[{'member': member}] = ana
 
             self.newlocalfield[member][:, :, idd] = analysis.sel({'member': member}).data
@@ -2155,10 +2155,10 @@ class RandomSampling(Assimilation):
             )
             self.error[idp, idd] = error.sel({'lat':nearest_lat, 'lon':nearest_lon})
 
-            draw_gamma = Preprocessing_ANTILOPE.random_draw(distribution='gamma', members=len(analysis.member))
-            draw_gauss = Preprocessing_ANTILOPE.random_draw(distribution='normal', members=len(analysis.member))
+            draw_gamma = Preprocessing_ANTILOPE.random_draw(distribution='gamma', members=len(analysis.member) - 1)
+            draw_gauss = Preprocessing_ANTILOPE.random_draw(distribution='normal', members=len(analysis.member) - 1)
 
-            for member in range(1, nmembers+1):
+            for member in range(1, nmembers + 1):
                 # Fill other members with random draw arround the corrected observation
                 ana = Preprocessing_ANTILOPE.perturb(obs, sd, draw_gamma[member - 1], draw_gauss[member - 1])
                 analysis.loc[{'member':member}] = ana
@@ -3163,7 +3163,7 @@ class ParticleFilter(Assimilation):
 #            #fig3, axes3 = plt.subplots(nrows=4, ncols=4, figsize=(16, 8))
         i = 0
         j = 0
-        for m in range(1, self.Ne+1):
+        for m in range(self.Ne+1):
             #t1 = time.time()
             #localfields.loc[{'time':self.date, 'member':m}] = self.newlocalfield[m]  # self.newlocalfield is a numpy array
             localfields.loc[{'member':m}] = self.newlocalfield[m]  # self.newlocalfield is a numpy array
@@ -3287,13 +3287,14 @@ if __name__ == "__main__":
         out, globalfields = pf.output(localfields, globalfields)
 
 #    plot_chrono(extract_period, antilope, pearome, localfields)
-        outname = f"Assimilation_locale_{args.datebegin.strftime('%Y%m%d%H')}_{args.dateend.strftime('%Y%m%d%H')}_{args.frequency}_{args.domain}.nc"
+        outname = f"Assimilation_locale_{args.datebegin.strftime('%Y%m%d%H')}_{args.dateend.strftime('%Y%m%d%H')}_{args.frequency}_{args.domain}"
         if args.localisation is not None:
             outname = '_'.join([outname, f'localisation{args.localisation}'])
         if mask is not None:
             outname = '_'.join([outname, f'mask{mask}'])
         if args.debiasing is not None:
             outname = '_'.join([outname, f'debiasing{args.debiasing}'])
+        outname = f'{outname}.nc'
 
     elif args.assimilation == 'enkf':  # 2. Ensemble Kalman Filter
 
