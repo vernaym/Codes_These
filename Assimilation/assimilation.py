@@ -261,7 +261,7 @@ def read_ensemble(datebegin, dateend, frequency, domain, antilope):
             pearome = pearome.resample(time='D').sum(dim='time')  # !!! VERY SLOW !!!
             pearome['time'] = pearome.time+np.timedelta64(30, 'h')
         else:
-            pearome['time'] = pearome.time-np.timedelta64(1, 'h')
+            pearome['time'] = pearome.time+np.timedelta64(23, 'h')
 
     return pearome
 
@@ -2419,14 +2419,14 @@ class EnsembleKalmanFilter(Assimilation):
 
             #A = X + K.dot(Y-X)
 #            Solution to avoid the "B+R" matrix inversion :
-#            1. solve (B+R).Z=Y-X
+#            1. solve (B+R).Z=Y-X  (Z=A-X)
 #            --> the matrix is already "band diagonal" but could be converted using a
 #            reverse_cuthill_mckee algorithm
 #            --> use "spsolve" method for sparse matrices (solveh_banded for dense
 #            matrices)
-#            2. compute anlaysis as A=X+BZ
-            Z = spsolve(B+R, Y-X)
-            A = X+B.dot(Z)
+#            2. compute analysis as A=X+BZ
+            Z = spsolve(B+R, B.dot(Y-X))
+            A = X+Z
 
             # On peut maintenant extraire les vrais domaines (on a plus besoind e la marge sur les bords)
             analysis.loc[{'member':member}] = A.reshape((len(ensemble.lat), len(ensemble.lon)))  # Go back in the real precipitation space
@@ -2488,10 +2488,8 @@ class EnsembleKalmanFilter(Assimilation):
 #            if domain != 'alp' and self.localisation is None:
             # Compute and plot K
             # Working inversion of large sparse matrix
-            A = B+R
-#            A = A + 0.001*scipy.sparse.eye(A.shape[0])
-#            K = B.dot(scipy.sparse.linalg.inv(A))
-            K = B/A  # since A is diagonal !
+            S = B + R
+            K = B / S  # since S is diagonal !
 #            K = B.dot(np.linalg.inv((B+R).toarray()))
 
             # Plot matrices
@@ -3326,17 +3324,19 @@ if __name__ == "__main__":
     if not xpid.startswith(args.assimilation.upper()):
         xpid = f'{args.assimilation.upper()}{xpid[-2:]}'
 
-    io.put_meteo(
-        kind         = 'Precipitation',
-        geometry     = f'{args.domain}1km',
-        xpid         = f'{xpid}@vernaym',
-        vapp         = 'edelweiss',
-        datebegin    = args.datebegin.strftime('%Y%m%d%H'),
-        dateend      = args.dateend.strftime('%Y%m%d%H'),
-        block        = 'daily',
-        filename     = outname,
-        #namespace    = 'vortex.cache.fr',
-    )
+    if not args.plot:
+
+        io.put_meteo(
+            kind         = 'Precipitation',
+            geometry     = f'{args.domain}1km',
+            xpid         = f'{xpid}@vernaym',
+            vapp         = 'edelweiss',
+            datebegin    = args.datebegin.strftime('%Y%m%d%H'),
+            dateend      = args.dateend.strftime('%Y%m%d%H'),
+            block        = 'daily',
+            filename     = outname,
+            #namespace    = 'vortex.cache.fr',
+        )
 
     tfin = time.time()
     print(f'Total execution time : {(tfin-t0)/60.} minutes')
