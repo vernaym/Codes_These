@@ -32,7 +32,7 @@ import argparse
 #matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib import cm
-from mpl_toolkits.mplot3d import Axes3D  # F401 unused import --> to ignore !
+#from mpl_toolkits.mplot3d import Axes3D  # F401 unused import --> to ignore !
 from matplotlib.text import Annotation
 from matplotlib import offsetbox
 import seaborn as sns
@@ -40,8 +40,8 @@ import palettable
 
 #plt.rcParams["figure.autolayout"] = True
 
-from mpl_toolkits.mplot3d import proj3d
-from mpl_toolkits.mplot3d.proj3d import proj_transform
+#from mpl_toolkits.mplot3d import proj3d
+#from mpl_toolkits.mplot3d.proj3d import proj_transform
 
 import time
 
