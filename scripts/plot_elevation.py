@@ -17,6 +17,7 @@ import shapefile
 #from metpy.interpolate import cross_section
 import cartopy.crs as ccrs
 from cartopy.mpl.ticker import LongitudeFormatter, LatitudeFormatter
+from pyproj import Proj, transform
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -102,11 +103,12 @@ def goto(path):
 def proj_mnt(mnt):
     outProj = Proj(init='epsg:4326')
     inProj = Proj(init='epsg:2154')
-    x, y = np.meshgrid(mnt['x'], mnt['y'])
+    x, y = np.meshgrid(mnt['xx'], mnt['yy'])
     X, Y = transform(inProj, outProj, x, y)
-    Z = mnt['ZS']
+    #Z = mnt['ZS']
     mnt_proj = xr.DataArray(
-        data=Z,
+        #data=Z,
+        data=mnt.data,
         name='elevation',
         dims=["lat", "lon"],
         coords=dict(lon=X[0], lat=Y[:,0]),
@@ -292,19 +294,25 @@ def plot_vertical_cross_section(cross):
     plt.close()
 
 
-mnt = xr.open_dataset(os.path.join(datadir, "DEM_ALPES_WGS84_250m_bilinear.nc"))
+#mnt = xr.open_dataset(os.path.join(datadir, "DEM_ALPES_WGS84_250m_bilinear.nc"))
+mnt = xr.open_dataset(os.path.join("/home/vernaym/.vortexrc/hack/uget/vernaym/data", "DEM_GrandesRousses25m_L93.tif"))
 #mnt = gdal.Open(os.path.join(datadir, "DEM_ALPES_WGS84_250m_bilinear.tif"))
 #tmp = np.transpose(mnt.ReadAsArray().astype(np.float), axis=1)
 #plt.contour(tmp, cmap = "viridis", levels = list(range(0, 5000, 100)))
-if 'elevation' not in mnt.keys():
-    mnt = mnt.rename({'Band1':'elevation'})
+if 'elevation'  in mnt.keys():
+    mnt = mnt.elevation
+elif 'band1' in mnt.keys():
+    mnt = mnt.band1
+elif 'band_data' in mnt.keys():
+    mnt = mnt.band_data
 
 # TMP : To produce 1km MNT over the Frenc Alps domain
 #antilope = xr.open_dataset('/home/vernaym/These/DATA/CUMUL_ANTILOPEH_alp_2021103000_2022060200.nc')
 #mnt1km = mnt.interp(lat=antilope.lat, lon=antilope.lon, method='linear')
 #mnt1km.to_netcdf('/home/vernaym/These/DATA/DEM_ALPESFR_WGS84_1km.nc')
 
-mnt=mnt.where((mnt['lat']>=latmin) & (mnt['lat']<=latmax) & (mnt['lon']>=lonmin) & (mnt['lon']<=lonmax), drop=True)
+#mnt=mnt.where((mnt['lat']>=latmin) & (mnt['lat']<=latmax) & (mnt['lon']>=lonmin) & (mnt['lon']<=lonmax), drop=True)
+mnt = proj_mnt(mnt)
 
 crossection = False
 if crossection:
@@ -371,44 +379,61 @@ else:
     #if not os.path.exists(filename):
     fig,ax = plt.subplots(figsize=figsize[domain], subplot_kw=dict(projection=ccrs.PlateCarree()))
     #ax = ax.ravel()
-    ax.set_extent([5.4, 7.2, 44.1, 46.45], crs=ccrs.PlateCarree())
+    xmin = domain_coords[domain]['lonmin']
+    xmax = domain_coords[domain]['lonmax']
+    ymin = domain_coords[domain]['latmin']
+    ymax = domain_coords[domain]['latmax']
+    ax.set_extent([xmin, xmax, ymin, ymax], crs=ccrs.PlateCarree())
     ax.set_frame_on(False)
     #https://discourse.holoviz.org/t/cannot-remove-grid-for-hv-quadmesh/2211/8
     #im = mnt.elevation.plot(ax=ax, cmap=plt.cm.terrain, subplot_kws={'frame_on':False}, linewidth=0, label='Elevation (m)', add_colorbar=False)
     #im = mnt.elevation.plot(ax=ax, cmap=plt.cm.terrain, linewidth=0, label='Elevation (m)', add_colorbar=False, transform=ccrs.PlateCarree())
     lons, lats = np.meshgrid(mnt.lon.data, mnt.lat.data)
-    im = ax.contourf(lons, lats, mnt.elevation.data, cmap=plt.cm.terrain, levels=50, transform=ccrs.PlateCarree(), alpha=1, antialiased=True)  # https://www.earthdatascience.org/tutorials/visualize-digital-elevation-model-contours-matplotlib/
+    im = ax.contourf(lons, lats, mnt.data, cmap=plt.cm.terrain, levels=50, transform=ccrs.PlateCarree(), alpha=1, antialiased=True)  # https://www.earthdatascience.org/tutorials/visualize-digital-elevation-model-contours-matplotlib/
     # This is the fix for the white lines between contour levels
     for c in im.collections:
         c.set_edgecolor("face")
-    c = ax.contour(lons, lats, mnt.elevation.data, colors='grey', levels=[1000, 2500], transform=ccrs.PlateCarree())  # https://www.earthdatascience.org/tutorials/visualize-digital-elevation-model-contours-matplotlib/
+    c = ax.contour(lons, lats, mnt.data, colors='grey', levels=[1000, 2500], transform=ccrs.PlateCarree())  # https://www.earthdatascience.org/tutorials/visualize-digital-elevation-model-contours-matplotlib/
     plt.clabel(c, inline=1, fontsize=10)
 
-    # Add optional features
-    add_boundaries(ax)
-    add_landmarks(ax)
-    add_rectangle(ax)
-    add_radar_positions(ax)
-    add_postes(ax, type_poste='automatic stations')
-    add_postes(ax, type_poste='nivometeo stations')
-    # Add cross section line
-    start = (45.14776, 5.63933)  # Radar Moucherotte
-    end   = (45.11872, 6.27540)  # Passe par le Pic Blanc : 50 km
-    plt.plot([start[1], end[1]], [start[0], end[0]], color='grey', linestyle='-', linewidth=5, transform=ccrs.PlateCarree())
+    fullfeatures = False
+    if fullfeatures:
+        # Add optional features
+        add_boundaries(ax)
+        add_landmarks(ax)
+        add_rectangle(ax)
+        add_radar_positions(ax)
+        add_postes(ax, type_poste='automatic stations')
+        add_postes(ax, type_poste='nivometeo stations')
+        # Add cross section line
+        start = (45.14776, 5.63933)  # Radar Moucherotte
+        end   = (45.11872, 6.27540)  # Passe par le Pic Blanc : 50 km
+        plt.plot([start[1], end[1]], [start[0], end[0]], color='grey', linestyle='-', linewidth=5, transform=ccrs.PlateCarree())
 
-    ax.set_frame_on(False)
-    # Add scalebar (https://stackoverflow.com/questions/39786714/how-to-insert-scale-bar-in-a-map-in-matplotlib)
-    scalebar = ScaleBar(
-            100000,  # 1 pixel = 1km
-            length_fraction=0.4,
-            location='upper left',
-            #frameon=False,  # Switch on/off scale background
-            box_alpha=0.8,  #Transparency of the scale background
-            border_pad = 1,  # Pad between the scale anbd the border of the plot
-            font_properties=dict(size=18),
-            scale_loc='top'
-        )
-    ax.add_artist(scalebar)
+        ax.set_frame_on(False)
+        # Add scalebar (https://stackoverflow.com/questions/39786714/how-to-insert-scale-bar-in-a-map-in-matplotlib)
+        scalebar = ScaleBar(
+                100000,  # 1 pixel = 1km
+                length_fraction=0.4,
+                location='upper left',
+                #frameon=False,  # Switch on/off scale background
+                box_alpha=0.8,  #Transparency of the scale background
+                border_pad = 1,  # Pad between the scale anbd the border of the plot
+                font_properties=dict(size=18),
+                scale_loc='top'
+            )
+        ax.add_artist(scalebar)
+        xticks = np.arange(5.5, 7.5, 0.5)
+        yticks = np.arange(44.5, 46.5, 0.5)
+        ax.set_xticks(xticks, crs=ccrs.PlateCarree())
+        ax.set_yticks(yticks, crs=ccrs.PlateCarree())
+        lon_formatter = LongitudeFormatter(zero_direction_label=True)
+        lat_formatter = LatitudeFormatter()
+        ax.xaxis.set_major_formatter(lon_formatter)
+        ax.yaxis.set_major_formatter(lat_formatter)
+        ax.tick_params(axis='both', which='major', labelsize=18)
+        ax.set_xlabel('longitude', fontsize=22)
+        ax.set_ylabel('latitude', fontsize=22)
 
     # Add colorbar
     #ax.legend(fontsize=20, loc=2)  # loc=2 --> upper-left
@@ -419,17 +444,6 @@ else:
     cb.ax.tick_params(labelsize=20)
     cb.set_label('Elevation (m)', size=24)
 
-    xticks = np.arange(5.5, 7.5, 0.5)
-    yticks = np.arange(44.5, 46.5, 0.5)
-    ax.set_xticks(xticks, crs=ccrs.PlateCarree())
-    ax.set_yticks(yticks, crs=ccrs.PlateCarree())
-    lon_formatter = LongitudeFormatter(zero_direction_label=True)
-    lat_formatter = LatitudeFormatter()
-    ax.xaxis.set_major_formatter(lon_formatter)
-    ax.yaxis.set_major_formatter(lat_formatter)
-    ax.tick_params(axis='both', which='major', labelsize=18)
-    ax.set_xlabel('longitude', fontsize=22)
-    ax.set_ylabel('latitude', fontsize=22)
     fig.savefig(filename, format='pdf')
 
     # Plot elevation difference
