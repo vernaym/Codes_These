@@ -10,15 +10,19 @@ coords = dict(
     Galibier = dict(
         xx        = 965767.64,
         yy        = 6445415.30,
-    ),
+    ),  # 2559m
     LacBlanc = dict(
         xx        = 944584.42,
         yy        = 6452410.74,
-    ),
+    ),  # 2720m
     NivometeoHuez = dict(
         xx        = 942705.64,
         yy        = 6447916.82,
     ),  # 1860m
+    RochillesNivose = dict(
+        xx        = 972852.5,
+        yy        = 6448853.87
+    ),  # 2444m
 )
 
 parser = argparse.ArgumentParser()
@@ -56,9 +60,9 @@ io.get_pro(datebegin=datebegin_RS27, dateend=dateend, xpid='RS27_pappus', vconf=
         namespace='vortex.cache.fr', filename='PRO_RS27.nc',vapp='edelweiss')
 
 xpid_map = {
-    '2021080106': 'CesarDB',
-    '2019080106': 'CesarDB_AngeH',
+    '2017080106': 'CesarDB_AngeH',
     '2018080106': 'CesarDB_AngeH',
+    '2021080106': 'CesarDB',
 }
 io.get_snow_obs_date(xpid=xpid_map[datebegin], geometry=geometry, date=dates_pleiades,
         vapp='Pleiades', filename='Pleiades_[date:ymdh].nc')

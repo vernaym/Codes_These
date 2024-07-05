@@ -27,9 +27,10 @@ datedeb = args.date_min
 datefin = args.date_max
 
 num_poste_map = dict(
-    GalibierNivose = '05079402',
-    LacBlancNivose = '38191403',
-    HuezNivometeo  = '38191002',
+    GalibierNivose    = '05079402',
+    LacBlancNivose    = '38191403',
+    RochillesNivose   = '73306401',
+    HuezNivometeo     = '38191400',
 )
 
 if isinstance(args.station, str):
@@ -37,7 +38,7 @@ if isinstance(args.station, str):
 else:
     num_poste = args.station
 
-outname = 'HTN.obs'
+outname = f'HTN_{args.station}_{datedeb}_{datefin}.obs'
 outmode = 'w'
 
 # II.1.1 construction de la question pour les postes nivo pour la HTN
@@ -46,7 +47,7 @@ outmode = 'w'
 
 # Postes NIVOSE
 question = question(
-    listvar=["to_char(dat,'YYYY-MM-DD-HH24-MI')", "to_char(h.num_poste, 'fm00000000')", "neigetot"],
+    listvar=["to_char(dat,'YYYY-MM-DD-HH24-MI')", "to_char(h.num_poste, 'fm00000000')", "neigetot", "lat_dg", "lon_dg"],
     table='H',
     listjoin=['POSTE_NIVO ON H.NUM_POSTE = POSTE_NIVO.NUM_POSTE and type_nivo != 2'],
     period=[datedeb, datefin],

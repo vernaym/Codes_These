@@ -70,10 +70,12 @@ enkf = xr.open_dataarray('PRO_EnKF36.nc')
 pf = xr.open_dataarray('PRO_PF32.nc')
 
 fig, ax = plt.subplots(figsize=(14, 4))
-ax.fill_between(rs_sorted.time, rs_sorted.min(dim='member'), rs_sorted.max(dim='member'), alpha=0.2, label='RS_sorted')
-ax.fill_between(rs.time, rs.min(dim='member'), rs.max(dim='member'), alpha=0.2, label='RS')
-ax.fill_between(enkf.time, enkf.min(dim='member'), enkf.max(dim='member'), alpha=0.2, label='EnKF')
-ax.fill_between(pf.time, pf.min(dim='member'), pf.max(dim='member'), alpha=0.2, label='PF')
+#ax.fill_between(rs_sorted.time, rs_sorted.min(dim='member'), rs_sorted.max(dim='member'), alpha=0.2, label='RS_sorted')
+for member in rs_sorted.member:
+    ax.plot(rs_sorted.time, rs_sorted.sel({'member': member}), color='red', label='RSS')
+ax.fill_between(rs.time, rs.min(dim='member'), rs.max(dim='member'), alpha=0.5, label='RS')
+ax.fill_between(enkf.time, enkf.min(dim='member'), enkf.max(dim='member'), alpha=0.5, label='EnKF')
+ax.fill_between(pf.time, pf.min(dim='member'), pf.max(dim='member'), alpha=0.5, label='PF')
 
 deb = pd.Timestamp(year=int(datebegin[0:4]), month=int(datebegin[4:6]), day=int(datebegin[6:8]), tz="UTC")
 end = pd.Timestamp(year=int(dateend[0:4]), month=int(dateend[4:6]), day=int(dateend[6:8]), tz="UTC")
