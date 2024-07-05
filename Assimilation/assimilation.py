@@ -119,7 +119,7 @@ def parse_command_line():
     parser.add_argument('-e', '--dateend', help = 'Final date of extraction (default=datebegin)')
     parser.add_argument('-d', '--domain', help='Domain of the file', choices=domain_coords.keys(), default='GrandesRousses')
     parser.add_argument('-w', '--workdir', help='Runing directory', default='/home/vernaym/workdir/ASSIMILATION')
-    parser.add_argument('-a', '--assimilation', help='Assimilation method (Particle Filter, Ensemble Kalman Filter or Random Sampling)', choices=['pf', 'enkf', 'rs'], default='enkf')
+    parser.add_argument('-a', '--assimilation', help='Assimilation method (Particle Filter, Ensemble Kalman Filter or Random Sampling)', choices=['PF', 'EnKF', 'RS'], default='EnKF')
     parser.add_argument('-m', '--mask', help='Switch observation error mask on/off', choices=[1,2,3,4,5,6,7,8,9], default=None, type=int)
     parser.add_argument('-c', '--debiasing', help='Apply bias correction to observation (0=constant bias, 1=pseudo-kriging, 2=estimation based on homogeneity,3=smoothing+scores)', default=None, type=int, choices=[0,1,2,3])
     parser.add_argument('-t', '--threshold', default=None, help='Threshold of precipitation (mm) to apply in the data to consider', type=int)
@@ -3275,7 +3275,7 @@ if __name__ == "__main__":
     # Assimilation
     # ------------
 
-    if args.assimilation == 'pf':  # 1. Particle Filter
+    if args.assimilation == 'PF':  # 1. Particle Filter
 
         #pf = ParticleFilter(extract_period, antilope, interp_ensemble, nivometeo, args.plot, args.frequency, args.gridded, args.localisation, args.mask, args.debiasing, args.domain, args.likelyhood)
         pf = ParticleFilter(extract_period, antilope, pearome, nivometeo, args.plot, args.frequency, args.gridded, args.localisation, args.mask, args.debiasing, args.domain, args.likelyhood)
@@ -3294,7 +3294,7 @@ if __name__ == "__main__":
             outname = '_'.join([outname, f'debiasing{args.debiasing}'])
         outname = f'{outname}.nc'
 
-    elif args.assimilation == 'enkf':  # 2. Ensemble Kalman Filter
+    elif args.assimilation == 'EnKF':  # 2. Ensemble Kalman Filter
 
         #enkf = EnsembleKalmanFilter(extract_period, antilope, interp_ensemble, nivometeo, args.plot, args.frequency, args.gridded, args.localisation, args.mask, args.debiasing, args.domain, args.likelyhood)
         enkf = EnsembleKalmanFilter(extract_period, antilope, pearome, nivometeo, args.plot, args.frequency, args.gridded, args.localisation, args.mask, args.debiasing, args.domain, args.likelyhood)
@@ -3306,7 +3306,7 @@ if __name__ == "__main__":
         out = enkf.output(localfields)
         outname = f"EnKF_{args.datebegin.strftime('%Y%m%d%H')}_{args.dateend.strftime('%Y%m%d%H')}_{args.frequency}_{args.domain}.nc"
 
-    elif args.assimilation == 'rs':  # Random Sampling
+    elif args.assimilation == 'RS':  # Random Sampling
 
         rs = RandomSampling(extract_period, antilope, nivometeo, args.plot, args.frequency, args.gridded, args.localisation, args.mask, args.debiasing, args.domain, args.likelyhood)
         mask = rs.pdf_parameters()
@@ -3321,8 +3321,8 @@ if __name__ == "__main__":
     out.to_netcdf(f"{outname}".encode('utf-8'))
 
     xpid = os.getcwd().split('/')[-1]  # TODO : ajouter une sécurité pour éviter d'écraser une XP existante
-    if not xpid.startswith(args.assimilation.upper()):
-        xpid = f'{args.assimilation.upper()}{xpid[-2:]}'
+    if not xpid.startswith(args.assimilation):
+        xpid = f'{args.assimilation}{xpid[-2:]}'
 
     if not args.plot:
 
