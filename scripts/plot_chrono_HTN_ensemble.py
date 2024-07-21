@@ -2,38 +2,47 @@ import os
 import xarray as xr
 import argparse
 import pandas as pd
-from snowtools.scripts.extract.vortex import vortexIO as io
+import numpy as np
+from scipy.stats import norm
+import matplotlib
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 
-coords = dict(
-    Galibier = dict(
-        xx        = 965767.64,
-        yy        = 6445415.30,
-    ),
-    LacBlanc = dict(
-        xx        = 944584.42,
-        yy        = 6452410.74,
-    ),
-    NivometeoHuez = dict(
-        xx        = 942705.64,
-        yy        = 6447916.82,
-    ),  # 1860m
+from snowtools.scripts.extract.vortex import vortexIO as io
+import snowtools.scripts.post_processing.extract_point as pp
+
+
+coords = pp.reference_points
+
+xpid_map = dict(
+    RS27_pappus              = 'RS',
+    EnKF36_pappus            = 'EnKF',
+    PF32_pappus              = 'PF',
+    RS27_sorted_pappus       = 'SRS',
+    RS27_pappus_assim        = 'RS_assim',
+    EnKF36_pappus_assim      = 'EnKF_assim',
+    PF32_pappus_assim        = 'PF_assim',
+    RS27_sorted_pappus_assim = 'SRS_assim',
+    ANTILOPE_pappus          = 'ANTILOPE',
+    SAFRAN_pappus            = 'SAFRAN',
 )
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument("datebegin", help="Start date")
-parser.add_argument("dateend", help="End date")
-parser.add_argument("point", help="Name of the point to plot", choices=coords.keys())
+parser.add_argument("-b", "--datebegin", help="Start date")
+parser.add_argument("-e", "--dateend", help="End date")
+parser.add_argument("-x", "--xpids", nargs='+', help="XPID(s) to plot")
+parser.add_argument("-p", "--point", help="Name of the point to plot", choices=coords.keys())
 args = parser.parse_args()
 
 pleiades_map = {
-    '2018': dict(dates=['2018012312', '2018031612'], geometry='Lautaret250m'),
-    '2019': dict(dates=['2019051312'], geometry='Huez250m'),
-    '2022': dict(dates=['2022022612', '2022050112'], geometry='Huez250m'),
+    '2018': dict(dates=['2018012312', '2018031612'], geometry='Lautaret250m', xpid='CesarDB_AngeH'),
+    '2019': dict(dates=['2019051312'], geometry='Huez250m', xpid='CesarDB_AngeH'),
+    '2022': dict(dates=['2022022612', '2022050112'], geometry='Huez250m', xpid='CesarDB'),
 }
 datebegin = args.datebegin
 dateend   = args.dateend
+xpids     = args.xpids
 point     = args.point
 
 xx = coords[point]['xx']
@@ -47,35 +56,33 @@ if datebegin == '2021080106':
     deb = '2021080207'
 else:
     deb = datebegin
-io.get_pro(datebegin=deb, dateend=dateend, xpid='RS27_pappus', vconf=point, geometry='SinglePoint',
-        namespace='vortex.cache.fr', filename='PRO_RS27.nc', vapp='edelweiss')
-io.get_pro(datebegin=deb, dateend=dateend, xpid='RS27_sorted_pappus', vconf=point, geometry='SinglePoint',
-        namespace='vortex.cache.fr', filename='PRO_RS27_sorted.nc', vapp='edelweiss')
-io.get_pro(datebegin=deb, dateend=dateend, xpid='EnKF36_pappus', vconf=point, geometry='SinglePoint',
-        namespace='vortex.cache.fr', filename='PRO_EnKF36.nc', vapp='edelweiss')
-io.get_pro(datebegin=deb, dateend=dateend, xpid='PF32_pappus', vconf=point, geometry='SinglePoint',
-        namespace='vortex.cache.fr', filename='PRO_PF32.nc', vapp='edelweiss')
-
-xpid_map = {
-    '2021080106': 'CesarDB',
-    '2019080106': 'CesarDB_AngeH',
-    '2018080106': 'CesarDB_AngeH',
-}
-io.get_snow_obs_date(xpid=xpid_map[datebegin], geometry=geometry, date=dates_pleiades,
-        vapp='Pleiades', filename='Pleiades_[date:ymdh].nc')
-
-rs_sorted = xr.open_dataarray('PRO_RS27_sorted.nc')
-rs = xr.open_dataarray('PRO_RS27.nc')
-enkf = xr.open_dataarray('PRO_EnKF36.nc')
-pf = xr.open_dataarray('PRO_PF32.nc')
 
 fig, ax = plt.subplots(figsize=(14, 4))
-#ax.fill_between(rs_sorted.time, rs_sorted.min(dim='member'), rs_sorted.max(dim='member'), alpha=0.2, label='RS_sorted')
-for member in rs_sorted.member:
-    ax.plot(rs_sorted.time, rs_sorted.sel({'member': member}), color='red', label='RSS')
-ax.fill_between(rs.time, rs.min(dim='member'), rs.max(dim='member'), alpha=0.5, label='RS')
-ax.fill_between(enkf.time, enkf.min(dim='member'), enkf.max(dim='member'), alpha=0.5, label='EnKF')
-ax.fill_between(pf.time, pf.min(dim='member'), pf.max(dim='member'), alpha=0.5, label='PF')
+for xpid in xpids:
+    if 'assim' in xpid:
+        vapp = 's2m'
+    else:
+        vapp = 'edelweiss'
+    io.get_pro(datebegin=deb, dateend=dateend, xpid=xpid, vconf=point, geometry='SinglePoint',
+            namespace='vortex.cache.fr', filename=f'PRO_{xpid}.nc', vapp=vapp)
+    ds = xr.open_dataarray(f'PRO_{xpid}.nc')
+
+    if 'sorted' in xpid or len(xpids) == 1:
+        for i, member in enumerate(ds.member):
+            if i == 0:
+                ax.plot(ds.time, ds.sel({'member': member}), color='blue', alpha=0.5, linestyle='-', linewidth=1,
+                        label='AS-ANTILOPE')
+            elif i == 1:
+                ax.plot(ds.time, ds.sel({'member': member}), color='blue', alpha=0.5, linestyle=':', linewidth=1,
+                        label=xpid_map[xpid])
+            else:
+                ax.plot(ds.time, ds.sel({'member': member}), color='blue', alpha=0.5, linestyle=':', linewidth=1)
+    else:
+        ax.fill_between(ds.time, ds.min(dim='member'), ds.max(dim='member'), alpha=0.5, label=xpid_map[xpid])
+
+
+io.get_snow_obs_date(xpid=pleiades_map[year]['xpid'], geometry=geometry, date=dates_pleiades,
+        vapp='Pleiades', filename='Pleiades_[date:ymdh].nc')
 
 deb = pd.Timestamp(year=int(datebegin[0:4]), month=int(datebegin[4:6]), day=int(datebegin[6:8]), tz="UTC")
 end = pd.Timestamp(year=int(dateend[0:4]), month=int(dateend[4:6]), day=int(dateend[6:8]), tz="UTC")
@@ -89,16 +96,49 @@ if os.path.exists('HTN2.obs'):
     plt.plot(obs.dat.values, obs.neigetot.values / 100, color='k')
 
 legend = True
+assim = False
 for date in dates_pleiades:
     pleiades = xr.open_dataset(f'Pleiades_{date}.nc')
-    htn = pleiades.interp({'x': xx, 'y': yy}, method='nearest').DSN_T_ISBA
-    plt.vlines(pd.to_datetime(date, format='%Y%m%d%H'), 0, 1.5, color='k', linestyle=':')
-    if legend:
-        plt.plot(pd.to_datetime(date, format='%Y%m%d%H'), htn, linestyle='', marker='.', markersize=20, color='k',
-                label='Pleiades')
+    htn = pleiades.sel({'x': xx, 'y': yy}, method='nearest').DSN_T_ISBA
+    # htn = pleiades.interp({'x': xx, 'y': yy}, method='nearest').DSN_T_ISBA
+    if date in ['2018012312', '2022022612']:
+        #plt.vlines(pd.to_datetime(date, format='%Y%m%d%H'), htn - 0.2, htn + 0.2, color='red', linestyle='-',
+        #        linewidth=2)
+        #plt.plot(pd.to_datetime(date, format='%Y%m%d%H'), htn, color='red', linestyle='', marker='_', markersize=20,
+        #        label='Pleiades (assimilated)')
+        gauss = np.random.normal(loc=htn, scale=0.2, size=10000)
+        pos = matplotlib.dates.date2num(pd.to_datetime(date, format='%Y%m%d%H'))
+        vl = plt.violinplot(gauss, showmeans=False, showmedians=True, showextrema=False, positions=[pos], widths=15,
+                side='high')
+        # Set the color of the violin patches
+        for item in vl['bodies']:
+            item.set_color('red')
+        # Set the color of the median lines
+        #for partname in ('cbars', 'cmins', 'cmaxes', 'cmedians', 'cmeans'):
+        for partname in ['cmedians']:
+            vl[partname].set_colors('red')
+        assim = True
     else:
-        plt.plot(pd.to_datetime(date, format='%Y%m%d%H'), htn, linestyle='', marker='.', markersize=20, color='k')
-    legend = False
-plt.legend()
+        # plt.vlines(pd.to_datetime(date, format='%Y%m%d%H'), 0, 1.5, color='k', linestyle=':')
+        if legend:
+            plt.plot(pd.to_datetime(date, format='%Y%m%d%H'), htn, linestyle='', marker='.', markersize=20, color='k',
+                    label='Pleiades (evaluation)')
+        else:
+            plt.plot(pd.to_datetime(date, format='%Y%m%d%H'), htn, linestyle='', marker='.', markersize=20, color='k')
+        legend = False
+
+# Get automatically generated legend
+handles, labels = plt.gca().get_legend_handles_labels()
+if assim:
+    # manually define the violinplot label
+    patch = mpatches.Patch(color='red', label='Pleiades (assimilated)')
+    # handles is a list, so append manual patch
+    handles.append(patch)
+# plot the legend
+plt.legend(handles=handles)
+
+plt.ylabel('Snow depth (m)')
+
 plt.tight_layout()
-plt.savefig('Chrono_ensemble.pdf')
+products = '_'.join(xpids)
+plt.savefig(f'Chrono_ensemble_{point}_{products}.pdf')
