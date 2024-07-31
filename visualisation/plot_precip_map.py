@@ -198,13 +198,13 @@ class PrecipitationAnalysis(object):
     def add_antilope_scatter(self, name, df=None, showscale=False, uncertainty=True, visible=True):
         # Normalisation de l'erreur entre low and high
         # Linear decrease between high and low marker size values
-        low  = 10
+        low  = 3
         high = 15
         def nan_ptp(a):
             return np.ptp(a[np.isfinite(a)])
         rr = self.df.rr.values
         error = self.df.error.values
-        self.errorsize = high - (high-low)*error/(2*rr)
+        self.errorsize = low + (high-low)*np.exp(-error/(rr+0.01))
         self.errorsize[self.errorsize<low] = low
         #error = low + (error - np.nanmin(error))/(nan_ptp(error)/high)
         #error = low + high/error
@@ -238,7 +238,8 @@ class PrecipitationAnalysis(object):
                         size  = np.nan_to_num(self.errorsize, nan=5) if uncertainty else 10,
                         #opacity=0.5,
                         #colorscale = 'YlGnBu',
-                        colorscale = 'dense',
+                        #colorscale = 'dense',
+                        colorscale = 'Jet',
                         #symbol='square',  # Impossible to change if color is defined : https://stackoverflow.com/questions/59628536/option-symbol-in-scattermapbox-is-not-working
                         #cmin = 100,
                         #cmax = 1200,
@@ -386,7 +387,7 @@ class PrecipitationAnalysis(object):
         buttons = list()
         # See https://plotly.com/python/reference/scattermapbox/ for possible colorscales
         #for colorscale in ['Dense', 'Rainbow', 'dense', 'viridis', 'Viridis', 'HSV', px.colors.sequential.dense]:
-        for colorscale in ['Blackbody','Bluered','Blues','Cividis','Earth','Electric','Greens','Greys','Hot','Jet','Picnic','Portland','Rainbow','RdBu','Reds','Viridis','YlGnBu','YlOrRd']:
+        for colorscale in ['Blackbody','Bluered','Blues','Cividis','dense','Earth','Electric','Greens','Greys','Hot','Jet','Picnic','Portland','Rainbow','RdBu','Reds','Viridis','YlGnBu','YlOrRd']:
             buttons.append(
                     dict(
                         # See https://stackoverflow.com/questions/73435977/change-colorscale-of-marker-with-update-menu-without-repeating-data
