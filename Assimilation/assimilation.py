@@ -74,10 +74,12 @@ domain_coords = dict(
         Vercors        = dict(lonmin=5.4, lonmax=6, latmin=44.75, latmax=45.4),
         AlpesSud       = dict(lonmin=6.56, lonmax=6.92, latmin=44.18, latmax=44.49),
         alp            = dict(latmax=46.450, latmin=44.100, lonmin=5.400, lonmax=7.200),
+        tmp            = dict(latmax=45.30, latmin=45.25, lonmin=6.68, lonmax=6.72),
 )
 
 figsize = dict(
         alp            = dict(singleplot=(14,16), ensembleplot=(32,20)),
+        tmp            = dict(singleplot=(14,14), ensembleplot=(32,20)),
         GrandesRousses = dict(singleplot=(15,7), ensembleplot=(16,7)),
         HauteSavoie    = dict(singleplot=(12,12), ensembleplot=(12,12)),
         MontBlanc      = dict(singleplot=(15,10), ensembleplot=(16,10)),
@@ -540,7 +542,7 @@ def read_obs(args):
         if args.domain == 'GrandesRousses':
             filename = 'ANTILOPED_2021080106_2022080106_GrandesRousses.nc'
         else:
-            filename = f'ANTILOPEQ_2021102900_2022060200_alp.nc'
+            filename = 'ANTILOPEQ_2021102900_2022060200_alp.nc'
         if not os.path.exists(filename):
             print(f'WARNING : file {filename} does not exist, looking for it under {datadir}')
             filename = os.path.join(datadir, filename)
@@ -1301,7 +1303,8 @@ class Assimilation(object):
             uncertainty = std + parameters.error.data
         else:
             uncertainty = std
-        pond = self.pond.dot(diags(1/uncertainty.flatten(), 0))  # WARNING : error NOT >1 par construction
+        pond = self.pond.dot(diags((1-uncertainty).flatten(), 0))  # WARNING : error NOT >1 par construction
+        #pond = self.pond.dot(diags(1/uncertainty.flatten(), 0))  # WARNING : error NOT >1 par construction
         #pond = self.pond.dot(diags(1/(std.flatten()*(1+parameters.error.data.flatten())), 0))  # WARNING : error NOT >1 par construction
         #pond = self.pond.dot(diags(np.exp(-parameters.error.data).flatten(), 0))  # WARNING : error NOT >1 par construction
         #pond = self.pond.dot(diags(1/parameters.error.data.flatten(), 0))
