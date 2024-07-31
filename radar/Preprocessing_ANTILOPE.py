@@ -112,7 +112,6 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
     #newfield = mean
     newfield = np.round(newfield, 1)
     #newfield = (initial_field * pixel_weight + mean * meanweight/(meanweight+pixel_weight)) / (pixel_weight + meanweight/(meanweight+pixel_weight))
-    #newfield = np.round(newfield, 1)
 
 #    if gradient is not None:
 #        # TODO : apply AROME vertical gradient only for pixels with large uncertainties to avoid to introduce underestimaiton in valleys
