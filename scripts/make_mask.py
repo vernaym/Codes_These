@@ -91,7 +91,7 @@ onlypostes = [73306403]
 
 blacklist = [1373001, 1189001]
 
-d0 = 0.1  # Portée horizontale
+d0 = 0.2  # Portée horizontale
 #h0 = 2000  # Portée altitudinale
 h0 = None
 c0 = 2
@@ -816,7 +816,7 @@ def ratio_estimation(field, model=None, moving_window=25):
     for i,poste in enumerate(scores.index):
     #for i,poste in enumerate(reversed(scores.index)):
         ratio = scores.loc[poste, 'ratio']
-        if poste in onlypostes and ratio > 0.1 and ratio < 1.9:
+        if poste in onlypostes and ratio > 0.9 and ratio < 1.1:
         #if poste not in blacklist:
             used_scores.append(poste)
             #print(scores.loc[poste])
@@ -863,16 +863,16 @@ def ratio_estimation(field, model=None, moving_window=25):
             else:
                 #w = 1/(0.1+dist)**2
                 #w = 1/(0.01+dist)**2
-                w = 1 - dist / d0
+                #w = 1 - dist / d0
+                #w[w<0] = 0
                 #dist[dist==0] = 0.001
                 #w = 1 / dist
                 #w = d0 / (d0 + dist)
                 #w = 1/(0.01+dist)**2  # XP25
-                #w[w<0] = 0
                 #w = np.round(1/(1+dist)**2, 3)
                 #w = np.round(np.exp(-(dist/d0)), 3)  # Propagates reference score further
                 #w = np.round(np.exp(-(dist**2/d0)), 3)
-                #w = np.round(np.exp(-(dist/d0)**2), 3)  # Sticks more to the reference
+                w = np.round(np.exp(-(dist/d0)**2), 3)  # Sticks more to the reference
 
             weights.append(w)
             # To take into account the increasing difference of cumuls with the distance
@@ -921,14 +921,14 @@ def ratio_estimation(field, model=None, moving_window=25):
     #W = np.mean(weights, axis=0)  # =1 if enough info else <1
     Wm = np.mean(weights, axis=0)
     tmp = to_xarray(Wm, field, varname='mean_weight')
-    plot_and_save(tmp, "mean_weight", cmap=plt.cm.viridis, vmin=0, vmax=10)
+    plot_and_save(tmp, "mean_weight", cmap=plt.cm.viridis, vmin=0)
     Wd = np.sqrt(np.mean((weights-Wm)**2, axis=0))
     tmp = to_xarray(Wd, field, varname='weight_spread')
-    plot_and_save(tmp, "weight_spread", cmap=plt.cm.viridis, vmin=0, vmax=100)
+    plot_and_save(tmp, "weight_spread", cmap=plt.cm.viridis, vmin=0)
 
     W[np.isnan(W)] = 0
     tmp = to_xarray(W, field, varname='mean_ratio')
-    plot_and_save(tmp, "Total_weight", cmap=plt.cm.viridis, vmin=0., vmax=1000)
+    plot_and_save(tmp, "Total_weight", cmap=plt.cm.viridis, vmin=0., vmax=2)
     mean_ratio = np.divide(np.sum(weights*ratios, axis=0), W)
 
     #mean_ratio = mean_ratio / ratio_arome.data  # TODO : TMP !!!!
@@ -938,7 +938,7 @@ def ratio_estimation(field, model=None, moving_window=25):
     #mean_ratio = np.sum(weights*ratios, axis=0)/W
     #mean_ratio[W==0] = np.nan
     tmp = to_xarray(mean_ratio, field, varname='mean_ratio')
-    plot_and_save(tmp, "Mean_ratio", cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=0, vmax=2, scores=scores)
+    plot_and_save(tmp, "Mean_ratio", cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=0.6, vmax=1.4, scores=scores)
     D = np.sqrt(np.sum(weights*(ratios-mean_ratio)**2, axis=0)/W)
     D[W==0] = 0
     #D = np.sum(weights*(ratios-mean_ratio)**2, axis=0)/W
@@ -962,7 +962,7 @@ def ratio_estimation(field, model=None, moving_window=25):
     K[W==0] = 0
     # Plot
     tmp = to_xarray(K, field, varname='K')
-    plot_and_save(tmp, "K", cmap=plt.cm.viridis, vmin=1)
+    #plot_and_save(tmp, "K", cmap=plt.cm.viridis, vmin=1)
     w1 = np.exp(-1/K)
     #w1 = K / (1 + K)  # normalisation
     #w1[np.isnan(w1)] = 0
@@ -982,7 +982,7 @@ def ratio_estimation(field, model=None, moving_window=25):
     #w1[D==0] = 1
     #w1 = w1 / (np.nanmax(w1)-np.nanmin(w1))
     tmp = to_xarray(w1, field, varname='w1')
-    plot_and_save(tmp, "Relative_weight", cmap=plt.cm.viridis)
+    #plot_and_save(tmp, "Relative_weight", cmap=plt.cm.viridis)
     #w1 = w1/(1+w1)
     #w0 = N/W  # = 1/np.mean(W)
     #w1 = w1/(w0+w1)
@@ -998,7 +998,7 @@ def ratio_estimation(field, model=None, moving_window=25):
     ############################################################
 
     tmp = to_xarray(1/D, field, varname='D')
-    plot_and_save(tmp, "1_over_D", cmap=plt.cm.viridis)
+    #plot_and_save(tmp, "1_over_D", cmap=plt.cm.viridis)
 #    tmp = to_xarray(W/D, field, varname='w1')
 #    plot_and_save(tmp, "W_over_D", cmap=plt.cm.viridis)
 #    tmp = to_xarray(D/W, field, varname='w1')
@@ -1010,6 +1010,12 @@ def ratio_estimation(field, model=None, moving_window=25):
     #w0 = (1+D) / relativeweight  # Ensures that estimated ratio for pixels with no information around stay near 1
     #w0[W==0] = 1  # Ensures that estimated ratio for pixels with no information around stay 1
     #w0[np.isnan(w1)] = 1
+
+    #w1 = np.exp(-(10*D+1/W))
+    #w1 = np.exp(-(5*D+/(2*W)))
+    #w1 = np.exp(-(5*D+1/(10*W)))
+    w1 = np.exp(-(5*D))
+    w0 = 1 - w1
 
     tmp = to_xarray(w0/(w0+w1), field, varname='W0')
     plot_and_save(tmp, "W0", cmap=plt.cm.viridis, vmin=0, vmax=1)
@@ -1099,12 +1105,18 @@ def ratio_estimation(field, model=None, moving_window=25):
     #uncertainty = observation_error
     #uncertainty = observation_error * (1 + np.abs(estimated_ratio-1) + D)
     #uncertainty = (1+w1) * observation_error + (1+D) * (np.abs(mean_ratio - 1))
-    uncertainty = (1+w1) * observation_error + (1+D) * mean_error
+    #uncertainty = (1+w1) * observation_error + (1+D) * mean_error
+    uncertainty = 6 * (1 - ratio_field)**2
+    from scipy.special import gammaincc
+    #uncertainty = gammaincc(10*np.abs(1-ratio_field), 3)
+    #uncertainty = gammaincc(20*np.abs(1-ratio_field), 4)  # OK avec 5*D pour l'estimation du ratio
+    uncertainty = gammaincc(10*np.abs(1-ratio_field), 2)
 
     #uncertainty = (1+w1) * observation_error + (1+D) * (np.abs(mean_ratio - 1) + np.exp(-np.abs(mean_ratio - 1)))
     #uncertainty = 1 + observation_error*w1+D/W
     #uncertainty = 1 + w1*observation_error/(1+w1)
-    uncertainty.data[np.isnan(field.rr_cumul.data)] = np.nanmax(uncertainty.data)
+    #uncertainty.data[np.isnan(field.rr_cumul.data)] = np.nanmax(uncertainty.data)
+    uncertainty.data[np.isnan(field.rr_cumul.data)] = 0
     #uncertainty.data = uniform_filter(uncertainty.data, size=3)
     uncertainty = uncertainty.rename('Uncertainty')
     confidence = uncertainty.copy()
@@ -1126,7 +1138,8 @@ def ratio_estimation(field, model=None, moving_window=25):
     #if domain == 'alp':
     # From https://qiita.com/tsukada_cs/items/d282f27f4024d00d7022 :
     #plot_and_save(ratio_field, rationame, vmin=0.2, vmax=1.8, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, scores=scores)  # Albane's choice !
-    plot_and_save(ratio_field, rationame, vmin=0.6, vmax=1.4, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, scores=scores, elevation=True, coords=True)  # Albane's choice !
+    #plot_and_save(ratio_field, rationame, vmin=0.4, vmax=1.6, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, scores=scores, elevation=True, coords=True)  # Albane's choice !
+    plot_and_save(ratio_field, rationame, vmin=0.6, vmax=1.4, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, elevation=True)
     #plot_and_save(ratio_field, rationame + '_free_scale', vmin=0, vmax=2, cmap=plt.cm.coolwarm, scores=scores)
     #plot_and_save(np.abs(observation_error), errorname, vmin=0, vmax=12, cmap=plt.cm.viridis, scores=scores)
     #plot_and_save(np.abs(observation_error), errorname, vmin=0, vmax=15, cmap=plt.cm.Reds, scores=scores)
@@ -1134,7 +1147,8 @@ def ratio_estimation(field, model=None, moving_window=25):
     #plot_and_save(observation_error, errorname, vmin=1, vmax=15, cmap=plt.cm.YlOrBr, scores=scores)
     plot_and_save(confidence, confidencename, vmin=0, cmap=plt.cm.Greens)
     #plot_and_save(uncertainty, uncertaintyname, vmin=1, vmax=40, cmap=plt.cm.YlOrBr, scores=scores)
-    plot_and_save(uncertainty, uncertaintyname, vmin=1, vmax=40, cmap=plt.cm.YlOrBr, elevation=True, coords=True)
+    #plot_and_save(uncertainty, uncertaintyname, vmin=1, vmax=40, cmap=plt.cm.YlOrBr, elevation=True, coords=True)
+    plot_and_save(uncertainty, uncertaintyname, vmin=0, vmax=1, cmap=plt.cm.YlOrBr, elevation=True)
 #    elif domain == 'GrandesRousses':
 #        plot_and_save(ratio_field, rationame, vmin=0.6, vmax=1.4, cmap=plt.cm.coolwarm, scores=scores)
 #        #plot_and_save(observation_error, errorname, vmin=-6, vmax=6, cmap=plt.cm.coolwarm, scores=scores)
@@ -1316,14 +1330,14 @@ if __name__ == "__main__":
         fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_{domain}_obs_auto.csv')
         ratio_estimation(antilope, model=model)
         # Estimation with automatic stations observations only
-        savedir = os.path.join(rootdir, 'sans_arome')
-        ratio_estimation(antilope)
+        #savedir = os.path.join(rootdir, 'sans_arome')
+        #ratio_estimation(antilope)
         # Estimation with nivometeo observations and AROME
-        savedir = os.path.join(rootdir, 'nivometeo')
-        fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_alp.csv')
-        ratio_estimation(antilope, model=model)
-        savedir = os.path.join(rootdir, 'nivometeo', 'sans_arome')
-        ratio_estimation(antilope)
+        #savedir = os.path.join(rootdir, 'nivometeo')
+        #fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_alp.csv')
+        #ratio_estimation(antilope, model=model)
+        #savedir = os.path.join(rootdir, 'nivometeo', 'sans_arome')
+        #ratio_estimation(antilope)
 
 #    ratio_estimation(antilope)
 #    KalmanFilter(antilope)
