@@ -112,13 +112,13 @@ function remplissageSelectDate(){
     if(i==0){
 	def=true;
 	}
+    today.setDate(today.getDate()-1);
     var year=(today.getFullYear()).toString();
     var month=addZero(today.getMonth()+1,2);
     var day=addZero(today.getDate(),2);
     var value=year+month+day
     var desc=day+"/"+month+"/"+year;
     tabDate.push({"value":value,"desc":desc,"def":def});
-    today.setDate(today.getDate()-1);
   }  
 
   //On remplit le select de date
