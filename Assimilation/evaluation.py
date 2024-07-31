@@ -282,8 +282,9 @@ algo = dict(
         ################################################################################################
         # Paper1 :
         RS27          = 'RandomSampling/XP27/Random_Sampling_2021120106_2022043006_daily_alp.nc',
-        PF32          = 'XP32/Assimilation_locale_2021120106_2022050106_daily_alp_mask9_debiasing3.nc',
-        KD36          = 'EnsembleKalmanFilter/XP36/EnKF_2021120106_2022050106_daily_alp.nc',
+        #PF32          = 'XP32/Assimilation_locale_2021120106_2022050106_daily_alp_mask9_debiasing3.nc',
+        #KD36          = 'EnsembleKalmanFilter/XP36/EnKF_2021120106_2022050106_daily_alp.nc',
+        RS28          = 'RandomSampling/XP28/Random_Sampling_2021120106_2022043006_daily_alp.nc',
         ################################################################################################
     )
 
@@ -427,6 +428,7 @@ xpid_label = dict(
         RS24          = 'RS24',
         RS25          = 'RS25',
         RS26          = 'RS26',
+        RS28          = 'RS_new',
         RS27          = 'RS',  # paper1
         PF32          = 'PF',  # paper1
         KD36          = 'EnKF',  # paper1
@@ -442,6 +444,7 @@ colors = dict(
     RS24      = 'maroon',
     RS25      = 'green',
     RS27      = 'darkblue',
+    RS28      = 'green',
     RS26      = 'green',
     #PF31      = 'green',
     PF31      = 'green',
@@ -1221,11 +1224,13 @@ class Evaluation(object):
                 i = 0
                 j = 0
                 title = 'a'
-            elif product.startswith('RS'):
+            #elif product.startswith('RS'):
+            elif product == 'RS27':
                 i = 0
                 j = 1
                 title = 'b'
-            elif product.startswith('PF'):
+            #elif product.startswith('PF'):
+            elif product == 'RS28':
                 i = 1
                 j = 0
                 title= 'c'
