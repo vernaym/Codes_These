@@ -1106,11 +1106,13 @@ def ratio_estimation(field, model=None, moving_window=25):
     #uncertainty = observation_error * (1 + np.abs(estimated_ratio-1) + D)
     #uncertainty = (1+w1) * observation_error + (1+D) * (np.abs(mean_ratio - 1))
     #uncertainty = (1+w1) * observation_error + (1+D) * mean_error
-    uncertainty = 6 * (1 - ratio_field)**2
-    from scipy.special import gammaincc
+    #uncertainty = 6 * (1 - ratio_field)**2
+    #from scipy.special import gammaincc
     #uncertainty = gammaincc(10*np.abs(1-ratio_field), 3)
     #uncertainty = gammaincc(20*np.abs(1-ratio_field), 4)  # OK avec 5*D pour l'estimation du ratio
-    uncertainty = gammaincc(10*np.abs(1-ratio_field), 2)
+    #uncertainty = gammaincc(10*np.abs(1-ratio_field), 2)
+
+    uncertainty = 1 - np.exp(-10 * (1 - ratio_field)**2)
 
     #uncertainty = (1+w1) * observation_error + (1+D) * (np.abs(mean_ratio - 1) + np.exp(-np.abs(mean_ratio - 1)))
     #uncertainty = 1 + observation_error*w1+D/W

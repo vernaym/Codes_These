@@ -284,7 +284,8 @@ algo = dict(
         RS27          = 'RandomSampling/XP27/Random_Sampling_2021120106_2022043006_daily_alp.nc',
         #PF32          = 'XP32/Assimilation_locale_2021120106_2022050106_daily_alp_mask9_debiasing3.nc',
         #KD36          = 'EnsembleKalmanFilter/XP36/EnKF_2021120106_2022050106_daily_alp.nc',
-        RS28          = 'RandomSampling/XP28/Random_Sampling_2021120106_2022043006_daily_alp.nc',
+        #RS28          = 'RandomSampling/XP28/Random_Sampling_2021120106_2022043006_daily_alp.nc',
+        RS29          = 'RandomSampling/XP29/Random_Sampling_2021120106_2022043006_daily_alp.nc',
         ################################################################################################
     )
 
@@ -428,7 +429,8 @@ xpid_label = dict(
         RS24          = 'RS24',
         RS25          = 'RS25',
         RS26          = 'RS26',
-        RS28          = 'RS_new',
+        RS28          = 'RS28',
+        RS29          = 'RS29',
         RS27          = 'RS',  # paper1
         PF32          = 'PF',  # paper1
         KD36          = 'EnKF',  # paper1
@@ -445,6 +447,7 @@ colors = dict(
     RS25      = 'green',
     RS27      = 'darkblue',
     RS28      = 'green',
+    RS29      = 'green',
     RS26      = 'green',
     #PF31      = 'green',
     PF31      = 'green',
@@ -1019,7 +1022,7 @@ class Evaluation(object):
             #if xpid.startswith('RS'):
             #if xpid == 'RS12':
             #if xpid == 'RS25':
-            if xpid == 'RS28':
+            if xpid == 'RS29':
                 antilopec = tmp.loc[{'member':0}]
                 antilopec = antilopec.loc[{'time':dates}]
                 antc = True

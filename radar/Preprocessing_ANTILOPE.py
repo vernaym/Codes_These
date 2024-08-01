@@ -98,6 +98,9 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
     mean = pond.dot(X).sum(axis=1).A1  # getA1 transforms the 1*N matrix object into a 1D np.array
     mean = mean / weight
 
+    #maxweight = pond.argmax(axis=1).A1
+    #maxval    = np.array([initial_field[idx] for idx in maxweight])
+
     sd1 = get_std(X, initial_field, pond, weight=weight, super_ensemble=super_ensemble)  # 1. Dispersion of the super ensemble around the initial field --> More dispersion on high error pixels (--> spatial structures)
     sd2 = get_std(X, mean, pond, weight=weight, super_ensemble=super_ensemble)  # 2. Dispersion of the super ensemble around the mean --> Smoother fields
 
@@ -108,7 +111,8 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
     #newfield = (initial_field * pixel_weight + mean * meanweight) / (pixel_weight + meanweight)  # Stay closer to the original value (spatial structures can still be visible)
     #newfield = (initial_field * pixel_weight + mean * meanweight/pixel_weight) / (pixel_weight + meanweight/pixel_weight)  # Smoother fields --> underestimation of extreme values
     #newfield = (initial_field * pixel_weight + mean * weight/pixel_weight) / (pixel_weight + weight/pixel_weight)  # Smoother fields --> underestimation of extreme values
-    newfield = (initial_field * pixel_weight + mean * (1-pixel_weight))
+    newfield = (initial_field * pixel_weight + mean * (1 - pixel_weight))
+    #newfield = (initial_field * pixel_weight + maxval * (1 - pixel_weight))
     #newfield = mean
     newfield = np.round(newfield, 1)
     #newfield = (initial_field * pixel_weight + mean * meanweight/(meanweight+pixel_weight)) / (pixel_weight + meanweight/(meanweight+pixel_weight))
@@ -399,7 +403,7 @@ def codistances(coords, domain='alp', ld=0.1, Zdist=False):  # TMP for illustrat
     tree = cKDTree(coords)
     dist = tree.sparse_distance_matrix(tree, max_distance=max_dist, p=2, output_type='coo_matrix')
     dist = csr_matrix(dist)
-    d0 = 0.05
+    d0 = 0.1
     #dist.data = d0 / (d0+dist.data)  # IDW
     #dist.data=1/(1+dist.data)  # IDW
     #dist.data = 1 - dist.data/d0  # Pondération de Franke-Little
@@ -411,7 +415,8 @@ def codistances(coords, domain='alp', ld=0.1, Zdist=False):  # TMP for illustrat
     #dist.data=1/(0.5+dist.data)**2  # IDW
     #dist[dist.nonzero()] = dist[dist.nonzero()]/ld
     #np.exp(-dist.data, out=dist.data )
-    np.exp(-(dist.data / d0), out=dist.data)
+    #np.exp(-(dist.data / d0), out=dist.data)
+    np.exp(-(dist.data / d0)**2, out=dist.data)
     #np.exp(1/(1+dist.data), out=dist.data )
 
     # 2. Elevation inter-distance
