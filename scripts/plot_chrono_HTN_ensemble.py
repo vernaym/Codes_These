@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 
 from snowtools.scripts.extract.vortex import vortexIO as io
+import snowtools.tools.xarray_preprocess as xrp
 import snowtools.scripts.post_processing.extract_point as pp
 
 
@@ -23,6 +24,7 @@ xpid_map = dict(
     EnKF36_pappus_assim      = 'EnKF_assim',
     PF32_pappus_assim        = 'PF_assim',
     RS27_sorted_pappus_assim = 'SRS_assim',
+    RS27_spa_erroOBS_025     = 'SRS_err025',
     ANTILOPE_pappus          = 'ANTILOPE',
     SAFRAN_pappus            = 'SAFRAN',
 )
@@ -38,7 +40,7 @@ args = parser.parse_args()
 pleiades_map = {
     '2018': dict(dates=['2018012312', '2018031612'], geometry='Lautaret250m', xpid='CesarDB_AngeH'),
     '2019': dict(dates=['2019051312'], geometry='Huez250m', xpid='CesarDB_AngeH'),
-    '2022': dict(dates=['2022022612', '2022050112'], geometry='Huez250m', xpid='CesarDB'),
+    '2022': dict(dates=['2022022612', '2022050112'], geometry='GrandesRousses250m', xpid='CesarDB'),
 }
 datebegin = args.datebegin
 dateend   = args.dateend
@@ -59,7 +61,7 @@ else:
 
 fig, ax = plt.subplots(figsize=(14, 4))
 for xpid in xpids:
-    if 'assim' in xpid:
+    if 'assim' in xpid or xpid == 'RS27_spa_erroOBS_025':
         vapp = 's2m'
     else:
         vapp = 'edelweiss'
@@ -99,7 +101,8 @@ legend = True
 assim = False
 for date in dates_pleiades:
     pleiades = xr.open_dataset(f'Pleiades_{date}.nc')
-    htn = pleiades.sel({'x': xx, 'y': yy}, method='nearest').DSN_T_ISBA
+    pleiades = xrp.preprocess(pleiades, mapping={'DSN_T_ISBA': 'HTN', 'DEP': 'HTN'})
+    htn = pleiades.sel({'xx': xx, 'yy': yy}, method='nearest').HTN
     # htn = pleiades.interp({'x': xx, 'y': yy}, method='nearest').DSN_T_ISBA
     if date in ['2018012312', '2022022612']:
         #plt.vlines(pd.to_datetime(date, format='%Y%m%d%H'), htn - 0.2, htn + 0.2, color='red', linestyle='-',
