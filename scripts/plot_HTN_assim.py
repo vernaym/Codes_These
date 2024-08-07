@@ -67,14 +67,17 @@ def parse_command_line():
                         help="Date of the reference Pleiade observation."
                              "Format YYYYMMDDHH")
 
-    parser.add_argument('-x', '--xpids', nargs='+', type=str,
-                        help="XPID(s) of the simulation(s) format XP_NAME@username")
+    parser.add_argument('-x', '--xpid', type=str,
+                        help="XPID of the simulation without assimilation format XP_NAME@username")
 
-    parser.add_argument('-a', '--vapp', type=str, default='edelweiss', choices=['s2m', 'edelweiss'],
+    parser.add_argument('-a', '--xpid_assim', type=str, default=None,
+                        help="XPID of the simulation with assimilation format XP_NAME@username")
+
+    parser.add_argument('-v', '--vapp', type=str, default='edelweiss', choices=['s2m', 'edelweiss'],
                         help="Application that produced the target file")
 
-    parser.add_argument('-u', '--uenv', type=str, default="uenv:edelweiss.2@vernaym",
-                        help="User environment for static resources (format 'uenv:name@user')")
+#    parser.add_argument('-u', '--uenv', type=str, default="uenv:edelweiss.2@vernaym",
+#                        help="User environment for static resources (format 'uenv:name@user')")
 
     parser.add_argument('-w', '--workdir', type=str, default=f'{os.environ["HOME"]}/workdir/EDELWEISS/plot/HTN',
                         help='Working directory')
@@ -96,6 +99,21 @@ def parse_command_line():
 
 
 def execute():
+
+    args = parse_command_line()
+    datebegin       = args.datebegin
+    dateend         = args.dateend
+    date            = args.date
+    xpid            = args.xpid
+    xpid_assim      = args.xpid_assim
+    geometry        = args.geometry
+    subdomain       = args.subdomain
+    vapp            = args.vapp
+    if args.obs_geometry is None:
+        obs_geometry = geometry
+    else:
+        obs_geometry    = args.obs_geometry
+    members         = args.members
 
     # 1. Get all input data
 
@@ -122,55 +140,55 @@ def execute():
     mnt = xrp.preprocess(mnt, decode_time=False)
     mnt = mnt['ZS']
 
-    for xpid in xpids:
-        # TODO : gérer ça plus proprement
-        if '@' not in xpid:
-            user = os.environ["USER"]
-            xpid = f'{xpid}@{user}'
-        shortid = xpid.split('@')[0]
+    # TODO : gérer ça plus proprement
+    if '@' not in xpid:
+        user = os.environ["USER"]
+        xpid = f'{xpid}@{user}'
+    shortid = xpid.split('@')[0]
 
-        # Get (filtered) PRO files with Vortex
-        if members:
-            member = members_map[shortid]
+    # Get (filtered) PRO files with Vortex
+    if members:
+        member = members_map[shortid]
+    else:
+        if shortid in ['safran', 'ANTILOPE', 'safran_pappus', 'ANTILOPE_pappus', 'SAFRAN', 'SAFRAN_pappus']:
+            member = None
         else:
-            if shortid in ['safran', 'ANTILOPE', 'safran_pappus', 'ANTILOPE_pappus', 'SAFRAN', 'SAFRAN_pappus']:
-                member = None
-            else:
-                member = [members_map[shortid][0]]
+            member = [members_map[shortid][0]]
 
-        # VERRUE pour gérer le décallage d'un jour en attendant de combler les données
-        if (shortid.startswith('SAFRAN') or shortid.startswith('ANTILOPE')) and datebegin == '2021080207':
-            deb = '2021080106'
-        else:
-            deb = datebegin  # 2021080207
+    # VERRUE pour gérer le décallage d'un jour en attendant de combler les données
+    if (shortid.startswith('SAFRAN') or shortid.startswith('ANTILOPE')) and datebegin == '2021080207':
+        deb = '2021080106'
+    else:
+        deb = datebegin  # 2021080207
 
-        # Get simulation without assimilation
-        kw = dict(datebegin=deb, dateend=dateend, vapp=vapp, member=member, namebuild=None,
-                filename=f'PRO_{shortid}.nc', xpid=xpid, geometry=geometry)
-        io.get_pro(**kw)
+    # Get simulation without assimilation
+    kw = dict(datebegin=deb, dateend=dateend, vapp=vapp, member=member, namebuild=None,
+            filename=f'PRO_{shortid}.nc', xpid=xpid, geometry=geometry)
+    io.get_pro(**kw)
 
-        # Get simulation without assimilation
-        xpid_assim = f'{shortid}_assim@{user}'
-        member_assim = members_map[f'{shortid}_assim']
-        io.get_pro(
-            datebegin   = deb,
-            dateend     = dateend,
-            vapp        = vapp,
-            member      = member_assim,
-            namebuild   = None,
-            filename    = f'PRO_{shortid}_assim.nc',
-            xpid        = xpid_assim,
-            geometry    = geometry,
-        )
+    # Get simulation without assimilation
+    if xpid_assim is None:
+        xpid_assim = f'{shortid}_assim'
+    member_assim = members_map[xpid_assim]
+    io.get_pro(
+        datebegin   = deb,
+        dateend     = dateend,
+        vapp        = vapp,
+        member      = member_assim,
+        namebuild   = None,
+        filename    = f'PRO_{xpid_assim}.nc',
+        xpid        = xpid_assim,
+        geometry    = geometry,
+    )
 
-        # Read data
-        openloop = read_simu(xpid, member, date)
-        assim = read_simu(xpid_assim, member_assim, date)
+    # Read data
+    openloop = read_simu(xpid, member, date)
+    assim = read_simu(xpid_assim, member_assim, date)
 
-        plot_htn(openloop, obs, assim, shortid, date, dem=mnt)
+    plot_htn(openloop, obs, assim, shortid, xpid_assim, date, subdomain, dem=mnt)
 
-        clean(shortid, member)
-        clean(f'{shortid}_assim', member_assim)
+    clean(shortid, member)
+    clean(xpid_assim, member_assim)
 
 
 def read_simu(xpid, members, date):
@@ -229,8 +247,8 @@ def read_simu(xpid, members, date):
     return simu
 
 
-def plot_htn(openloop, obs, assim, xpid, date, dem=None):
-    savename = f'HTN_{xpid}_{date}.pdf'
+def plot_htn(openloop, obs, assim, xpid, xpid_assim, date, subdomain, dem=None):
+    savename = f'HTN_{xpid}_{xpid_assim}_{date}.pdf'
 
     lonmin = subdomain_map[subdomain]['lonmin']
     lonmax = subdomain_map[subdomain]['lonmax']
@@ -244,26 +262,27 @@ def plot_htn(openloop, obs, assim, xpid, date, dem=None):
 
     # obshtn = var_obshtn[date]
     vmin = 0
-    vmax = max(openloop.DSN_T_ISBA.max(), obs.max(), assim.DSN_T_ISBA.max())
+    # Round max to nearest 0.5m
+    vmax = round(float(max(openloop.DSN_T_ISBA.max(), obs.max(), assim.DSN_T_ISBA.max())) * 2) / 2
 
     fig, ax = plt.subplots(1, 3, figsize=(36 * len(obs.xx) / len(obs.yy), 10), sharey=True)
 
     olp = openloop.DSN_T_ISBA.mean(dim='member')
     print('plot openloop')
     plot2D.plot_field(olp, ax=ax[0], vmin=vmin, vmax=vmax, cmap=plt.cm.Blues, dem=dem, shade=False,
-            isolevels=thresholds)
+            isolevels=thresholds, slices=6)
     ax[0].set_title('Openloop mean snow depth (m)')
 
     print('plot observation')
     plot2D.plot_field(obs, ax=ax[1], vmin=vmin, vmax=vmax, cmap=plt.cm.Blues, dem=dem, shade=False,
-            isolevels=thresholds)
+            isolevels=thresholds, slices=6)
     #        shade=True,)
     ax[1].set_title('Observed snow depth (m)')
 
     print('plot assimilation')
     ass = assim.DSN_T_ISBA.mean(dim='member')
     plot2D.plot_field(ass, ax=ax[2], cmap=plt.cm.Blues, dem=dem, shade=False, vmin=vmin, vmax=vmax,
-            isolevels=thresholds)
+            isolevels=thresholds, slices=6)
     ax[2].set_title('Assimilation mean snow depth (m)')
 
     plot2D.save_fig(savename, fig)
@@ -290,26 +309,7 @@ def execution_info(workdir):
 if __name__ == '__main__':
 
     args = parse_command_line()
-    datebegin       = args.datebegin
-    dateend         = args.dateend
-    date            = args.date
-    xpids           = args.xpids
     workdir         = args.workdir
-    geometry        = args.geometry
-    subdomain       = args.subdomain
-    vapp            = args.vapp
-    uenv            = args.uenv
-    if args.obs_geometry is None:
-        obs_geometry = geometry
-    else:
-        obs_geometry    = args.obs_geometry
-    members         = args.members
-
-#    if ':' in args.members:
-#        first_mb, last_mb = args.members.split(':')
-#        members         = [mb for mb in range(int(first_mb), int(last_mb) + 1)]
-#    else:
-#        members = None
 
     if not os.path.exists(workdir):
         os.makedirs(workdir)
