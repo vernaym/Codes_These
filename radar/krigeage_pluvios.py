@@ -15,6 +15,8 @@ from snowtools.plots.maps import cartopy
 
 from pykrige.uk import UniversalKriging
 
+import snowtools.scripts.extract.vortex.vortexIO as io
+
 variogram  = 'exponential'  # The same as for ANTILOPE without RADAR data
 
 # Liste des coordonnées attendues par la commande dap3: lat_max, lat_min, lon_max, lon_min
@@ -102,7 +104,7 @@ def read_ref_coords(domain):
 if __name__ == "__main__":
     args = parse_command_line()
 
-    extract_period = date_range(args.datebegin, args.dateend)
+    extract_period = date_range(args.datebegin, args.dateend, dt=1)
 
     if args.data == 'nivometeo':
         reference = read_ref_coords(domain)
@@ -201,13 +203,27 @@ if __name__ == "__main__":
                     }, ignore_index=True)
             out.data[:, :, idx] = rr24.data
 
+    datebegin = args.datebegin.strftime('%Y%m%d%H')
+    dateend   = args.dateend.strftime('%Y%m%d%H')
+
     if args.data == 'all':
         outname = f"CUMUL_krigeage_{args.datebegin.strftime('%Y%m%d%H')}_{args.dateend.strftime('%Y%m%d%H')}.nc"
         cumul.to_netcdf(outname, mode='w')
     else:
-        out.to_netcdf(f"KRIGING_{args.datebegin.strftime('%Y%m%d%H')}_{args.dateend.strftime('%Y%m%d%H')}.nc")
+        outname = f"KRIGING_{datebegin}_{dateend}.nc"
+        out.to_netcdf(outname)
         if reference is not None:
             outkrig.set_index('date')
             outname = 'Kriging_{0:s}_{1:s}_{2:s}.csv'.format(args.data, args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'))
             outkrig.to_csv(outname, index=False, sep=';')
 
+    io.put_meteo(
+      kind         = 'Precipitation',
+      geometry     = 'GrandesRousses1km',
+      xpid         = 'Kriging@vernaym',
+      vapp         = 'edelweiss',
+      datebegin    = datebegin,
+      dateend      = dateend,
+      block        = 'hourly',
+      filename     = outname,
+    )
