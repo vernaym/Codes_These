@@ -39,7 +39,7 @@ def to_xarray(array, field, varname='rr'):
     )
     return output
 
-def plot_scatter(ax, reference, model, xlabel, ylabel, savename, savedir, color=None, addtext=None, xaxis=True, yaxis=True, legend=False):
+def plot_scatter(ax, reference, model, color=None, addtext=None, xaxis=True, yaxis=True, legend=False, lims=[0, 45]):
     from sklearn.linear_model import LinearRegression
     ref = reference.flatten()
     mod = model.flatten()
@@ -71,12 +71,6 @@ def plot_scatter(ax, reference, model, xlabel, ylabel, savename, savedir, color=
         for idx,text in enumerate(addtext):
             ax.text(ref[idx], mod[idx], int(text))
 
-    lims = [
-        np.min([ax.get_xlim(), ax.get_ylim()]),  # min of both axes
-        np.max([ax.get_xlim(), ax.get_ylim()]),  # max of both axes
-    ]
-    lims = [0, 45]
-
     # Add x/y mean lines for article figures
     xmean = np.mean(x)
     ymean = np.mean(y)
@@ -91,7 +85,7 @@ def plot_scatter(ax, reference, model, xlabel, ylabel, savename, savedir, color=
     ax.set_xlim(lims)
     ax.set_ylim(lims)
     if yaxis:
-        ax.set_yticks(range(lims[0], lims[1]+1, 5))
+        ax.set_yticks(np.linspace(lims[0], lims[1], 5))
         ax.tick_params(
             axis='y',
             labelsize=14)
@@ -104,7 +98,7 @@ def plot_scatter(ax, reference, model, xlabel, ylabel, savename, savedir, color=
             right=False,         # ticks along the top edge are off
             labelleft=False) # labels along the bottom edge are off
     if xaxis:
-        ax.set_xticks(range(lims[0], lims[1]+1, 5))
+        ax.set_xticks(np.linspace(lims[0], lims[1], 5))
         ax.tick_params(
             axis='x',
             labelsize=14)

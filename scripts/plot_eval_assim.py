@@ -30,6 +30,8 @@ from snowtools.scripts.extract.vortex import vortexIO as io
 
 from snowtools.scripts.post_processing import common_dict
 
+from These.scripts import tools
+
 members_map = common_dict.members_map
 product_map = common_dict.product_map
 xpid_map    = common_dict.xpid_map
@@ -97,6 +99,9 @@ def execute():
             obs = xrp.preprocess(obs, decode_time=False, mapping={'Band1': 'HTN', 'DEP': 'HTN', 'DSN_T_ISBA': 'HTN'})
             obs = obs['HTN']
 
+        # Sort yy coordinate to avoid problems in the histogram computation
+        obs = obs.reindex(yy=list(np.sort(obs.yy)))
+
         # c) Simulations
         for xpid in xpids:
             crps = dict()
@@ -147,15 +152,16 @@ def execute():
             assim = read_simu(xpid_assim, member_assim, date)
 
             pearson['opl'], crps['opl'], bias['opl'], spread['opl'] = compute_scores(openloop, obs, shortid, date)
-            pearson['ass'], crps['ass'], bias['ass'], spread['ass']  = compute_scores(assim, obs, shortid, date)
+            pearson['ass'], crps['ass'], bias['ass'], spread['ass']  = compute_scores(assim, obs, xpid_assim, date)
 
             if idx == 0:
                 linestyle = '-'
-                # label     = product
+                label     = product
             else:
                 linestyle = ':'
-                # label     = None
+                label     = None
 
+            # Plot Cesar's synthetic scores
             x0 = bias['opl']
             x1 = bias['ass']
             y0 = spread['opl']
@@ -174,9 +180,26 @@ def execute():
             y1 = crps['ass']
             ax[1].scatter(x0, y0, s=80, facecolors='none', edgecolors=colors_map[product])
             # ax[1].plot(x0, y0, marker='o', color=colors_map[product], markersize=6, fillstyle='none')
-            ax[1].annotate("", xy=(x1, y1), xytext=(x0, y0),
+            ax[1].annotate("", xy=(x1, y1), xytext=(x0, y0), label=label,
                     arrowprops={'arrowstyle': '-|>', 'lw': 2, 'color': colors_map[product], 'linestyle': linestyle})
             # ax[1].arrow(x, y, dx, dy, color=colors_map[product], linestyle=linestyle, label=label, lw=3)
+
+            if False:
+                # Compute/plot rank histograms
+                obs_p = obs.where(obs > 0, drop=True)
+                sim_p = openloop.DSN_T_ISBA.where(obs > 0, drop=True)
+                rh  = xskillscore.rank_histogram(obs_p, sim_p)
+                figrh, axrh = plt.subplots()
+                axrh.bar(rh['rank'], rh.data)
+                axrh.set_ylim(0, 1000)
+                figrh.savefig(f'RankHistogram_{shortid}_{date}.pdf')
+
+                sim_p = assim.DSN_T_ISBA.where(obs > 0, drop=True)
+                rh = xskillscore.rank_histogram(obs_p, sim_p)
+                figrh, axrh = plt.subplots()
+                axrh.bar(rh['rank'], rh.data)
+                axrh.set_ylim(0, 1000)
+                figrh.savefig(f'RankHistogram_{xpid_assim}_{date}.pdf')
 
             clean(shortid, members_map[shortid])
 
@@ -191,6 +214,7 @@ def execute():
     ax[1].set_ylim(0, 0.6)
     ax[1].grid()
     # plt.legend()
+    plt.tight_layout()
     suffix = '_'.join([product_map[xpid.split('@')[0]] for xpid in xpids])
     fig.savefig(f'synthese_eval_assim_{suffix}.pdf')
 
@@ -252,15 +276,34 @@ def compute_scores(simu, obs, xpid, date):
 
     # Select common domains
     obs  = obs.sel({'xx': np.intersect1d(obs.xx, simu.xx), 'yy': np.intersect1d(obs.yy, simu.yy)})
+    obs    = obs.where(~np.isnan(obs), drop=True)
     obs    = obs.where(obs > 0, drop=True)
 
     simu = simu.sel({'xx': np.intersect1d(obs.xx, simu.xx), 'yy': np.intersect1d(obs.yy, simu.yy)})['DSN_T_ISBA']
     # Mask missing values from the observatin dataset in the simulation dataset
-    simu   = simu.where(~np.isnan(obs))
+    simu   = simu.where(~np.isnan(obs), drop=True)
     simu   = simu.where(obs > 0, drop=True)
     mean   = simu.mean(dim='member')
-    bias   = xr.apply_ufunc(np.abs, mean - obs).mean()
-    spread = simu.std(dim='member').mean()
+    bias   = xr.apply_ufunc(np.abs, mean - obs)
+    spread = simu.std(dim='member')
+
+    if False:
+        figSK, axSK = plt.subplots()
+        x = bias.data.flatten()
+        y = spread.data.flatten()
+        z = obs.data.flatten()
+        x = x[~np.isnan(z)]
+        y = y[~np.isnan(z)]
+        z = z[~np.isnan(z)]
+        sc = tools.plot_scatter(axSK, x, y, lims=[0, 3], color=z)
+        axSK.set_xlabel('Mean absolute bias (m)')
+        axSK.set_ylabel('Mean spread (m)')
+        cb = figSK.colorbar(sc)
+        cb.set_label(label='Snow depth (m)', size=18)
+        figSK.savefig(f'SpreadSkill_{xpid}_{date}.pdf')
+
+    bias = bias.mean()
+    spread = spread.mean()
 
     # control_member = simu.sel({'member': 0})
     pearson = xr.corr(mean, obs, dim=['xx', 'yy'])

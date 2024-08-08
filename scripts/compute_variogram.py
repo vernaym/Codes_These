@@ -186,6 +186,7 @@ def execute():
     plt.ylabel('Semivariance')
     plt.xlim(0, 10)
     plt.ylim(0, 1)
+    plt.grid()
     plt.legend()
 
     suffix = '_'.join([product_map[xpid.split('@')[0]] for xpid in xpids])
