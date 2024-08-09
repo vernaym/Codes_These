@@ -90,7 +90,8 @@ def execute():
     # 1. Get all input data
 
     # a) Pleiades observations
-    fig, ax = plt.subplots(1, 2, figsize=(16, 8))
+    fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16, 12), gridspec_kw={'height_ratios': [2, 1]})
+
     for idx, date in enumerate(dates_pleiades):
         obsname = f'PLEIADES_{date}.nc'
         io.get_snow_obs_date(xpid=xpid_map[date], geometry=obs_geometry, date=date, vapp='Pleiades', filename=obsname)
@@ -178,11 +179,9 @@ def execute():
             ellipse2 = Ellipse((x1, y1), width=bias['ass'][1] / fact, height=spread['ass'][1] / fact,
                               facecolor='none', edgecolor=colors_map[product], linestyle=linestyle,
                               linewidth=2)
-            # Add empty plot for legend
-            ax[0].plot([], [], linestyle=linestyle, color=colors_map[product], label=label)
-            ax[0].add_patch(ellipse1)
-            ax[0].add_patch(ellipse2)
-            ax[0].annotate("", xy=(x1, y1), xytext=(x0, y0),
+            ax1.add_patch(ellipse1)
+            ax1.add_patch(ellipse2)
+            ax1.annotate("", xy=(x1, y1), xytext=(x0, y0),
                     arrowprops={'arrowstyle': '-|>', 'lw': 3, 'color': colors_map[product],
                         'linestyle': linestyle, 'mutation_scale': 30})
 
@@ -196,47 +195,90 @@ def execute():
             ellipse2 = Ellipse((x1, y1), width=pearson['ass'][1], height=crps['ass'][1] / fact,
                               facecolor='none', edgecolor=colors_map[product], linestyle=linestyle,
                               linewidth=2)
-            # Add empty plot for legend
-            ax[1].plot([], [], linestyle=linestyle, color=colors_map[product], label=label)
-            ax[1].add_patch(ellipse1)
-            ax[1].add_patch(ellipse2)
-            ax[1].annotate("", xy=(x1, y1), xytext=(x0, y0),
+            ax2.add_patch(ellipse1)
+            ax2.add_patch(ellipse2)
+            ax2.annotate("", xy=(x1, y1), xytext=(x0, y0),
                     arrowprops={'arrowstyle': '-|>', 'lw': 3, 'color': colors_map[product],
                         'linestyle': linestyle, 'mutation_scale': 30})
+
+            # Add empty plot for legend
+            ax4.plot([], [], linestyle=linestyle, color=colors_map[product], label=label, lw=3)
 
             if False:
                 # Compute/plot rank histograms
                 obs_p = obs.where(obs > 0, drop=True)
                 sim_p = openloop.DSN_T_ISBA.where(obs > 0, drop=True)
                 rh  = xskillscore.rank_histogram(obs_p, sim_p)
-                figrh, axrh = plt.subplots()
-                axrh.bar(rh['rank'], rh.data)
-                axrh.set_ylim(0, 1000)
-                figrh.savefig(f'RankHistogram_{shortid}_{date}.pdf')
+                fig2, ax = plt.subplots()
+                ax.bar(rh['rank'], rh.data)
+                ax.set_ylim(0, 1000)
+                fig2.savefig(f'RankHistogram_{shortid}_{date}.pdf')
 
                 sim_p = assim.DSN_T_ISBA.where(obs > 0, drop=True)
                 rh = xskillscore.rank_histogram(obs_p, sim_p)
-                figrh, axrh = plt.subplots()
-                axrh.bar(rh['rank'], rh.data)
-                axrh.set_ylim(0, 1000)
-                figrh.savefig(f'RankHistogram_{xpid_assim}_{date}.pdf')
+                fig3, ax = plt.subplots()
+                ax.bar(rh['rank'], rh.data)
+                ax.set_ylim(0, 1000)
+                fig3.savefig(f'RankHistogram_{xpid_assim}_{date}.pdf')
 
             clean(shortid, members_map[shortid])
 
-    ax[0].set_xlabel('Mean absolute bias')
-    ax[0].set_ylabel('Mean spread')
-    ax[0].set_xlim(0, 0.7)
-    ax[0].set_ylim(0, 0.7)
-    ax[0].grid()
-    ax[1].set_xlabel('Pearson correlation')
-    ax[1].set_ylabel('Mean CRPS')
-    ax[1].set_xlim(0.5, 1)
-    ax[1].set_ylim(0, 0.6)
-    ax[1].grid()
-    plt.legend()
+    ax1.set_xlabel('Mean absolute bias')
+    ax1.set_ylabel('Mean spread')
+    ax1.set_xlim(0, 0.7)
+    ax1.set_ylim(0, 0.7)
+    ax1.grid()
+    ax2.set_xlabel('Pearson correlation')
+    ax2.set_ylabel('Mean CRPS')
+    ax2.set_xlim(0.5, 1)
+    ax2.set_ylim(0, 0.6)
+    ax2.grid()
+    ax4.legend(loc='center', frameon=False)
+    ax4.axis('off')
+    # plt.legend()
+    custom_legend(ax3)
     plt.tight_layout()
     suffix = '_'.join([product_map[xpid.split('@')[0]] for xpid in xpids])
     fig.savefig(f'synthese_eval_assim_{suffix}.pdf')
+
+
+def custom_legend(axis):
+
+    x0 = 0.1
+    x1 = 0.5
+    x2 = 0.9
+
+    axis.text(x0, 0.8, 'No assimilation', horizontalalignment='center', transform=axis.transAxes, weight='bold')
+    axis.text(x2, 0.8, 'Assimilation', horizontalalignment='center', transform=axis.transAxes, weight='bold')
+
+    ellipse = list()
+
+    ellipse.append(Ellipse((x0, x1), width=0.16, height=0.15, transform=axis.transAxes,
+                      facecolor='none', edgecolor='k', linestyle='-', linewidth=2))
+    ellipse.append(Ellipse((x2, x1), width=0.105, height=0.1, transform=axis.transAxes,
+                      facecolor='none', edgecolor='k', linestyle='-', linewidth=2))
+    ellipse.append(Ellipse((x0, x0), width=0.16, height=0.15, transform=axis.transAxes,
+                      facecolor='none', edgecolor='k', linestyle='--', linewidth=2))
+    ellipse.append(Ellipse((x2, x0), width=0.105, height=0.1, transform=axis.transAxes,
+                      facecolor='none', edgecolor='k', linestyle='--', linewidth=2))
+
+    for item in ellipse:
+        axis.add_patch(item)
+
+    axis.text(x1, x1 + 0.1, "Assimilation date (2022-02-26)", horizontalalignment='center')
+    axis.annotate("", xy=(x2, x1), xytext=(x0, x1), xycoords='axes fraction',
+            arrowprops={'arrowstyle': '-|>', 'lw': 3, 'color': 'k',
+                'linestyle': '-', 'mutation_scale': 30})
+
+    axis.text(x1, x0 + 0.1, "Evaluation date (2022-05-01)", horizontalalignment='center')
+    axis.annotate("", xy=(x2, x0), xytext=(x0, x0), xycoords='axes fraction',
+            arrowprops={'arrowstyle': '-|>', 'lw': 3, 'color': 'k',
+                'linestyle': '--', 'mutation_scale': 30})
+
+    axis.axis('off')
+
+#    plt.xlim(0, 4)
+#    plt.ylim(0, 2)
 
 
 def read_simu(xpid, members, date):
