@@ -83,6 +83,65 @@ def parse_command_line():
     return args
 
 
+def variogram(array, color, ax, var='HTN', label=None, model='spherical', linestyle='-', samples=None):
+
+    maxlag = 10
+
+#    t1 = time.time()
+
+    # Convert coordinates into distances
+    array['xx'] = np.array([0.25 * idx for idx in range(len(array.xx))])
+    array['yy'] = np.array([0.25 * idy for idy in range(len(array.yy))])
+    df = array.to_dataframe().reset_index().dropna()
+    # compute variogram
+    # https://scikit-gstat.readthedocs.io/en/latest/reference/variogram.html
+    # Sampling only 20% of the data to compute / fit the variogram gives results very similar
+    # to the one obtain with all data and is much more efficient :
+    # Computing variogram with only 20.0 % of points took 2.2013840675354004 s
+    # Computing variogram with all points took 9.015846490859985 s
+    # Fitting variogram with 20.0 % of the data took 2.8023908138275146 s
+    # Fitting variogram with all data took 76.80178022384644 s
+
+    V = skg.Variogram(df[['xx', 'yy']].values, df[var].values, use_nugget=True, normalisze=False, maxlag=maxlag,
+        samples=samples,)  # Randomly draw a fraction (if *samples* < 1) of the points to reduce computational cost
+
+    # extract variogram values
+    xdata = V.bins
+    ydata = V.experimental
+    # color = next(ax._get_lines.prop_cycler)['color']
+    ax.scatter(xdata, ydata, s=12, color=color)
+
+#    t2 = time.time()
+#    print(f'Computing variogram with only {sample*100}% of points took {(t2-t1)} s')
+#    V2 = skg.Variogram(df[['xx', 'yy']].values, df[var].values, use_nugget=True, normalisze=False, maxlag=maxlag)
+#    # extract variogram values
+#    xdata = V2.bins
+#    ydata = V2.experimental
+#    # color = next(ax._get_lines.prop_cycler)['color']
+#    ax.scatter(xdata, ydata, s=12, color='red')
+#    t3 = time.time()
+#    print(f'Computing variogram with all points took {(t3-t2)} s')
+
+    # Fit shperical Variogram
+    V.model = model
+    # V.parameters[0] = Range
+    # V.parameters[1] = Sill
+    # V.parameters[2] = Nugget
+    x = np.linspace(0, maxlag, 20)
+    y = [models.spherical(h, V.parameters[0], V.parameters[1], V.parameters[2]) for h in x]
+    ax.plot(x, y, linestyle=linestyle, label=label, color=color)
+    ax.vlines(V.parameters[0], 0, V.parameters[1] + V.parameters[2], linestyle=':', color=color)
+
+#    t4 = time.time()
+#    print(f'Fitting variogram with {sample*100}% of the data took {(t4-t3)} s')
+#    V2.model = model
+#    x = np.linspace(0, maxlag, 100)
+#    y = [models.spherical(h, V2.parameters[0], V2.parameters[1], V2.parameters[2]) for h in x]
+#    ax.plot(x, y, '-', label='With all data', color='red')
+#    t5 = time.time()
+#    print(f'Fitting variogram with all data took {(t5-t4)} s')
+
+
 def execute():
 
     # 1. Get all input data
@@ -99,36 +158,12 @@ def execute():
         obs = xrp.preprocess(obs, decode_time=False, mapping={'Band1': 'HTN', 'DEP': 'HTN', 'DSN_T_ISBA': 'HTN'})
         obs = obs['HTN']
 
-#    x = np.array([0.25 * idx for idx in range(len(obs.xx))])
-#    y = np.array([0.25 * idy for idy in range(len(obs.yy))])
-#    With gstools : very slow and does not work
-#    bin_center, gamma = gs.vario_estimate((x, y), obs.data, mesh_type='structured')
-#    fit_model = gs.Stable(dim=2)
-#    fit_model.fit_variogram(bin_center, gamma)
-#    ax = fit_model.plot(x_max=40)
-#    ax.scatter(bin_center, gamma, label="Vario Pleiades")
-
-    # compute variogram
+    fig, ax = plt.subplots(figsize=(10, 8))
+    color = 'k'
     tmp = obs.copy()
     tmp = tmp.where(obs > 0, drop=True)
-    tmp['xx'] = np.array([0.25 * idx for idx in range(len(tmp.xx))])
-    tmp['yy'] = np.array([0.25 * idy for idy in range(len(tmp.yy))])
-    df = tmp.to_dataframe().reset_index().dropna()
-    maxlag = 10
-    V = skg.Variogram(df[['xx', 'yy']].values, df.HTN.values, use_nugget=True, normalisze=False, maxlag=maxlag)
-
-    # extract variogram values
-    xdata = V.bins
-    ydata = V.experimental
-    fig, ax = plt.subplots(figsize=(10, 8))
-    color = next(ax._get_lines.prop_cycler)['color']
-    ax.scatter(xdata, ydata, s=12, color=color)
-
-    # Fit shperical Variogram
-    V.model = 'spherical'
-    x = np.linspace(0, maxlag, 100)
-    y = [models.spherical(h, V.parameters[0], V.parameters[1], V.parameters[2]) for h in x]
-    ax.plot(x, y, '-', label='Pleiades', color=color)
+    # variogram(tmp, color, ax, label='Pleiades', samples=0.2)
+    variogram(tmp, color, ax, label='Pleiades')
 
     # c) Simulations
     for xpid in xpids:
@@ -137,6 +172,7 @@ def execute():
             user = os.environ["USER"]
             xpid = f'{xpid}@{user}'
         shortid = xpid.split('@')[0]
+        product = product_map[shortid]
 
         # Get (filtered) PRO files with Vortex
         if members:
@@ -158,26 +194,18 @@ def execute():
 
         simu = read_simu(xpid, member, date)
 
-        # compute variogram
+        color = colors_map[product]
+        if 'assim' in product:
+            linestyle = '--'
+        else:
+            linestyle = '-'
+
         tmp = simu.mean('member')
         tmp = tmp.where(obs > 0, drop=True)
-        tmp['xx'] = np.array([0.25 * idx for idx in range(len(tmp.xx))])
-        tmp['yy'] = np.array([0.25 * idy for idy in range(len(tmp.yy))])
-        df = tmp.to_dataframe().reset_index().dropna()
-        V = skg.Variogram(df[['xx', 'yy']].values, df.DSN_T_ISBA.values, use_nugget=True, normalisze=False,
-                maxlag=maxlag)
 
-        # extract variogram values
-        xdata = V.bins
-        ydata = V.experimental
-        color = next(ax._get_lines.prop_cycler)['color']
-        ax.scatter(xdata, ydata, s=15, color=color)
-
-        # Fit shperical Variogram
-        V.model = 'spherical'
-        x = np.linspace(0, maxlag, 100)
-        y = [models.spherical(h, V.parameters[0], V.parameters[1], V.parameters[2]) for h in x]
-        ax.plot(x, y, '-', label=product_map[shortid], color=color)
+        # compute variogram
+        # variogram(tmp, color, ax, var='DSN_T_ISBA', label=product_map[shortid], linestyle=linestyle, samples=0.2)
+        variogram(tmp, color, ax, var='DSN_T_ISBA', label=product_map[shortid], linestyle=linestyle)
 
         clean(shortid, member)
 
@@ -186,7 +214,7 @@ def execute():
     plt.ylabel('Semivariance')
     plt.xlim(0, 10)
     plt.ylim(0, 1)
-    plt.grid()
+    plt.grid(linestyle=':', linewidth=0.5)
     plt.legend()
 
     suffix = '_'.join([product_map[xpid.split('@')[0]] for xpid in xpids])
@@ -206,42 +234,14 @@ def read_simu(xpid, members, date):
     # Open all simulation PRO files at once
     simu = xr.open_mfdataset(listfiles, concat_dim='member', combine='nested').compute()
     simu = xrp.preprocess(simu, decode_time=False)
-    # <xarray.Dataset>
-    # Dimensions:     (time: 3, xx: 143, yy: 101, member: 16)
-    # Coordinates:
-    #   * time        (time) datetime64[ns] 2018-01-23 2018-03-16
-    #   * xx          (xx) float64 9.379e+05 9.381e+05 ... 9.731e+05 9.734e+05
-    #   * yy          (yy) float64 6.439e+06 6.439e+06 ... 6.464e+06 6.464e+06
-    # Dimensions without coordinates: xpid
-    # Data variables:
-    #     DSN_T_ISBA  (member, time, yy, xx) float64 1.997 1.918 ... 0.0001194 0.2854
     # Get variable's DataArray
     simu = simu.sel({'time': pd.to_datetime(date[:8], format='%Y%m%d')}, method='nearest')
-    # <xarray.Dataset>
-    # Dimensions:     (xx: 143, yy: 101, member: 16)
-    # Coordinates:
-    #   time        datetime64[ns] 2018-01-23
-    #   * xx        (xx) float64 9.379e+05 9.381e+05 ... 9.731e+05 9.734e+05
-    #   * yy        (yy) float64 6.439e+06 6.439e+06 ... 6.464e+06 6.464e+06
-    # Dimensions without coordinates: xpid
-    # Data variables:
-    #     DSN_T_ISBA  (member, time, yy, xx) float64 1.997 1.918 ... 0.0001194 0.2854
 
     # Set the 'xpid' dimension for simulation identification
     if members is not None:
         simu['member'] = members
     else:
         simu['member'] = [0]
-    # <xarray.Dataset>
-    # Dimensions:     (xx: 143, yy: 101, member: 16)
-    # Coordinates:
-    #   time        datetime64[ns] 2018-01-23
-    #   * xx        (xx) float64 9.379e+05 9.381e+05 ... 9.731e+05 9.734e+05
-    #   * yy        (yy) float64 6.439e+06 6.439e+06 ... 6.464e+06 6.464e+06
-    #   * member    (member) int64 1 2 3 ... 16
-    # Dimensions without coordinates: xpid
-    # Data variables:
-    #     DSN_T_ISBA  (member, time, yy, xx) float64 1.997 1.918 ... 0.0001194 0.2854
 
     return simu
 
