@@ -17,7 +17,9 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 import argparse
+import matplotlib
 import matplotlib.pyplot as plt
+from matplotlib.patches import Ellipse
 
 # Following installation required on sxcen :
 # - Install xskillscore : pip install xskillscore
@@ -31,6 +33,8 @@ from snowtools.scripts.extract.vortex import vortexIO as io
 from snowtools.scripts.post_processing import common_dict
 
 from These.scripts import tools
+
+matplotlib.rcParams.update({'font.size': 18})
 
 members_map = common_dict.members_map
 product_map = common_dict.product_map
@@ -162,27 +166,43 @@ def execute():
                 label     = None
 
             # Plot Cesar's synthetic scores
-            x0 = bias['opl']
-            x1 = bias['ass']
-            y0 = spread['opl']
-            y1 = spread['ass']
-            ax[0].scatter(x0, y0, s=80, facecolors='none', edgecolors=colors_map[product])
-            # ax[0].plot(x0, y0, marker='o', color=colors_map[product], markersize=6, fillstyle='none')
+            x0 = bias['opl'][0]
+            x1 = bias['ass'][0]
+            y0 = spread['opl'][0]
+            y1 = spread['ass'][0]
+            # ax[0].scatter(x0, y0, s=80, facecolors='none', edgecolors=colors_map[product])
+            fact = 10
+            ellipse1 = Ellipse((x0, y0), width=bias['opl'][1] / fact, height=spread['opl'][1] / fact,
+                              facecolor='none', edgecolor=colors_map[product], linestyle=linestyle,
+                              linewidth=2)
+            ellipse2 = Ellipse((x1, y1), width=bias['ass'][1] / fact, height=spread['ass'][1] / fact,
+                              facecolor='none', edgecolor=colors_map[product], linestyle=linestyle,
+                              linewidth=2)
+            # Add empty plot for legend
+            ax[0].plot([], [], linestyle=linestyle, color=colors_map[product], label=label)
+            ax[0].add_patch(ellipse1)
+            ax[0].add_patch(ellipse2)
             ax[0].annotate("", xy=(x1, y1), xytext=(x0, y0),
-                    arrowprops={'arrowstyle': '-|>', 'lw': 2, 'color': colors_map[product], 'linestyle': linestyle})
-            # ax[0].arrow(x, y, dx, dy, color=colors_map[product], linestyle=linestyle, lw=3)
+                    arrowprops={'arrowstyle': '-|>', 'lw': 3, 'color': colors_map[product],
+                        'linestyle': linestyle, 'mutation_scale': 30})
 
-            x0 = pearson['opl']
-            # dx = pearson['ass'] - pearson['opl']
-            x1 = pearson['ass']
-            y0 = crps['opl']
-            # dy = crps['ass'] - crps['opl']
-            y1 = crps['ass']
-            ax[1].scatter(x0, y0, s=80, facecolors='none', edgecolors=colors_map[product])
-            # ax[1].plot(x0, y0, marker='o', color=colors_map[product], markersize=6, fillstyle='none')
-            ax[1].annotate("", xy=(x1, y1), xytext=(x0, y0), label=label,
-                    arrowprops={'arrowstyle': '-|>', 'lw': 2, 'color': colors_map[product], 'linestyle': linestyle})
-            # ax[1].arrow(x, y, dx, dy, color=colors_map[product], linestyle=linestyle, label=label, lw=3)
+            x0 = pearson['opl'][0]
+            x1 = pearson['ass'][0]
+            y0 = crps['opl'][0]
+            y1 = crps['ass'][0]
+            ellipse1 = Ellipse((x0, y0), width=pearson['opl'][1], height=crps['opl'][1] / fact,
+                              facecolor='none', edgecolor=colors_map[product], linestyle=linestyle,
+                              linewidth=2)
+            ellipse2 = Ellipse((x1, y1), width=pearson['ass'][1], height=crps['ass'][1] / fact,
+                              facecolor='none', edgecolor=colors_map[product], linestyle=linestyle,
+                              linewidth=2)
+            # Add empty plot for legend
+            ax[1].plot([], [], linestyle=linestyle, color=colors_map[product], label=label)
+            ax[1].add_patch(ellipse1)
+            ax[1].add_patch(ellipse2)
+            ax[1].annotate("", xy=(x1, y1), xytext=(x0, y0),
+                    arrowprops={'arrowstyle': '-|>', 'lw': 3, 'color': colors_map[product],
+                        'linestyle': linestyle, 'mutation_scale': 30})
 
             if False:
                 # Compute/plot rank histograms
@@ -213,7 +233,7 @@ def execute():
     ax[1].set_xlim(0.5, 1)
     ax[1].set_ylim(0, 0.6)
     ax[1].grid()
-    # plt.legend()
+    plt.legend()
     plt.tight_layout()
     suffix = '_'.join([product_map[xpid.split('@')[0]] for xpid in xpids])
     fig.savefig(f'synthese_eval_assim_{suffix}.pdf')
@@ -302,18 +322,17 @@ def compute_scores(simu, obs, xpid, date):
         cb.set_label(label='Snow depth (m)', size=18)
         figSK.savefig(f'SpreadSkill_{xpid}_{date}.pdf')
 
-    bias = bias.mean()
-    spread = spread.mean()
+    bs = [bias.mean().data, bias.std().data]
+    sd = [spread.mean().data, spread.std().data]
 
     # control_member = simu.sel({'member': 0})
-    pearson = xr.corr(mean, obs, dim=['xx', 'yy'])
+    pearson = xr.corr(simu, obs, dim=['xx', 'yy'])
+    ps = [pearson.mean().data, pearson.std().data]
 
-    # simu = simu.expand_dims(dim="time")
-    # obs  = obs.expand_dims(dim="time")
-    # crps = xskillscore.crps_ensemble(obs, simu, dim='time').mean()
-    crps = xskillscore.crps_ensemble(obs, simu).mean()
+    crps = xskillscore.crps_ensemble(obs, simu, dim=[])
+    cs = [crps.mean().data, crps.std().data]
 
-    return pearson, crps, bias, spread
+    return ps, cs, bs, sd
 
 
 def clean(xpid, members):
