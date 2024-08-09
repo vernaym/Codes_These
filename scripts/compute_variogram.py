@@ -17,6 +17,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 import argparse
+import matplotlib
 import matplotlib.pyplot as plt
 
 # Installation required on sxcen : pip install gstools
@@ -33,6 +34,8 @@ from snowtools.scripts.extract.vortex import vortexIO as io
 from snowtools.scores import clusters
 
 from snowtools.scripts.post_processing import common_dict
+
+matplotlib.rcParams.update({'font.size': 18})
 
 members_map = common_dict.members_map
 product_map = common_dict.product_map
@@ -85,6 +88,7 @@ def parse_command_line():
 
 def variogram(array, color, ax, var='HTN', label=None, model='spherical', linestyle='-', samples=None):
 
+    # WARNING : maxlag should not be larger than half of the domain's dimension
     maxlag = 10
 
 #    t1 = time.time()
@@ -109,7 +113,7 @@ def variogram(array, color, ax, var='HTN', label=None, model='spherical', linest
     xdata = V.bins
     ydata = V.experimental
     # color = next(ax._get_lines.prop_cycler)['color']
-    ax.scatter(xdata, ydata, s=12, color=color)
+    ax.scatter(xdata, ydata, marker='+', s=40, color=color)
 
 #    t2 = time.time()
 #    print(f'Computing variogram with only {sample*100}% of points took {(t2-t1)} s')
@@ -129,8 +133,8 @@ def variogram(array, color, ax, var='HTN', label=None, model='spherical', linest
     # V.parameters[2] = Nugget
     x = np.linspace(0, maxlag, 20)
     y = [models.spherical(h, V.parameters[0], V.parameters[1], V.parameters[2]) for h in x]
-    ax.plot(x, y, linestyle=linestyle, label=label, color=color)
-    ax.vlines(V.parameters[0], 0, V.parameters[1] + V.parameters[2], linestyle=':', color=color)
+    ax.plot(x, y, linestyle=linestyle, label=label, color=color, lw=4)
+    ax.vlines(V.parameters[0], 0, V.parameters[1] + V.parameters[2], linestyle=':', color=color, lw=3)
 
 #    t4 = time.time()
 #    print(f'Fitting variogram with {sample*100}% of the data took {(t4-t3)} s')
@@ -153,6 +157,7 @@ def execute():
     try:
         obs = xr.open_dataarray(obsname)
         obs = xrp.preprocess(obs, decode_time=False)
+        obs = obs.rename('HTN')
     except ValueError:
         obs = xr.open_dataset(obsname)
         obs = xrp.preprocess(obs, decode_time=False, mapping={'Band1': 'HTN', 'DEP': 'HTN', 'DSN_T_ISBA': 'HTN'})
@@ -162,7 +167,9 @@ def execute():
     color = 'k'
     tmp = obs.copy()
     tmp = tmp.where(obs > 0, drop=True)
-    # variogram(tmp, color, ax, label='Pleiades', samples=0.2)
+    # Label dots
+    ax.scatter([], [], marker='+', s=40, color='k', label='Experimental variogram')
+    # variogram(tmp, color, ax, label='Pleiades', samples=0.2)  # Computing optimisation
     variogram(tmp, color, ax, label='Pleiades')
 
     # c) Simulations
@@ -209,16 +216,17 @@ def execute():
 
         clean(shortid, member)
 
-    plt.title('Isotropoic Experimental Variogram')
-    plt.xlabel('Lag (km)')
-    plt.ylabel('Semivariance')
+    # plt.title('Isotropoic Experimental Variogram')
+    plt.xlabel('Distance (km)')
+    plt.ylabel('Semi-variance (m²)')
     plt.xlim(0, 10)
     plt.ylim(0, 1)
     plt.grid(linestyle=':', linewidth=0.5)
+    plt.tight_layout()
     plt.legend()
 
     suffix = '_'.join([product_map[xpid.split('@')[0]] for xpid in xpids])
-    plt.savefig(f'variogram_{suffix}.pdf')
+    plt.savefig(f'variogram_{suffix}_{date}.pdf')
 
 
 def read_simu(xpid, members, date):
