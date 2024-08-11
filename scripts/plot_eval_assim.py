@@ -130,7 +130,7 @@ def execute():
                     member = [members_map[shortid][0]]
 
             # VERRUE pour gérer le décallage d'un jour en attendant de combler les données
-            if (shortid.startswith('SAFRAN') or shortid.startswith('ANTILOPE')) and datebegin == '2021080207':
+            if (shortid.split('_')[0] in ['SAFRAN', 'ANTILOPE', 'KRIGING']) and datebegin == '2021080207':
                 deb = '2021080106'
             else:
                 deb = datebegin  # 2021080207
@@ -223,14 +223,14 @@ def execute():
 
             clean(shortid, members_map[shortid])
 
-    ax1.set_xlabel('Mean absolute bias')
-    ax1.set_ylabel('Mean spread')
+    ax1.set_xlabel('Mean absolute bias (m)')
+    ax1.set_ylabel('Mean spread (m)')
     ax1.set_xlim(0, 0.7)
     ax1.set_ylim(0, 0.7)
     ax1.grid()
-    ax2.set_xlabel('Pearson correlation')
-    ax2.set_ylabel('Mean CRPS')
-    ax2.set_xlim(0.5, 1)
+    ax2.set_xlabel('Pearson correlation coefficient')
+    ax2.set_ylabel('Mean CRPS (m)')
+    ax2.set_xlim(0.4, 1)
     ax2.set_ylim(0, 0.6)
     ax2.grid()
     ax4.legend(loc='center', frameon=False)

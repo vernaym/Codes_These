@@ -51,6 +51,8 @@ subdomain_map = dict(
     )
 )
 
+datesassim = ['2022022612', '2018012312']
+
 
 def parse_command_line():
     description = "Plot figures comparing snow depth simulation(s) to a Pleiade observation"
@@ -277,7 +279,10 @@ def plot_htn(openloop, obs, assim, xpid, xpid_assim, date, subdomain, dem=None):
     plot2D.plot_field(obs, ax=ax[1], vmin=vmin, vmax=vmax, cmap=plt.cm.Blues, dem=dem, shade=False,
             isolevels=thresholds, slices=6)
     #        shade=True,)
-    ax[1].set_title('Observed snow depth (m)')
+    if date in datesassim:
+        ax[1].set_title('Assimilated snow depth (m)')
+    else:
+        ax[1].set_title('Observed snow depth (m)')
 
     print('plot assimilation')
     ass = assim.DSN_T_ISBA.mean(dim='member')

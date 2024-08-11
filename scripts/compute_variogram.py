@@ -191,7 +191,7 @@ def execute():
                 member = [members_map[shortid][0]]
 
         # VERRUE pour gérer le décallage d'un jour en attendant de combler les données
-        if (shortid.startswith('SAFRAN') or shortid.startswith('ANTILOPE')) and datebegin == '2021080207':
+        if (shortid.split('_')[0] in ['SAFRAN', 'ANTILOPE', 'KRIGING']) and datebegin == '2021080207':
             deb = '2021080106'
         else:
             deb = datebegin  # 2021080207
