@@ -104,7 +104,9 @@ def read_ref_coords(domain):
 if __name__ == "__main__":
     args = parse_command_line()
 
-    extract_period = date_range(args.datebegin, args.dateend, dt=1)
+    timestep = 1
+
+    extract_period = date_range(args.datebegin, args.dateend, dt=timestep)
 
     if args.data == 'nivometeo':
         reference = read_ref_coords(domain)
@@ -127,10 +129,13 @@ if __name__ == "__main__":
         reference = read_nivometeo_coords(domain)
         fic = "obs_quotidiennes_RR.data"
         pluvios = pd.read_csv(fic, sep=';', parse_dates=['dat'], dtype={'num_poste':int, 'poste':str, 'lat':float, 'lon':float, 'alti':int, 'rr':float, 'reseau_poste':int}, na_values=['--'])
+        latmax, latmin, lonmin, lonmax = np.array(coords[domain]).astype(float)/1000.
+        pluvios = pluvios.loc[(pluvios['lat']>=latmin) & (pluvios['lat']<=latmax) & (pluvios['lon']>=lonmin) & (pluvios['lon']<=lonmax)]
 
     if reference is not None:
         pluvios = pluvios[~pluvios['num_poste'].isin(reference.keys())]  # sécurité pour assurer que le krigeage n'utilise pas d'obs d'évaluation
     pluvios = pluvios.loc[~pluvios['rr'].isna()]
+
     #outkrig = pd.DataFrame(columns=['date', 'num_poste', 'rr_kriging'])
     outkrig = pd.DataFrame()
     lon, lat = np.meshgrid(gridx, gridy)
@@ -150,14 +155,14 @@ if __name__ == "__main__":
     )
     for idx, rundate in enumerate(extract_period):
         print(rundate)
-        startdate = rundate - timedelta(hours=24)
+        startdate = rundate - timedelta(hours=timestep)
         # Extract hourly precipitation of the last 23-hours
         tmp  = pluvios.loc[pluvios['dat']<=rundate].loc[pluvios['dat']>startdate]
         nval = tmp.groupby(['num_poste']).dat.count()
-        y    = tmp.groupby(['num_poste']).lat.mean()[nval==24]
-        x    = tmp.groupby(['num_poste']).lon.mean()[nval==24]
-        rr   = tmp.groupby(['num_poste']).rr.sum()[nval==24]
-        alti = tmp.groupby(['num_poste']).alti.mean()[nval==24]
+        y    = tmp.groupby(['num_poste']).lat.mean()[nval==timestep]
+        x    = tmp.groupby(['num_poste']).lon.mean()[nval==timestep]
+        rr   = tmp.groupby(['num_poste']).rr.sum()[nval==timestep]
+        alti = tmp.groupby(['num_poste']).alti.mean()[nval==timestep]
 
         if np.max(rr) > 0:
             #kriging = OrdinaryKriging(x.values, y.values, rr.values, variogram_model='linear')
