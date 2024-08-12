@@ -26,7 +26,7 @@ coords = dict(
     cor  = ['43000', '41000', '8000', '10500'],
     ange = ['45240', '44990', '6010', '6490'],
     #GrandesRousses = ['45240', '44990', '6010', '6490'],
-    GrandesRousses = ['45440', '44790', '5810', '6690'],  # With 0.2 margin
+    GrandesRousses = ['45800', '44400', '5500', '7000'],  # With 0.5 margin
 )
 domain = 'GrandesRousses'
 ymax, ymin, xmin, xmax = coords[domain]
@@ -71,7 +71,7 @@ def get_date(a_string):
         return date
 
 def date_range(start, end, dt=24):
-    start = start.replace(hour=6)
+    start = start
     dates = list()
     while start <= end:
         dates.append(start)
@@ -107,6 +107,8 @@ if __name__ == "__main__":
     timestep = 1
 
     extract_period = date_range(args.datebegin, args.dateend, dt=timestep)
+    datebegin = args.datebegin.strftime('%Y%m%d%H')
+    dateend   = args.dateend.strftime('%Y%m%d%H')
 
     if args.data == 'nivometeo':
         reference = read_ref_coords(domain)
@@ -127,7 +129,7 @@ if __name__ == "__main__":
         pluvios = pd.concat([pluvios1, pluvios2], ignore_index=True, sort=True)
     else:
         reference = read_nivometeo_coords(domain)
-        fic = "obs_quotidiennes_RR.data"
+        fic = f"obs_quotidiennes_RR_{datebegin}_{dateend}.data"
         pluvios = pd.read_csv(fic, sep=';', parse_dates=['dat'], dtype={'num_poste':int, 'poste':str, 'lat':float, 'lon':float, 'alti':int, 'rr':float, 'reseau_poste':int}, na_values=['--'])
         latmax, latmin, lonmin, lonmax = np.array(coords[domain]).astype(float)/1000.
         pluvios = pluvios.loc[(pluvios['lat']>=latmin) & (pluvios['lat']<=latmax) & (pluvios['lon']>=lonmin) & (pluvios['lon']<=lonmax)]
@@ -170,6 +172,7 @@ if __name__ == "__main__":
             #kriging = UniversalKriging(x.values, y.values, rr.values, variogram_model=variogram, drift_terms=drift_terms, point_drift=drift)
             kriging = UniversalKriging(x.values, y.values, rr.values, variogram_model=variogram)
             rr24, ss = kriging.execute('grid', gridx, gridy)
+            rr24.data[rr24.data<0.01] = 0
         else:
             print('No precipitation over the domain')
             rr24 = np.zeros(shape=(len(gridy), len(gridx)))
@@ -208,14 +211,14 @@ if __name__ == "__main__":
                     }, ignore_index=True)
             out.data[:, :, idx] = rr24.data
 
-    datebegin = args.datebegin.strftime('%Y%m%d%H')
-    dateend   = args.dateend.strftime('%Y%m%d%H')
 
     if args.data == 'all':
         outname = f"CUMUL_krigeage_{args.datebegin.strftime('%Y%m%d%H')}_{args.dateend.strftime('%Y%m%d%H')}.nc"
         cumul.to_netcdf(outname, mode='w')
     else:
         outname = f"KRIGING_{datebegin}_{dateend}.nc"
+        if os.path.exists(outname):
+            os.remove(outname)
         out.to_netcdf(outname)
         if reference is not None:
             outkrig.set_index('date')
