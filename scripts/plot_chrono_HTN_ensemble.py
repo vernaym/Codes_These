@@ -70,7 +70,10 @@ for xpid in xpids:
     ds = xr.open_dataarray(f'PRO_{xpid}.nc')
 
     if 'sorted' in xpid or len(xpids) == 1:
+        from mycolorpy import colorlist as mcp
+        color = mcp.gen_color_normalized(cmap="viridis", data_arr=range(len(ds.member)-1))
         for i, member in enumerate(ds.member):
+            # ax.plot(ds.time, ds.sel({'member': member}), color=color[i], linestyle='-', linewidth=1)
             if i == 0:
                 ax.plot(ds.time, ds.sel({'member': member}), color='blue', alpha=0.5, linestyle='-', linewidth=1,
                         label='AS-ANTILOPE')
@@ -88,12 +91,12 @@ io.get_snow_obs_date(xpid=pleiades_map[year]['xpid'], geometry=geometry, date=da
 
 deb = pd.Timestamp(year=int(datebegin[0:4]), month=int(datebegin[4:6]), day=int(datebegin[6:8]), tz="UTC")
 end = pd.Timestamp(year=int(dateend[0:4]), month=int(dateend[4:6]), day=int(dateend[6:8]), tz="UTC")
-if os.path.exists('HTN.obs'):
-    obs = pd.read_csv('HTN.obs', sep=';', parse_dates=['dat'])
+if os.path.exists(f'HTN_{point}.obs'):
+    obs = pd.read_csv(f'HTN_{point}.obs', sep=';', parse_dates=['dat'])
     obs = obs[(obs.dat >= deb) & (obs.dat <= end)]
     plt.plot(obs.dat.values, obs.neigetot.values / 100, color='k', label='In-situ observation')
-if os.path.exists('HTN2.obs'):
-    obs = pd.read_csv('HTN.obs', sep=';', parse_dates=['dat'])
+if os.path.exists(f'HTN2_{point}.obs'):
+    obs = pd.read_csv(f'HTN2_{point}.obs', sep=';', parse_dates=['dat'])
     obs = obs[(obs.dat >= deb) & (obs.dat <= end)]
     plt.plot(obs.dat.values, obs.neigetot.values / 100, color='k')
 
