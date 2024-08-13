@@ -2127,7 +2127,7 @@ class RandomSampling(Assimilation):
             analysis = xr.DataArray(
                 name   = 'rr',
                 dims   = ["member", "lat", "lon"],
-                coords = dict(lon=parameters_loc.lon, lat=parameters_loc.lat, member=range(0, nmembers+1)),
+                coords = dict(lon=parameters_loc.lon, lat=parameters_loc.lat, member=range(0, nmembers + 1)),
             )
 
             # Fill first member with corrected observation
@@ -2158,9 +2158,9 @@ class RandomSampling(Assimilation):
             draw_gamma = Preprocessing_ANTILOPE.random_draw(distribution='gamma', members=len(analysis.member) - 1)
             draw_gauss = Preprocessing_ANTILOPE.random_draw(distribution='normal', members=len(analysis.member) - 1)
 
-            for member in range(1, nmembers + 1):
+            for idx, member in enumerate(analysis.member.data[1:]):
                 # Fill other members with random draw arround the corrected observation
-                ana = Preprocessing_ANTILOPE.perturb(obs, sd, draw_gamma[member - 1], draw_gauss[member - 1])
+                ana = Preprocessing_ANTILOPE.perturb(obs, sd, draw_gamma[idx], draw_gauss[idx])
                 analysis.loc[{'member':member}] = ana
 
                 self.newlocalfield[member][idp,idd] = analysis.sel({'lat':nearest_lat, 'lon':nearest_lon, 'member':member}).data
