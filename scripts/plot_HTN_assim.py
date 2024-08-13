@@ -17,7 +17,7 @@ import pandas as pd
 import xarray as xr
 import argparse
 import matplotlib.pyplot as plt
-
+from mpl_toolkits.axes_grid1 import ImageGrid
 
 import snowtools.tools.xarray_preprocess as xrp
 from snowtools.scripts.extract.vortex import vortexIO as io
@@ -69,10 +69,10 @@ def parse_command_line():
                         help="Date of the reference Pleiade observation."
                              "Format YYYYMMDDHH")
 
-    parser.add_argument('-x', '--xpid', type=str,
+    parser.add_argument('-x', '--xpids', type=str, nargs='+',
                         help="XPID of the simulation without assimilation format XP_NAME@username")
 
-    parser.add_argument('-a', '--xpid_assim', type=str, default=None,
+    parser.add_argument('-a', '--xpids_assim', type=str, default=None,
                         help="XPID of the simulation with assimilation format XP_NAME@username")
 
     parser.add_argument('-v', '--vapp', type=str, default='edelweiss', choices=['s2m', 'edelweiss'],
@@ -106,8 +106,13 @@ def execute():
     datebegin       = args.datebegin
     dateend         = args.dateend
     date            = args.date
-    xpid            = args.xpid
-    xpid_assim      = args.xpid_assim
+    xpids           = args.xpids
+    xpids_assim     = args.xpids_assim
+    if xpids_assim is None:
+        xpids_assim = [f'{xp}_assim' for xp in xpids]
+    else:
+        # TODO : ensure that len(xpids) == 1 in this case
+        xpids_assim = [xpids_assim]
     geometry        = args.geometry
     subdomain       = args.subdomain
     vapp            = args.vapp
@@ -142,55 +147,56 @@ def execute():
     mnt = xrp.preprocess(mnt, decode_time=False)
     mnt = mnt['ZS']
 
-    # TODO : gérer ça plus proprement
-    if '@' not in xpid:
-        user = os.environ["USER"]
-        xpid = f'{xpid}@{user}'
-    shortid = xpid.split('@')[0]
+    for idx, xpid in enumerate(xpids):
 
-    # Get (filtered) PRO files with Vortex
-    if members:
-        member = members_map[shortid]
-    else:
-        if shortid in ['safran', 'ANTILOPE', 'safran_pappus', 'ANTILOPE_pappus', 'SAFRAN', 'SAFRAN_pappus']:
-            member = None
+        # TODO : gérer ça plus proprement
+        if '@' not in xpid:
+            user = os.environ["USER"]
+            xpid = f'{xpid}@{user}'
+        shortid = xpid.split('@')[0]
+
+        # Get (filtered) PRO files with Vortex
+        if members:
+            member = members_map[shortid]
         else:
-            member = [members_map[shortid][0]]
+            if shortid in ['safran', 'ANTILOPE', 'safran_pappus', 'ANTILOPE_pappus', 'SAFRAN', 'SAFRAN_pappus']:
+                member = None
+            else:
+                member = [members_map[shortid][0]]
 
-    # VERRUE pour gérer le décallage d'un jour en attendant de combler les données
-    if (shortid.startswith('SAFRAN') or shortid.startswith('ANTILOPE')) and datebegin == '2021080207':
-        deb = '2021080106'
-    else:
-        deb = datebegin  # 2021080207
+        # VERRUE pour gérer le décallage d'un jour en attendant de combler les données
+        if (shortid.split('_')[0] in ['SAFRAN', 'ANTILOPE', 'KRIGING']) and datebegin == '2021080207':
+            deb = '2021080106'
+        else:
+            deb = datebegin  # 2021080207
 
-    # Get simulation without assimilation
-    kw = dict(datebegin=deb, dateend=dateend, vapp=vapp, member=member, namebuild=None,
-            filename=f'PRO_{shortid}.nc', xpid=xpid, geometry=geometry)
-    io.get_pro(**kw)
+        # Get simulation without assimilation
+        kw = dict(datebegin=deb, dateend=dateend, vapp=vapp, member=member, namebuild=None,
+                filename=f'PRO_{shortid}.nc', xpid=xpid, geometry=geometry)
+        io.get_pro(**kw)
 
-    # Get simulation without assimilation
-    if xpid_assim is None:
-        xpid_assim = f'{shortid}_assim'
-    member_assim = members_map[xpid_assim]
-    io.get_pro(
-        datebegin   = deb,
-        dateend     = dateend,
-        vapp        = vapp,
-        member      = member_assim,
-        namebuild   = None,
-        filename    = f'PRO_{xpid_assim}.nc',
-        xpid        = xpid_assim,
-        geometry    = geometry,
-    )
+        # Get simulation without assimilation
+        xpid_assim = xpids_assim[idx]
+        member_assim = members_map[xpid_assim]
+        io.get_pro(
+            datebegin   = deb,
+            dateend     = dateend,
+            vapp        = vapp,
+            member      = member_assim,
+            namebuild   = None,
+            filename    = f'PRO_{xpid_assim}.nc',
+            xpid        = xpid_assim,
+            geometry    = geometry,
+        )
 
-    # Read data
-    openloop = read_simu(xpid, member, date)
-    assim = read_simu(xpid_assim, member_assim, date)
+        # Read data
+        openloop = read_simu(xpid, member, date)
+        assim = read_simu(xpid_assim, member_assim, date)
 
-    plot_htn(openloop, obs, assim, shortid, xpid_assim, date, subdomain, dem=mnt)
+        plot_htn(openloop, obs, assim, shortid, xpid_assim, date, subdomain, dem=mnt)
 
-    clean(shortid, member)
-    clean(xpid_assim, member_assim)
+        clean(shortid, member)
+        clean(xpid_assim, member_assim)
 
 
 def read_simu(xpid, members, date):
@@ -265,19 +271,32 @@ def plot_htn(openloop, obs, assim, xpid, xpid_assim, date, subdomain, dem=None):
     # obshtn = var_obshtn[date]
     vmin = 0
     # Round max to nearest 0.5m
-    vmax = round(float(max(openloop.DSN_T_ISBA.max(), obs.max(), assim.DSN_T_ISBA.max())) * 2) / 2
+    # vmax = round(float(max(openloop.DSN_T_ISBA.max(), obs.max(), assim.DSN_T_ISBA.max())) * 2) / 2
+    vmax = round(float(max(openloop.DSN_T_ISBA.max(), obs.max(), assim.DSN_T_ISBA.max())))
+    slices = int(vmax)
 
-    fig, ax = plt.subplots(1, 3, figsize=(36 * len(obs.xx) / len(obs.yy), 10), sharey=True)
+    # fig, ax = plt.subplots(1, 3, figsize=(36 * len(obs.xx) / len(obs.yy), 10), sharey=True)
+    fig = plt.figure(figsize=(30 * len(obs.xx) / len(obs.yy), 10))
+    ax = ImageGrid(
+        fig, 111,          # as in plt.subplot(111)
+        nrows_ncols   = (1, 3),
+        axes_pad      = 0.15,
+        share_all     = True,
+        cbar_location = "right",
+        cbar_mode     = "single",
+        cbar_size     = "7%",
+        cbar_pad      = 0.15,
+    )
 
-    olp = openloop.DSN_T_ISBA.mean(dim='member')
+    opl = openloop.DSN_T_ISBA.mean(dim='member')
     print('plot openloop')
-    plot2D.plot_field(olp, ax=ax[0], vmin=vmin, vmax=vmax, cmap=plt.cm.Blues, dem=dem, shade=False,
-            isolevels=thresholds, slices=6)
+    plot2D.plot_field(opl, ax=ax[0], vmin=vmin, vmax=vmax, cmap=plt.cm.Blues, dem=dem, shade=False,
+            isolevels=thresholds, slices=slices, add_colorbar=False)
     ax[0].set_title('Openloop mean snow depth (m)')
 
     print('plot observation')
     plot2D.plot_field(obs, ax=ax[1], vmin=vmin, vmax=vmax, cmap=plt.cm.Blues, dem=dem, shade=False,
-            isolevels=thresholds, slices=6)
+            isolevels=thresholds, slices=slices, add_colorbar=False)
     #        shade=True,)
     if date in datesassim:
         ax[1].set_title('Assimilated snow depth (m)')
@@ -286,9 +305,17 @@ def plot_htn(openloop, obs, assim, xpid, xpid_assim, date, subdomain, dem=None):
 
     print('plot assimilation')
     ass = assim.DSN_T_ISBA.mean(dim='member')
-    plot2D.plot_field(ass, ax=ax[2], cmap=plt.cm.Blues, dem=dem, shade=False, vmin=vmin, vmax=vmax,
-            isolevels=thresholds, slices=6)
+    im = plot2D.plot_field(ass, ax=ax[2], cmap=plt.cm.Blues, dem=dem, shade=False, vmin=vmin, vmax=vmax,
+            isolevels=thresholds, slices=slices, add_colorbar=False)
     ax[2].set_title('Assimilation mean snow depth (m)')
+
+    for axis in ax:
+        axis.set_xticks([])
+        axis.set_yticks([])
+        axis.set_xlabel('')
+        axis.set_ylabel('')
+
+    ax[2].cax.colorbar(im, label='Snow depth(m)')
 
     plot2D.save_fig(savename, fig)
 
