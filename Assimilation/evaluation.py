@@ -282,8 +282,10 @@ algo = dict(
         ################################################################################################
         # Paper1 :
         RS27          = 'RandomSampling/XP27/Random_Sampling_2021120106_2022043006_daily_alp.nc',
-        PF32          = 'XP32/Assimilation_locale_2021120106_2022050106_daily_alp_mask9_debiasing3.nc',
-        KD36          = 'EnsembleKalmanFilter/XP36/EnKF_2021120106_2022050106_daily_alp.nc',
+        RS29          = 'RandomSampling/XP29/Random_Sampling_2021120106_2022043006_daily_alp.nc',
+        RS29_error    = 'RandomSampling/XP29/Random_Sampling_2021120106_2022043006_daily_alp_test_error.nc',
+        #PF32          = 'XP32/Assimilation_locale_2021120106_2022050106_daily_alp_mask9_debiasing3.nc',
+        #KD36          = 'EnsembleKalmanFilter/XP36/EnKF_2021120106_2022050106_daily_alp.nc',
         ################################################################################################
     )
 
@@ -428,6 +430,8 @@ xpid_label = dict(
         RS25          = 'RS25',
         RS26          = 'RS26',
         RS27          = 'RS',  # paper1
+        RS29          = 'RS29',
+        RS29_error    = 'RS29_error',
         PF32          = 'PF',  # paper1
         KD36          = 'EnKF',  # paper1
     )
@@ -442,6 +446,8 @@ colors = dict(
     RS24      = 'maroon',
     RS25      = 'green',
     RS27      = 'darkblue',
+    RS29      = 'red',
+    RS29_error = 'green',
     RS26      = 'green',
     #PF31      = 'green',
     PF31      = 'green',
@@ -1016,7 +1022,7 @@ class Evaluation(object):
             #if xpid.startswith('RS'):
             #if xpid == 'RS12':
             #if xpid == 'RS25':
-            if xpid == 'RS26':
+            if xpid == 'RS29':
                 antilopec = tmp.loc[{'member':0}]
                 antilopec = antilopec.loc[{'time':dates}]
                 antc = True
@@ -1233,7 +1239,7 @@ class Evaluation(object):
                 i = 1
                 j = 1
                 title= 'd'
-            sc = tools.plot_scatter(axes[i,j], error, spread, 'Absolute error of the ensemble mean (kg/m²)', 'Ensemble spread (kg/m²)', f"spread_skill_{product}.pdf", savedir, color=rr)
+            sc = tools.plot_scatter(axes[i,j], error, spread, xaxis='Absolute error of the ensemble mean (kg/m²)', yaxis='Ensemble spread (kg/m²)', color=rr)
                     #savedir, color=rr, xaxis=xaxis, yaxis=yaxis)
             axes[i,j].set_title(f'{title}) {xpid_label[product]}', fontsize=16)
             j = j + 1

@@ -302,7 +302,7 @@ def add_boundaries(ax, linewidth=1):
     for shape in massifs.shapeRecords():
         x = [i[0] for i in shape.shape.points[:]]
         y = [i[1] for i in shape.shape.points[:]]
-        ax.plot(x, y, color='grey', linewidth=linewidth)
+        ax.plot(x, y, color='k', linewidth=linewidth)
 
 def add_cities(latmin, latmax, lonmin, lonmax):
     cities = pd.read_csv(os.path.join('/home/vernaym/safran/monitoring/', 'cities.csv'), sep=',')
@@ -500,41 +500,41 @@ def finalize_fig(figure, imm, label, outname):
 @speedtest
 def read_obs(args):
     filename = f'ANTILOPEH_{args.datebegin.strftime("%Y%m%d%H")}_{args.dateend.strftime("%Y%m%d%H")}_{args.domain}.nc'
-    try:
-        io.get_meteo(
-            kind           = 'Precipitation',
-            geometry       = 'GrandesRousses1km',
-            xpid           = 'ANTILOPE@vernaym',
-            vapp           = 'edelweiss',
-            block          = 'hourly',
-            datebegin      = Date(args.datebegin).ymd6h,
-            dateend        = Date(args.dateend).ymd6h,
-            filename       = filename,
-            namespace      = 'vortex.cache.fr',
-        )
-    except SectionFatalError:
-        if Date(args.datebegin).month > 8:
-            datebegin = Date(args.datebegin).replace(month=8, day=1)
-        else:
-            year = Date(args.datebegin).year - 1
-            datebegin = Date(args.datebegin).replace(year=year, month=8, day=1)
-        if Date(args.dateend).month > 8:
-            year = Date(args.dateend).year + 1
-            dateend = Date(args.dateend).replace(year=year, month=8, day=1)
-        else:
-            dateend = Date(args.dateend).replace(month=8, day=1)
-
-        io.get_meteo(
-            kind           = 'Precipitation',
-            geometry       = 'GrandesRousses1km',
-            xpid           = 'ANTILOPE@vernaym',
-            vapp           = 'edelweiss',
-            block          = 'hourly',
-            datebegin      = datebegin.ymd6h,
-            dateend        = dateend.ymd6h,
-            filename       = filename,
-            namespace      = 'vortex.cache.fr',
-        )
+#    try:
+#        io.get_meteo(
+#            kind           = 'Precipitation',
+#            geometry       = 'GrandesRousses1km',
+#            xpid           = 'ANTILOPE@vernaym',
+#            vapp           = 'edelweiss',
+#            block          = 'hourly',
+#            datebegin      = Date(args.datebegin).ymd6h,
+#            dateend        = Date(args.dateend).ymd6h,
+#            filename       = filename,
+#            namespace      = 'vortex.cache.fr',
+#        )
+#    except SectionFatalError:
+#        if Date(args.datebegin).month > 8:
+#            datebegin = Date(args.datebegin).replace(month=8, day=1)
+#        else:
+#            year = Date(args.datebegin).year - 1
+#            datebegin = Date(args.datebegin).replace(year=year, month=8, day=1)
+#        if Date(args.dateend).month > 8:
+#            year = Date(args.dateend).year + 1
+#            dateend = Date(args.dateend).replace(year=year, month=8, day=1)
+#        else:
+#            dateend = Date(args.dateend).replace(month=8, day=1)
+#
+#        io.get_meteo(
+#            kind           = 'Precipitation',
+#            geometry       = 'GrandesRousses1km',
+#            xpid           = 'ANTILOPE@vernaym',
+#            vapp           = 'edelweiss',
+#            block          = 'hourly',
+#            datebegin      = datebegin.ymd6h,
+#            dateend        = dateend.ymd6h,
+#            filename       = filename,
+#            namespace      = 'vortex.cache.fr',
+#        )
 
     if not os.path.exists(filename):
         if args.domain == 'GrandesRousses':
@@ -1289,8 +1289,21 @@ class Assimilation(object):
 
         return M
 
+    def interpolate_cubic(self, field, uncertainty):
+
+        if self.plot:
+            self.plot_array(field.where(uncertainty < 0.2), field, 'Masked field', f'{self.date_str}/Masked_field_{self.date_str}.pdf', cmap=plt.cm.YlGnBu)
+
+        # https://corteva.github.io/rioxarray/html/examples/interpolate_na.html
+        #new = field.where(uncertainty < 0.5).rio.write_nodata(np.nan).rename({'lon': 'x', 'lat': 'y'}).rio.write_crs("EPSG:4326", inplace=True).rio.interpolate_na(method='cubic')
+        #new = field.where(uncertainty < 0.1).rio.write_nodata(np.nan).rename({'lon': 'x', 'lat': 'y'}).rio.write_crs("EPSG:4326", inplace=True).rio.interpolate_na(method='linear')
+        new = field.where(uncertainty < 0.05).rio.write_nodata(np.nan).rename({'lon': 'x', 'lat': 'y'}).rio.write_crs("EPSG:4326", inplace=True).rio.interpolate_na(method='linear')
+        # sd = xr.apply_ufunc(np.abs, field - new)
+        sd = uncertainty
+        return new, sd
+
 #    @speedtest
-    def observation_ECM_new(self, parameters, date, plot=None):
+    def observation_ECM_new(self, parameters, date, plot=False):
 
         initial_obs = parameters.rr.data.flatten()
         std = np.abs(parameters.sigma.data)
@@ -1301,7 +1314,7 @@ class Assimilation(object):
             uncertainty = std + parameters.error.data
         else:
             uncertainty = std
-        pond = self.pond.dot(diags(1/uncertainty.flatten(), 0))  # WARNING : error NOT >1 par construction
+        #pond = self.pond.dot(diags(1/uncertainty.flatten(), 0))  # WARNING : error NOT >1 par construction
         #pond = self.pond.dot(diags(1/(std.flatten()*(1+parameters.error.data.flatten())), 0))  # WARNING : error NOT >1 par construction
         #pond = self.pond.dot(diags(np.exp(-parameters.error.data).flatten(), 0))  # WARNING : error NOT >1 par construction
         #pond = self.pond.dot(diags(1/parameters.error.data.flatten(), 0))
@@ -1321,19 +1334,22 @@ class Assimilation(object):
             gradient.data = uniform_filter(gradient.data, 10)
             gradient = gradient.sel({'lat':np.intersect1d(parameters.lat, gradient.lat), 'lon':np.intersect1d(parameters.lon, gradient.lon)})
 
-        newfield, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(obs, pond)
+        new_obs, sd = self.interpolate_cubic(parameters.db, uncertainty)
+        #new_obs = self.bicubic_spline(parameters.rr, uncertainty)
+        #newfield, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(obs, pond)
         #newfield, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(obs, pond, gradient=gradient.data.flatten(), uncertainty=uncertainty)  # Use AROME mean vertical gradient
         #newfield, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(obs, pond, qq_adjustment=True)  # qq adjustment add >0 bias !
 
         #Rdyn = diags(sd, 0)
-        new_obs = xr.DataArray(
-            data   = newfield.reshape((len(parameters.lat), len(parameters.lon))),
-            name   = 'obs',
-            dims   = ["lat", "lon"],
-            coords = dict(lon=parameters.lon, lat=parameters.lat)
-        )
+        #new_obs = xr.DataArray(
+        #    data   = newfield.reshape((len(parameters.lat), len(parameters.lon))),
+        #    name   = 'obs',
+        #    dims   = ["lat", "lon"],
+        #    coords = dict(lon=parameters.lon, lat=parameters.lat)
+        #)
 
-        Rstat = diags(sd, 0)  # WARNING : variable name not adapted anymore
+        sd = parameters.sigma
+        Rstat = diags(sd.data.flatten(), 0)  # WARNING : variable name not adapted anymore
         #Rdyn = diags(np.sqrt(sd*np.abs(new_obs.data - parameters.db.data).flatten()), 0)
         #error = parameters.error.data
         #error = uniform_filter(error, 10)
@@ -1346,26 +1362,26 @@ class Assimilation(object):
         #R = dia_matrix(Rdyn+Rstat)
         R = dia_matrix(Rstat)
 
-        # Plot data
-        if plot is not None:
-            #point = 2059  #max obs 20220110
-            #point = 1988  #max std 20220110
-            #point = 887 #max obs 20210825
-            point = 2065
-            point = 1200 # To match the illustrastion of the localization area
-            #point = 78 # min obs 20211230
-            #point = np.where(obs==np.nanmin(obs))[0][0]
-            #point = np.where(obs==np.nanmax(obs))[0][0]
-            num_poste = plot['num_poste']
-            date = plot['date']
-            nivometeo = read_nivometeo_obs()
-            if nivometeo is not None and np.datetime64(date) in nivometeo.date:
-                ref = nivometeo.loc[{'num_poste':num_poste, 'date':np.datetime64(date)}].obs.data
-                if not np.isnan(ref):
-                    lat,lon = np.meshgrid(parameters.lat, parameters.lon)
-                    point = np.where((lat.flatten()==plot['lat']) & (lon.flatten()==plot['lon']))[0][0]
-                    #self.plot_super_ensemble(point, obs, mean[point], sd[point], pond, f'Observation_{num_poste}_{date}', reference=ref, initial_obs=initial_obs)
-                    self.plot_super_ensemble(point, obs, newfield, mean[point], R.diagonal()[point], pond, f'Observation_{num_poste}_{date}', reference=ref, initial_obs=initial_obs)
+#        # Plot data
+#        if self.plot:
+#            #point = 2059  #max obs 20220110
+#            #point = 1988  #max std 20220110
+#            #point = 887 #max obs 20210825
+#            point = 2065
+#            point = 1200 # To match the illustrastion of the localization area
+#            #point = 78 # min obs 20211230
+#            #point = np.where(obs==np.nanmin(obs))[0][0]
+#            #point = np.where(obs==np.nanmax(obs))[0][0]
+#            num_poste = plot['num_poste']
+#            date = plot['date']
+#            nivometeo = read_nivometeo_obs()
+#            if nivometeo is not None and np.datetime64(date) in nivometeo.date:
+#                ref = nivometeo.loc[{'num_poste':num_poste, 'date':np.datetime64(date)}].obs.data
+#                if not np.isnan(ref):
+#                    lat,lon = np.meshgrid(parameters.lat, parameters.lon)
+#                    point = np.where((lat.flatten()==plot['lat']) & (lon.flatten()==plot['lon']))[0][0]
+#                    #self.plot_super_ensemble(point, obs, mean[point], sd[point], pond, f'Observation_{num_poste}_{date}', reference=ref, initial_obs=initial_obs)
+#                    self.plot_super_ensemble(point, obs, newfield, mean[point], R.diagonal()[point], pond, f'Observation_{num_poste}_{date}', reference=ref, initial_obs=initial_obs)
 
         return R, Rstat, Rdyn, new_obs
 
@@ -1540,6 +1556,8 @@ class Assimilation(object):
                 dims   = ["lat", "lon"],
                 coords = dict(lon=ref_field.lon, lat=ref_field.lat),
             )
+
+        cmap.set_bad('grey', 1.)
 
         # Reduce the data to the actual domain (remove the potential correlation length edge)
         latmin = domain_coords[domain]['latmin']

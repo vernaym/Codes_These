@@ -472,7 +472,7 @@ def random_draw(distribution='gamma', members=16):
     return np.sort(draw)
 
 
-def perturb(obs, sd, perturbation1, perturbation2, ratio=None, sd2=None, frac=0.2):
+def perturb(obs, sd, perturbation1, perturbation2, ratio=None, sd2=None, frac=0.1):
     """
     Perturb an *obs* field with a previously randomly dranw value *perturbation* and an estimated error *sd*.
     """
@@ -484,7 +484,8 @@ def perturb(obs, sd, perturbation1, perturbation2, ratio=None, sd2=None, frac=0.
     # WARNING : the small ensemble size (16) lead to a large variability
     # of the ensemble mean but this algorithm ensures that on average the ensemble
     # mean is centered on the corrected observation
-    ana = obs + obs * frac * perturbation1 + sd * perturbation2
+    # ana = obs + obs * frac * perturbation1 + sd * perturbation2
+    ana = obs + obs * (frac + sd) * perturbation2  # Perturbation2 = gamma
 
     if sd2 is not None:
         gamma = random_draw(distribution='gamma', members=1)[0]
