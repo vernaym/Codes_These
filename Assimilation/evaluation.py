@@ -282,8 +282,9 @@ algo = dict(
         ################################################################################################
         # Paper1 :
         RS27          = 'RandomSampling/XP27/Random_Sampling_2021120106_2022043006_daily_alp.nc',
-        RS29          = 'RandomSampling/XP29/Random_Sampling_2021120106_2022043006_daily_alp.nc',
-        RS29_error    = 'RandomSampling/XP29/Random_Sampling_2021120106_2022043006_daily_alp_test_error.nc',
+        #RS29          = 'RandomSampling/XP29/Random_Sampling_2021120106_2022043006_daily_alp.nc',
+        RS30          = 'RandomSampling/XP30/Random_Sampling_2021120106_2022043006_daily_alp.nc',
+        #RS29_error    = 'RandomSampling/XP29/Random_Sampling_2021120106_2022043006_daily_alp_test_error.nc',
         #PF32          = 'XP32/Assimilation_locale_2021120106_2022050106_daily_alp_mask9_debiasing3.nc',
         #KD36          = 'EnsembleKalmanFilter/XP36/EnKF_2021120106_2022050106_daily_alp.nc',
         ################################################################################################
@@ -431,6 +432,7 @@ xpid_label = dict(
         RS26          = 'RS26',
         RS27          = 'RS',  # paper1
         RS29          = 'RS29',
+        RS30          = 'RS30',
         RS29_error    = 'RS29_error',
         PF32          = 'PF',  # paper1
         KD36          = 'EnKF',  # paper1
@@ -447,6 +449,7 @@ colors = dict(
     RS25      = 'green',
     RS27      = 'darkblue',
     RS29      = 'red',
+    RS30      = 'maroon',
     RS29_error = 'green',
     RS26      = 'green',
     #PF31      = 'green',
@@ -972,7 +975,8 @@ class Evaluation(object):
         self.data = self.data.loc[{'date':dates}]
 
 #        data = dict(antilope=list(), wma=list(), antiloped=list(), antilopec=list())
-        data = dict(antilope=list(), raw=list(), antilopec=list())
+        data = dict(antilope=list())
+#        data = dict(antilope=list(), raw=list(), antilopec=list())
 #        data = dict(antilopec=list(), raw=list())
 #        data = dict(antilope=list(), antiloped=list(), antiloper=list())
         #data = dict(antilope=list(), raw=list(), antilopec=list())
@@ -1022,11 +1026,12 @@ class Evaluation(object):
             #if xpid.startswith('RS'):
             #if xpid == 'RS12':
             #if xpid == 'RS25':
-            if xpid == 'RS29':
-                antilopec = tmp.loc[{'member':0}]
-                antilopec = antilopec.loc[{'time':dates}]
-                antc = True
-            tmp = tmp.loc[{'member':range(1,17)}]
+            #if xpid == 'RS27':
+            #    antilopec = tmp.loc[{'member':0}]
+            #    antilopec = antilopec.loc[{'time':dates}]
+            #    antc = True
+            #tmp = tmp.loc[{'member':range(1,17)}]
+            tmp = tmp.loc[{'member': 0}]
             simus[xpid] = tmp
 
         if 'raw' in data.keys():
@@ -1123,7 +1128,8 @@ class Evaluation(object):
 
                 #if not os.path.exists(os.path.join(datadir, 'scores.nc')):
                 # Spread skill
-                ensemble_products = ['raw'] + [xpid for xpid in experiments.keys()]
+                #ensemble_products = ['raw'] + [xpid for xpid in experiments.keys()]
+                ensemble_products = []
                 for product in data.keys():
                     if product not in scores_dict.keys():
                         scores_dict[product] = {score:list() for score in scores_list}
@@ -1183,7 +1189,10 @@ class Evaluation(object):
         if 'raw' in data.keys():
             self.data['raw'] = (('num_poste', 'date', 'member'), data['raw'])
         for xpid in experiments.keys():
-            self.data[xpid] = (('num_poste', 'date', 'member'), data[xpid])
+            if len(np.shape(data[xpid])) == 3:
+                self.data[xpid] = (('num_poste', 'date', 'member'), data[xpid])
+            else:
+                self.data[xpid] = (('num_poste', 'date'), data[xpid])
         t8 = time.time()
         #print(f'Filling self.data took {(t8-t7)*1000.}ms')
 
@@ -1214,7 +1223,8 @@ class Evaluation(object):
         plt.close(fig)
 
         # Spread skill
-        products = [xpid for xpid in experiments.keys()]
+        #products = [xpid for xpid in experiments.keys()]
+        products = ensemble_products
         if 'raw' in data.keys(): products = products + ['raw']
         fig, axes = plt.subplots(nrows=2, ncols=2, sharex=True, sharey=True, figsize=(11,10))
         xaxis = False
@@ -1257,20 +1267,21 @@ class Evaluation(object):
 #            ax.set_xlim(top=vmax)
 #            fig.savefig(os.path.join(savedir, f"spread_skill_{product}.pdf"), format='pdf')
 #            plt.close(fig)
-        plt.subplots_adjust(bottom=0.08, left=0.08, right=0.88, top=0.95, wspace=0.05, hspace=0.12)
-        fig.text(0.5, 0.02, 'Absolute error of the ensemble mean (kg/m²)', ha='center', fontsize=18)
-        fig.text(0.02, 0.4, 'Ensemble spread (kg/m²)', ha='center', rotation='vertical', fontsize=18)
-        cax = plt.axes((0.89, 0.08, 0.03, 0.87))
-        cb = fig.colorbar(sc, cax=cax)
-        cb.set_label(label='Precipitation (kg/m²)', size=18)
-        cb.ax.tick_params(labelsize=16)
-        #fig.tight_layout()
-        #fig.subplots_adjust(left=0.005, top=0.98, right=0.99, bottom=0.1)
-        fig.savefig(os.path.join(savedir, f"spread_skill.pdf"), format='pdf')
-        plt.close(fig)
+        if len(products) > 0:
+            plt.subplots_adjust(bottom=0.08, left=0.08, right=0.88, top=0.95, wspace=0.05, hspace=0.12)
+            fig.text(0.5, 0.02, 'Absolute error of the ensemble mean (kg/m²)', ha='center', fontsize=18)
+            fig.text(0.02, 0.4, 'Ensemble spread (kg/m²)', ha='center', rotation='vertical', fontsize=18)
+            cax = plt.axes((0.89, 0.08, 0.03, 0.87))
+            cb = fig.colorbar(sc, cax=cax)
+            cb.set_label(label='Precipitation (kg/m²)', size=18)
+            cb.ax.tick_params(labelsize=16)
+            #fig.tight_layout()
+            #fig.subplots_adjust(left=0.005, top=0.98, right=0.99, bottom=0.1)
+            fig.savefig(os.path.join(savedir, f"spread_skill.pdf"), format='pdf')
+            plt.close(fig)
 
-        fig1,ax1 = plt.subplots()
         if 'raw' in data.keys():
+            fig1,ax1 = plt.subplots()
             for product in ['raw'] + [xpid for xpid in experiments.keys()]:
                 self.reliability_diagram(self.data[product].data.reshape(-1, 16), self.data.obs.data.flatten(), product, ax1)
                 fig2,ax2 = plt.subplots()
@@ -1293,14 +1304,14 @@ class Evaluation(object):
                         #self.rank_histogram(simu, obs, product, ax)
                         #fig.savefig(os.path.join(savedir, 'hists', f'rank_histogram_{product}_{poste}.pdf'), format='pdf')
                         plt.close(fig)
-        ax1.plot([0,1], [0,1], linestyle=':', color='k')
-        ax1.set_xlim([0, 1])
-        ax1.set_ylim([0, 1])
-        ax1.set_xlabel('Forecast Probability')
-        ax1.set_ylabel('Observed Frequency')
-        ax1.legend(fontsize=20)
-        fig1.savefig(f'{savedir}/reliability_diagram_{self.threshold}.pdf', format='pdf')
-        plt.close(fig1)
+            ax1.plot([0,1], [0,1], linestyle=':', color='k')
+            ax1.set_xlim([0, 1])
+            ax1.set_ylim([0, 1])
+            ax1.set_xlabel('Forecast Probability')
+            ax1.set_ylabel('Observed Frequency')
+            ax1.legend(fontsize=20)
+            fig1.savefig(f'{savedir}/reliability_diagram_{self.threshold}.pdf', format='pdf')
+            plt.close(fig1)
 
         for threshold in [0, 1, 10, 20]:
             fig,ax = plt.subplots()
@@ -1385,7 +1396,7 @@ class Evaluation(object):
                     if not np.isnan(liste_score[idx]):
                         if not np.isnan(liste_score[idx]):
                             # Plot station numbers :
-                            #axis.text(pos, liste_score[idx], str(int(poste)), fontsize=6)
+                            axis.text(pos, liste_score[idx], str(int(poste)), fontsize=6)
                             # Plot only horizontal lines :
                             #axis.plot(pos, liste_score[idx], linestyle='', marker='_', markersize='20', color='k')
                             pass
@@ -1407,7 +1418,8 @@ class Evaluation(object):
 #                    pos2 += 1
                 x = self.scores.loc[{'score':score}][product].data
                 add_num_poste(ax, pos, x)
-                labels.append(self.add_label(ax.violinplot(x[~np.isnan(x)], showmeans=True, positions=[pos]), xpid_label[product], color=colors[product]))
+                labels.append(self.add_label(ax.violinplot(x[~np.isnan(x)], showmeans=True, positions=[pos]), xpid_label[product], color=colors[product], boxplot=False))
+                #labels.append(self.add_label(ax.boxplot(x[~np.isnan(x)], positions=[pos], notch=True, patch_artist=True), xpid_label[product], color=colors[product]))
                 if len(products) <= 2:
                     pos +=0.5
                 else:
@@ -1470,20 +1482,27 @@ class Evaluation(object):
 
         fig.savefig(f'{savedir}/brier_evolution.pdf', format='pdf', bbox_inches='tight')
 
-    def add_label(self, violin, label, color=None):
+    def add_label(self, violin, label, color=None, boxplot=True):
         """ Customize violinplot by adding a label"""
         import matplotlib.patches as mpatches
-        if color is None:
-            color = violin["bodies"][0].get_facecolor().flatten()
+        if boxplot:
+            # Here violin is a boxplot...
+            #for item in ["boxprops", "capprops", "whiskerprops", "flierprops", "medianprops"]:
+            #    violin["boxprops"] = dict(facecolor=color, color=color, markeredgecolor=color),
+            for patch in violin['boxes']:
+                patch.set(color=color, facecolor=color)
         else:
-            violin["bodies"][0].set_color(color)
-            violin['cmeans'].set_color(color)
-            violin['cmaxes'].set_color(color)
-            violin['cmins'].set_color(color)
-            violin['cbars'].set_color(color)
-            for pc in violin['bodies']:
-                pc.set_facecolor(color)
-                pc.set_edgecolor(color)
+            if color is None:
+                color = violin["bodies"][0].get_facecolor().flatten()
+            else:
+                violin["bodies"][0].set_color(color)
+                violin['cmeans'].set_color(color)
+                violin['cmaxes'].set_color(color)
+                violin['cmins'].set_color(color)
+                violin['cbars'].set_color(color)
+                for pc in violin['bodies']:
+                    pc.set_facecolor(color)
+                    pc.set_edgecolor(color)
 
         return (mpatches.Patch(color=color), label)
 
