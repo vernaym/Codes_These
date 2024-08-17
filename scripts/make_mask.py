@@ -870,9 +870,9 @@ def ratio_estimation(field, model=None, moving_window=25):
                 #w = d0 / (d0 + dist)
                 #w = 1/(0.01+dist)**2  # XP25
                 #w = np.round(1/(1+dist)**2, 3)
-                #w = np.round(np.exp(-(dist/d0)), 3)  # Propagates reference score further
+                w = np.round(np.exp(-(dist/d0)), 3)  # Propagates reference score further
                 #w = np.round(np.exp(-(dist**2/d0)), 3)
-                w = np.round(np.exp(-(dist/d0)**2), 3)  # Sticks more to the reference
+                #w = np.round(np.exp(-(dist/d0)**2), 3)  # Sticks more to the reference
 
             weights.append(w)
             # To take into account the increasing difference of cumuls with the distance
@@ -928,7 +928,7 @@ def ratio_estimation(field, model=None, moving_window=25):
 
     W[np.isnan(W)] = 0
     tmp = to_xarray(W, field, varname='mean_ratio')
-    plot_and_save(tmp, "Total_weight", cmap=plt.cm.viridis, vmin=0., vmax=2)
+    plot_and_save(tmp, "Total_weight", cmap=plt.cm.viridis, vmin=0.)
     mean_ratio = np.divide(np.sum(weights*ratios, axis=0), W)
 
     #mean_ratio = mean_ratio / ratio_arome.data  # TODO : TMP !!!!
