@@ -484,8 +484,8 @@ def perturb(obs, sd, perturbation1, perturbation2, ratio=None, sd2=None, frac=0.
     # WARNING : the small ensemble size (16) lead to a large variability
     # of the ensemble mean but this algorithm ensures that on average the ensemble
     # mean is centered on the corrected observation
-    # ana = obs + obs * frac * perturbation1 + sd * perturbation2
-    ana = obs + obs * (frac + sd) * perturbation2  # Perturbation2 = gamma
+    # The first term allows members with 0mm precipitation for very small precipitation events
+    ana = obs + obs * frac * perturbation1 + obs * frac * sd * perturbation2  # perturbation1=gauss, perturbation2=gamma
 
     if sd2 is not None:
         gamma = random_draw(distribution='gamma', members=1)[0]
