@@ -743,7 +743,7 @@ class Evaluation(object):
         proba, catsize, freq_occ, global_freq_occ = self.probability_classes(simu, obs, Ne=Ne)
         # TODO : taille du marker proportionelle au nombre de prevision dans une categorie
         ax.plot(proba, freq_occ, marker=None, linestyle='-', label=f'{product}')
-        ax.scatter(proba, freq_occ, catsize)
+        ax.scatter(proba, freq_occ, catsize, alpha=0.5)
 
     def probability_classes(self, simu, obs, Ne=16, nb_cat=17):
 
@@ -1026,13 +1026,16 @@ class Evaluation(object):
             #if xpid.startswith('RS'):
             #if xpid == 'RS12':
             #if xpid == 'RS25':
-            #if xpid == 'RS27':
+            #if xpid == 'RS30':
             #    antilopec = tmp.loc[{'member':0}]
             #    antilopec = antilopec.loc[{'time':dates}]
             #    antc = True
-            #tmp = tmp.loc[{'member':range(1,17)}]
-            tmp = tmp.loc[{'member': 0}]
+            tmp = tmp.loc[{'member': range(1,17)}]
+            #tmp = tmp.loc[{'member': 0}]
             simus[xpid] = tmp
+        #ensemble_products = ['raw'] + [xpid for xpid in experiments.keys()]
+        ensemble_products = [xpid for xpid in experiments.keys()]
+        #ensemble_products = []
 
         if 'raw' in data.keys():
             raw = self.read_raw_ensemble(dates)
@@ -1128,8 +1131,7 @@ class Evaluation(object):
 
                 #if not os.path.exists(os.path.join(datadir, 'scores.nc')):
                 # Spread skill
-                #ensemble_products = ['raw'] + [xpid for xpid in experiments.keys()]
-                ensemble_products = []
+                #ensemble_products = []
                 for product in data.keys():
                     if product not in scores_dict.keys():
                         scores_dict[product] = {score:list() for score in scores_list}
@@ -1233,11 +1235,13 @@ class Evaluation(object):
         title = ''
         for product in products:  # Only for ensemble simulations
             spread, error, rr = self.spread_skill(self.data[product].data.reshape(-1, 16), self.data.obs.data.flatten())
-            if product == 'raw':
+            #if product == 'raw':
+            if product == 'RS27':
                 i = 0
                 j = 0
                 title = 'a'
-            elif product.startswith('RS'):
+            #elif product.startswith('RS'):
+            elif product == 'RS30':
                 i = 0
                 j = 1
                 title = 'b'
@@ -1280,46 +1284,44 @@ class Evaluation(object):
             fig.savefig(os.path.join(savedir, f"spread_skill.pdf"), format='pdf')
             plt.close(fig)
 
-        if 'raw' in data.keys():
-            fig1,ax1 = plt.subplots()
-            for product in ['raw'] + [xpid for xpid in experiments.keys()]:
-                self.reliability_diagram(self.data[product].data.reshape(-1, 16), self.data.obs.data.flatten(), product, ax1)
-                fig2,ax2 = plt.subplots()
-                self.rank_histogram(self.data[product].data.reshape(-1, 16), self.data.obs.data.flatten(), product, ax2)
-                ax2.set_ylim(top=1200)
-                fig2.savefig(f'{savedir}/rank_histogram_{product}.pdf', format='pdf')
-                plt.close(fig2)
-                fig2,ax2 = plt.subplots()
-                self.rank_histogram(self.data[product].data.reshape(-1, 16), self.data.obs.data.flatten(), product, ax2, onlypos=True)
-                ax2.set_ylim(top=400)
-                fig2.savefig(f'{savedir}/rank_histogram_onlypos_{product}.pdf', format='pdf')
-                plt.close(fig2)
-                if product.startswith('RS'):
-                    for poste in self.data[product].num_poste.data:
-                        simu = self.data[product].loc[{'num_poste':poste}].data
-                        obs = self.data.obs.loc[{'num_poste':poste}].data
-                        fig, ax = plt.subplots()
-                        self.rank_histogram(simu, obs, product, ax, onlypos=True)
-                        fig.savefig(os.path.join(savedir, 'hists', f'rank_histogram_onlypos_{product}_{poste}.pdf'), format='pdf')
-                        #self.rank_histogram(simu, obs, product, ax)
-                        #fig.savefig(os.path.join(savedir, 'hists', f'rank_histogram_{product}_{poste}.pdf'), format='pdf')
-                        plt.close(fig)
-            ax1.plot([0,1], [0,1], linestyle=':', color='k')
-            ax1.set_xlim([0, 1])
-            ax1.set_ylim([0, 1])
-            ax1.set_xlabel('Forecast Probability')
-            ax1.set_ylabel('Observed Frequency')
-            ax1.legend(fontsize=20)
-            fig1.savefig(f'{savedir}/reliability_diagram_{self.threshold}.pdf', format='pdf')
-            plt.close(fig1)
+        fig1,ax1 = plt.subplots()
+        for product in ensemble_products:
+            self.reliability_diagram(self.data[product].data.reshape(-1, 16), self.data.obs.data.flatten(), product, ax1)
+            fig2,ax2 = plt.subplots()
+            self.rank_histogram(self.data[product].data.reshape(-1, 16), self.data.obs.data.flatten(), product, ax2)
+            ax2.set_ylim(top=1200)
+            fig2.savefig(f'{savedir}/rank_histogram_{product}.pdf', format='pdf')
+            plt.close(fig2)
+            fig2,ax2 = plt.subplots()
+            self.rank_histogram(self.data[product].data.reshape(-1, 16), self.data.obs.data.flatten(), product, ax2, onlypos=True)
+            ax2.set_ylim(top=400)
+            fig2.savefig(f'{savedir}/rank_histogram_onlypos_{product}.pdf', format='pdf')
+            plt.close(fig2)
+            if product.startswith('RS'):
+                for poste in self.data[product].num_poste.data:
+                    simu = self.data[product].loc[{'num_poste':poste}].data
+                    obs = self.data.obs.loc[{'num_poste':poste}].data
+                    fig, ax = plt.subplots()
+                    self.rank_histogram(simu, obs, product, ax, onlypos=True)
+                    fig.savefig(os.path.join(savedir, 'hists', f'rank_histogram_onlypos_{product}_{poste}.pdf'), format='pdf')
+                    #self.rank_histogram(simu, obs, product, ax)
+                    #fig.savefig(os.path.join(savedir, 'hists', f'rank_histogram_{product}_{poste}.pdf'), format='pdf')
+                    plt.close(fig)
+        ax1.plot([0,1], [0,1], linestyle=':', color='k')
+        ax1.set_xlim([0, 1])
+        ax1.set_ylim([0, 1])
+        ax1.set_xlabel('Forecast Probability')
+        ax1.set_ylabel('Observed Frequency')
+        ax1.legend(fontsize=20)
+        fig1.savefig(f'{savedir}/reliability_diagram_{self.threshold}.pdf', format='pdf')
+        plt.close(fig1)
 
         for threshold in [0, 1, 10, 20]:
             fig,ax = plt.subplots()
             ax.set_title(f'Threshold={threshold} kg/m²')
-            if 'raw' in data.keys():
-                for product in ['raw'] + [xpid for xpid in experiments.keys()]:
-                    # TODO : vérifier les données (virer les dates où obs=nan,...)
-                    self.ROC(self.data[product].data.reshape(-1, 16), self.data.obs.data.flatten(), xpid_label[product], ax, threshold=threshold)
+            for product in ensemble_products:
+                # TODO : vérifier les données (virer les dates où obs=nan,...)
+                self.ROC(self.data[product].data.reshape(-1, 16), self.data.obs.data.flatten(), xpid_label[product], ax, threshold=threshold)
             if 'antilope' in data.keys():
                 self.ROC(self.data['antilope'].data.flatten(), self.data.obs.data.flatten(), 'antilope', ax, threshold=threshold)
             if 'antilopec' in data.keys():
