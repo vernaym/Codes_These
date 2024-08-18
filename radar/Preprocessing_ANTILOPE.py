@@ -472,7 +472,7 @@ def random_draw(distribution='gamma', members=16):
     return np.sort(draw)
 
 
-def perturb(obs, sd, perturbation1, perturbation2, ratio=None, sd2=None, frac=0.4):
+def perturb(obs, sd, perturbation1, perturbation2, ratio=None, sd2=None, frac=0.3):
     """
     Perturb an *obs* field with a previously randomly dranw value *perturbation* and an estimated error *sd*.
     """
@@ -485,11 +485,12 @@ def perturb(obs, sd, perturbation1, perturbation2, ratio=None, sd2=None, frac=0.
     # of the ensemble mean but this algorithm ensures that on average the ensemble
     # mean is centered on the corrected observation
     # The first term allows members with 0mm precipitation for very small precipitation events
-    ana = obs + obs * frac * perturbation1 + obs * frac * sd * perturbation2  # perturbation1=gauss, perturbation2=gamma
+    # sd2 = estimated uncertainty, in [0, 1]
+    ana = obs + obs * (1 + sd2)  * frac * perturbation2 + sd * perturbation1  # perturbation1=gauss, perturbation2=gamma
 
-    if sd2 is not None:
-        gamma = random_draw(distribution='gamma', members=1)[0]
-        ana = ana + sd2 * gamma
+#    if sd2 is not None:
+#        gamma = random_draw(distribution='gamma', members=1)[0]
+#        ana = ana + sd2 * gamma
 
     ana[ana < 0] = 0  # WARNING : "mass accumulation" in 0 (analysis distribution not normal anymore)
 

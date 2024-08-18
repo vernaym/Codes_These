@@ -1299,7 +1299,14 @@ class Assimilation(object):
         #new = field.where(uncertainty < 0.1).rio.write_nodata(np.nan).rename({'lon': 'x', 'lat': 'y'}).rio.write_crs("EPSG:4326", inplace=True).rio.interpolate_na(method='linear')
         new = field.where(uncertainty < 0.05).rio.write_nodata(np.nan).rename({'lon': 'x', 'lat': 'y'}).rio.write_crs("EPSG:4326", inplace=True).rio.interpolate_na(method='linear')
         # sd = xr.apply_ufunc(np.abs, field - new)
-        sd = uncertainty
+        smooth = new.copy()
+        # Replace nan values by the mean
+        # TODO : find a better solution
+        tmp = np.nan_to_num(smooth.data, nan=smooth.mean().data)
+        smooth.data = uniform_filter(tmp, 20)
+
+        sd = xr.apply_ufunc(np.abs, new - smooth)
+
         return new, sd
 
 #    @speedtest
@@ -1348,7 +1355,6 @@ class Assimilation(object):
         #    coords = dict(lon=parameters.lon, lat=parameters.lat)
         #)
 
-        sd = parameters.sigma
         Rstat = diags(sd.data.flatten(), 0)  # WARNING : variable name not adapted anymore
         #Rdyn = diags(np.sqrt(sd*np.abs(new_obs.data - parameters.db.data).flatten()), 0)
         #error = parameters.error.data
@@ -1906,9 +1912,9 @@ class RandomSampling(Assimilation):
         #sd = sd1 + sd2
         # If no precipitation have been introduced by the WMA we are confident that there is actually no precipitation
         # Avoid small dispersion around 0mm and flatten the rank histogram
-        sd[obs==0] = 0
-        sd1[obs==0] = 0
-        sd2[obs==0] = 0
+        #sd[obs==0] = 0
+        #sd1[obs==0] = 0
+        #sd2[obs==0] = 0
 
         error = xr.DataArray(
             name   = 'error',
@@ -2008,7 +2014,7 @@ class RandomSampling(Assimilation):
         draw_gauss = Preprocessing_ANTILOPE.random_draw(distribution='normal', members=len(analysis.member) - 1)
 
         for idx, member in enumerate(analysis.member.data[1:]):
-            ana = Preprocessing_ANTILOPE.perturb(obs, sd, draw_gamma[idx], draw_gauss[idx])
+            ana = Preprocessing_ANTILOPE.perturb(obs, sd, draw_gamma[idx], draw_gauss[idx], sd2=parameters.sigma.data)
             analysis.loc[{'member': member}] = ana
 
             self.newlocalfield[member][:, :, idd] = analysis.sel({'member': member}).data
@@ -2160,9 +2166,9 @@ class RandomSampling(Assimilation):
             #sd = sd1 + sd2
             # If no precipitation have been introduced by the WMA we are confident that there is actually no precipitation
             # Avoid small dispersion around 0mm and flatten the rank histogram
-            sd[obs==0] = 0
-            sd1[obs==0] = 0
-            sd2[obs==0] = 0
+            #sd[obs==0] = 0
+            #sd1[obs==0] = 0
+            #sd2[obs==0] = 0
 
             error = xr.DataArray(
                 name   = 'error',
@@ -2178,7 +2184,7 @@ class RandomSampling(Assimilation):
 
             for idx, member in enumerate(analysis.member.data[1:]):
                 # Fill other members with random draw arround the corrected observation
-                ana = Preprocessing_ANTILOPE.perturb(obs, sd, draw_gamma[idx], draw_gauss[idx])
+                ana = Preprocessing_ANTILOPE.perturb(obs, sd, draw_gamma[idx], draw_gauss[idx], sd2=parameters_loc.sigma.data)
                 analysis.loc[{'member':member}] = ana
 
                 self.newlocalfield[member][idp,idd] = analysis.sel({'lat':nearest_lat, 'lon':nearest_lon, 'member':member}).data
