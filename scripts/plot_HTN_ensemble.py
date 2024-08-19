@@ -17,7 +17,7 @@ import pandas as pd
 import xarray as xr
 import argparse
 import matplotlib.pyplot as plt
-from mpl_toolkits.axes_grid1 import ImageGrid
+# from mpl_toolkits.axes_grid1 import ImageGrid
 
 import snowtools.tools.xarray_preprocess as xrp
 from snowtools.scripts.extract.vortex import vortexIO as io
@@ -72,9 +72,6 @@ def parse_command_line():
     parser.add_argument('-x', '--xpids', type=str, nargs='+',
                         help="XPID of the simulation without assimilation format XP_NAME@username")
 
-    parser.add_argument('-a', '--xpids_assim', type=str, default=None,
-                        help="XPID of the simulation with assimilation format XP_NAME@username")
-
     parser.add_argument('-v', '--vapp', type=str, default='edelweiss', choices=['s2m', 'edelweiss'],
                         help="Application that produced the target file")
 
@@ -93,9 +90,6 @@ def parse_command_line():
     parser.add_argument('-s', '--subdomain', type=str, choices=subdomain_map.keys(),
                         help='Subdomain over which the plot will be made', default='huez')
 
-    parser.add_argument('-m', '--members', action='store_true',
-                        help="To activate ensemble simulations")
-
     args = parser.parse_args()
     return args
 
@@ -107,12 +101,6 @@ def execute():
     dateend         = args.dateend
     date            = args.date
     xpids           = args.xpids
-    xpids_assim     = args.xpids_assim
-    if xpids_assim is None:
-        xpids_assim = [f'{xp}_assim' for xp in xpids]
-    else:
-        # TODO : ensure that len(xpids) == 1 in this case
-        xpids_assim = [xpids_assim]
     geometry        = args.geometry
     subdomain       = args.subdomain
     vapp            = args.vapp
@@ -120,7 +108,6 @@ def execute():
         obs_geometry = geometry
     else:
         obs_geometry    = args.obs_geometry
-    members         = args.members
 
     # 1. Get all input data
 
@@ -155,14 +142,7 @@ def execute():
             xpid = f'{xpid}@{user}'
         shortid = xpid.split('@')[0]
 
-        # Get (filtered) PRO files with Vortex
-        if members:
-            member = members_map[shortid]
-        else:
-            if shortid in ['safran', 'ANTILOPE', 'safran_pappus', 'ANTILOPE_pappus', 'SAFRAN', 'SAFRAN_pappus']:
-                member = None
-            else:
-                member = [members_map[shortid][0]]
+        member = members_map[shortid]
 
         # VERRUE pour gérer le décallage d'un jour en attendant de combler les données
         if (shortid.split('_')[0] in ['SAFRAN', 'ANTILOPE', 'KRIGING']) and datebegin == '2021080207':
@@ -170,33 +150,17 @@ def execute():
         else:
             deb = datebegin  # 2021080207
 
-        # Get simulation without assimilation
+        # Get simulation
         kw = dict(datebegin=deb, dateend=dateend, vapp=vapp, member=member, namebuild=None,
                 filename=f'PRO_{shortid}.nc', xpid=xpid, geometry=geometry)
         io.get_pro(**kw)
 
-        # Get simulation without assimilation
-        xpid_assim = xpids_assim[idx]
-        member_assim = members_map[xpid_assim]
-        io.get_pro(
-            datebegin   = deb,
-            dateend     = dateend,
-            vapp        = vapp,
-            member      = member_assim,
-            namebuild   = None,
-            filename    = f'PRO_{xpid_assim}.nc',
-            xpid        = xpid_assim,
-            geometry    = geometry,
-        )
-
         # Read data
-        openloop = read_simu(xpid, member, date)
-        assim = read_simu(xpid_assim, member_assim, date)
+        ensemble = read_simu(xpid, member, date)
 
-        plot_htn(openloop, obs, assim, shortid, xpid_assim, date, subdomain, dem=mnt)
+        plot_htn(ensemble, shortid, date, subdomain, dem=mnt)
 
         clean(shortid, member)
-        clean(xpid_assim, member_assim)
 
 
 def read_simu(xpid, members, date):
@@ -253,69 +217,73 @@ def read_simu(xpid, members, date):
     return simu
 
 
-def plot_htn(openloop, obs, assim, xpid, xpid_assim, date, subdomain, dem=None):
-    savename = f'HTN_{xpid}_{xpid_assim}_{date}.pdf'
+def plot_htn(ensemble, xpid, date, subdomain, dem=None):
+    savename = f'HTN_ensemble_{xpid}_{date}.pdf'
 
     lonmin = subdomain_map[subdomain]['lonmin']
     lonmax = subdomain_map[subdomain]['lonmax']
     latmin = subdomain_map[subdomain]['latmin']
     latmax = subdomain_map[subdomain]['latmax']
-    openloop = openloop.where((openloop.xx > lonmin) & (openloop.xx < lonmax) & (openloop.yy < latmax) &
-            (openloop.yy > latmin), drop=True)
-    obs      = obs.where((obs.xx > lonmin) & (obs.xx < lonmax) & (obs.yy < latmax) & (obs.yy > latmin), drop=True)
-    assim    = assim.where((assim.xx > lonmin) & (assim.xx < lonmax) & (assim.yy < latmax) & (assim.yy > latmin),
-            drop=True)
+    ensemble = ensemble.where((ensemble.xx > lonmin) & (ensemble.xx < lonmax) & (ensemble.yy < latmax) &
+            (ensemble.yy > latmin), drop=True)
 
     # obshtn = var_obshtn[date]
     vmin = 0
     # Round max to nearest 0.5m
     # vmax = round(float(max(openloop.DSN_T_ISBA.max(), obs.max(), assim.DSN_T_ISBA.max())) * 2) / 2
-    vmax = round(float(max(openloop.DSN_T_ISBA.max(), obs.max(), assim.DSN_T_ISBA.max())))
+    vmax = round(float(ensemble.DSN_T_ISBA.max()))
     slices = int(vmax)
 
-    # fig, ax = plt.subplots(1, 3, figsize=(36 * len(obs.xx) / len(obs.yy), 10), sharey=True)
-    fig = plt.figure(figsize=(30 * len(obs.xx) / len(obs.yy), 10))
-    ax = ImageGrid(
-        fig, 111,          # as in plt.subplot(111)
-        nrows_ncols   = (1, 3),
-        axes_pad      = 0.15,
-        share_all     = True,
-        cbar_location = "right",
-        cbar_mode     = "single",
-        cbar_size     = "7%",
-        cbar_pad      = 0.15,
-    )
+    fig, ax = plt.subplots(nrows=4, ncols=4, figsize=(26, 20))
+    i = 0
+    j = 0
+    for mb in ensemble.member.data[1:]:
+        tmp = ensemble.sel({'member': mb}).DSN_T_ISBA
+        plot2D.plot_field(tmp, ax=ax[i, j], vmin=vmin, vmax=vmax, cmap=plt.cm.Blues, dem=dem, shade=False,
+                isolevels=thresholds, slices=slices, add_colorbar=False)
+        j = j + 1
+        if j == 4:
+            j = 0
+            i = i + 1
 
-    opl = openloop.DSN_T_ISBA.mean(dim='member')
-    print('plot openloop')
-    plot2D.plot_field(opl, ax=ax[0], vmin=vmin, vmax=vmax, cmap=plt.cm.Blues, dem=dem, shade=False,
-            isolevels=thresholds, slices=slices, add_colorbar=False)
-    ax[0].set_title('Openloop mean snow depth (m)')
-
-    print('plot observation')
-    plot2D.plot_field(obs, ax=ax[1], vmin=vmin, vmax=vmax, cmap=plt.cm.Blues, dem=dem, shade=False,
-            isolevels=thresholds, slices=slices, add_colorbar=False)
-    #        shade=True,)
-    if date in datesassim:
-        ax[1].set_title('Assimilated snow depth (m)')
-    else:
-        ax[1].set_title('Observed snow depth (m)')
-
-    print('plot assimilation')
-    ass = assim.DSN_T_ISBA.mean(dim='member')
-    im = plot2D.plot_field(ass, ax=ax[2], cmap=plt.cm.Blues, dem=dem, shade=False, vmin=vmin, vmax=vmax,
-            isolevels=thresholds, slices=slices, add_colorbar=False)
-    ax[2].set_title('Assimilation mean snow depth (m)')
-
-    for axis in ax:
+    for axis in ax.flatten():
+        axis.set_title('')
         axis.set_xticks([])
         axis.set_yticks([])
         axis.set_xlabel('')
         axis.set_ylabel('')
 
-    ax[2].cax.colorbar(im, label='Snow depth(m)')
-
     plot2D.save_fig(savename, fig)
+
+#    fig, ax = plt.subplots(4, 4, figsize=(22, 20), sharey=True, sharex=True)
+#    ax = ImageGrid(
+#        fig, 111,          # as in plt.subplot(111)
+#        nrows_ncols   = (4, 4),
+#        axes_pad      = 0.15,
+#        share_all     = True,
+#        cbar_location = "right",
+#        cbar_mode     = "single",
+#        cbar_size     = "7%",
+#        cbar_pad      = 0.15,
+#    )
+#
+#    i = 0
+#    j = 0
+#    for mb in ensemble.members.data[1:]:
+#        j = j + 1
+#        if j == 4:
+#            j = 0
+#            i = i + 1
+#
+#    for axis in ax:
+#        axis.set_xticks([])
+#        axis.set_yticks([])
+#        axis.set_xlabel('')
+#        axis.set_ylabel('')
+#
+#    ax[2].cax.colorbar(im, label='Snow depth(m)')
+#
+#    plot2D.save_fig(savename, fig)
 
 
 def clean(suffix, members):
