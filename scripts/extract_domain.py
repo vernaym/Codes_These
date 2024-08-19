@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 import palettable
 import cartopy.crs as ccrs
 
+from snowtools.plots.maps import plot2D
 
 import make_mask
 import plot_elevation
@@ -103,18 +104,18 @@ def plot_field(fig, ax, field, cmap=plt.cm.Greys, vmin=None, vmax=None, scores=N
 
 if __name__ == "__main__":
 
-    plot_mnt = False
+    plot_mnt = True
     if plot_mnt:
         fic = os.path.join("/home/vernaym/QGIS/MNT", "DEM_ALPES_WGS84_250m_bilinear.nc")
-        field = xr.open_dataset(fic)
-        #reduced_field = field.sel({'lat':np.intersect1d(extract_lat, field.lat), 'lon':np.intersect1d(extract_lon, field.lon)})
-        extract_lat = field.lat.data[(field.lat.data>=domain_coords[domain]['latmin']) & (field.lat.data<=domain_coords[domain]['latmax'])]
-        extract_lon = field.lon.data[(field.lon.data>=domain_coords[domain]['lonmin']) & (field.lon.data<=domain_coords[domain]['lonmax'])]
-        reduced_field = field.sel({'lat':np.intersect1d(extract_lat, field.lat), 'lon':np.intersect1d(extract_lon, field.lon)})
+        dem = xr.open_dataset(fic)
+        #reduced_dem = dem.sel({'lat':np.intersect1d(extract_lat, dem.lat), 'lon':np.intersect1d(extract_lon, dem.lon)})
+        extract_lat = dem.lat.data[(dem.lat.data>=domain_coords[domain]['latmin']) & (dem.lat.data<=domain_coords[domain]['latmax'])]
+        extract_lon = dem.lon.data[(dem.lon.data>=domain_coords[domain]['lonmin']) & (dem.lon.data<=domain_coords[domain]['lonmax'])]
+        reduced_dem = dem.sel({'lat':np.intersect1d(extract_lat, dem.lat), 'lon':np.intersect1d(extract_lon, dem.lon)})
         fig,ax = plt.subplots(figsize=figsize[domain])
         #https://discourse.holoviz.org/t/cannot-remove-grid-for-hv-quadmesh/2211/8
         #im = mnt.elevation.plot(ax=ax, cmap=plt.cm.terrain, subplot_kws={'frame_on':False}, linewidth=0, label='Elevation (m)', add_colorbar=False)
-        im = reduced_field.Band1.plot(ax=ax, cmap=plt.cm.terrain, linewidth=0, label='Elevation (m)', add_colorbar=False)
+        im = reduced_dem.Band1.plot(ax=ax, cmap=plt.cm.terrain, linewidth=0, label='Elevation (m)', add_colorbar=False)
         #plot_elevation.add_boundaries(ax)
         #plot_elevation.add_radar_positions(ax)
         #make_mask.add_cities(domain_coords[domain]['latmin'], domain_coords[domain]['latmax'], domain_coords[domain]['lonmin'], domain_coords[domain]['lonmax'])
@@ -128,6 +129,7 @@ if __name__ == "__main__":
         ax.set_ylabel(None)
         ax.tick_params(axis='both', which='major', labelsize=14)
         fig.savefig(os.path.join('/home/vernaym/These/figures', f'DEM_WGS84_250m_{domain}.pdf'), format='pdf')
+        dem = dem.rename({'lon': 'xx', 'lat': 'yy'}).Band1
 
     for subdir in ['', 'nivometeo']:
         if not os.path.exists(os.path.join(savedir, subdir)):
@@ -156,7 +158,10 @@ if __name__ == "__main__":
         else:
             reduced_error = error.sel({'lat':np.intersect1d(extract_lat, error.lat), 'lon':np.intersect1d(extract_lon, error.lon)})
             reduced_ratio = ratio.sel({'lat':np.intersect1d(extract_lat, ratio.lat), 'lon':np.intersect1d(extract_lon, ratio.lon)})
-        figname = os.path.join(subdir, 'Observation_error')
-        make_mask.plot_and_save(reduced_error, figname, vmin=1, vmax=25, cmap=plt.cm.YlOrBr)
+        figname = os.path.join(savedir, subdir, 'Observation_error.pdf')
+        #make_mask.plot_and_save(reduced_error, figname, vmin=0, vmax=1, cmap=plt.cm.YlOrBr)
+        reduced_error = reduced_error.rename({'lon': 'xx', 'lat': 'yy'})
+        plot2D.plot_field(reduced_error, vmin=0, vmax=1, cmap=plt.cm.YlOrBr, dem=dem, shade=False)
+        plot2D.save_fig(figname)
         figname = os.path.join(subdir, 'Estimated_ratio')
         make_mask.plot_and_save(reduced_ratio, figname, vmin=0.5, vmax=1.5, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap)
