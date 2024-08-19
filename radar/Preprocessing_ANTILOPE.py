@@ -465,6 +465,8 @@ def random_draw(distribution='gamma', members=16):
         shift = k * theta  # shift = mean  --> no bias introduction
         # Draw random element from gamma distribution (>0 only ==> shift necessary to convert into perturbations)
         draw = np.random.gamma(k, scale=theta, size=members) - shift
+    elif distribution == 'exponential':
+        draw = np.random.exponential(scale=1.0, size=members)  # TODO : check scale influence
     else:
         print('Error : unknown distribution')
         return None
@@ -472,10 +474,16 @@ def random_draw(distribution='gamma', members=16):
     return np.sort(draw)
 
 
-def perturb(obs, sd, perturbation1, perturbation2, ratio=None, sd2=None, frac=0.6):
+def perturb(obs, sd, gamma=0, gauss=0, exp=0, ratio=None, sd2=None, frac=0.3):
     """
     Perturb an *obs* field with a previously randomly dranw value *perturbation* and an estimated error *sd*.
     """
+
+    smooth = obs.copy()
+    # Replace nan values by the mean
+    # TODO : find a better solution
+    tmp = np.nan_to_num(smooth.data, nan=np.nanmean(smooth))
+    smooth.data = uniform_filter(tmp, 20)
 
     # Add 2 perturbations terms:
     # - 1 gamma distributed proportionnal to the precipitation intensity
@@ -486,7 +494,10 @@ def perturb(obs, sd, perturbation1, perturbation2, ratio=None, sd2=None, frac=0.
     # mean is centered on the corrected observation
     # The first term allows members with 0mm precipitation for very small precipitation events
     # sd2 = estimated uncertainty, in [0, 1]
-    ana = obs + obs * (1 + 0 * sd2 / 6)  * frac * perturbation1 + 0.5 * sd * perturbation2  # perturbation1=gamma, perturbation2=gauss
+    ana = obs + obs * (1 + sd2 / 2)  * frac * gamma  # perturbation1=gamma --> account for ANTILOPE uncertainty / representativity
+    ana = ana + frac * smooth * gauss
+    #ana = ana - sd * exp  # perturbation2 = gauss --> smooth local maximas/minimas
+
 
 #    if sd2 is not None:
 #        gamma = random_draw(distribution='gamma', members=1)[0]

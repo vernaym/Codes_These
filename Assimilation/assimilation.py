@@ -1304,13 +1304,17 @@ class Assimilation(object):
         #new = field.where(uncertainty < 0.1).rio.write_nodata(np.nan).rename({'lon': 'x', 'lat': 'y'}).rio.write_crs("EPSG:4326", inplace=True).rio.interpolate_na(method='linear')
         new = field.where(uncertainty < 0.05).rio.write_nodata(np.nan).rename({'lon': 'x', 'lat': 'y'}).rio.write_crs("EPSG:4326", inplace=True).rio.interpolate_na(method='linear')
         # sd = xr.apply_ufunc(np.abs, field - new)
-        smooth = new.copy()
+        smooth = field.copy()
         # Replace nan values by the mean
         # TODO : find a better solution
         tmp = np.nan_to_num(smooth.data, nan=smooth.mean().data)
         smooth.data = uniform_filter(tmp, 20)
 
-        sd = xr.apply_ufunc(np.abs, new - smooth)
+        if self.plot:
+            self.plot_array(smooth, field, 'Smoothed corrected field', f'{self.date_str}/Smoothed_field_{self.date_str}.pdf', cmap=plt.cm.YlGnBu)
+
+        #sd = xr.apply_ufunc(np.abs, field - smooth)
+        sd = field - smooth
 
         return new, sd
 
@@ -2017,9 +2021,10 @@ class RandomSampling(Assimilation):
 
         draw_gamma = Preprocessing_ANTILOPE.random_draw(distribution='gamma', members=len(analysis.member) - 1)
         draw_gauss = Preprocessing_ANTILOPE.random_draw(distribution='normal', members=len(analysis.member) - 1)
+        draw_exp = Preprocessing_ANTILOPE.random_draw(distribution='exponential', members=len(analysis.member) - 1)
 
         for idx, member in enumerate(analysis.member.data[1:]):
-            ana = Preprocessing_ANTILOPE.perturb(obs, sd, draw_gamma[idx], draw_gauss[idx], sd2=parameters.sigma.data)
+            ana = Preprocessing_ANTILOPE.perturb(obs, sd, gamma=draw_gamma[idx], gauss=draw_gauss[idx], exp=draw_exp[idx], sd2=parameters.sigma.data)
             analysis.loc[{'member': member}] = ana
 
             self.newlocalfield[member][:, :, idd] = analysis.sel({'member': member}).data
