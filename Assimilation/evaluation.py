@@ -284,6 +284,7 @@ algo = dict(
         RS27          = 'RandomSampling/XP27/Random_Sampling_2021120106_2022043006_daily_alp.nc',
         #RS29          = 'RandomSampling/XP29/Random_Sampling_2021120106_2022043006_daily_alp.nc',
         RS30          = 'RandomSampling/XP30/Random_Sampling_2021120106_2022043006_daily_alp.nc',
+        RS31          = 'RandomSampling/XP31/Random_Sampling_2021120106_2022043006_daily_alp.nc',
         #RS29_error    = 'RandomSampling/XP29/Random_Sampling_2021120106_2022043006_daily_alp_test_error.nc',
         #PF32          = 'XP32/Assimilation_locale_2021120106_2022050106_daily_alp_mask9_debiasing3.nc',
         #KD36          = 'EnsembleKalmanFilter/XP36/EnKF_2021120106_2022050106_daily_alp.nc',
@@ -433,6 +434,7 @@ xpid_label = dict(
         RS27          = 'RS',  # paper1
         RS29          = 'RS29',
         RS30          = 'RS30',
+        RS31          = 'RS31',
         RS29_error    = 'RS29_error',
         PF32          = 'PF',  # paper1
         KD36          = 'EnKF',  # paper1
@@ -450,6 +452,7 @@ colors = dict(
     RS27      = 'darkblue',
     RS29      = 'red',
     RS30      = 'maroon',
+    RS31      = 'green',
     RS29_error = 'green',
     RS26      = 'green',
     #PF31      = 'green',
@@ -715,6 +718,9 @@ class Evaluation(object):
             obs = obs[mask]
 
         combined = np.vstack((obs[np.newaxis], ensemble))
+
+        import pdb
+        pdb.set_trace()
 
         # Computing ranks
         ranks = np.apply_along_axis(lambda x: rankdata(x, method='min'), 0, combined)
@@ -1061,9 +1067,14 @@ class Evaluation(object):
 
         #dates = dates[:10]
         liste_postes = np.array([])
-        for idx, num_poste in enumerate(self.data.num_poste.data):
+        #num_poste = 38191400
+        num_poste = 73322401
+        self.data = self.data.loc[{'num_poste': [num_poste]}]
+        idx = 0
+        if True:
+        #for idx, num_poste in enumerate(self.data.num_poste.data):
         #for idx, num_poste in enumerate(indep):
-            print(f'Station {idx+1}/{len(self.data.num_poste.data)}')
+            #print(f'Station {idx+1}/{len(self.data.num_poste.data)}')
 #            num_poste = row['num_poste']
 #            lat       = row['lat']
 #            lon       = row['lon']
@@ -1111,7 +1122,7 @@ class Evaluation(object):
                         data[xpid].append(simus[xpid].sel({'num_poste':num_poste}).rr.data)
                     #t5 = time.time()
                     #print(f'Reading simulation {xpid} took {(t5-t4)*1000.}ms')
-#                self.temporal_plot(dates, obs, num_poste, lat, lon, alti, antilope=data['antilope'][-1])
+                self.temporal_plot(dates, obs, num_poste, lat, lon, alti, simu=('RS27', data['RS27'][-1]), simu2=('RS31', data['RS31'][-1]))
                 #self.temporal_plot(dates, obs, num_poste, lat, lon, alti, antilope=data['antilope'][-1], corrected=data['antilopec'][-1])
                 #self.temporal_plot(dates, obs, num_poste, lat, lon, alti, raw=data['raw'][-1], antilope=data['antilope'][-1])
                 #self.temporal_plot(dates, data['LH0'][-1], obs, num_poste, raw=data['raw'][-1], antilope=data['antilope'][-1], simu2=data['LD0'][-1])
@@ -1509,12 +1520,12 @@ class Evaluation(object):
         return (mpatches.Patch(color=color), label)
 
     def read_observation_error(self):
-        self.obs_error = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask/alp", "Observation_error.nc"))  # To test a new estimation
+        self.obs_error = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask/alp", "Observation_uncertainty.nc"))  # To test a new estimation
 
     def read_ratio(self):
         self.rat = xr.open_dataset(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask/alp", "Estimated_ratio.nc"))  # To test a new estimation
 
-    def temporal_plot(self, time, obs, num_poste, lat, lon, alti, raw=None, antilope=None, corrected=None, xpid=None, simu=None, simu2=None):
+    def temporal_plot(self, time, obs, num_poste, lat, lon, alti, raw=None, antilope=None, corrected=None, suffix=None, simu=None, simu2=None):
         # TODO : add flexibility in the number and oreder of simulations (use dict !)
 
         if self.lpn is None:
@@ -1523,7 +1534,7 @@ class Evaluation(object):
         if self.obs_error is None:
             self.read_observation_error()
         #error = self.obs_error.loc[{'num_poste':num_poste, 'time':time}].erreur_obs.data
-        error = self.obs_error.sel({'lat':nearest(self.obs_error.lat, lat), 'lon':nearest(self.obs_error.lon, lon)}).error.data
+        error = self.obs_error.sel({'lat':nearest(self.obs_error.lat, lat), 'lon':nearest(self.obs_error.lon, lon)}).Uncertainty.data
 
         if self.rat is None:
             self.read_rat()
@@ -1538,7 +1549,7 @@ class Evaluation(object):
         self.labels.append((ref, 'Nivometeo reference'))
         positions = mpl.dates.date2num(time)
         if simu is not None:
-            self.add_label(plt.violinplot(np.transpose(simu), positions=positions), xpid_label[xpid])
+            self.labels.append(self.add_label(plt.violinplot(np.transpose(simu[1]), positions=positions), xpid_label[simu[0]], boxplot=False))
         if raw is not None:
             #add_label(plt.violinplot(np.transpose(raw), positions=positions), 'Raw ensemble', color='sandybrown')
             #add_label(plt.violinplot(np.transpose(raw), positions=positions), 'Raw ensemble')
@@ -1558,24 +1569,25 @@ class Evaluation(object):
             self.labels.append((antpec, 'Antilope Corrected field'))
         if simu2 is not None:
             #add_label(plt.violinplot(np.transpose(simu2), positions=positions), 'Daily assimilation', color='skyblue')
-            self.add_label(plt.violinplot(np.transpose(simu2), positions=positions), 'Daily assimilation')
+            self.labels.append(self.add_label(plt.violinplot(np.transpose(simu2[1]), positions=positions), xpid_label[simu2[0]], boxplot=False))
         ax.set_xlabel('Date')
         ax.set_ylabel('24 hour precipitation (kg/m²)')
         ax.legend(*zip(*self.labels), fontsize=32)
         ax.axhline(y=0, linewidth=1, color='k')
         #rrmax = int(np.ceil(max([np.nanmax(obs), np.nanmax(simu), np.nanmax(raw), np.nanmax(antilope)])))+10
-        rrmax = int(np.ceil(max([np.nanmax(obs), np.nanmax(antilope)])))+10
+        #rrmax = int(np.ceil(max([np.nanmax(obs), np.nanmax(antilope)])))+10
+        rrmax = int(np.ceil(max([np.nanmax(obs), np.nanmax(simu[1]), np.nanmax(simu2[1])])))+10
         for rr in range(10, rrmax, 10):
             ax.axhline(y=rr, linewidth=0.1, color='k', linestyle='dotted')
         ax.set_ylim(-rrmax, rrmax)
 
         # make a plot with different y-axis using second axis object
         ax2=ax.twinx()
-        ax2.plot(lpn.date, diff_alti_lpn, color="k", marker="*", linestyle='')
+        ax2.plot(lpn.date.values, diff_alti_lpn.values, color="k", marker="*", linestyle='')
         ax2.set_ylabel("Difference between LPN max and station elevation (m)", color="blue", fontsize=14)
 
         #fig.savefig(f'{savedir}/{num_poste}_{xpid}.pdf', formatout='pdf',  bbox_inches='tight')
-        fig.savefig(f'{savedir}/{num_poste}_{xpid}.pdf', format='pdf',  bbox_inches='tight')
+        fig.savefig(f'{savedir}/{num_poste}_{suffix}.pdf', format='pdf',  bbox_inches='tight')
         plt.close()
         #plt.show()
 
