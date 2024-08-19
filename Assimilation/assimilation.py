@@ -286,7 +286,12 @@ def read_nivometeo_obs(domain='alp'):
         #nivometeo = nivometeo.set_index(['num_poste', 'lat', 'lon', 'nom', 'alti', 'date'])  # Utilité de passer en index ?
         nivometeo.set_index(['num_poste','date'], inplace=True)
 
-        return nivometeo.to_xarray()
+        nivometeo = nivometeo.to_xarray()
+
+        # TODO : TMP (to do only 1 station)
+        # nivometeo = nivometeo.sel({'num_poste': [73322401]})
+
+        return nivometeo
     else:
         return None
 
@@ -2119,6 +2124,9 @@ class RandomSampling(Assimilation):
 
     @speedtest
     def ponctual_random_draw(self, date, idd, parameters, nmembers=16):
+
+        # To deal with only 1 station :
+        #evaluation_points = zip([self.nivometeo.num_poste.data], [np.nanmax(self.nivometeo.lat)], [np.nanmax(self.nivometeo.lon)])
 
         evaluation_points = zip(self.nivometeo.num_poste.data, np.nanmax(self.nivometeo.lat, axis=1).data, np.nanmax(self.nivometeo.lon, axis=1).data)
         for idp, (num_poste, lat, lon) in enumerate(evaluation_points):

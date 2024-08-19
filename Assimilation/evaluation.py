@@ -9,6 +9,7 @@ import time
 from datetime import datetime,timedelta
 import numpy as np
 import xarray as xr
+import xskillscore
 import pandas as pd
 from scipy.stats import rankdata
 import CRPS.CRPS as pscore
@@ -719,11 +720,8 @@ class Evaluation(object):
 
         combined = np.vstack((obs[np.newaxis], ensemble))
 
-        import pdb
-        pdb.set_trace()
-
         # Computing ranks
-        ranks = np.apply_along_axis(lambda x: rankdata(x, method='min'), 0, combined)
+        ranks = np.apply_along_axis(lambda x: rankdata(x, method='average'), 0, combined)
 
         # Computing ties'
         ties = np.sum(ranks[0]==ranks[1:], axis=0)
@@ -1298,13 +1296,20 @@ class Evaluation(object):
         fig1,ax1 = plt.subplots()
         for product in ensemble_products:
             self.reliability_diagram(self.data[product].data.reshape(-1, 16), self.data.obs.data.flatten(), product, ax1)
+            # Compute/plot rank histograms
+            #fig2, ax = plt.subplots()
+            #rh  = xskillscore.rank_histogram(self.data.obs, self.data[product])
+            #ax.bar(rh['rank'], rh.data)
             fig2,ax2 = plt.subplots()
             self.rank_histogram(self.data[product].data.reshape(-1, 16), self.data.obs.data.flatten(), product, ax2)
             ax2.set_ylim(top=1200)
             fig2.savefig(f'{savedir}/rank_histogram_{product}.pdf', format='pdf')
             plt.close(fig2)
             fig2,ax2 = plt.subplots()
-            self.rank_histogram(self.data[product].data.reshape(-1, 16), self.data.obs.data.flatten(), product, ax2, onlypos=True)
+            obs_p = self.data.obs.where(self.data.obs > 0, drop=True)
+            sim_p = self.data[product].where(self.data.obs > 0, drop=True)
+            rh  = xskillscore.rank_histogram(obs_p, sim_p)
+            ax2.bar(rh['rank'], rh.data)
             ax2.set_ylim(top=400)
             fig2.savefig(f'{savedir}/rank_histogram_onlypos_{product}.pdf', format='pdf')
             plt.close(fig2)
