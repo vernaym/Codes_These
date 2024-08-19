@@ -486,7 +486,7 @@ def perturb(obs, sd, perturbation1, perturbation2, ratio=None, sd2=None, frac=0.
     # mean is centered on the corrected observation
     # The first term allows members with 0mm precipitation for very small precipitation events
     # sd2 = estimated uncertainty, in [0, 1]
-    ana = obs + obs * (1 + sd2 / 5)  * frac * perturbation1 + sd * perturbation1  # perturbation1=gauss, perturbation2=gamma
+    ana = obs + obs * (1 + sd2 / 5)  * frac * perturbation2 + sd * perturbation2  # perturbation1=gamma, perturbation2=gauss
 
 #    if sd2 is not None:
 #        gamma = random_draw(distribution='gamma', members=1)[0]
