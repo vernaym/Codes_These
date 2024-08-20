@@ -284,8 +284,9 @@ algo = dict(
         # Paper1 :
         RS27          = 'RandomSampling/XP27/Random_Sampling_2021120106_2022043006_daily_alp.nc',
         #RS29          = 'RandomSampling/XP29/Random_Sampling_2021120106_2022043006_daily_alp.nc',
-        RS30          = 'RandomSampling/XP30/Random_Sampling_2021120106_2022043006_daily_alp.nc',
-        RS31          = 'RandomSampling/XP31/Random_Sampling_2021120106_2022043006_daily_alp.nc',
+        #RS30          = 'RandomSampling/XP30/Random_Sampling_2021120106_2022043006_daily_alp.nc',
+        #RS31          = 'RandomSampling/XP31/Random_Sampling_2021120106_2022043006_daily_alp.nc',
+        RS37          = 'RandomSampling/XP37/Random_Sampling_2021120106_2022043006_daily_alp.nc',
         #RS29_error    = 'RandomSampling/XP29/Random_Sampling_2021120106_2022043006_daily_alp_test_error.nc',
         #PF32          = 'XP32/Assimilation_locale_2021120106_2022050106_daily_alp_mask9_debiasing3.nc',
         #KD36          = 'EnsembleKalmanFilter/XP36/EnKF_2021120106_2022050106_daily_alp.nc',
@@ -436,6 +437,7 @@ xpid_label = dict(
         RS29          = 'RS29',
         RS30          = 'RS30',
         RS31          = 'RS31',
+        RS37          = 'RS37',
         RS29_error    = 'RS29_error',
         PF32          = 'PF',  # paper1
         KD36          = 'EnKF',  # paper1
@@ -453,7 +455,8 @@ colors = dict(
     RS27      = 'darkblue',
     RS29      = 'red',
     RS30      = 'maroon',
-    RS31      = 'green',
+    RS31      = 'maroon',
+    RS37      = 'green',
     RS29_error = 'green',
     RS26      = 'green',
     #PF31      = 'green',
@@ -1065,14 +1068,15 @@ class Evaluation(object):
 
         #dates = dates[:10]
         liste_postes = np.array([])
+        # TO deal with only 1 station :
         #num_poste = 38191400
-        num_poste = 73322401
-        self.data = self.data.loc[{'num_poste': [num_poste]}]
-        idx = 0
-        if True:
-        #for idx, num_poste in enumerate(self.data.num_poste.data):
+        #num_poste = 73322401
+        #self.data = self.data.loc[{'num_poste': [num_poste]}]
+        #idx = 0
+        #if True:
+        for idx, num_poste in enumerate(self.data.num_poste.data):
         #for idx, num_poste in enumerate(indep):
-            #print(f'Station {idx+1}/{len(self.data.num_poste.data)}')
+            print(f'Station {idx+1}/{len(self.data.num_poste.data)}')
 #            num_poste = row['num_poste']
 #            lat       = row['lat']
 #            lon       = row['lon']
@@ -1111,7 +1115,7 @@ class Evaluation(object):
                     data['raw'].append(raw.sel({'lat':nearest(raw.lat, lat), 'lon':nearest(raw.lon, lon)}).rr.data)
                 t4 = time.time()
                 print(f'Reading raw ensemble took {(t4-t3)*1000.}ms')
-                for xpid,filename in experiments.items():
+                for xpid, filename in experiments.items():
                     if xpid not in data.keys():
                         data[xpid] = list()
                     if domain == 'GrandesRousses':  # gridded data
@@ -1120,7 +1124,7 @@ class Evaluation(object):
                         data[xpid].append(simus[xpid].sel({'num_poste':num_poste}).rr.data)
                     #t5 = time.time()
                     #print(f'Reading simulation {xpid} took {(t5-t4)*1000.}ms')
-                self.temporal_plot(dates, obs, num_poste, lat, lon, alti, simu=('RS27', data['RS27'][-1]), simu2=('RS31', data['RS31'][-1]))
+#                self.temporal_plot(dates, obs, num_poste, lat, lon, alti, simu=('RS27', data['RS27'][-1]), simu2=('RS37', data['RS37'][-1]))
                 #self.temporal_plot(dates, obs, num_poste, lat, lon, alti, antilope=data['antilope'][-1], corrected=data['antilopec'][-1])
                 #self.temporal_plot(dates, obs, num_poste, lat, lon, alti, raw=data['raw'][-1], antilope=data['antilope'][-1])
                 #self.temporal_plot(dates, data['LH0'][-1], obs, num_poste, raw=data['raw'][-1], antilope=data['antilope'][-1], simu2=data['LD0'][-1])
