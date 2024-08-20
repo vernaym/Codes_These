@@ -30,6 +30,8 @@ from osgeo import gdal
 from These.scripts import tools
 from These.radar import Preprocessing_ANTILOPE
 
+from snowtools.plots.maps import plot2D
+
 import richdem as rd
 
 #plt.rcParams["figure.figsize"] = [7.50, 3.50]
@@ -396,10 +398,11 @@ else:
     #im = mnt.elevation.plot(ax=ax, cmap=plt.cm.terrain, subplot_kws={'frame_on':False}, linewidth=0, label='Elevation (m)', add_colorbar=False)
     #im = mnt.plot(ax=ax, cmap=plt.cm.terrain, linewidth=0, label='Elevation (m)', add_colorbar=False, transform=ccrs.PlateCarree())
     lons, lats = np.meshgrid(mnt.lon.data, mnt.lat.data)
-    im = ax.contourf(lons, lats, mnt.data, cmap=plt.cm.terrain, levels=50, transform=ccrs.PlateCarree(), alpha=1, antialiased=True)  # https://www.earthdatascience.org/tutorials/visualize-digital-elevation-model-contours-matplotlib/
+    im = plot2D.plot_field(mnt.where(mnt>3000), ax=ax, transform=ccrs.PlateCarree(), cmap=plt.cm.terrain, add_colorbar=False, vmin=0)
+    #im = ax.contourf(lons, lats, dataplot, cmap=plt.cm.terrain, levels=50, transform=ccrs.PlateCarree(), alpha=1, antialiased=True)  # https://www.earthdatascience.org/tutorials/visualize-digital-elevation-model-contours-matplotlib/
     # This is the fix for the white lines between contour levels
-    for c in im.collections:
-        c.set_edgecolor("face")
+    #for c in im.collections:
+    #    c.set_edgecolor("face")
     c = ax.contour(lons, lats, mnt.data, colors='grey', levels=[1000, 2500], transform=ccrs.PlateCarree())  # https://www.earthdatascience.org/tutorials/visualize-digital-elevation-model-contours-matplotlib/
     plt.clabel(c, inline=1, fontsize=10)
 
@@ -410,8 +413,8 @@ else:
         add_landmarks(ax)
         #add_rectangle(ax)
         #add_radar_positions(ax)
-        add_postes(ax, type_poste='automatic stations')
-        add_postes(ax, type_poste='nivometeo stations')
+        #add_postes(ax, type_poste='automatic stations')
+        #add_postes(ax, type_poste='nivometeo stations')
         # Add cross section line
         start = (45.14776, 5.63933)  # Radar Moucherotte
         end   = (45.11872, 6.27540)  # Passe par le Pic Blanc : 50 km
@@ -429,7 +432,7 @@ else:
                 font_properties=dict(size=18),
                 scale_loc='top',
             )
-        ax.add_artist(scalebar)
+        #ax.add_artist(scalebar)
 #        xticks = np.arange(xmin, xmax, 0.5)
 #        yticks = np.arange(ymin, ymax, 0.5)
 #        ax.set_xticks(xticks, crs=ccrs.PlateCarree())
@@ -444,7 +447,7 @@ else:
 
     # Add colorbar
     #ax.legend(fontsize=20, loc=2)  # loc=2 --> upper-left
-    ax.legend(fontsize=20, loc=(0.04, 0.85))  # loc=2 --> upper-left
+    #ax.legend(fontsize=20, loc=(0.04, 0.85))  # loc=2 --> upper-left
     #plot_correlation(ax, mnt)  # To add correlation area
     # Force colorbar size
     cb = fig.colorbar(im, fraction=0.058, pad=0.04)  # From https://stackoverflow.com/questions/18195758/set-matplotlib-colorbar-size-to-match-graph
