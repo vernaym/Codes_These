@@ -474,7 +474,7 @@ def random_draw(distribution='gamma', members=16):
     return np.sort(draw)
 
 
-def perturb(obs, sd, gamma=0, gauss=0, exp=0, ratio=None, sd2=None, frac=0.3):
+def perturb(obs, sd, gamma=0, gauss=0, exp=0, ratio=None, sd2=None, frac=0.2):
     """
     Perturb an *obs* field with a previously randomly dranw value *perturbation* and an estimated error *sd*.
     """
@@ -494,8 +494,8 @@ def perturb(obs, sd, gamma=0, gauss=0, exp=0, ratio=None, sd2=None, frac=0.3):
     # mean is centered on the corrected observation
     # The first term allows members with 0mm precipitation for very small precipitation events
     # sd2 = estimated uncertainty, in [0, 1]
-    ana = obs + obs * (1 + sd2 / 2)  * frac * gamma  # perturbation1=gamma --> account for ANTILOPE uncertainty / representativity
-    ana = ana + frac * smooth * gauss
+    ana = obs + obs * frac * gamma  # perturbation1=gamma --> account for ANTILOPE uncertainty / representativity
+    ana = ana + frac * (1 + sd2 / 2) * smooth * gauss  # Can be > obs (include 0mm scenario for RR close to 0) + increase error on under-corrected pixels with strong underestimations
     #ana = ana - sd * exp  # perturbation2 = gauss --> smooth local maximas/minimas
 
 
