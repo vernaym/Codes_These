@@ -1047,6 +1047,12 @@ class Evaluation(object):
 
         #dates = dates[:10]
         liste_postes = np.array([])
+        # TO deal with only 1 station :
+        #num_poste = 38191400
+        #num_poste = 73322401
+        #self.data = self.data.loc[{'num_poste': [num_poste]}]
+        #idx = 0
+        #if True:
         for idx, num_poste in enumerate(self.data.num_poste.data):
         #for idx, num_poste in enumerate(indep):
             print(f'Station {idx+1}/{len(self.data.num_poste.data)}')
@@ -1088,7 +1094,7 @@ class Evaluation(object):
                     data['raw'].append(raw.sel({'lat':nearest(raw.lat, lat), 'lon':nearest(raw.lon, lon)}).rr.data)
                 t4 = time.time()
                 print(f'Reading raw ensemble took {(t4-t3)*1000.}ms')
-                for xpid,filename in experiments.items():
+                for xpid, filename in experiments.items():
                     if xpid not in data.keys():
                         data[xpid] = list()
                     if domain == 'GrandesRousses':  # gridded data
@@ -1097,7 +1103,7 @@ class Evaluation(object):
                         data[xpid].append(simus[xpid].sel({'num_poste':num_poste}).rr.data)
                     #t5 = time.time()
                     #print(f'Reading simulation {xpid} took {(t5-t4)*1000.}ms')
-#                self.temporal_plot(dates, obs, num_poste, lat, lon, alti, antilope=data['antilope'][-1])
+#                self.temporal_plot(dates, obs, num_poste, lat, lon, alti, simu=('RS27', data['RS27'][-1]), simu2=('RS37', data['RS37'][-1]))
                 #self.temporal_plot(dates, obs, num_poste, lat, lon, alti, antilope=data['antilope'][-1], corrected=data['antilopec'][-1])
                 #self.temporal_plot(dates, obs, num_poste, lat, lon, alti, raw=data['raw'][-1], antilope=data['antilope'][-1])
                 #self.temporal_plot(dates, data['LH0'][-1], obs, num_poste, raw=data['raw'][-1], antilope=data['antilope'][-1], simu2=data['LD0'][-1])
