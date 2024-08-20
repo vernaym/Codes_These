@@ -19,7 +19,7 @@ import xarray as xr
 import argparse
 import matplotlib
 import matplotlib.pyplot as plt
-from mpl_toolkits.axes_grid1 import make_axes_locatable
+from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
 
 from snowtools.scripts.extract.vortex import vortexIO as io
 from snowtools.scripts.post_processing import common_dict
@@ -32,7 +32,6 @@ toolbox.active_now = True
 
 matplotlib.rcParams.update({'font.size': 18})
 
-members_map = common_dict.members_map
 product_map = common_dict.product_map
 xpid_map    = common_dict.xpid_map
 colors_map  = common_dict.colors_map
@@ -82,7 +81,7 @@ def execute():
             user = os.environ["USER"]
             xpid = f'{xpid}@{user}'
         shortid = xpid.split('@')[0]
-        product = product_map[shortid]
+        product = product_map(shortid)
         filename = f'PART_{shortid}_{date}.txt'
 
         toolbox.input(
@@ -123,15 +122,12 @@ def execute():
 
         for var in ['mean', 'median']:
             fig, ax  = plt.subplots()
-            divider = make_axes_locatable(ax)
-            cax = divider.append_axes('right', size='5%', pad=0.05)
-            im = plot2D.plot_field(out[var], ax=ax, cmap=plt.cm.viridis, dem=dem.ZS, shade=False, vmin=1, vmax=17,
-                    isolevels=thresholds, add_colorbar=False)
+            im = plot2D.plot_field(out[var], ax=ax, cmap=plt.cm.RdBu, dem=dem.ZS, shade=False, vmin=1, vmax=17,
+                    isolevels=thresholds, add_colorbar=True)
             ax.set_xticks([])
             ax.set_yticks([])
             ax.set_xlabel('')
             ax.set_ylabel('')
-            fig.colorbar(im, cax=cax, label=f'{var} member selected')
             savename = f'SODA_{var}_{date}_{product}.pdf'
             plot2D.save_fig(savename, fig)
 

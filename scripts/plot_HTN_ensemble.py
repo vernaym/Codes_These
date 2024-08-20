@@ -142,7 +142,7 @@ def execute():
             xpid = f'{xpid}@{user}'
         shortid = xpid.split('@')[0]
 
-        member = members_map[shortid]
+        member = members_map(shortid)
 
         # VERRUE pour gérer le décallage d'un jour en attendant de combler les données
         if (shortid.split('_')[0] in ['SAFRAN', 'ANTILOPE', 'KRIGING']) and datebegin == '2021080207':
@@ -220,40 +220,36 @@ def read_simu(xpid, members, date):
 def plot_htn(ensemble, xpid, date, subdomain, dem=None):
     savename = f'HTN_ensemble_{xpid}_{date}.pdf'
 
-    lonmin = subdomain_map[subdomain]['lonmin']
-    lonmax = subdomain_map[subdomain]['lonmax']
-    latmin = subdomain_map[subdomain]['latmin']
-    latmax = subdomain_map[subdomain]['latmax']
-    ensemble = ensemble.where((ensemble.xx > lonmin) & (ensemble.xx < lonmax) & (ensemble.yy < latmax) &
-            (ensemble.yy > latmin), drop=True)
-
-    # obshtn = var_obshtn[date]
     vmin = 0
-    # Round max to nearest 0.5m
-    # vmax = round(float(max(openloop.DSN_T_ISBA.max(), obs.max(), assim.DSN_T_ISBA.max())) * 2) / 2
-    vmax = round(float(ensemble.DSN_T_ISBA.max()))
-    slices = int(vmax)
+    vmax = 3
 
-    fig, ax = plt.subplots(nrows=4, ncols=4, figsize=(26, 20))
+    fig, ax = plt.subplots(nrows=4, ncols=4, figsize=(22, 15))
     i = 0
     j = 0
     for mb in ensemble.member.data[1:]:
         tmp = ensemble.sel({'member': mb}).DSN_T_ISBA
-        plot2D.plot_field(tmp, ax=ax[i, j], vmin=vmin, vmax=vmax, cmap=plt.cm.Blues, dem=dem, shade=False,
-                isolevels=thresholds, slices=slices, add_colorbar=False)
+        im = plot2D.plot_field(tmp, ax=ax[i, j], vmin=vmin, vmax=vmax, cmap=plt.cm.Blues, dem=dem, shade=False,
+                isolevels=thresholds, add_colorbar=False)
         j = j + 1
         if j == 4:
             j = 0
             i = i + 1
 
     for axis in ax.flatten():
+        axis.margins(0.02)
         axis.set_title('')
         axis.set_xticks([])
         axis.set_yticks([])
         axis.set_xlabel('')
         axis.set_ylabel('')
 
-    plot2D.save_fig(savename, fig)
+    fig.subplots_adjust(left=0.01, top=0.99, bottom=0.01, right=0.85, wspace=0.02, hspace=0.02)
+    cax = fig.add_axes([0.86, 0.02, 0.05, 0.96])
+    cb = fig.colorbar(im, cax=cax)
+    # cb.ax.tick_params(labelsize=20)
+    cb.set_label('Snow depth (m)', size=24)
+
+    plot2D.save_fig(savename, fig, tight_layout=False)  # subplots_adjust does not work with tight_layout
 
 #    fig, ax = plt.subplots(4, 4, figsize=(22, 20), sharey=True, sharex=True)
 #    ax = ImageGrid(
