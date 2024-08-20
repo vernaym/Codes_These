@@ -118,16 +118,16 @@ def execute():
                 user = os.environ["USER"]
                 xpid = f'{xpid}@{user}'
             shortid = xpid.split('@')[0]
-            product = product_map[shortid]
+            product = product_map(shortid)
 
             # Get (filtered) PRO files with Vortex
             if members:
-                member = members_map[shortid]
+                member = members_map(shortid)
             else:
                 if shortid in ['safran', 'ANTILOPE', 'safran_pappus', 'ANTILOPE_pappus', 'SAFRAN', 'SAFRAN_pappus']:
                     member = None
                 else:
-                    member = [members_map[shortid][0]]
+                    member = [members_map(shortid)[0]]
 
             # VERRUE pour gérer le décallage d'un jour en attendant de combler les données
             if (shortid.split('_')[0] in ['SAFRAN', 'ANTILOPE', 'KRIGING']) and datebegin == '2021080207':
@@ -140,7 +140,7 @@ def execute():
 
             # Get simulation without assimilation
             xpid_assim = f'{shortid}_assim'
-            member_assim = members_map[xpid_assim]
+            member_assim = members_map(xpid_assim)
             io.get_pro(
                 datebegin   = deb,
                 dateend     = dateend,
@@ -173,16 +173,20 @@ def execute():
             y1 = spread['ass'][0]
             # ax[0].scatter(x0, y0, s=80, facecolors='none', edgecolors=colors_map[product])
             fact = 10
+            if product in colors_map.keys():
+                color = colors_map[product]
+            else:
+                color = None
             ellipse1 = Ellipse((x0, y0), width=bias['opl'][1] / fact, height=spread['opl'][1] / fact,
-                              facecolor='none', edgecolor=colors_map[product], linestyle=linestyle,
+                              facecolor='none', edgecolor=color, linestyle=linestyle,
                               linewidth=2)
             ellipse2 = Ellipse((x1, y1), width=bias['ass'][1] / fact, height=spread['ass'][1] / fact,
-                              facecolor='none', edgecolor=colors_map[product], linestyle=linestyle,
+                              facecolor='none', edgecolor=color, linestyle=linestyle,
                               linewidth=2)
             ax1.add_patch(ellipse1)
             ax1.add_patch(ellipse2)
             ax1.annotate("", xy=(x1, y1), xytext=(x0, y0),
-                    arrowprops={'arrowstyle': '-|>', 'lw': 3, 'color': colors_map[product],
+                    arrowprops={'arrowstyle': '-|>', 'lw': 3, 'color': color,
                         'linestyle': linestyle, 'mutation_scale': 30})
 
             x0 = pearson['opl'][0]
@@ -190,19 +194,19 @@ def execute():
             y0 = crps['opl'][0]
             y1 = crps['ass'][0]
             ellipse1 = Ellipse((x0, y0), width=pearson['opl'][1], height=crps['opl'][1] / fact,
-                              facecolor='none', edgecolor=colors_map[product], linestyle=linestyle,
+                              facecolor='none', edgecolor=color, linestyle=linestyle,
                               linewidth=2)
             ellipse2 = Ellipse((x1, y1), width=pearson['ass'][1], height=crps['ass'][1] / fact,
-                              facecolor='none', edgecolor=colors_map[product], linestyle=linestyle,
+                              facecolor='none', edgecolor=color, linestyle=linestyle,
                               linewidth=2)
             ax2.add_patch(ellipse1)
             ax2.add_patch(ellipse2)
             ax2.annotate("", xy=(x1, y1), xytext=(x0, y0),
-                    arrowprops={'arrowstyle': '-|>', 'lw': 3, 'color': colors_map[product],
+                    arrowprops={'arrowstyle': '-|>', 'lw': 3, 'color': color,
                         'linestyle': linestyle, 'mutation_scale': 30})
 
             # Add empty plot for legend
-            ax4.plot([], [], linestyle=linestyle, color=colors_map[product], label=label, lw=3)
+            ax4.plot([], [], linestyle=linestyle, color=color, label=label, lw=3)
 
             if False:
                 # Compute/plot rank histograms
@@ -221,7 +225,7 @@ def execute():
                 ax.set_ylim(0, 1000)
                 fig3.savefig(f'RankHistogram_{xpid_assim}_{date}.pdf')
 
-            clean(shortid, members_map[shortid])
+            clean(shortid, members_map(shortid))
 
     ax1.set_xlabel('Mean absolute bias (m)')
     ax1.set_ylabel('Mean spread (m)')
@@ -240,7 +244,7 @@ def execute():
     dateeval = f'{dates_pleiades[1][0:4]}-{dates_pleiades[1][4:6]}-{dates_pleiades[1][6:8]}'
     custom_legend(ax3, dateassim, dateeval)
     plt.tight_layout()
-    suffix = '_'.join([product_map[xpid.split('@')[0]] for xpid in xpids])
+    suffix = '_'.join([product_map(xpid.split('@')[0]) for xpid in xpids])
     fig.savefig(f'synthese_eval_assim_{suffix}.pdf')
 
 
