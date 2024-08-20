@@ -63,10 +63,11 @@ domain_coords = dict(
         AlpesSud       = dict(lonmin=6.56, lonmax=6.92, latmin=44.18, latmax=40.49),
         alp            = dict(latmax=46.450, latmin=44.100, lonmin=5.400, lonmax=7.200),
 )
-latmin = domain_coords[domain]['latmin']
-latmax = domain_coords[domain]['latmax']
-lonmin = domain_coords[domain]['lonmin']
-lonmax = domain_coords[domain]['lonmax']
+delta = 0
+latmin = domain_coords[domain]['latmin'] - delta / 2
+latmax = domain_coords[domain]['latmax'] + delta / 2
+lonmin = domain_coords[domain]['lonmin'] - delta
+lonmax = domain_coords[domain]['lonmax'] + delta / 2
 
 figsize = dict(
         alp            = (15.1,16),
@@ -128,7 +129,8 @@ def add_landmarks(ax):
 
 def add_rectangle(ax):
     # Create a Rectangle patch
-    for domain in ['MontBlanc', 'GrandesRousses']:
+    #for domain in ['MontBlanc', 'GrandesRousses']:
+    for domain in ['GrandesRousses']:
         x0 = domain_coords[domain]['lonmin']
         y0 = domain_coords[domain]['latmin']
         dx = domain_coords[domain]['lonmax'] - x0
@@ -197,8 +199,8 @@ def add_postes(ax, type_poste='nivometeo'):
     postes = pd.read_csv(fic_postes, sep=';')
     postes = postes.rename(columns={'poste_nivo.lat_dg':'lats', 'poste_nivo.lon_dg':'lons'})
     postes_domain = postes.loc[(postes.lons>=lonmin) & (postes.lons<=lonmax) & (postes.lats<=latmax) & (postes.lats>=latmin)]
-    lons = postes['lons']
-    lats = postes['lats']
+    lons = postes_domain['lons']
+    lats = postes_domain['lats']
 
 
     #sc = ax.scatter(scores['poste_nivo.lon_dg'], scores['poste_nivo.lat_dg'], c=scores['poste_nivo.alti'],  marker='^', s=300)
@@ -295,7 +297,10 @@ def plot_vertical_cross_section(cross):
 
 
 #mnt = xr.open_dataset(os.path.join(datadir, "DEM_ALPES_WGS84_250m_bilinear.nc"))
+#mnt=mnt.where((mnt['lat']>=latmin) & (mnt['lat']<=latmax) & (mnt['lon']>=lonmin) & (mnt['lon']<=lonmax), drop=True)
+
 mnt = xr.open_dataset(os.path.join("/home/vernaym/.vortexrc/hack/uget/vernaym/data", "DEM_GrandesRousses25m_L93.tif"))
+
 #mnt = gdal.Open(os.path.join(datadir, "DEM_ALPES_WGS84_250m_bilinear.tif"))
 #tmp = np.transpose(mnt.ReadAsArray().astype(np.float), axis=1)
 #plt.contour(tmp, cmap = "viridis", levels = list(range(0, 5000, 100)))
@@ -303,6 +308,8 @@ if 'elevation'  in mnt.keys():
     mnt = mnt.elevation
 elif 'band1' in mnt.keys():
     mnt = mnt.band1
+elif 'Band1' in mnt.keys():
+    mnt = mnt.Band1
 elif 'band_data' in mnt.keys():
     mnt = mnt.band_data
 
@@ -311,7 +318,6 @@ elif 'band_data' in mnt.keys():
 #mnt1km = mnt.interp(lat=antilope.lat, lon=antilope.lon, method='linear')
 #mnt1km.to_netcdf('/home/vernaym/These/DATA/DEM_ALPESFR_WGS84_1km.nc')
 
-#mnt=mnt.where((mnt['lat']>=latmin) & (mnt['lat']<=latmax) & (mnt['lon']>=lonmin) & (mnt['lon']<=lonmax), drop=True)
 mnt = proj_mnt(mnt)
 
 crossection = False
@@ -378,16 +384,17 @@ else:
     # Plot elevation
     #if not os.path.exists(filename):
     fig,ax = plt.subplots(figsize=figsize[domain], subplot_kw=dict(projection=ccrs.PlateCarree()))
+    #fig,ax = plt.subplots(figsize=(16, 8), subplot_kw=dict(projection=ccrs.PlateCarree()))
     #ax = ax.ravel()
-    xmin = domain_coords[domain]['lonmin']
-    xmax = domain_coords[domain]['lonmax']
-    ymin = domain_coords[domain]['latmin']
-    ymax = domain_coords[domain]['latmax']
+    xmin = lonmin
+    xmax = lonmax
+    ymin = latmin
+    ymax = latmax
     ax.set_extent([xmin, xmax, ymin, ymax], crs=ccrs.PlateCarree())
     ax.set_frame_on(False)
     #https://discourse.holoviz.org/t/cannot-remove-grid-for-hv-quadmesh/2211/8
     #im = mnt.elevation.plot(ax=ax, cmap=plt.cm.terrain, subplot_kws={'frame_on':False}, linewidth=0, label='Elevation (m)', add_colorbar=False)
-    #im = mnt.elevation.plot(ax=ax, cmap=plt.cm.terrain, linewidth=0, label='Elevation (m)', add_colorbar=False, transform=ccrs.PlateCarree())
+    #im = mnt.plot(ax=ax, cmap=plt.cm.terrain, linewidth=0, label='Elevation (m)', add_colorbar=False, transform=ccrs.PlateCarree())
     lons, lats = np.meshgrid(mnt.lon.data, mnt.lat.data)
     im = ax.contourf(lons, lats, mnt.data, cmap=plt.cm.terrain, levels=50, transform=ccrs.PlateCarree(), alpha=1, antialiased=True)  # https://www.earthdatascience.org/tutorials/visualize-digital-elevation-model-contours-matplotlib/
     # This is the fix for the white lines between contour levels
@@ -396,48 +403,48 @@ else:
     c = ax.contour(lons, lats, mnt.data, colors='grey', levels=[1000, 2500], transform=ccrs.PlateCarree())  # https://www.earthdatascience.org/tutorials/visualize-digital-elevation-model-contours-matplotlib/
     plt.clabel(c, inline=1, fontsize=10)
 
-    fullfeatures = False
+    fullfeatures = True
     if fullfeatures:
         # Add optional features
         add_boundaries(ax)
         add_landmarks(ax)
-        add_rectangle(ax)
-        add_radar_positions(ax)
+        #add_rectangle(ax)
+        #add_radar_positions(ax)
         add_postes(ax, type_poste='automatic stations')
         add_postes(ax, type_poste='nivometeo stations')
         # Add cross section line
         start = (45.14776, 5.63933)  # Radar Moucherotte
         end   = (45.11872, 6.27540)  # Passe par le Pic Blanc : 50 km
-        plt.plot([start[1], end[1]], [start[0], end[0]], color='grey', linestyle='-', linewidth=5, transform=ccrs.PlateCarree())
+        #ax.plot([start[1], end[1]], [start[0], end[0]], color='grey', linestyle='-', linewidth=5, transform=ccrs.PlateCarree())
 
         ax.set_frame_on(False)
         # Add scalebar (https://stackoverflow.com/questions/39786714/how-to-insert-scale-bar-in-a-map-in-matplotlib)
         scalebar = ScaleBar(
                 100000,  # 1 pixel = 1km
                 length_fraction=0.4,
-                location='upper left',
+                location='lower right',
                 #frameon=False,  # Switch on/off scale background
                 box_alpha=0.8,  #Transparency of the scale background
                 border_pad = 1,  # Pad between the scale anbd the border of the plot
                 font_properties=dict(size=18),
-                scale_loc='top'
+                scale_loc='top',
             )
         ax.add_artist(scalebar)
-        xticks = np.arange(5.5, 7.5, 0.5)
-        yticks = np.arange(44.5, 46.5, 0.5)
-        ax.set_xticks(xticks, crs=ccrs.PlateCarree())
-        ax.set_yticks(yticks, crs=ccrs.PlateCarree())
-        lon_formatter = LongitudeFormatter(zero_direction_label=True)
-        lat_formatter = LatitudeFormatter()
-        ax.xaxis.set_major_formatter(lon_formatter)
-        ax.yaxis.set_major_formatter(lat_formatter)
-        ax.tick_params(axis='both', which='major', labelsize=18)
-        ax.set_xlabel('longitude', fontsize=22)
-        ax.set_ylabel('latitude', fontsize=22)
+#        xticks = np.arange(xmin, xmax, 0.5)
+#        yticks = np.arange(ymin, ymax, 0.5)
+#        ax.set_xticks(xticks, crs=ccrs.PlateCarree())
+#        ax.set_yticks(yticks, crs=ccrs.PlateCarree())
+#        lon_formatter = LongitudeFormatter(zero_direction_label=True)
+#        lat_formatter = LatitudeFormatter()
+#        ax.xaxis.set_major_formatter(lon_formatter)
+#        ax.yaxis.set_major_formatter(lat_formatter)
+#        ax.tick_params(axis='both', which='major', labelsize=18)
+#        ax.set_xlabel('longitude', fontsize=22)
+#        ax.set_ylabel('latitude', fontsize=22)
 
     # Add colorbar
     #ax.legend(fontsize=20, loc=2)  # loc=2 --> upper-left
-    ax.legend(fontsize=20, loc=(0.0, 0.81))  # loc=2 --> upper-left
+    ax.legend(fontsize=20, loc=(0.04, 0.85))  # loc=2 --> upper-left
     #plot_correlation(ax, mnt)  # To add correlation area
     # Force colorbar size
     cb = fig.colorbar(im, fraction=0.058, pad=0.04)  # From https://stackoverflow.com/questions/18195758/set-matplotlib-colorbar-size-to-match-graph
