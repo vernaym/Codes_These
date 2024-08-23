@@ -19,12 +19,13 @@ import xarray as xr
 import argparse
 import matplotlib
 import matplotlib.pyplot as plt
-from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
 
 from snowtools.scripts.extract.vortex import vortexIO as io
 from snowtools.scripts.post_processing import common_dict
 import snowtools.tools.xarray_preprocess as xrp
 from snowtools.plots.maps import plot2D
+from snowtools.scores import clusters
+
 
 from vortex import toolbox
 
@@ -36,7 +37,8 @@ product_map = common_dict.product_map
 xpid_map    = common_dict.xpid_map
 colors_map  = common_dict.colors_map
 
-thresholds = [1500, 2000, 2500, 3000, 3500]
+# thresholds = [1500, 2000, 2500, 3000, 3500]
+thresholds = [0, 2400, 2800, 3500]
 
 
 def parse_command_line():
@@ -101,6 +103,18 @@ def execute():
         )
 
         df  = pd.read_csv(filename, sep=',', header=None)
+        ds = xr.DataArray(
+            data = np.array([df[member].values.reshape(len(dem.yy), len(dem.xx))
+                for member in range(17)]),
+            dims = ["member", "yy", "xx"],
+            coords = dict(
+                xx = (('xx'), dem.xx.data),
+                yy = (('yy'), dem.yy.data),
+                member = (('member'), range(1, 18)),
+            ),
+            attrs  = dict(description="SODA output"),
+        )
+        # Identify pixels with assimilation (sum != 17)
         df['sum'] = df.nunique(axis=1)
         median = df[range(17)].apply(lambda x: x.median(), axis=1)
         mean = df[range(17)].apply(lambda x: x.mean(), axis=1)
@@ -122,13 +136,35 @@ def execute():
 
         for var in ['mean', 'median']:
             fig, ax  = plt.subplots()
-            im = plot2D.plot_field(out[var], ax=ax, cmap=plt.cm.RdBu, dem=dem.ZS, shade=False, vmin=1, vmax=17,
+            plot2D.plot_field(out[var], ax=ax, cmap=plt.cm.RdBu, dem=dem.ZS, shade=False, vmin=1, vmax=17,
                     isolevels=thresholds, add_colorbar=True)
             ax.set_xticks([])
             ax.set_yticks([])
             ax.set_xlabel('')
             ax.set_ylabel('')
             savename = f'SODA_{var}_{date}_{product}.pdf'
+            plot2D.save_fig(savename, fig)
+
+        clustered = clusters.by_slices(ds, dem.ZS, thresholds)
+        cout = clusters.by_slices(out, dem.ZS, thresholds)
+        for cluster in clustered.slices.data:
+            tmp = clustered.sel({'slices': cluster})
+            fig, ax = plt.subplots()
+            xr.plot.hist(tmp, ax=ax, bins=17)
+            # ax.bar(tmp.member.data, tmp.data.flatten())
+            # ax.set_ylim(0, 2200)
+            fig.savefig(f'Histogram_{date}_{product}_{cluster}.pdf')
+
+            # Plot cluster's map
+            fig, ax = plt.subplots()
+            tmp = cout['mean'].sel({'slices': cluster})
+            plot2D.plot_field(tmp, ax=ax, cmap=plt.cm.RdBu, dem=dem.ZS, shade=False, vmin=1, vmax=17,
+                    isolevels=thresholds, add_colorbar=True)
+            ax.set_xticks([])
+            ax.set_yticks([])
+            ax.set_xlabel('')
+            ax.set_ylabel('')
+            savename = f'SODA_mean_{date}_{product}_{cluster}.pdf'
             plot2D.save_fig(savename, fig)
 
         os.remove(filename)
