@@ -298,14 +298,18 @@ def plot_vertical_cross_section(cross):
     plt.close()
 
 
-#mnt = xr.open_dataset(os.path.join(datadir, "DEM_ALPES_WGS84_250m_bilinear.nc"))
-#mnt=mnt.where((mnt['lat']>=latmin) & (mnt['lat']<=latmax) & (mnt['lon']>=lonmin) & (mnt['lon']<=lonmax), drop=True)
 
-mnt = xr.open_dataset(os.path.join("/home/vernaym/.vortexrc/hack/uget/vernaym/data", "DEM_GrandesRousses25m_L93.tif"))
+
+if domain == 'GrandesRousses':
+    mnt = xr.open_dataset(os.path.join("/home/vernaym/.vortexrc/hack/uget/vernaym/data", "DEM_GrandesRousses25m_L93.tif"))
+else:
+    mnt = xr.open_dataset(os.path.join(datadir, "DEM_ALPES_WGS84_250m_bilinear.nc"))
+    #mnt=mnt.where((mnt['lat']>=latmin) & (mnt['lat']<=latmax) & (mnt['lon']>=lonmin) & (mnt['lon']<=lonmax), drop=True)
 
 #mnt = gdal.Open(os.path.join(datadir, "DEM_ALPES_WGS84_250m_bilinear.tif"))
 #tmp = np.transpose(mnt.ReadAsArray().astype(np.float), axis=1)
 #plt.contour(tmp, cmap = "viridis", levels = list(range(0, 5000, 100)))
+
 if 'elevation'  in mnt.keys():
     mnt = mnt.elevation
 elif 'band1' in mnt.keys():
@@ -320,7 +324,8 @@ elif 'band_data' in mnt.keys():
 #mnt1km = mnt.interp(lat=antilope.lat, lon=antilope.lon, method='linear')
 #mnt1km.to_netcdf('/home/vernaym/These/DATA/DEM_ALPESFR_WGS84_1km.nc')
 
-mnt = proj_mnt(mnt)
+if domain == 'GrandesRousses':
+    mnt = proj_mnt(mnt)
 
 crossection = False
 if crossection:
@@ -398,11 +403,11 @@ else:
     #im = mnt.elevation.plot(ax=ax, cmap=plt.cm.terrain, subplot_kws={'frame_on':False}, linewidth=0, label='Elevation (m)', add_colorbar=False)
     #im = mnt.plot(ax=ax, cmap=plt.cm.terrain, linewidth=0, label='Elevation (m)', add_colorbar=False, transform=ccrs.PlateCarree())
     lons, lats = np.meshgrid(mnt.lon.data, mnt.lat.data)
-    im = plot2D.plot_field(mnt.where(mnt>3000), ax=ax, transform=ccrs.PlateCarree(), cmap=plt.cm.terrain, add_colorbar=False, vmin=0)
-    #im = ax.contourf(lons, lats, dataplot, cmap=plt.cm.terrain, levels=50, transform=ccrs.PlateCarree(), alpha=1, antialiased=True)  # https://www.earthdatascience.org/tutorials/visualize-digital-elevation-model-contours-matplotlib/
+    #im = plot2D.plot_field(mnt.where(mnt>3000), ax=ax, transform=ccrs.PlateCarree(), cmap=plt.cm.terrain, add_colorbar=False, vmin=0)
+    im = ax.contourf(lons, lats, mnt, cmap=plt.cm.terrain, levels=50, transform=ccrs.PlateCarree(), alpha=1, antialiased=True)  # https://www.earthdatascience.org/tutorials/visualize-digital-elevation-model-contours-matplotlib/
     # This is the fix for the white lines between contour levels
-    #for c in im.collections:
-    #    c.set_edgecolor("face")
+    for c in im.collections:
+        c.set_edgecolor("face")
     c = ax.contour(lons, lats, mnt.data, colors='grey', levels=[1000, 2500], transform=ccrs.PlateCarree())  # https://www.earthdatascience.org/tutorials/visualize-digital-elevation-model-contours-matplotlib/
     plt.clabel(c, inline=1, fontsize=10)
 
@@ -411,10 +416,10 @@ else:
         # Add optional features
         add_boundaries(ax)
         add_landmarks(ax)
-        #add_rectangle(ax)
-        #add_radar_positions(ax)
-        #add_postes(ax, type_poste='automatic stations')
-        #add_postes(ax, type_poste='nivometeo stations')
+        add_rectangle(ax)
+        add_radar_positions(ax)
+        add_postes(ax, type_poste='automatic stations')
+        add_postes(ax, type_poste='nivometeo stations')
         # Add cross section line
         start = (45.14776, 5.63933)  # Radar Moucherotte
         end   = (45.11872, 6.27540)  # Passe par le Pic Blanc : 50 km
@@ -447,7 +452,7 @@ else:
 
     # Add colorbar
     #ax.legend(fontsize=20, loc=2)  # loc=2 --> upper-left
-    #ax.legend(fontsize=20, loc=(0.04, 0.85))  # loc=2 --> upper-left
+    ax.legend(fontsize=20, loc=(0.0, 0.85))  # loc=2 --> upper-left
     #plot_correlation(ax, mnt)  # To add correlation area
     # Force colorbar size
     cb = fig.colorbar(im, fraction=0.058, pad=0.04)  # From https://stackoverflow.com/questions/18195758/set-matplotlib-colorbar-size-to-match-graph
