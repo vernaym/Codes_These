@@ -227,8 +227,8 @@ def execute():
 
             clean(shortid, members_map(shortid))
 
-    ax1.set_xlabel('Mean absolute bias (m)')
-    ax1.set_ylabel('Mean spread (m)')
+    ax1.set_xlabel('Mean absolute error of the ensemble mean (m)')
+    ax1.set_ylabel('Mean ensemble spread (m)')
     ax1.set_xlim(0, 1)
     ax1.set_ylim(0, 1)
     ax1.grid()
@@ -355,7 +355,7 @@ def compute_scores(simu, obs, xpid, date):
     bias   = xr.apply_ufunc(np.abs, mean - obs)
     spread = simu.std(dim='member')
 
-    if False:
+    if True:
         figSK, axSK = plt.subplots()
         x = bias.data.flatten()
         y = spread.data.flatten()
@@ -364,8 +364,8 @@ def compute_scores(simu, obs, xpid, date):
         y = y[~np.isnan(z)]
         z = z[~np.isnan(z)]
         sc = tools.plot_scatter(axSK, x, y, lims=[0, 3], color=z)
-        axSK.set_xlabel('Mean absolute bias (m)')
-        axSK.set_ylabel('Mean spread (m)')
+        axSK.set_xlabel('Absolute error of the ensemble mean (m)')
+        axSK.set_ylabel('Ensemble spread (m)')
         cb = figSK.colorbar(sc)
         cb.set_label(label='Snow depth (m)', size=18)
         figSK.savefig(f'SpreadSkill_{xpid}_{date}.pdf')
