@@ -86,10 +86,7 @@ def parse_command_line():
     return args
 
 
-def variogram(array, color, ax, var='HTN', label=None, model='spherical', linestyle='-', samples=None):
-
-    # WARNING : maxlag should not be larger than half of the domain's dimension
-    maxlag = 10
+def variogram(array, color, ax, var='HTN', label=None, model='spherical', linestyle='-', samples=None, maxlag=10):
 
 #    t1 = time.time()
 
@@ -148,6 +145,9 @@ def variogram(array, color, ax, var='HTN', label=None, model='spherical', linest
 
 def execute():
 
+    # WARNING : maxlag should not be larger than half of the domain's dimension
+    maxlag = 10
+
     # 1. Get all input data
 
     # a) Pleiades observations
@@ -170,7 +170,7 @@ def execute():
     # Label dots
     ax.scatter([], [], marker='+', s=40, color='k', label='Experimental variogram')
     # variogram(tmp, color, ax, label='Pleiades', samples=0.2)  # Computing optimisation
-    variogram(tmp, color, ax, label='Pleiades')
+    variogram(tmp, color, ax, label='Pleiades', maxlag=maxlag)
 
     # c) Simulations
     for xpid in xpids:
@@ -179,16 +179,16 @@ def execute():
             user = os.environ["USER"]
             xpid = f'{xpid}@{user}'
         shortid = xpid.split('@')[0]
-        product = product_map[shortid]
+        product = product_map(shortid)
 
         # Get (filtered) PRO files with Vortex
         if members:
-            member = members_map[shortid]
+            member = members_map(shortid)
         else:
             if shortid in ['safran', 'ANTILOPE', 'safran_pappus', 'ANTILOPE_pappus', 'SAFRAN', 'SAFRAN_pappus']:
                 member = None
             else:
-                member = [members_map[shortid][0]]
+                member = [members_map(shortid)[0]]
 
         # VERRUE pour gérer le décallage d'un jour en attendant de combler les données
         if (shortid.split('_')[0] in ['SAFRAN', 'ANTILOPE', 'KRIGING']) and datebegin == '2021080207':
@@ -212,20 +212,20 @@ def execute():
 
         # compute variogram
         # variogram(tmp, color, ax, var='DSN_T_ISBA', label=product_map[shortid], linestyle=linestyle, samples=0.2)
-        variogram(tmp, color, ax, var='DSN_T_ISBA', label=product_map[shortid], linestyle=linestyle)
+        variogram(tmp, color, ax, var='DSN_T_ISBA', label=product_map(shortid), linestyle=linestyle)
 
         clean(shortid, member)
 
     # plt.title('Isotropoic Experimental Variogram')
     plt.xlabel('Distance (km)')
     plt.ylabel('Semi-variance (m²)')
-    plt.xlim(0, 10)
+    plt.xlim(0, maxlag)
     plt.ylim(0, 1)
     plt.grid(linestyle=':', linewidth=0.5)
     plt.tight_layout()
     plt.legend()
 
-    suffix = '_'.join([product_map[xpid.split('@')[0]] for xpid in xpids])
+    suffix = '_'.join([product_map(xpid.split('@')[0]) for xpid in xpids])
     plt.savefig(f'variogram_{suffix}_{date}.pdf')
 
 

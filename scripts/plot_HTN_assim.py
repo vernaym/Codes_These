@@ -157,12 +157,12 @@ def execute():
 
         # Get (filtered) PRO files with Vortex
         if members:
-            member = members_map[shortid]
+            member = members_map(shortid)
         else:
             if shortid in ['safran', 'ANTILOPE', 'safran_pappus', 'ANTILOPE_pappus', 'SAFRAN', 'SAFRAN_pappus']:
                 member = None
             else:
-                member = [members_map[shortid][0]]
+                member = [members_map(shortid)[0]]
 
         # VERRUE pour gérer le décallage d'un jour en attendant de combler les données
         if (shortid.split('_')[0] in ['SAFRAN', 'ANTILOPE', 'KRIGING']) and datebegin == '2021080207':
@@ -177,7 +177,7 @@ def execute():
 
         # Get simulation without assimilation
         xpid_assim = xpids_assim[idx]
-        member_assim = members_map[xpid_assim]
+        member_assim = members_map(xpid_assim)
         io.get_pro(
             datebegin   = deb,
             dateend     = dateend,
@@ -273,7 +273,8 @@ def plot_htn(openloop, obs, assim, xpid, xpid_assim, date, subdomain, dem=None):
     # Round max to nearest 0.5m
     # vmax = round(float(max(openloop.DSN_T_ISBA.max(), obs.max(), assim.DSN_T_ISBA.max())) * 2) / 2
     vmax = round(float(max(openloop.DSN_T_ISBA.max(), obs.max(), assim.DSN_T_ISBA.max())))
-    slices = int(vmax)
+    vmax = 3
+    slices = 6
 
     # fig, ax = plt.subplots(1, 3, figsize=(36 * len(obs.xx) / len(obs.yy), 10), sharey=True)
     fig = plt.figure(figsize=(30 * len(obs.xx) / len(obs.yy), 10))
