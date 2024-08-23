@@ -71,7 +71,7 @@ for xpid in xpids:
 
     if 'sorted' in xpid or len(xpids) == 1:
         from mycolorpy import colorlist as mcp
-        color = mcp.gen_color_normalized(cmap="viridis", data_arr=range(len(ds.member)-1))
+        color = mcp.gen_color_normalized(cmap="RdBu", data_arr=range(len(ds.member)-1))
         for i, member in enumerate(ds.member):
             # ax.plot(ds.time, ds.sel({'member': member}), color=color[i], linestyle='-', linewidth=1)
             if i == 0:
