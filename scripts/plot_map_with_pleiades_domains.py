@@ -7,7 +7,15 @@ import os
 
 from pyproj import Proj, transform
 
+import plot_elevation
+
 #from snowtools.scripts.extract.vortex import vortex_get as io
+
+# Grandes Rousses domain
+latmax = 45.240,
+latmin = 44.990,
+lonmin = 6.010,
+lonmax = 6.490,
 
 def proj_mnt(mnt):
     outProj = Proj(init='epsg:4326')
@@ -28,6 +36,7 @@ def proj_mnt(mnt):
 #ds = xr.open_dataset('CUMUL_ANTILOPEH_GrandesRousses_2021073106_2022070106.nc')
 #ds = xrp.preprocess(ds)
 
+#FondCarte = 'elevation'
 FondCarte = 'uncertainty'
 if FondCarte == 'elevation':
     field = xr.open_dataset(os.path.join("/home/vernaym/.vortexrc/hack/uget/vernaym/data/", "DEM_GrandesRousses25m_L93.tif"))
@@ -37,17 +46,18 @@ if FondCarte == 'elevation':
     vmax = 4000
     cmap = plt.cm.terrain
     ratio =14
-    savename = 'Relief_GrandesRousses25m_Pleiades_2018_2019_2022.pdf'
+    savename = 'Relief_GrandesRousses25m_Pleiades_2018_2022.pdf'
     # dem = xrp.preprocess(dem.elevation)
     # dem = dem.sel({'xx': ds.xx, 'yy': ds.yy})
 elif FondCarte == 'uncertainty':
-    field = xr.open_dataset('/home/vernaym/workdir/ASSIMILATION/mask/GrandesRousses/Observation_error.nc')
+    field = xr.open_dataset('/home/vernaym/workdir/ASSIMILATION/RandomSampling/XP27/Observation_error.nc')
+    field = field.where((field.lon>=lonmin) & (field.lon<=lonmax) & (field.lat>=latmin) & (field.lat<=latmax), drop=True)
     field = field.Uncertainty
     vmin = 0
-    vmax = 40
+    vmax = 26
     cmap = plt.cm.YlOrBr
     ratio = 10
-    savename = 'Uncertainty_GrandesRousses1km_Pleiades_2018_2019_2022.pdf'
+    savename = 'Uncertainty_GrandesRousses1km_Pleiades_2018_2022.pdf'
 
 #filename = 'Pleiades_20190513.nc'
 #io.get(vapp='Pleiades', geometry='Huez250m', xpid='CesarDB_AngeH@vernaym', date='2019051312',
@@ -67,14 +77,16 @@ ax = plt.gca()
 
 #plot2D.add_iso_elevation(ax, dem, levels=[900, 1700, 2500, 3300])
 
+plot_elevation.add_landmarks(ax, transform=False)
+
 #plot2D.add_rectangle(ax, 'GrandesRousses', linewidth=4)
-plot2D.add_quadrilateral(ax, 'Pleiades2018', color='dimgrey', linewidth=3, linestyle='--')
-plot2D.add_quadrilateral(ax, 'Pleiades2019', color='crimson', linewidth=3, linestyle='--')
-plot2D.add_quadrilateral(ax, 'Pleiades2022', color='darkviolet', linewidth=3, linestyle='--')
+plot2D.add_quadrilateral(ax, 'Lautaret area (Pleiades 2018)', color='darkviolet', linewidth=7, linestyle='--')
+#plot2D.add_quadrilateral(ax, 'Pleiades2019', color='crimson', linewidth=3, linestyle='--')
+plot2D.add_quadrilateral(ax, 'Huez area (Pleiades 2022)', color='red', linewidth=7, linestyle='--')
 
 plt.title(None)
 plt.legend()
 plt.tight_layout()
 
 #plt.savefig('Relief_GrandesRousses25m_Pleiades_2022.pdf')
-plt.savefig(os.path.join('/home/vernaym/These/figures',savename))
+plt.savefig(os.path.join('/home/vernaym/These/figures', savename))
