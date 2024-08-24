@@ -88,13 +88,15 @@ max_dist = d0*3
 blacklist = [5063407, 5063410, 38191408]  # La Meije, LA GRAVE, Huez 2350
 
 landmarks = {
-        #"Alpe d'Huez" : dict(lon=6.070, lat=45.092, alt=1800, marker='o'),
-        #"Les 2 Alpes" : dict(lon=6.127, lat=45.013, alt=1800, marker='o'),
-        #"Lautaret"    : dict(lon=6.408, lat=45.038, alt=2058, marker='X'),
-        "La Meije"    : dict(lon=6.311, lat=45.008, alt=3500, marker='^'),  # real alt = 3984
-        "Pic Blanc"   : dict(lon=6.131, lat=45.128, alt=3000, marker='^'),  # real alt = 3333
-        "Mont-Blanc"  : dict(lon=6.87, lat=45.84, alt=4807, marker='^'),
-    }
+    "Alpe d'Huez (1800m)"       : dict(lon=6.070, lat=45.092, alt=1800, marker='o'),
+    #"Les 2 Alpes (1800m)"       : dict(lon=6.127, lat=45.013, alt=1800, marker='o'),
+    "Lautaret (2058m)"          : dict(lon=6.408, lat=45.038, alt=2058, marker='X'),
+    #"Galibier (2642m)"          : dict(lon=6.243, lat=45.035, alt=2642, marker='X'),
+    #"La Meije (3984m)"          : dict(lon=6.311, lat=45.008, alt=3984, marker='^'),
+    "Pic Blanc (3323m)"         : dict(lon=6.131, lat=45.128, alt=3323, marker='^'),
+    #"Aiguilles d'Arves (3514m)" : dict(lon=6.200, lat=45.072, alt=3514, marker='^'),
+    #"Mont-Blanc"  : dict(lon=6.87, lat=45.84, alt=4807, marker='^'),
+}
 
 
 
@@ -119,14 +121,18 @@ def proj_mnt(mnt):
     )
     return mnt_proj
 
-def add_landmarks(ax):
+def add_landmarks(ax, transform=True):
     # Add landmarks
     for landmark, infos in landmarks.items():
-        ax.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='white', markersize=20, transform=ccrs.PlateCarree())
-        if landmark == 'Pic Blanc':
-            ab = ax.annotate(landmark, (infos['lon']+0.03, infos['lat']+0.01), weight='bold', color='k', fontsize=22, transform=ccrs.PlateCarree())
+        if transform:
+            ax.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='white', markersize=20, transform=ccrs.PlateCarree())
+            if landmark == 'Pic Blanc':
+                ab = ax.annotate(landmark, (infos['lon']+0.03, infos['lat']+0.01), weight='bold', color='k', fontsize=22, transform=ccrs.PlateCarree())
+            else:
+                ab = ax.annotate(landmark, (infos['lon']-0.1, infos['lat']-0.07), weight='bold', color='k', fontsize=22, transform=ccrs.PlateCarree())
         else:
-            ab = ax.annotate(landmark, (infos['lon']-0.1, infos['lat']-0.07), weight='bold', color='k', fontsize=22, transform=ccrs.PlateCarree())
+            ax.plot(infos['lon'], infos['lat'], marker=infos['marker'], color='white', markersize=20)
+            ab = ax.annotate(landmark, (infos['lon']+0.01, infos['lat']), weight='bold', color='k', fontsize=22)
         ab.set_bbox(dict(facecolor='white', alpha=0.3, edgecolor='white'))
 
 def add_rectangle(ax):
@@ -418,7 +424,7 @@ else:
         add_landmarks(ax)
         add_rectangle(ax)
         add_radar_positions(ax)
-        add_postes(ax, type_poste='automatic stations')
+        #add_postes(ax, type_poste='automatic stations')
         add_postes(ax, type_poste='nivometeo stations')
         # Add cross section line
         start = (45.14776, 5.63933)  # Radar Moucherotte
