@@ -30,7 +30,8 @@ num_poste_map = dict(
     GalibierNivose    = '05079402',
     LacBlancNivose    = '38191403',
     RochillesNivose   = '73306401',
-    HuezNivometeo     = '38191400',
+    HuezNivometeo     = '38191002',  # ALPE-D'HUEZ - 1860m
+    #HuezNivometeo     = '38191400',  # L Alpe d Huez (SATA) - 1860m --> poste nivometeo
 )
 
 if isinstance(args.station, str):
@@ -45,13 +46,22 @@ outmode = 'w'
 # ---------------------------------------------------------------------------
 # On prend toutes les heures
 
+table = 'H_NIVO'
+listvar = ["to_char(dat,'YYYY-MM-DD-HH24-MI')", f"to_char({table}.num_poste, 'fm00000000')", "lat_dg", "lon_dg", 'alti', "ALTI_LPNX",
+          "neigetot"]
+header = ['dat', 'num_poste', 'lat', 'lon', 'alt', 'lpn', 'neigetot']
+if num_poste == '38191002':
+    table = 'H'
+    listvar = ["to_char(dat,'YYYY-MM-DD-HH24-MI')", f"to_char({table}.num_poste, 'fm00000000')", "lat_dg", "lon_dg", 'alti', "neigetot"]
+    header = ['dat', 'num_poste', 'lat', 'lon', 'alt', 'neigetot']
+
 # Postes NIVOSE
 question = question(
-    listvar=["to_char(dat,'YYYY-MM-DD-HH24-MI')", "to_char(h.num_poste, 'fm00000000')", "neigetot", "lat_dg", "lon_dg"],
-    table='H',
-    listjoin=['POSTE_NIVO ON H.NUM_POSTE = POSTE_NIVO.NUM_POSTE and type_nivo != 2'],
+    listvar=listvar,
+    table=table,
+    listjoin=[f'POSTE_NIVO ON {table}.NUM_POSTE = POSTE_NIVO.NUM_POSTE and type_nivo != 2'],
     period=[datedeb, datefin],
-    listorder=['dat', 'h.num_poste'],
-    listconditions=[f"to_char(dat,'HH24') = '06' and H.NUM_POSTE = '{num_poste}'"]
+    listorder=['dat', f'{table}.num_poste'],
+    listconditions=[f"to_char(dat,'HH24') = '06' and {table}.NUM_POSTE = '{num_poste}'"]
 )
-question.run(outputfile=outname, header=['dat', 'num_poste', 'neigetot'], mode=outmode)
+question.run(outputfile=outname, header=header, mode=outmode)

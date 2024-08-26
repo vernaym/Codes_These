@@ -62,6 +62,8 @@ else:
     datebegin_RS27 = datebegin
 io.get_pro(datebegin=datebegin_RS27, dateend=dateend, xpid='RS27_sorted_pappus', vconf=point, geometry='SinglePoint',
         namespace='vortex.cache.fr', filename='PRO_RS27.nc',vapp='edelweiss')
+io.get_pro(datebegin=datebegin_RS27, dateend=dateend, xpid='RS27_LPNp200', vconf=point, geometry='SinglePoint',
+        namespace='vortex.cache.fr', filename='PRO_RS27_bis.nc',vapp='edelweiss')
 
 xpid_map = {
     '2017080106': 'CesarDB',
@@ -71,6 +73,19 @@ xpid_map = {
 io.get_snow_obs_date(xpid=xpid_map[datebegin], geometry=geometry, date=dates_pleiades,
         vapp='Pleiades', filename='Pleiades_[date:ymdh].nc')
 
+io.get_meteo(
+    kind        = 'ISO_WETBT',
+    datebegin   = datebegin,
+    dateend     = dateend,
+    geometry    = "EURW1S40",
+    xpid        = "ExtractionBDAP@vernaym",
+    filename    = 'ISO_TPW.nc',
+    vapp        = 'edelweiss',
+    source_app  = 'arome',
+    source_conf = '3dvarfr',
+)
+
+
 safran = xr.open_dataset('PRO_SAFRAN.nc')
 safran = safran.DSN_T_ISBA
 kriging = xr.open_dataset('PRO_KRIGING.nc')
@@ -79,20 +94,60 @@ antilope = xr.open_dataset('PRO_ANTILOPE.nc')
 antilope = antilope.DSN_T_ISBA
 rs27 = xr.open_dataset('PRO_RS27.nc')
 rs27 = rs27.DSN_T_ISBA
+rs27_bis = xr.open_dataset('PRO_RS27_bis.nc')
+rs27_bis = rs27_bis.DSN_T_ISBA
 time = safran.time
 
+ymax = 1.3  # Huez 2021
+
 fig, ax = plt.subplots(figsize=(14, 4))
-plt.plot(time, safran, label='SAFRAN', color='grey')
-plt.plot(time, kriging, label='KRIGING', color='red')
-plt.plot(time, antilope, label='ANTILOPE', color='blue')
-plt.plot(rs27.time, rs27, label='AS-ANTILOPE', color='green')
+ax.set_ylim([-ymax, ymax])
+#plt.plot(time, safran, label='SAFRAN', color="#1f78b4")
+#plt.plot(time, kriging, label='KRIGING', color="#e31a1c")
+#plt.plot(time, antilope, label='ANTILOPE', color="#b2df8a")
+#plt.plot(rs27.time, rs27, label='AS-ANTILOPE', color="#33a02c")
+#plt.plot(time, safran, label='SAFRAN', color="grey")
+#plt.plot(time, kriging, label='KRIGING', color="purple")
+#plt.plot(time, antilope, label='ANTILOPE', color="red")
+plt.plot(rs27.time, rs27, label='AS-ANTILOPE', color="blue")
+plt.plot(rs27_bis.time, rs27_bis, label='AS-ANTILOPE LPN+200m', color="green")
 deb = pd.Timestamp(year=int(datebegin[0:4]), month=int(datebegin[4:6]), day=int(datebegin[6:8]),  tz="UTC")
 end = pd.Timestamp(year=int(dateend[0:4]), month=int(dateend[4:6]), day=int(dateend[6:8]),  tz="UTC")
 if os.path.exists('HTN.obs'):
-    #obs = pd.read_csv('NIVOSE.obs', sep=';', parse_dates=['dat'])
-    obs = pd.read_csv('HTN.obs', sep=';', parse_dates=['dat'])
-    obs = obs[(obs.dat>=deb) & (obs.dat<=end)]
-    plt.plot(obs.dat.values, obs.neigetot.values / 100, color='k', label='In-situ observation')
+    #htn = pd.read_csv('NIVOSE.htn', sep=';', parse_dates=['dat'])
+    htn = pd.read_csv('HTN.obs', sep=';', parse_dates=['dat'])
+    htn = htn[(htn.dat >= deb) & (htn.dat <= end)]
+    ax.plot(htn.dat.values, htn.neigetot.values / 100, color='k', label='In-situ observation')
+
+    alt = htn.alt.unique()[0]
+
+    plot_lpn = True
+    if plot_lpn:
+        ax2 = ax.twinx()
+        lpn = pd.read_csv('LPN.obs', sep=';', parse_dates=['dat'])
+        lpn = lpn[(lpn.dat >= deb) & (lpn.dat <= end)]
+        # Add LPN
+        #ax.fill_between(lpn.dat.values, 0, np.where(lpn.lpn < lpn.alti, ymax, 0), color='grey', alpha=0.5, step='pre', label='LPN > station')
+        #ax.fill_between(lpn.dat.values, 0, np.where(lpn.lpn < lpn.alti + 200, ymax, 0), color='grey', alpha=0.1, step='pre', label='LPN > station + 200m' )
+        ax2.plot(lpn.dat.values, lpn.lpn.values - alt, marker='*', color='k', linestyle='', label='Maximum rain elevation')
+
+        isot = xr.open_dataarray('ISO_TPW.nc')
+        isot = isot.sel({'latitude': lpn.lat.unique(), 'longitude': lpn.lon.unique(), 'ISO_TPW': 27415}, method='nearest')
+        isot = isot.sel({'valid_time': lpn.dat.values})
+        isot = isot.where(isot.valid_time == lpn.dat.values).squeeze()
+        isot = isot.where(~np.isnan(lpn.lpn.values))
+        #isot = isot.sel({'valid_time': lpn.dat.values[~np.isnan(lpn.lpn.values)]}).squeeze()
+        #isot = isot.where(isot.time.dt.hour == 6).squeeze()
+        ax2.plot(isot.time.data, isot.data - alt, marker='*', color='b', linestyle='', label='Simulation LPN')
+        ax2.set_ylim([-1800, 1800])
+        ax2.set_ylabel("Elevation difference with Huez elevation (m)")
+
+    diff = lpn.lpn.values - isot.data
+    pos = np.where(diff > 0)
+    neg = np.where(diff < 0)
+    ax2.vlines(lpn.dat.values[pos], isot.data[pos] - alt, lpn.lpn.values[pos] - alt, color='blue', linestyle='--', label='LPN under-estimation')
+    ax2.vlines(lpn.dat.values[neg], lpn.lpn.values[neg] - alt, isot.data[neg] - alt, color='red', linestyle='--', label='LPN over-estimation')
+
 if os.path.exists('HTN2.obs'):
     #obs = pd.read_csv('NIVOSE.obs', sep=';', parse_dates=['dat'])
     obs = pd.read_csv('HTN.obs', sep=';', parse_dates=['dat'])
@@ -104,13 +159,16 @@ for date in dates_pleiades:
     pleiades = xr.open_dataset(f'Pleiades_{date}.nc')
     pleiades = xrp.preprocess(pleiades, mapping={'DSN_T_ISBA': 'HTN', 'DEP': 'HTN'})
     htn = pleiades.interp({'xx': xx, 'yy': yy}, method='nearest').HTN
-    plt.vlines(pd.to_datetime(date, format='%Y%m%d%H'), 0, 1.5, color='k', linestyle=':')
+    ax.vlines(pd.to_datetime(date, format='%Y%m%d%H'), -ymax, ymax, color='k', linestyle=':')
     if legend:
-        plt.plot(pd.to_datetime(date, format='%Y%m%d%H'), htn, linestyle='', marker='.', markersize=20, color='k',
+        ax.plot(pd.to_datetime(date, format='%Y%m%d%H'), htn, linestyle='', marker='.', markersize=20, color='k',
                 label='Pleiades')
     else:
-        plt.plot(pd.to_datetime(date, format='%Y%m%d%H'), htn, linestyle='', marker='.', markersize=20, color='k')
+        ax.plot(pd.to_datetime(date, format='%Y%m%d%H'), htn, linestyle='', marker='.', markersize=20, color='k')
     legend = False
-plt.legend()
+ax.set_ylabel('Snow depth (m)')
+ax.legend(loc='upper left')
+#ax.legend(loc='upper left', bbox_to_anchor=(0.05, 0.3, 0.5, 0.5))
+ax2.legend(loc='lower right')
 plt.tight_layout()
-plt.savefig(f'Chrono.pdf')
+plt.savefig('Chrono.pdf')
