@@ -75,7 +75,7 @@ def parse_command_line():
     parser.add_argument('-v', '--vapp', type=str, default='edelweiss', choices=['s2m', 'edelweiss'],
                         help="Application that produced the target file")
 
-#    parser.add_argument('-u', '--uenv', type=str, default="uenv:edelweiss.2@vernaym",
+#    parser.add_argument('-u', '--uenv', type=str, default="uenv:edelweiss.3@vernaym",
 #                        help="User environment for static resources (format 'uenv:name@user')")
 
     parser.add_argument('-w', '--workdir', type=str, default=f'{os.environ["HOME"]}/workdir/EDELWEISS/plot/HTN',
