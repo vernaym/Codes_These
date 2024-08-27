@@ -36,20 +36,21 @@ def proj_mnt(mnt):
 #ds = xr.open_dataset('CUMUL_ANTILOPEH_GrandesRousses_2021073106_2022070106.nc')
 #ds = xrp.preprocess(ds)
 
-#FondCarte = 'elevation'
+dem = xr.open_dataset(os.path.join("/home/vernaym/.vortexrc/hack/uget/vernaym/data/", "DEM_GrandesRousses25m_L93.tif"))
+dem = dem.band_data
+dem = proj_mnt(dem)
+dem = dem
+vmin = 600
+vmax = 4000
+cmap = plt.cm.terrain
+ratio =14
+savename = 'Relief_GrandesRousses25m_Pleiades_2018_2022.pdf'
+dem = xrp.preprocess(dem)
+# dem = dem.sel({'xx': ds.xx, 'yy': ds.yy})
+
 FondCarte = 'uncertainty'
-if FondCarte == 'elevation':
-    field = xr.open_dataset(os.path.join("/home/vernaym/.vortexrc/hack/uget/vernaym/data/", "DEM_GrandesRousses25m_L93.tif"))
-    field = field.band_data
-    field = proj_mnt(field)
-    vmin = 600
-    vmax = 4000
-    cmap = plt.cm.terrain
-    ratio =14
-    savename = 'Relief_GrandesRousses25m_Pleiades_2018_2022.pdf'
-    # dem = xrp.preprocess(dem.elevation)
-    # dem = dem.sel({'xx': ds.xx, 'yy': ds.yy})
-elif FondCarte == 'uncertainty':
+#FondCarte = 'ratio'
+if FondCarte == 'uncertainty':
     field = xr.open_dataset('/home/vernaym/workdir/ASSIMILATION/RandomSampling/XP27/Observation_error.nc')
     field = field.where((field.lon>=lonmin) & (field.lon<=lonmax) & (field.lat>=latmin) & (field.lat<=latmax), drop=True)
     field = field.Uncertainty
@@ -58,6 +59,17 @@ elif FondCarte == 'uncertainty':
     cmap = plt.cm.YlOrBr
     ratio = 10
     savename = 'Uncertainty_GrandesRousses1km_Pleiades_2018_2022.pdf'
+elif FondCarte == 'ratio':
+    field = xr.open_dataset('/home/vernaym/workdir/ASSIMILATION/RandomSampling/XP27/Estimated_ratio.nc')
+    field = field.where((field.lon>=lonmin) & (field.lon<=lonmax) & (field.lat>=latmin) & (field.lat<=latmax), drop=True)
+    field = field.Ratio
+    vmin = 0.7
+    vmax = 1.3
+    cmap = plt.cm.RdBu_r
+    ratio = 10
+    savename = 'Ratio_GrandesRousses1km_Pleiades_2018_2022.pdf'
+elif FondCarte == 'elevation':
+    field = dem
 
 #filename = 'Pleiades_20190513.nc'
 #io.get(vapp='Pleiades', geometry='Huez250m', xpid='CesarDB_AngeH@vernaym', date='2019051312',
@@ -71,11 +83,12 @@ elif FondCarte == 'uncertainty':
 #plot2D.plot_field(dem, vmin=600, vmax=3900)
 plt.figure(figsize=(ratio * len(field.lon) / len(field.lat), 10))
 #im = plt.contourf(field.xx, field.yy, field.data, cmap=plt.cm.terrain, levels=100, alpha=0.9, antialiased=False)
+#im = plot2D.plot_field(field, vmin=vmin, vmax=vmax, dem=dem)
 im = field.plot(vmin=vmin, vmax=vmax, cmap=cmap, rasterized=True)
 im.set_edgecolor("face")
 ax = plt.gca()
 
-#plot2D.add_iso_elevation(ax, dem, levels=[900, 1700, 2500, 3300])
+plot2D.add_iso_elevation(dem, ax=ax, levels=[1500, 2000, 2500, 3000, 3500])
 
 plot_elevation.add_landmarks(ax, transform=False)
 
