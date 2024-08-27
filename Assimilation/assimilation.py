@@ -61,6 +61,7 @@ datadir = '/home/vernaym/These/DATA'
 
 domain_coords = dict(
         GrandesRousses = dict(latmax=45.240, latmin=44.990, lonmin=6.010, lonmax = 6.490),
+        eaudolle       = dict(lonmin=5.921, lonmax=6.334, latmin=45.058, latmax=45.357),
         NorthernAlps   = dict(lonmin=6.0, lonmax=6.9, latmin=45.6, latmax=46.35),
         CentralAlps    = dict(lonmin=5.6, lonmax=7.0, latmin=45.0, latmax=45.6),
         SouthernAlps   = dict(lonmin=5.7, lonmax=7.0, latmin=44.2, latmax=45.0),
@@ -3243,7 +3244,7 @@ if __name__ == "__main__":
     extract_period = date_range(args.datebegin, args.dateend, dt=timestep[args.frequency])
 
     antilope = read_obs(args)
-    if not args.assimilation == 'rs':
+    if not args.assimilation == 'RS':
         pearome = read_ensemble(args.datebegin.strftime('%Y%m%d%H'), args.dateend.strftime('%Y%m%d%H'), args.frequency, args.domain, antilope)
 
     nivometeo = read_nivometeo_obs(domain=args.domain)
