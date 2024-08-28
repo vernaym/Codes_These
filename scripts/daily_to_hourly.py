@@ -74,6 +74,7 @@ io.get(
     filename       = 'ANTILOPE.nc',
 )
 antilope = xr.open_dataset('ANTILOPE.nc')  # sxcen
+antilope = antilope.assign_coords({'lat': np.round(antilope.lat.data, 2), 'lon': np.round(antilope.lon.data, 2)})
 antilope = antilope.sel(lat=analysis.lat.data, lon=analysis.lon.data)
 
 dailyfiles = False
@@ -90,21 +91,22 @@ if not dailyfiles:
     print('Resampling hourly ANTILOPE data over !')
     tmp = tmp.transpose('lat', 'lon', 'time')  # reorder data
     tmp = tmp.reindex_like(antilope).ffill('time')  # Fill hourly time steps with daily precipitation (https://stackoverflow.com/questions/54452336/xarray-resample-time-series-data-from-daily-to-hourly)
-    chronology = antilope.rr.data / (tmp.rr.data+0.00001)  # Avoid division by 0 Warnings
-    chronology[tmp.rr.data==0] = 1/24.  # Avoid to remove precipitation when/where the analysis transformed null precipitation into >0 ones. TODO : Find a better solution
+    chronology = antilope.rr / (tmp.rr + 0.00001)  # Avoid division by 0 Warnings
+    chronology.where(tmp.rr==0, 1/24.)  # Avoid to remove precipitation when/where the analysis transformed null precipitation into >0 ones.
+    chronology = chronology.transpose('time', 'lat', 'lon')
 
     analysis['time'] = analysis.time-np.timedelta64(6, 'h')-np.timedelta64(1, 'D')
     # Is it really necessary to duplicate daily precipitation 24 times ?
     daily_ana = analysis.resample(time='1D').pad()  # Remove hours from time coord
     hourly_ana = daily_ana.reindex_like(antilope).ffill('time')  # Fill hourly time steps with daily precipitation (https://stackoverflow.com/questions/54452336/xarray-resample-time-series-data-from-daily-to-hourly)
-    hourly_ana = hourly_ana.transpose('member', 'lat', 'lon', 'time')
+    hourly_ana = hourly_ana.transpose('member', 'time', 'lat', 'lon')
 
 
     for member in hourly_ana.member.data:
-        array = hourly_ana.sel({'member':member}).rr.data * chronology
+        array = hourly_ana.sel({'member':member}).rr.data * chronology.data
         #array = hourly_ana.sel({'member':member}).rr.data * chronology
         output = xr.Dataset(
-            data_vars = dict(Precipitation=(["latitude", "longitude", "time"], array)),
+            data_vars = dict(Precipitation=(["time", "latitude", "longitude"], array)),
             coords    = dict(longitude=('longitude', analysis.lon.data), latitude=('latitude', analysis.lat.data), time=sel_time),
             )
         #output.rio.write_grid_mapping(inplace=True)
