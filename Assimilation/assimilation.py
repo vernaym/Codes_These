@@ -49,7 +49,8 @@ from These.radar import Preprocessing_ANTILOPE
 from These.scripts import make_mask
 
 from bronx.stdtypes.date import Date
-from snowtools.scripts.extract.vortex import vortexIO as io
+#from snowtools.scripts.extract.vortex import vortexIO as io
+from snowtools.scripts.extract.vortex import vortex_get as io
 
 from vortex.layout.dataflow import SectionFatalError
 
@@ -506,41 +507,57 @@ def finalize_fig(figure, imm, label, outname):
 @speedtest
 def read_obs(args):
     filename = f'ANTILOPEH_{args.datebegin.strftime("%Y%m%d%H")}_{args.dateend.strftime("%Y%m%d%H")}_{args.domain}.nc'
-#    try:
-#        io.get_meteo(
-#            kind           = 'Precipitation',
-#            geometry       = 'GrandesRousses1km',
-#            xpid           = 'ANTILOPE@vernaym',
-#            vapp           = 'edelweiss',
-#            block          = 'hourly',
-#            datebegin      = Date(args.datebegin).ymd6h,
-#            dateend        = Date(args.dateend).ymd6h,
-#            filename       = filename,
-#            namespace      = 'vortex.cache.fr',
-#        )
-#    except SectionFatalError:
-#        if Date(args.datebegin).month > 8:
-#            datebegin = Date(args.datebegin).replace(month=8, day=1)
-#        else:
-#            year = Date(args.datebegin).year - 1
-#            datebegin = Date(args.datebegin).replace(year=year, month=8, day=1)
-#        if Date(args.dateend).month > 8:
-#            year = Date(args.dateend).year + 1
-#            dateend = Date(args.dateend).replace(year=year, month=8, day=1)
-#        else:
-#            dateend = Date(args.dateend).replace(month=8, day=1)
-#
-#        io.get_meteo(
-#            kind           = 'Precipitation',
-#            geometry       = 'GrandesRousses1km',
-#            xpid           = 'ANTILOPE@vernaym',
-#            vapp           = 'edelweiss',
-#            block          = 'hourly',
-#            datebegin      = datebegin.ymd6h,
-#            dateend        = dateend.ymd6h,
-#            filename       = filename,
-#            namespace      = 'vortex.cache.fr',
-#        )
+    if args.domain == 'GrandesRousses':
+        try:
+            #io.get_meteo(
+            io.get(
+                kind           = 'Precipitation',
+                geometry       = 'GrandesRousses1km',
+                xpid           = 'raw@vernaym',
+                vapp           = 'antilope',
+                block          = 'hourly',
+                datebegin      = Date(args.datebegin).ymd6h,
+                dateend        = Date(args.dateend).ymd6h,
+                filename       = filename,
+                namespace      = 'vortex.multi.fr',
+            )
+        except SectionFatalError:
+            if Date(args.datebegin).month > 8:
+                datebegin = Date(args.datebegin).replace(month=8, day=1)
+            else:
+                year = Date(args.datebegin).year - 1
+                datebegin = Date(args.datebegin).replace(year=year, month=8, day=1)
+            if Date(args.dateend).month > 8:
+                year = Date(args.dateend).year + 1
+                dateend = Date(args.dateend).replace(year=year, month=8, day=1)
+            else:
+                dateend = Date(args.dateend).replace(month=8, day=1)
+
+            #io.get_meteo(
+            io.get(
+                kind           = 'Precipitation',
+                geometry       = 'GrandesRousses1km',
+                xpid           = 'raw@vernaym',
+                vapp           = 'antilope',
+                block          = 'hourly',
+                datebegin      = datebegin.ymd6h,
+                dateend        = dateend.ymd6h,
+                filename       = filename,
+                namespace      = 'vortex.multi.fr',
+            )
+    else:
+        #io.get_meteo(
+        io.get(
+            kind           = 'Precipitation',
+            geometry       = 'Alp1km',
+            xpid           = 'raw@vernaym',
+            vapp           = 'antilope',
+            block          = 'hourly',
+            datebegin      = Date(args.datebegin).ymd6h,
+            dateend        = Date(args.dateend).ymd6h,
+            filename       = filename,
+            namespace      = 'vortex.multi.fr',
+        )
 
     if not os.path.exists(filename):
         if args.domain == 'GrandesRousses':
@@ -3364,7 +3381,7 @@ if __name__ == "__main__":
 
     if not args.plot:
 
-        io.put_meteo(
+        io.put(
             kind         = 'Precipitation',
             geometry     = f'{args.domain}1km',
             xpid         = f'{xpid}@vernaym',

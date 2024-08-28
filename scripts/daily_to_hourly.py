@@ -5,7 +5,8 @@ import xarray as xr
 #import rioxarray
 import pytz
 
-from snowtools.scripts.extract.vortex import vortexIO as io
+#from snowtools.scripts.extract.vortex import vortexIO as io
+from snowtools.scripts.extract.vortex import vortex_get as io
 
 import vortex
 from cen.data import flow
@@ -15,10 +16,11 @@ from bronx.stdtypes.date import Date, Period
 
 toolbox.active_now = True
 
-if len(sys.argv) == 4:
+if len(sys.argv) == 5:
     datebegin = Date(sys.argv[1])
     dateend   = Date(sys.argv[2])
     xpid      = sys.argv[3]
+    geometry  = sys.argv[4]
 else:
     print('ERROR : missing arguments')
     print('USAGE : daily_to_hourly.py datebegin dateend xpid')
@@ -47,9 +49,9 @@ xp_number = xpid[-2:]
 
 # Read ensemble analysis
 # All members are stored in the same netcdf file !
-io.get_meteo(
+io.get(
     kind           = 'Precipitation',
-    geometry       = 'GrandesRousses1km',
+    geometry       = geometry,
     xpid           = f'{xpid}@vernaym',
     vapp           = 'edelweiss',
     block          = 'daily',
@@ -60,12 +62,12 @@ io.get_meteo(
 analysis = xr.open_dataset('ANALYSIS.nc')
 
 # Read ANTILOPE raw hourly precipitation
-io.get_meteo(
+io.get(
     kind           = 'Precipitation',
-    geometry       = 'GrandesRousses1km',
+    geometry       = geometry if geometry == 'GrandesRousses1km' else 'Alp1km',
     #xpid           = 'RawData@vernaym',
-    xpid           = 'ANTILOPE@vernaym',
-    vapp           = 'edelweiss',
+    xpid           = 'raw@vernaym',
+    vapp           = 'antilope',
     block          = 'hourly',
     datebegin      = datebegin.ymd6h,
     dateend        = dateend.ymd6h,
@@ -117,9 +119,9 @@ if not dailyfiles:
 
     # Use put_meteo because this is not a FORCING-ready resource
     # TODO : do not archive on Hendrix !
-    io.put_meteo(
+    io.put(
         kind           = 'Precipitation',
-        geometry       = 'GrandesRousses1km',
+        geometry       = geometry,
         xpid           = f'{xpid}@vernaym',
         member         = footprints.util.rangex(0, len(hourly_ana.member) - 1),
         vapp           = 'edelweiss',
@@ -186,14 +188,14 @@ else:
             filename       = f'/home/vernaym/workdir/EDELWEISS/hourly_precipitation_analysis/precipitation_[datebegin:ymd6h]_[dateend:ymd6h]_mb[member].nc',
             #filename       = f'precipitation_[datebegin]_[dateend]_mb[member].nc',
             experiment     = xpid,
-            geometry       = 'GrandesRousses1km',
+            geometry       = geometry,
             nativefmt      = 'netcdf',
             model          = 'edelweiss',
             date           = dateend.ymd6h,
             datebegin      = datebegin.ymd6h,
             dateend        = dateend.ymd6h,
             namespace      = 'vortex.multi.fr',
-            member         = footprints.util.rangex(1,16,1),
+            member         = footprints.util.rangex(1, 16, 1),
             block          = 'analysis',
             intent         = 'inout',
         ),

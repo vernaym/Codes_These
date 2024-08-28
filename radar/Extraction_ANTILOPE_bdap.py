@@ -57,6 +57,12 @@ coords = dict(
     HauteSavoie = ['46490', '45300', '5620', '7250'],  # WARNING : includes margin
 )
 
+geometry_map = dict(
+    alp            = 'Alp1km',
+    GrandesRousses = 'GrandesRousses1km',
+    pyr            = 'Pyr1km',
+)
+
 # Pas en lat/lon de la grille
 dl = ['10', '10']
 
@@ -303,9 +309,10 @@ if __name__ == "__main__":
 
             #  np.shape(rr24) = (time, 21, 21) et il faut un data de la forme (21, 21, time)
             rr = xr.DataArray(
-                data = np.transpose(rr24, (1,2,0)),  # Pour passer la dimension temporelle en dernier : (lon, lat, time)
+                # data = np.transpose(rr24, (1,2,0)),  # Pour passer la dimension temporelle en dernier : (lon, lat, time)
+                data = rr24,  # Pour passer la dimension temporelle en dernier : (lon, lat, time)
                 name = 'rr',
-                dims=["lat", "lon", "time"],
+                dims=["time", "lat", "lon"],
                 #coords=dict(lon=(["lon"], lon[0]),lat=(["lat"], lat[:,0]), time=time, reference_time=reference_time,),
                 coords=dict(lon=lon[0], lat=lat[:,0], time=extract_period, reference_time=reference_time,),
                 attrs=dict(description="24 hour precipitation",units="mm/24h"),
@@ -323,9 +330,9 @@ if __name__ == "__main__":
 #            xcumul.to_netcdf('CUMUL_{0:s}_{1:s}_{2:s}_{3:s}.nc'.format(args.model, domain, args.datebegin.strftime("%Y%m%d%H"), args.dateend.strftime("%Y%m%d%H")))
         tbout = io.put_meteo(
             kind           = 'Precipitation',
-            geometry       = 'GrandesRousses1km',
-            xpid           = 'RawData@vernaym',
-            vapp           = 'edelweiss',
+            geometry       = geometry_map[domain],
+            xpid           = 'raw@vernaym',
+            vapp           = 'antilope',
             block          = block,
             datebegin      = Date(args.datebegin).ymd6h,
             dateend        = Date(args.dateend).ymd6h,
