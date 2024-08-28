@@ -589,6 +589,7 @@ def read_obs(args):
     lonmax = domain_coords[args.domain]['lonmax']
     sel_lat = np.round(np.arange(latmin-max_dist, latmax+max_dist, 0.01), 2)
     sel_lon = np.round(np.arange(lonmin-max_dist, lonmax+max_dist, 0.01), 2)
+    antilope = antilope.assign_coords({'lat': np.round(antilope.lat.data, 2), 'lon': np.round(antilope.lon.data, 2)})
     antilope = antilope.sel({'lat':np.intersect1d(sel_lat, antilope.lat.data), 'lon':np.intersect1d(sel_lon, antilope.lon.data)})
 
     return antilope
