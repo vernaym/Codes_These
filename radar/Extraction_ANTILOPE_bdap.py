@@ -212,12 +212,15 @@ class ExtractGrib(object):
                 if os.stat(self.gribname).st_size > 0:
                     return True
                 else:
+                    os.remove(self.gribname)
                     self.grid = 'FRAN0012'
                     self.extract(parameter, level, ech)
-                    if os.stat(self.gribname).st_size > 0:
-                        return True
-                    else:
-                        return False
+                    if os.path.isfile(self.gribname):
+                        if os.stat(self.gribname).st_size > 0:
+                            return True
+                        else:
+                            os.remove(self.gribname)
+                            return False
             else:
                 return False
 
