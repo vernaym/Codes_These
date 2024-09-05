@@ -55,7 +55,7 @@ if datebegin == '2021080106':
     ymax = 1.3  # Huez 2021/2022
 else:
     datebegin_RS27 = datebegin
-    ymax = 3  # Rochilles Nivose 2017/2018
+    ymax = 3.5  # Rochilles Nivose 2017/2018
 
 plot_lpn = False
 
@@ -87,12 +87,16 @@ else:
             namespace='vortex.cache.fr', filename='PRO_KRIGING.nc', vapp='edelweiss')
     io.get_pro(datebegin=datebegin, dateend=dateend, xpid='ANTILOPE_pappus', vconf=point, geometry='SinglePoint',
             namespace='vortex.cache.fr', filename='PRO_ANTILOPE.nc', vapp='edelweiss')
+    io.get_pro(datebegin=datebegin, dateend=dateend, xpid='AROME_perturb', vconf=point, geometry='SinglePoint',
+            namespace='vortex.cache.fr', filename='PRO_AROME.nc', vapp='edelweiss')
     safran = xr.open_dataset('PRO_SAFRAN.nc')
     safran = safran.DSN_T_ISBA
     kriging = xr.open_dataset('PRO_KRIGING.nc')
     kriging = kriging.DSN_T_ISBA
     antilope = xr.open_dataset('PRO_ANTILOPE.nc')
     antilope = antilope.DSN_T_ISBA
+    arome = xr.open_dataset('PRO_AROME.nc')
+    arome = arome.DSN_T_ISBA
 
 xpid_map = {
     '2017080106': 'CesarDB',
@@ -110,6 +114,7 @@ if plot_lpn:
 else:
     plt.plot(safran.time, safran, label='SAFRAN', color="#1f78b4")
     plt.plot(kriging.time, kriging, label='KRIGING', color="#e31a1c")
+    plt.plot(arome.time, arome, label='AROME', color="#6a3d9a")
     plt.plot(antilope.time, antilope, label='ANTILOPE', color="#b2df8a")
     plt.plot(rs27.time, rs27, label='AS-ANTILOPE', color="#33a02c")
 
