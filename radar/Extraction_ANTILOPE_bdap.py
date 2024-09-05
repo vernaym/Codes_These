@@ -272,9 +272,12 @@ if __name__ == "__main__":
                 else:
                     print('Missing date {0:s}'.format(date.strftime("%Y%m%d%H")))
 
+            dates = [np.datetime64(date) for date in extract_period]
             # Read data and create NetCDF file
             ds  = xr.open_mfdataset(listgrib, concat_dim='valid_time', combine='nested', engine='cfgrib')
             ds = ds.drop('time').rename({'valid_time': 'time', 'latitude': 'lat', 'longitude': 'lon', 'PRECIP': 'rr'})
+            # Fill missing dates with Nan to cover the entire period
+            ds = ds.reindex(time=dates, fill_value=np.nan).sortby("time")
             ds.to_netcdf(filename)
 
         datebegin = Date(args.datebegin).ymd6h
