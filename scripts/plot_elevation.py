@@ -14,7 +14,6 @@ from scipy.spatial import cKDTree
 from scipy.sparse import csr_matrix, csc_matrix, diags
 from scipy.spatial import distance_matrix
 import shapefile
-#from metpy.interpolate import cross_section
 import cartopy.crs as ccrs
 from cartopy.mpl.ticker import LongitudeFormatter, LatitudeFormatter
 from pyproj import Proj, transform
@@ -268,19 +267,28 @@ def extract_cross_section(field, varname='elevation'):
     """
     Using MetPy : https://unidata.github.io/MetPy/latest/examples/cross_section.html
     """
+    from metpy.interpolate import cross_section
+
     # Definition of the cross section coordinates :
     #start = (45.14776, 5.63933)  # Radar Moucherotte
     #start = (45.14776, 5.635)  # Radar Moucherotte
     #start = (46.42572, 6.10032)  # Radar La Dole
     #start = (46.02947300021354, 7.1429769396152825)  # Orsières (Suisse)
-    start  = (45.93, 6.86)  # Chamonix
+    #start  = (45.93, 6.86)  # Chamonix
+    start = (44.49664, 6.21729)  # Colombis
     #end   = (45.13761, 6.21261)
     #end   = (45.12142, 6.21189)  # Passe par le Pic Blanc : 45 km
     #end   = (45.11872, 6.27540)  # Passe par le Pic Blanc : 50 km
     #end   = (45.750494, 6.9680)  # From La Dole : passe par le Mont Blanc (100 km)
     #end   = (45.70184, 6.676548)  # Depuis Orsières : traverse le Mont-Blanc  (50 km)
-    end    = (45.82, 6.864)  # Mont Blanc
+    #end    = (45.82, 6.864)  # Mont Blanc
+    #end    = (45.12622, 6.12743)  # Pic Blanc
+    end    = (45.13568, 6.12597)  # Pic Blanc
 
+    if isinstance(field, xr.DataArray):
+        field = field.to_dataset()
+    if 'Band1' in field.keys():
+        field = field.rename({'Band1': 'elevation'})
     field = field.metpy.parse_cf(varname=varname).squeeze()
     cross = cross_section(field, start, end)
 
@@ -288,10 +296,10 @@ def extract_cross_section(field, varname='elevation'):
 
 def plot_vertical_cross_section(cross):
     #x = np.linspace(0, 50, len(cross.data))
-    x = np.linspace(0, 12, len(cross.data))
+    x = np.linspace(0, 72, len(cross.data))
     #x = np.linspace(0, 100, len(cross.data))
     y = cross.data + 250
-    fig, ax = plt.subplots(figsize=(14, 10))
+    fig, ax = plt.subplots(figsize=(20, 10))
     ax.fill_between(x, y, color='k')
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
@@ -299,12 +307,10 @@ def plot_vertical_cross_section(cross):
     #ax.set_xlabel('Distance to the radar (km)', fontsize=26)
     ax.set_xlabel('Distance (km)', fontsize=16)
     ax.set_ylabel('Elevation (m)', fontsize=16)
+    ax.set_ylim(1000, 5000)
     #plt.show()
-    fig.savefig(os.path.join(savedir, 'Vertical_cross_section.pdf'), format='pdf')
+    fig.savefig(os.path.join(savedir, 'Vertical_cross_section_Colombis_PicBlanc.pdf'), format='pdf')
     plt.close()
-
-
-
 
 if domain == 'GrandesRousses':
     mnt = xr.open_dataset(os.path.join("/home/vernaym/.vortexrc/hack/uget/vernaym/data", "DEM_GrandesRousses25m_L93.tif"))
@@ -333,32 +339,34 @@ elif 'band_data' in mnt.keys():
 if domain == 'GrandesRousses':
     mnt = proj_mnt(mnt)
 
-crossection = False
+crossection = True
 if crossection:
 
     cross = extract_cross_section(mnt)
     plot_vertical_cross_section(cross)
 
-    sys.exit()
+    #sys.exit()
 
-    ratio = xr.open_dataset(os.path.join('/home/vernaym/workdir/ASSIMILATION/mask/alp', 'Estimated_ratio.nc'))
-    cross = extract_cross_section(ratio, varname='ratio')
-    plt.imshow(np.atleast_2d(cross), cmap=plt.get_cmap('RdBu_r'), extent=(0, 50, 0, 1))
+#    ratio = xr.open_dataset(os.path.join('/home/vernaym/workdir/ASSIMILATION/mask/alp', 'Estimated_ratio.nc'))
+#    cross = extract_cross_section(ratio, varname='ratio')
+#    plt.imshow(np.atleast_2d(cross), cmap=plt.get_cmap('RdBu_r'), extent=(0, 50, 0, 1))
+#
+#    import pdb
+#    pdb.set_trace()
+#
+#    error = xr.open_dataset(os.path.join('/home/vernaym/workdir/ASSIMILATION/mask/alp', 'Observation_error.nc'))
+#    cross = extract_cross_section(error, varname='error')
+#    #plt.imshow(np.atleast_2d(cross), cmap=plt.get_cmap('Reds'), extent=(0, 50, 0, 1))
+#    plt.imshow(np.atleast_2d(cross), cmap=plt.get_cmap('YlOrBr'), extent=(0, 50, 0, 1))
+#
+#    import pdb
+#    pdb.set_trace()
 
-    import pdb
-    pdb.set_trace()
-
-    error = xr.open_dataset(os.path.join('/home/vernaym/workdir/ASSIMILATION/mask/alp', 'Observation_error.nc'))
-    cross = extract_cross_section(error, varname='error')
-    #plt.imshow(np.atleast_2d(cross), cmap=plt.get_cmap('Reds'), extent=(0, 50, 0, 1))
-    plt.imshow(np.atleast_2d(cross), cmap=plt.get_cmap('YlOrBr'), extent=(0, 50, 0, 1))
-
-    import pdb
-    pdb.set_trace()
-
-    #cumul = xr.open_dataset('/home/vernaym/These/DATA/./CUMUL_ANTILOPEH_alp_2021103000_2022060200.nc')
-    #cross = extract_cross_section(cumul, varname='rr_cumul')
-    #plt.imshow(np.atleast_2d(cross), cmap=plt.get_cmap('YlGnBu'), extent=(0, 50, 0, 1))
+    cumul = xr.open_dataset('/home/vernaym/These/DATA/CUMUL_ANTILOPEH_alp_2021073106_2022080106.nc')
+    cross = extract_cross_section(cumul, varname='rr_cumul')
+    plt.imshow(np.atleast_2d(cross), cmap=plt.get_cmap('YlGnBu'), extent=(0, 72, 0, 1), vmin=500, vmax=1300)
+    plt.tight_layout()
+    plt.savefig(os.path.join(savedir, 'Cumul_ANTILOPE_Colombis_PicBlanc.pdf'), format='pdf')
 
 else:
 
