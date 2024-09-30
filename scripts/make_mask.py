@@ -605,8 +605,10 @@ def plot_field(fig, ax, field, cmap=None, vmin=None, vmax=None, scores=None, col
 
     if colorbar:
         #plt.subplots_adjust(bottom=0.05, left=0, right=0.8, top=0.95)
-        plt.subplots_adjust(bottom=0.05, left=0, top=0.95, wspace=0.05)
-        cax = plt.axes((0.9, 0.07, 0.03, 0.9))
+        #plt.subplots_adjust(bottom=0.05, left=0, top=0.95, wspace=0.05)
+        #cax = plt.axes((0.9, 0.07, 0.03, 0.9))
+        plt.subplots_adjust(bottom=0.05, left=0.1, right=0.88, top=0.95)
+        cax = plt.axes((0.89, 0.055, 0.03, 0.89))
         cb = fig.colorbar(cml, cax=cax)
         #cb.set_label(field.name, fontsize=24)
         #cb.ax.tick_params(labelsize=20)
@@ -1106,7 +1108,7 @@ def ratio_estimation(field, model=None, moving_window=25):
     #uncertainty = 1 + w1*observation_error/(1+w1)
     uncertainty.data[np.isnan(field.rr_cumul.data)] = np.nanmax(uncertainty.data)
     #uncertainty.data = uniform_filter(uncertainty.data, size=3)
-    uncertainty = uncertainty.rename('Uncertainty')
+    uncertainty = uncertainty.rename('Uncertainty (kg/m²)')
     confidence = uncertainty.copy()
     confidence.data = 1/confidence.data
     confidence = confidence.rename('Confidence')
