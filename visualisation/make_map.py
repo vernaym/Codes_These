@@ -71,6 +71,8 @@ def get_antilope(domain, obs_auto=None):
     pp = AntilopePreprocessing(date, domain, filename)
     antilope = pp.run(obs_auto=obs_auto)
 
+    antilope.to_netcdf(f'ANTILOPEH_{datebegin.replace(hour=7).ymdh}_{dateend.ymdh}_{domain}.nc')
+
     return antilope
 
 def get_nivometeo():
