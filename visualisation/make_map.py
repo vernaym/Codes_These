@@ -152,7 +152,8 @@ for domain in ['alp', 'pyr']:
     auto[domain] = get_obs_auto(domain)
 
     # 3. Récupération de ANTILOPE depuis sotrtm35-sidev
-    antilope[domain] = get_antilope(domain, obs_auto=auto[domain])
+    #antilope[domain] = get_antilope(domain, obs_auto=auto[domain])  # WARNING : explosions numériques possibles !!
+    antilope[domain] = get_antilope(domain)
 
     # 4. Récupération de l'analyse SAFRAN oper de 9h
     safran[domain] = get_safran(domain)
