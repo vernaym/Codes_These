@@ -213,6 +213,30 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
 
     return newfield, mean, sd
 
+
+def interpolate(field, uncertainty):
+
+    # https://corteva.github.io/rioxarray/html/examples/interpolate_na.html
+    #new = field.where(uncertainty < 0.5).rio.write_nodata(np.nan).rename({'lon': 'x', 'lat': 'y'}).rio.write_crs("EPSG:4326", inplace=True).rio.interpolate_na(method='cubic')
+    #new = field.where(uncertainty < 0.1).rio.write_nodata(np.nan).rename({'lon': 'x', 'lat': 'y'}).rio.write_crs("EPSG:4326", inplace=True).rio.interpolate_na(method='linear')
+    #new = field.where(uncertainty < 0.05).rio.write_nodata(np.nan).rename({'lon': 'x', 'lat': 'y'}).rio.write_crs("EPSG:4326", inplace=True).rio.interpolate_na(method='linear')
+    new = field.where(uncertainty < 0.05).rio.write_nodata(np.nan).rio.write_crs("EPSG:4326", inplace=True).rio.interpolate_na(method='linear')
+    # sd = xr.apply_ufunc(np.abs, field - new)
+    smooth = field.copy()
+    # Replace nan values by the mean
+    # TODO : find a better solution
+    tmp = np.nan_to_num(smooth.data, nan=smooth.mean().data)
+    smooth.data = uniform_filter(tmp, 20)
+
+    #if self.plot:
+    #    self.plot_array(smooth, field, 'Smoothed corrected field', f'{self.date_str}/Smoothed_field_{self.date_str}.pdf', cmap=plt.cm.YlGnBu)
+
+    #sd = xr.apply_ufunc(np.abs, field - smooth)
+    sd = field - smooth
+
+    return new, sd
+
+
 def filter_gauges(df, antilope, delta=0.1):
     """
     Filter gauges observations and compute corresponding ANTILOPE ratio.
@@ -522,6 +546,7 @@ class AntilopePreprocessing(object):
         #filename = os.path.join(datadir, f'ANTILOPEH_{self.datebegin.strftime("%Y%m%d%H")}_{self.dateend.strftime("%Y%m%d%H")}_{self.domain}.nc')  # TODO : extract only up to 6h
         #if os.path.exists(filename):
         antilope = xr.open_dataset(self.filename)
+        antilope = antilope.rename({'lon': 'x', 'lat': 'y'})
         # TODO : gérer le changement d'heure !
 
         if 'analysis' in antilope.variables.keys():
@@ -538,6 +563,7 @@ class AntilopePreprocessing(object):
             # 1. Static de-biasing :
             #antilope = self.debiasing(antilope)
             ratio = xr.open_dataset(os.path.join(workdir, f"Estimated_ratio_{self.domain}.nc"))
+            ratio = ratio.rename({'lon': 'x', 'lat': 'y'})
 
             antilope["ratio"] = ratio.Ratio  # Fill missing point with NaNs
             var0 = 'rr'
@@ -549,7 +575,7 @@ class AntilopePreprocessing(object):
                 delta = 0.1
                 if self.domain == 'alp':
                     arome_clim = xr.open_dataset(os.path.join(workdir, 'CUMUL_AROME.nc'))
-                    arome_clim = arome_clim.sel(lat=ratio.lat, lon=ratio.lon)
+                    arome_clim = arome_clim.sel(lat=ratio.y, lon=ratio.x)
                 else:
                     arome_clim = None
                 obs_auto = filter_gauges(obs_auto, antilope[var1], delta=delta)
@@ -566,15 +592,16 @@ class AntilopePreprocessing(object):
             # 3. WMA correction (localisation)
             #antilope['error'] = xr.open_dataset(os.path.join(datadir, 'Observation_error.nc'))
             error = xr.open_dataarray(os.path.join(workdir, f'Observation_error_{self.domain}.nc'))
+            error = error.rename({'lon': 'x', 'lat': 'y'})
             #error = xr.open_dataarray(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask/alp", 'Observation_error.nc'))
             std = error.data
             if 'error' in antilope.keys():
-                std2 = antilope.error.sel({'lat':np.intersect1d(error.lat.data, antilope.lat.data), 'lon':np.intersect1d(error.lon.data, antilope.lon.data)}).data
+                std2 = antilope.error.sel({'y':np.intersect1d(error.y.data, antilope.y.data), 'x':np.intersect1d(error.x.data, antilope.x.data)}).data
                 std = std + std2
             codist = os.path.join(datadir, f'codistance_max_dist_{max_dist:.2f}_{self.domain}.npz')
             if not os.path.exists(codist):
                 # Compute inter-distances
-                coords=[(lon,lat) for lat in error.lat.data for lon in error.lon.data]
+                coords=[(lon,lat) for lat in error.y.data for lon in error.x.data]
                 pond = codistances(coords, self.domain)
                 scipy.sparse.save_npz(codist, pond, compressed=False)  # TODO comprendre pourquoi ca ne marche pas pour éviter de recalculer les codistances à chaque fois
             else:
@@ -582,38 +609,41 @@ class AntilopePreprocessing(object):
             #pond = pond.dot(diags(np.exp(-(std-1)).flatten(), 0))  # std is in [1, inf[
             #pond = pond.dot(diags(1/std.flatten(), 0))  # std is in [1, inf[
             pond = pond.dot(diags((1 - std).flatten(), 0))  # std is in [0, 1[
-            obs = antilope[var2].sel({'lat':np.intersect1d(error.lat.data, antilope.lat.data), 'lon':np.intersect1d(error.lon.data, antilope.lon.data)}).data.flatten()
+            obs = antilope[var2]
 
-            new, mean, sd = dynamic_correction(obs, pond)  # Update obs (new) and get observation error (sd)
-            antilope['obs'] = xr.DataArray(
-                    data   = new.reshape((len(ratio.lat), len(ratio.lon))),
-                    dims   = ["lat", "lon"],
-                    coords = dict(lon=ratio.lon, lat=ratio.lat)
-                )
+            #tmpobs = obs.sel({'lat':np.intersect1d(error.lat.data, antilope.lat.data), 'lon':np.intersect1d(error.lon.data, antilope.lon.data)})
+            #new, mean, sd = dynamic_correction(tmpobs.data.flatten(), pond)  # Update obs (new) and get observation error (sd)
+            antilope['obs'], sd = interpolate(obs, error)
+#            antilope['obs'] = xr.DataArray(
+#                    data   = new.reshape((len(ratio.lat), len(ratio.lon))),
+#                    dims   = ["lat", "lon"],
+#                    coords = dict(lon=ratio.lon, lat=ratio.lat)
+#                )
 
             # 4. Observation error = WMA spread + field modification + 20% of the precipitation field ?
-            #err = np.abs(antilope['obs'] - antilope[var1])
             err = np.abs(antilope['obs'] - antilope[var0])
+            #err = np.abs(antilope['obs'] - antilope[var1])
             #err = np.abs(antilope['obs'].data - antilope[var0].data)  " TODO : try error = corrected_antilope - raw_antilope
-            err = error.sel(({'lat':np.intersect1d(ratio.lat.data, err.lat.data), 'lon':np.intersect1d(ratio.lon.data, err.lon.data)})).data
+            #err = error.sel(({'y':np.intersect1d(ratio.y.data, err.y.data), 'y':np.intersect1d(ratio.y.data, err.y.data)})).data
             #err = uniform_filter(err, 5)  # TODO : try to remove filter
-            rr = antilope['obs'].sel(({'lat':np.intersect1d(ratio.lat.data, antilope.lat.data), 'lon':np.intersect1d(ratio.lon.data, antilope.lon.data)})).data
+            #rr = antilope['obs'].sel(({'x':np.intersect1d(ratio.x.data, antilope.x.data), 'y':np.intersect1d(ratio.y.data, antilope.y.data)})).data
             #std = sd.reshape((len(ratio.lat), len(ratio.lon))) + err + 0.2 * rr
-            std = sd.reshape((len(ratio.lat), len(ratio.lon))) + err
-            antilope['error'] = xr.DataArray(
-                    data   = std.reshape((len(ratio.lat), len(ratio.lon))),
-                    #data   = sd.reshape((len(ratio.lat), len(ratio.lon))) + 0.3 * new.reshape((len(ratio.lat), len(ratio.lon))),
-                    dims   = ["lat", "lon"],
-                    coords = dict(lon=ratio.lon, lat=ratio.lat)
-                )
+            #std = sd.reshape((len(ratio.y), len(ratio.x))) + err
+#            antilope['error'] = xr.DataArray(
+#                    data   = std.reshape((len(ratio.y), len(ratio.x))),
+#                    #data   = sd.reshape((len(ratio.lat), len(ratio.lon))) + 0.3 * new.reshape((len(ratio.lat), len(ratio.lon))),
+#                    dims   = ["y", "x"],
+#                    coords = dict(x=ratio.x, y=ratio.y)
+#                )
             #antilope['error'] = sd.reshape((len(ratio.lat), len(ratio.lon))) + 0.3 * antilope['obs']
+            antilope['error'] = np.abs(sd) + err + antilope['obs'] * 0.2
 
             # Fill potential missing data with nan
             #antilope['obs'] = antilope['obs'].fillna(antilope.rr)
             #antilope['error'] = antilope['error'].fillna(antilope.rr)
 
 #            antilope = antilope.rename({'rr_debiaise':'analysis'})
-            antilope = antilope.rename({'obs':'analysis'})
+            antilope = antilope.rename({'obs': 'analysis'})
 
             # 5. Nivometeo Assimilation
             #antilope = self.nivometeo_assimilation(antilope, pond)

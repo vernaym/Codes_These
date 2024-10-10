@@ -1313,30 +1313,6 @@ class Assimilation(object):
 
         return M
 
-    def interpolate_cubic(self, field, uncertainty):
-
-        if self.plot:
-            self.plot_array(field.where(uncertainty < 0.2), field, 'Masked field', f'{self.date_str}/Masked_field_{self.date_str}.pdf', cmap=plt.cm.YlGnBu)
-
-        # https://corteva.github.io/rioxarray/html/examples/interpolate_na.html
-        #new = field.where(uncertainty < 0.5).rio.write_nodata(np.nan).rename({'lon': 'x', 'lat': 'y'}).rio.write_crs("EPSG:4326", inplace=True).rio.interpolate_na(method='cubic')
-        #new = field.where(uncertainty < 0.1).rio.write_nodata(np.nan).rename({'lon': 'x', 'lat': 'y'}).rio.write_crs("EPSG:4326", inplace=True).rio.interpolate_na(method='linear')
-        new = field.where(uncertainty < 0.05).rio.write_nodata(np.nan).rename({'lon': 'x', 'lat': 'y'}).rio.write_crs("EPSG:4326", inplace=True).rio.interpolate_na(method='linear')
-        # sd = xr.apply_ufunc(np.abs, field - new)
-        smooth = field.copy()
-        # Replace nan values by the mean
-        # TODO : find a better solution
-        tmp = np.nan_to_num(smooth.data, nan=smooth.mean().data)
-        smooth.data = uniform_filter(tmp, 20)
-
-        if self.plot:
-            self.plot_array(smooth, field, 'Smoothed corrected field', f'{self.date_str}/Smoothed_field_{self.date_str}.pdf', cmap=plt.cm.YlGnBu)
-
-        #sd = xr.apply_ufunc(np.abs, field - smooth)
-        sd = field - smooth
-
-        return new, sd
-
 #    @speedtest
     def observation_ECM_new(self, parameters, date, plot=False):
 
@@ -1369,7 +1345,10 @@ class Assimilation(object):
             gradient.data = uniform_filter(gradient.data, 10)
             gradient = gradient.sel({'lat':np.intersect1d(parameters.lat, gradient.lat), 'lon':np.intersect1d(parameters.lon, gradient.lon)})
 
-        new_obs, sd = self.interpolate_cubic(parameters.db, uncertainty)
+        if self.plot:
+            self.plot_array(parameters.db.where(uncertainty < 0.2), parameters.db, 'Masked field', f'{self.date_str}/Masked_field_{self.date_str}.pdf', cmap=plt.cm.YlGnBu)
+
+        new_obs, sd = Preprocessing_ANTILOPE.interpolate(parameters.db, uncertainty)
         #new_obs = self.bicubic_spline(parameters.rr, uncertainty)
         #newfield, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(obs, pond)
         #newfield, mean, sd = Preprocessing_ANTILOPE.dynamic_correction(obs, pond, gradient=gradient.data.flatten(), uncertainty=uncertainty)  # Use AROME mean vertical gradient

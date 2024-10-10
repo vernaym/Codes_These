@@ -143,13 +143,14 @@ class PrecipitationAnalysis(object):
         for domain in self.antilope.keys():
             # 1. read_relief (TODO : add to ANTILOPE pre-processing ?)
             #mnt = xr.open_dataset(f"/home/vernaym/These/DATA/DEM_{domain.upper()}_WGS84_1km.nc")
+            # TODO : à récupérer depuis le UEnv "uenv:dem.2@vernaym"
             mnt = xr.open_dataset(f"DEM_{domain.upper()}_WGS84_1km.nc")
             # WARNING : update of xarray necessary !
             #data = antilope.interp(lat=mnt.lat.data, lon=mnt.lon.data)
-            tmp = mnt.interp(lat=self.antilope[domain].lat.data, lon=self.antilope[domain].lon.data)
+            tmp = mnt.interp(lat=self.antilope[domain].y.data, lon=self.antilope[domain].x.data)
             self.antilope[domain]["elevation"] = tmp.elevation
 
-            X,Y  = np.meshgrid(self.antilope[domain].lon.data, self.antilope[domain].lat.data)
+            X,Y  = np.meshgrid(self.antilope[domain].x.data, self.antilope[domain].y.data)
             x = np.concatenate((x, X.flatten()))
             y = np.concatenate((y, Y.flatten()))
             rr = np.concatenate((rr, self.antilope[domain][self.var].data.flatten()))  # Corrected obs
@@ -238,7 +239,7 @@ class PrecipitationAnalysis(object):
                         size  = np.nan_to_num(self.errorsize, nan=5) if uncertainty else 10,
                         #opacity=0.5,
                         #colorscale = 'YlGnBu',
-                        colorscale = 'dense',
+                        colorscale = 'Rainbow',
                         #symbol='square',  # Impossible to change if color is defined : https://stackoverflow.com/questions/59628536/option-symbol-in-scattermapbox-is-not-working
                         #cmin = 100,
                         #cmax = 1200,
@@ -334,7 +335,7 @@ class PrecipitationAnalysis(object):
                 locations = massif_number,
                 z = rr,  #TODO : add elevation choice
                 #colorscale = 'YlGnBu',
-                colorscale = 'dense',
+                colorscale = 'Rainbow',
                 name = 'SAFRAN (1800m)',
                 zmin = 0,
                 #zmax = np.nanmax(antilope.rr.data.flatten()),
