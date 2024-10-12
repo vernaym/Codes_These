@@ -49,15 +49,8 @@ if len(sys.argv) == 2:
 else:
     domain = 'alp'
 
-datadir = '/home/vernaym/These/DATA'
-#savedir = '/home/vernaym/workdir/ASSIMILATION/mask'
-#savedir = '/home/vernaym/workdir/ASSIMILATION/mask/illustration_methode'
-savedir = '/home/vernaym/workdir/ASSIMILATION/mask/'
-#savedir = '/home/vernaym/workdir/ASSIMILATION/mask/ref/r2'
-savedir = f'/home/vernaym/workdir/ASSIMILATION/mask/{domain}'
-rootdir = f'/home/vernaym/workdir/ASSIMILATION/mask/{domain}'
-#savedir = f'/home/vernaym/workdir/ASSIMILATION/mask/{domain}/nivometeo'
-
+savedir = f'/home/mrns/vernaym/workdir/ASSIMILATION/mask/{domain}'
+rootdir = f'/home/mrns/vernaym/workdir/ASSIMILATION/mask/{domain}'
 
 onlypostes = [5001400, 5085403]
 onlypostes = [5001400, 5085403, 5133400]
@@ -98,17 +91,17 @@ c0 = 2
 max_dist = 0.5
 
 # TODO ajouter les postes clim non utilisés par ANTILOPE temps réel
-#fic_score = os.path.join(datadir, 'scores_2021103106_2022060206_alpes_postes_clim.csv')
-#fic_score = os.path.join(datadir, 'scores_2018110106_2019043006_alpes_10.csv')  # WARNING : scores valid for precipitation >10mm
-#fic_score = os.path.join(datadir, 'scores_2021110106_2022043006_alpes_10.csv')  # WARNING : scores valid for precipitation >10mm
-#fic_score = os.path.join(datadir, f'scores_2018110106_2019043006_{domain}.csv')
-if domain == 'pyr':
-    fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_{domain}.csv')
-else:
-    #fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_alp.csv')
-    #fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_alpes_10_obs_auto.csv')
-    fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_alpes_obs_auto.csv')
-    #fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_alpes_obs_nivometeo_antilope_debiaise.csv')
+#obs_auto = os.path.join(datadir, 'scores_2021103106_2022060206_alpes_postes_clim.csv')
+#obs_auto = os.path.join(datadir, 'scores_2018110106_2019043006_alpes_10.csv')  # WARNING : scores valid for precipitation >10mm
+#obs_auto = os.path.join(datadir, 'scores_2021110106_2022043006_alpes_10.csv')  # WARNING : scores valid for precipitation >10mm
+#obs_auto = os.path.join(datadir, f'scores_2018110106_2019043006_{domain}.csv')
+#if domain == 'pyr':
+#    obs_auto = os.path.join(datadir, f'scores_2021110106_2022043006_{domain}.csv')
+#else:
+#    #obs_auto = os.path.join(datadir, f'scores_2021110106_2022043006_alp.csv')
+#    #obs_auto = os.path.join(datadir, f'scores_2021110106_2022043006_alpes_10_obs_auto.csv')
+#    obs_auto = os.path.join(datadir, f'scores_2021110106_2022043006_alpes_obs_auto.csv')
+#    #obs_auto = os.path.join(datadir, f'scores_2021110106_2022043006_alpes_obs_nivometeo_antilope_debiaise.csv')
 
 
 landmarks = {
@@ -164,6 +157,12 @@ extract_dom = dict(
             lonmin = -1.5,
             lonmax = 2.7,
         ),
+        MercantourTheo = dict(  # Without margin
+            latmax = 44.45,
+            latmin = 43.4,
+            lonmin = 6.55,
+            lonmax = 7.8,
+        )
     )
 
 if domain is not None:
@@ -310,14 +309,14 @@ def add_radar_positions(ax):
     def getImage(path):
        return OffsetImage(plt.imread(path, format="png"), zoom=0.03)
 
-    symbole_radar = '/home/vernaym/These/figures/symbole_radar_maroon.png'
+    symbole_radar = '/home/mrns/vernaym/These/figures/symbole_radar_maroon.png'
     for radar, infos in radars.items():
        ab = AnnotationBbox(getImage(symbole_radar), (infos['lon'], infos['lat']), frameon=False)
        ax.add_artist(ab)
 
 def add_boundaries(ax):
 
-    shapefile_name = os.path.join("/home/vernaym/QGIS/FondDeCarte/", "world-administrative-boundaries.shp")
+    shapefile_name = os.path.join("/home/mrns/vernaym/DATA", "world-administrative-boundaries.shp")
     borders = shapefile.Reader(shapefile_name)
     for shape in borders.shapeRecords():
         x = [i[0] for i in shape.shape.points[:]]
@@ -447,7 +446,7 @@ def plot(antilope, datebegin, dateend, categories=True, biascorrection=False, sc
         #add_cities(latmin, latmax, lonmin, lonmax)
 
     if scores:
-        scores = pd.read_csv(fic_score, sep=';')
+        scores = pd.read_csv(obs_auto, sep=';')
         #sc = add_scores(scores, ax, mycmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=0, vmax=2)
         sc = add_scores(scores, axes[0])
         if biascorrection:
@@ -677,7 +676,7 @@ def KalmanFilter(field, moving_window=40):
 
     #P = np.diag([1]*42716)
 
-    scores = pd.read_csv(fic_score, sep=';')
+    scores = pd.read_csv(obs_auto, sep=';')
     scores = scores.set_index('num_poste')
     scores = scores.sort_values('lats')
 
@@ -760,8 +759,8 @@ def ratio_estimation(field, model=None, moving_window=25):
 #        lons = [np.round(lon,2) for lon in np.arange(lonmin,lonmax,0.01)]
 #        field = field.sel({'lat':lats, 'lon':lons})
 
-    mnt = xr.open_dataset(os.path.join("/home/vernaym/QGIS/MNT", "DEM_ALPES_WGS84_250m_bilinear.nc"))
-    mnt = mnt.interp(lat=field.lat, lon=field.lon)
+    #mnt = xr.open_dataset(os.path.join("/home/vernaym/QGIS/MNT", "DEM_ALPES_WGS84_250m_bilinear.nc"))
+    #mnt = mnt.interp(lat=field.lat, lon=field.lon)
     #mnt = mnt.where((mnt['lat']>=latmin) & (mnt['lat']<=latmax) & (mnt['lon']>=lonmin) & (mnt['lon']<=lonmax), drop=True)
 
     mean_daily_precipitation = field.rr_cumul.data/334  # 334 is the number of days over wich the field cumul is made : we want a mean daily (24h) error
@@ -772,13 +771,13 @@ def ratio_estimation(field, model=None, moving_window=25):
     #diff = (mean_daily_precipitation-smoothed) * mean_daily_precipitation
     diff = mean_daily_precipitation-smoothed
 
-    scores = pd.read_csv(fic_score, sep=';')
-    #scores = scores.loc[(scores.lats>=latmin) & (scores.lats<=latmax) & (scores.lons>=lonmin) & (scores.lons<=lonmax)]
-    scores = scores.set_index('num_poste')
-    scores = scores.sort_values('lats')
+    reference = pd.read_csv(obs_auto, sep=';')
+    #reference = reference.loc[(reference.lats>=latmin) & (reference.lats<=latmax) & (reference.lons>=lonmin) & (reference.lons<=lonmax)]
+    reference = reference.set_index('num_poste')
+    #reference = reference.sort_values('lat')
 
     lons, lats = np.meshgrid(field.lon.data, field.lat.data)
-    #estimated_ratio = np.ones(np.shape(field.rr_cumul.data))*scores.ratio.mean()
+    #estimated_ratio = np.ones(np.shape(field.rr_cumul.data))*reference.ratio.mean()
     estimated_ratio = np.ones(np.shape(field.rr_cumul.data))
     ##estimated_ratio = smoothratio
     inov = np.zeros(np.shape(field.rr_cumul.data))
@@ -787,8 +786,8 @@ def ratio_estimation(field, model=None, moving_window=25):
     weight = np.zeros(np.shape(field.rr_cumul.data))
     #inov = smoothratio
     #wsum  = np.ones(np.shape(field.rr_cumul.data))
-    scores = scores
-    used_scores = []
+    reference = reference
+    used_reference = []
 
     if model is not None:
         ratio_arome = model.rr_cumul / uniform_filter(model.rr_cumul.data, 10)  # ~ gradient vertical modele
@@ -809,22 +808,25 @@ def ratio_estimation(field, model=None, moving_window=25):
 #    yy = 0
 
     # TODO : trouver un moyen de rendre l'estimation indépendante de l'ordre de traitement
-    #onlypostes = set(scores.index) - set(blacklist)
-    onlypostes = [poste for poste in scores.index if poste not in blacklist]
+    #onlypostes = set(reference.index) - set(blacklist)
+    onlypostes = [poste for poste in reference.index if poste not in blacklist]
     rr = list()
     ww = list()
     weights = list()
     ratios  = list()
-    for i,poste in enumerate(scores.index):
-    #for i,poste in enumerate(reversed(scores.index)):
-        ratio = scores.loc[poste, 'ratio']
+    for i,poste in enumerate(reference.index):
+    #for i,poste in enumerate(reversed(reference.index)):
+        ref_cumul = reference.loc[poste, 'rr'].sum()
+        lat_ref = reference.loc[poste, 'lat'].unique()
+        lon_ref = reference.loc[poste, 'lon'].unique()
+        ref_antilope_cumul = field.rr_cumul.sel({'lat': lat_ref, 'lon': lon_ref}, method='nearest')
+        ratio = ref_antilope_cumul / ref_cumul
         if poste in onlypostes and ratio > 0.1 and ratio < 1.9:
         #if poste not in blacklist:
-            used_scores.append(poste)
-            #print(scores.loc[poste])
-            dist = np.sqrt((lats-scores.loc[poste,'lats'])**2+(lons-scores.loc[poste, 'lons'])**2)  # Euclidian horizontal distance
-            idx, idy = np.where(dist==np.min(dist))
-            ref_cumul = field.rr_cumul.data[idx[0],idy[0]]
+            used_reference.append(poste)
+            #print(reference.loc[poste])
+            dist = np.sqrt((lats - lat_ref)**2 + (lons - lon_ref)**2)  # Euclidian horizontal distance
+            idx, idy = np.where(dist == np.min(dist))
             #ref_elevation = mnt.Band1.data[idx[0],idy[0]]  # TODO : utiliser plutot l'altitude réelle du poste ?
             #elevation_dist = mnt.Band1.data - ref_elevation
             if model is not None:
@@ -832,34 +834,33 @@ def ratio_estimation(field, model=None, moving_window=25):
                 ratio_modele = model.rr_cumul.data/model_cumul  # Ratio entre chaque point du modele et le point d'évaluation
                 #ratio_modele = model.rr_cumul.data / uniform_filter(model.rr_cumul.data, int(d0*100))  # ~ gradient vertical modele
             if poste == 74056416:
-                rcc = ref_cumul.copy()
+                rcc = ref_antilope_cumul.copy()
                 rr0 = ratio.copy()
-            cumul_dist = field.rr_cumul.data-ref_cumul
-            cumul_ratio = field.rr_cumul.data/ref_cumul
-            #estimated_ratio = estimated_ratio+(cumul_ratio-estimated_ratio)*np.exp(-np.abs(cumul_dist)/(ref_cumul/5))*np.exp(-dist/0.3)  # Marche bien mais n'utilise pas le score !
-            #estimated_ratio = estimated_ratio+((cumul_ratio-estimated_ratio)*np.exp(-np.abs(cumul_dist)/(ref_cumul))-estimated_ratio)*np.exp(-dist/0.2)  # DERIVE
+            cumul_ratio = field.rr_cumul.data / ref_antilope_cumul.squeeze().data
+            #estimated_ratio = estimated_ratio+(cumul_ratio-estimated_ratio)*np.exp(-np.abs(cumul_dist)/(ref_antilope_cumul/5))*np.exp(-dist/0.3)  # Marche bien mais n'utilise pas le score !
+            #estimated_ratio = estimated_ratio+((cumul_ratio-estimated_ratio)*np.exp(-np.abs(cumul_dist)/(ref_antilope_cumul))-estimated_ratio)*np.exp(-dist/0.2)  # DERIVE
             #pond = np.exp(-dist/0.3)
             #pond[np.where(dist>0.5)]=0
-            #estimated_ratio = estimated_ratio+(ratio-estimated_ratio)*np.exp(-np.abs(cumul_dist)/(ref_cumul/10))*np.exp(-dist/1)  # PAS MAL
-            #estimated_ratio = estimated_ratio+(ratio*cumul_ratio-estimated_ratio)*np.exp(-np.abs(cumul_dist)/(ref_cumul/c0))*np.exp(-dist/d0)  # Marche bien avec d0=0.4 et c0=5
-            #estimated_ratio = estimated_ratio+(ratio-estimated_ratio)*np.exp(-np.abs(cumul_dist)/(ref_cumul/c0))*np.exp(-dist/d0)  # TEST
+            #estimated_ratio = estimated_ratio+(ratio-estimated_ratio)*np.exp(-np.abs(cumul_dist)/(ref_antilope_cumul/10))*np.exp(-dist/1)  # PAS MAL
+            #estimated_ratio = estimated_ratio+(ratio*cumul_ratio-estimated_ratio)*np.exp(-np.abs(cumul_dist)/(ref_antilope_cumul/c0))*np.exp(-dist/d0)  # Marche bien avec d0=0.4 et c0=5
+            #estimated_ratio = estimated_ratio+(ratio-estimated_ratio)*np.exp(-np.abs(cumul_dist)/(ref_antilope_cumul/c0))*np.exp(-dist/d0)  # TEST
             #estimated_ratio = estimated_ratio+(ratio*cumul_ratio-estimated_ratio)*np.exp(-dist/d0)  # TEST
-            #estimated_ratio = estimated_ratio+(ratio*smoothratio-estimated_ratio)*np.exp(-dist/d0)*np.exp(-np.abs(cumul_dist)/(ref_cumul/c0)) # TEST
-            #estimated_ratio = estimated_ratio+(ratio*cumul_ratio-estimated_ratio)*np.exp(-dist/d0)*np.exp(-np.abs(cumul_dist)/(ref_cumul/c0))
-            #estimated_ratio = estimated_ratio+(ratio*cumul_ratio-1)*np.exp(-(dist/d0)**2)*np.exp(-(np.abs(cumul_dist)/(ref_cumul/c0))**2)
+            #estimated_ratio = estimated_ratio+(ratio*smoothratio-estimated_ratio)*np.exp(-dist/d0)*np.exp(-np.abs(cumul_dist)/(ref_antilope_cumul/c0)) # TEST
+            #estimated_ratio = estimated_ratio+(ratio*cumul_ratio-estimated_ratio)*np.exp(-dist/d0)*np.exp(-np.abs(cumul_dist)/(ref_antilope_cumul/c0))
+            #estimated_ratio = estimated_ratio+(ratio*cumul_ratio-1)*np.exp(-(dist/d0)**2)*np.exp(-(np.abs(cumul_dist)/(ref_antilope_cumul/c0))**2)
 
-            #w = np.exp(-(dist/d0)**2)*np.exp(-(np.abs(cumul_dist)/(ref_cumul/c0))**2)  # PROBLEME : ref_cumul/c0 donne plus de poids aux bias >0 !!
+            #w = np.exp(-(dist/d0)**2)*np.exp(-(np.abs(cumul_dist)/(ref_antilope_cumul/c0))**2)  # PROBLEME : ref_antilope_cumul/c0 donne plus de poids aux bias >0 !!
 
             # TODO : on veut que dans le cercle de corrélation, un gros écart de cumul entraine une forte correction du biais (et non pas une décroissance indépendante)
 
-            #w = np.exp(-1/2*(dist/d0)**2)*np.exp(-1/2*(np.abs(cumul_dist)/(ref_cumul/(ratio*c0))))
-            #w = np.exp(-(dist/d0)**2*np.abs(cumul_dist)/(ref_cumul/(ratio*c0)))
-            #w = np.exp(-(dist/d0))*np.exp(-np.abs(cumul_dist)/(ref_cumul/(ratio*c0)))
-            #w = np.exp(-(dist/d0)**2)*np.exp(-np.abs(cumul_dist)/(ref_cumul/(ratio*c0)))
+            #w = np.exp(-1/2*(dist/d0)**2)*np.exp(-1/2*(np.abs(cumul_dist)/(ref_antilope_cumul/(ratio*c0))))
+            #w = np.exp(-(dist/d0)**2*np.abs(cumul_dist)/(ref_antilope_cumul/(ratio*c0)))
+            #w = np.exp(-(dist/d0))*np.exp(-np.abs(cumul_dist)/(ref_antilope_cumul/(ratio*c0)))
+            #w = np.exp(-(dist/d0)**2)*np.exp(-np.abs(cumul_dist)/(ref_antilope_cumul/(ratio*c0)))
 
-#            w = np.exp(-(dist/d0)**2)*np.exp(-np.abs(cumul_dist)/(ref_cumul/(ratio*c0))**2)
-#            w = np.exp(-(dist/d0)**2)*np.exp(-np.abs(cumul_dist)/(ref_cumul/(ratio*c0)))
-            #w = np.exp(-(dist/d0))*np.exp(-np.abs(cumul_dist)/(ref_cumul/(ratio*c0)))
+#            w = np.exp(-(dist/d0)**2)*np.exp(-np.abs(cumul_dist)/(ref_antilope_cumul/(ratio*c0))**2)
+#            w = np.exp(-(dist/d0)**2)*np.exp(-np.abs(cumul_dist)/(ref_antilope_cumul/(ratio*c0)))
+            #w = np.exp(-(dist/d0))*np.exp(-np.abs(cumul_dist)/(ref_antilope_cumul/(ratio*c0)))
             if h0 is not None:
                 w = np.exp(-(dist/d0))*np.exp(-(np.abs(elevation_dist)/h0))
             else:
@@ -878,12 +879,12 @@ def ratio_estimation(field, model=None, moving_window=25):
 
             weights.append(w)
             # To take into account the increasing difference of cumuls with the distance
-#            ratios.append(field.rr_cumul.data/(ref_cumul/ratio+(field.rr_cumul.data-ref_cumul/ratio)*np.exp(-(dist/d0))))
+#            ratios.append(field.rr_cumul.data/(ref_antilope_cumul/ratio+(field.rr_cumul.data-ref_antilope_cumul/ratio)*np.exp(-(dist/d0))))
             if model is None:
                 ratios.append(ratio*cumul_ratio)
             else:
                 ratios.append(ratio*cumul_ratio/ratio_modele)  # v2=r1*a2/a1*m1/m2=r1*a2/a1*1/rm
-                #ratios.append(field.rr_cumul.data/(ref_cumul/ratio+grad_modele))  # r2 = a2/(a1/r1+gradv)
+                #ratios.append(field.rr_cumul.data/(ref_antilope_cumul/ratio+grad_modele))  # r2 = a2/(a1/r1+gradv)
 #            guess = ratio*cumul_ratio
             #print(poste)
             #print(toto[xx,yy], w[xx,yy])
@@ -1200,7 +1201,7 @@ def plot_ratio_estime_vs_ratio_reel(ratio, erreur):
 
 def animation_mask(field):
 
-    scores = pd.read_csv(fic_score, sep=';')
+    scores = pd.read_csv(obs_auto, sep=';')
     scores = scores.loc[(scores.lons>=lonmin) & (scores.lons<=lonmax) & (scores.lats<=latmax) & (scores.lats>=latmin)]
     scores = scores.set_index('num_poste')
     scores = scores.sort_values('lats')
@@ -1247,7 +1248,7 @@ def animation_mask(field):
 def krigeage_scores(field):
     variogram  = 'exponential'  # The same as for ANTILOPE without RADAR data
 
-    scores = pd.read_csv(fic_score, sep=';')
+    scores = pd.read_csv(obs_auto, sep=';')
 
     kriging = UniversalKriging(scores.lons.values, scores.lats.values, scores.ratio.values, variogram_model=variogram)
     score, ss = kriging.execute('grid', field.lon, field.lat)
@@ -1277,30 +1278,28 @@ if __name__ == "__main__":
     if not os.path.exists(savedir):
         os.makedirs(savedir)
 
-    if domain == 'GrandesRousses':
-        filename = 'CUMUL_ANTILOPEH_GrandesRousses_2021073106_2022070106.nc'
-    else:
-        filename =f'CUMUL_ANTILOPEH_{domain}_2021103000_2022060200.nc'
-        #filename ='CUMUL_ANTILOPEQ_alp_2018080106_2019043006.nc'
+    filename = '/home/mrns/vernaym/workdir/extraction_ANTILOPEH/MercantourTheo/PRECIP/ANTILOPEH_FRANXL1S100_2021073106_2022080106.nc'
+
     datebegin = filename.split('.')[0].split('_')[-2]
     dateend = filename.split('.')[0].split('_')[-1]
-    antilope = xr.open_dataset(os.path.join(datadir, filename))
+    antilope = xr.open_dataset(filename)
+    antilope = antilope.rename({'longitude': 'lon', 'latitude': 'lat'})
 #    antilope.lat.data = antilope.lat.data+0.005  # TODO : comprendre et resoudre le probleme de decallage des coordonnees
     antilope = antilope.where((antilope.lon>=lonmin) & (antilope.lon<=lonmax) & (antilope.lat<=latmax) & (antilope.lat>latmin-0.01), drop=True)  # >=44.1 ne fonctionne pas pour ANTILOPEQ (np.where(antilope.lat==44.1) renvoie une liste vide...)
+    antilope["rr_cumul"] = antilope.PRECIP.sum(dim='time')
 
-    if domain == 'pyr':
-        model = None
-    else:
-        #model = xr.open_dataset(os.path.join(datadir, 'CUMUL_ASPEAROME001.nc'))
-        model = xr.open_dataset(os.path.join(datadir, 'CUMUL_AROME.nc'))
-        # TODO : prendre un cumul sur la même période que ANTILOPE pour éviter de fausser la méthode avec des situations spécifiques
-        model = model.where((model.lon>=lonmin) & (model.lon<=lonmax) & (model.lat<=latmax) & (model.lat>latmin-0.01), drop=True)
+    #arome = xr.open_dataset(os.path.join(datadir, 'AROME_MercantourTheo_2021073106_2022080106.nc'))
+    arome = xr.open_dataset('/home/mrns/vernaym/workdir/extraction_PAROME/MercantourTheo/PRECIP/AROME_MercantourTheo_2021073106_2022080106.nc')
+    arome = arome.rename({'longitude': 'lon', 'latitude': 'lat'})
+    #arome = arome.where((arome.lon>=lonmin) & (arome.lon<=lonmax) & (arome.lat<=latmax) & (arome.lat>latmin-0.01), drop=True)
+    arome = arome.interp(lon=antilope.lon, lat=antilope.lat, method='linear')
+    arome["rr_cumul"] = arome.tp.sum(dim='time')
 
     plot_antilope = False
 
     if plot_antilope:
-        #fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_{domain}_obs_auto.csv')
-        fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_alp.csv')
+        #obs_auto = os.path.join(datadir, f'scores_2021110106_2022043006_{domain}_obs_auto.csv')
+        obs_auto = '/home/mrns/vernaym/extraction_obs/pluvios/obs_quotidiennes_RR_MercantourTheo_2021073107_2022080106.data'
 
         #plot(antilope, datebegin, dateend, categories=True, biascorrection=True)
         #plot(antilope, datebegin, dateend, categories=False, biascorrection=True)
@@ -1314,18 +1313,18 @@ if __name__ == "__main__":
 
         # Estimation with automatic stations observations and AROME
         savedir = rootdir
-        #fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_alpes_obs_auto.csv')
-        fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_{domain}_obs_auto.csv')
-        ratio_estimation(antilope, model=model)
-        # Estimation with automatic stations observations only
-        savedir = os.path.join(rootdir, 'sans_arome')
-        ratio_estimation(antilope)
-        # Estimation with nivometeo observations and AROME
-        savedir = os.path.join(rootdir, 'nivometeo')
-        fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_alp.csv')
-        ratio_estimation(antilope, model=model)
-        savedir = os.path.join(rootdir, 'nivometeo', 'sans_arome')
-        ratio_estimation(antilope)
+        #obs_auto = os.path.join(datadir, f'scores_2021110106_2022043006_alpes_obs_auto.csv')
+        obs_auto = '/home/mrns/vernaym/extraction_obs/pluvios/obs_quotidiennes_RR_MercantourTheo_2021073107_2022080106.data'
+        ratio_estimation(antilope, model=arome)
+#        # Estimation with automatic stations observations only
+#        savedir = os.path.join(rootdir, 'sans_arome')
+#        ratio_estimation(antilope)
+#        # Estimation with nivometeo observations and AROME
+#        savedir = os.path.join(rootdir, 'nivometeo')
+#        obs_auto = os.path.join(datadir, f'scores_2021110106_2022043006_alp.csv')
+#        ratio_estimation(antilope, model=arome)
+#        savedir = os.path.join(rootdir, 'nivometeo', 'sans_arome')
+#        ratio_estimation(antilope)
 
 #    ratio_estimation(antilope)
 #    KalmanFilter(antilope)
