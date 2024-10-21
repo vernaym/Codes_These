@@ -426,7 +426,10 @@ def plot(antilope, datebegin, dateend, categories=True, biascorrection=False, sc
         #cml = antilope.rr_cumul.plot(ax=ax, vmin=150, vmax=500, cmap=plt.cm.YlGnBu, add_colorbar=False, transform=ccrs.PlateCarree())
 
     # Add elevation lines
-    mnt = xr.open_dataset('/home/vernaym/QGIS/MNT/DEM_ALPES_WGS84_250m_bilinear.nc')
+    if not os.path.exists('DEM.nc'):
+        from snowtools.scripts.extract.vortex import vortexIO as io
+        io.get_const("uenv:dem.2@vernaym", 'relief', "alp1km", filename='DEM.nc', gvar="DEM_ALP1KM_EPSG4326")
+    mnt = xr.open_dataset('DEM.nc')
     if 'elevation' not in mnt.keys():
         mnt = mnt.rename({'Band1':'elevation'})
     mnt=mnt.where((mnt['lat']>=latmin) & (mnt['lat']<=latmax) & (mnt['lon']>=lonmin) & (mnt['lon']<=lonmax), drop=True)
@@ -590,7 +593,10 @@ def plot_field(fig, ax, field, cmap=None, vmin=None, vmax=None, scores=None, col
 
     if elevation:
         # Add elevation lines
-        mnt = xr.open_dataset('/home/vernaym/QGIS/MNT/DEM_ALPES_WGS84_250m_bilinear.nc')
+        if not os.path.exists('DEM.nc'):
+            from snowtools.scripts.extract.vortex import vortexIO as io
+            io.get_const("uenv:dem.2@vernaym", 'relief', "alp1km", filename='DEM.nc', gvar="DEM_ALP1KM_EPSG4326")
+        mnt = xr.open_dataset('DEM.nc')
         if 'elevation' not in mnt.keys():
             mnt = mnt.rename({'Band1':'elevation'})
         mnt=mnt.where((mnt['lat']>=latmin) & (mnt['lat']<=latmax) & (mnt['lon']>=lonmin) & (mnt['lon']<=lonmax), drop=True)
@@ -615,8 +621,8 @@ def plot_field(fig, ax, field, cmap=None, vmin=None, vmax=None, scores=None, col
         cb.ax.tick_params(labelsize=20)
 
     if coords:
-        xticks = np.arange(5.5, 7.5, 0.5)
-        yticks = np.arange(44.5, 46.5, 0.5)
+        xticks = np.arange(np.round(min(field.lon.data), 1), np.round(max(field.lon.data), 1), 0.5)
+        yticks = np.arange(np.round(min(field.lat.data), 1), np.round(max(field.lat.data), 1), 0.5)
         lon_formatter = LongitudeFormatter(zero_direction_label=True)
         lat_formatter = LatitudeFormatter()
         ax.set_yticks(yticks, crs=ccrs.PlateCarree())
@@ -787,7 +793,6 @@ def ratio_estimation(field, model=None, moving_window=25):
     #inov = smoothratio
     #wsum  = np.ones(np.shape(field.rr_cumul.data))
     reference = reference
-    used_reference = []
 
     if model is not None:
         ratio_arome = model.rr_cumul / uniform_filter(model.rr_cumul.data, 10)  # ~ gradient vertical modele
@@ -814,13 +819,17 @@ def ratio_estimation(field, model=None, moving_window=25):
     ww = list()
     weights = list()
     ratios  = list()
+    used_reference = list()
+    df = list()
     for i,poste in enumerate(reference.index):
     #for i,poste in enumerate(reversed(reference.index)):
-        ref_cumul = reference.loc[poste, 'rr'].sum()
-        lat_ref = reference.loc[poste, 'lat'].unique()
-        lon_ref = reference.loc[poste, 'lon'].unique()
+        ref_cumul = reference.loc[poste, 'rr']
+        lat_ref = reference.loc[poste, 'lat']
+        lon_ref = reference.loc[poste, 'lon']
         ref_antilope_cumul = field.rr_cumul.sel({'lat': lat_ref, 'lon': lon_ref}, method='nearest')
         ratio = ref_antilope_cumul / ref_cumul
+        ratio = float(ratio.squeeze().data)
+        df.append({'lons': lon_ref, 'lats': lat_ref, 'ratio': ratio, 'num_poste': poste})
         if poste in onlypostes and ratio > 0.1 and ratio < 1.9:
         #if poste not in blacklist:
             used_reference.append(poste)
@@ -919,7 +928,7 @@ def ratio_estimation(field, model=None, moving_window=25):
 #    w0 = 1 - W
 #    estimated_ratio = 1*w0 + np.sum(tmp*sratios, axis=0)
 
-    N = len(used_scores)
+    N = len(used_reference)
     W = np.sum(weights, axis=0)  # =1 if enough info else <1
     #W = np.mean(weights, axis=0)  # =1 if enough info else <1
     Wm = np.mean(weights, axis=0)
@@ -941,7 +950,7 @@ def ratio_estimation(field, model=None, moving_window=25):
     #mean_ratio = np.sum(weights*ratios, axis=0)/W
     #mean_ratio[W==0] = np.nan
     tmp = to_xarray(mean_ratio, field, varname='mean_ratio')
-    plot_and_save(tmp, "Mean_ratio", cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=0, vmax=2, scores=scores)
+    #plot_and_save(tmp, "Mean_ratio", cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=0, vmax=2, scores=scores)
     D = np.sqrt(np.sum(weights*(ratios-mean_ratio)**2, axis=0)/W)
     D[W==0] = 0
     #D = np.sum(weights*(ratios-mean_ratio)**2, axis=0)/W
@@ -1116,7 +1125,8 @@ def ratio_estimation(field, model=None, moving_window=25):
 
     # PLots
     #######
-    scores = scores.loc[(scores.lats>=latmin) & (scores.lats<=latmax) & (scores.lons>=lonmin) & (scores.lons<=lonmax)]
+    scores = pd.DataFrame(df)
+    #scores = scores.loc[(scores.lats>=latmin) & (scores.lats<=latmax) & (scores.lons>=lonmin) & (scores.lons<=lonmax)]
     #scores = scores.loc[used_scores]  # TODO : voir pourquoi ca ne marche plus après update de la version de pandas
 #    rationame = f'estimated_ratio_{domain}_{d0}_{h0}' if h0 is not none else f'estimated_ratio_{domain}_{d0}'
 #    errorname = f'observation_error_{d0}_{h0}_{domain}' if h0 is not none else f'observation_error_{d0}_{domain}'
@@ -1129,7 +1139,9 @@ def ratio_estimation(field, model=None, moving_window=25):
     #if domain == 'alp':
     # From https://qiita.com/tsukada_cs/items/d282f27f4024d00d7022 :
     #plot_and_save(ratio_field, rationame, vmin=0.2, vmax=1.8, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, scores=scores)  # Albane's choice !
-    plot_and_save(ratio_field, rationame, vmin=0.6, vmax=1.4, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, scores=scores, elevation=True, coords=True)  # Albane's choice !
+    #plot_and_save(ratio_field, rationame, vmin=0.6, vmax=1.4, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, scores=scores, elevation=True, coords=True)  # Albane's choice !
+    plot_and_save(ratio_field, rationame, vmin=0.5, vmax=1.5, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, elevation=True, coords=True, scores=scores)  # Albane's choice !
+    #plot_and_save(ratio_field, rationame, vmin=0.6, vmax=1.4, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap)  # Albane's choice !
     #plot_and_save(ratio_field, rationame + '_free_scale', vmin=0, vmax=2, cmap=plt.cm.coolwarm, scores=scores)
     #plot_and_save(np.abs(observation_error), errorname, vmin=0, vmax=12, cmap=plt.cm.viridis, scores=scores)
     #plot_and_save(np.abs(observation_error), errorname, vmin=0, vmax=15, cmap=plt.cm.Reds, scores=scores)
@@ -1145,7 +1157,7 @@ def ratio_estimation(field, model=None, moving_window=25):
 
     plt.close('all')
 
-    plot_ratio_estime_vs_ratio_reel(ratio_field, observation_error)
+    #plot_ratio_estime_vs_ratio_reel(ratio_field, observation_error)
 
 def plot_ratio_estime_vs_ratio_reel(ratio, erreur):
 
@@ -1278,6 +1290,8 @@ if __name__ == "__main__":
     if not os.path.exists(savedir):
         os.makedirs(savedir)
 
+    goto(savedir)
+
     filename = '/home/mrns/vernaym/workdir/extraction_ANTILOPEH/MercantourTheo/PRECIP/ANTILOPEH_FRANXL1S100_2021073106_2022080106.nc'
 
     datebegin = filename.split('.')[0].split('_')[-2]
@@ -1299,7 +1313,8 @@ if __name__ == "__main__":
 
     if plot_antilope:
         #obs_auto = os.path.join(datadir, f'scores_2021110106_2022043006_{domain}_obs_auto.csv')
-        obs_auto = '/home/mrns/vernaym/extraction_obs/pluvios/obs_quotidiennes_RR_MercantourTheo_2021073107_2022080106.data'
+        #obs_auto = '/home/mrns/vernaym/extraction_obs/pluvios/obs_quotidiennes_RR_MercantourTheo_2021073107_2022080106.data'
+        obs_auto = '/home/mrns/vernaym/extraction_obs/pluvios/CUMUL_RR_MercantourTheo_2021073107_2022080106.data'
 
         #plot(antilope, datebegin, dateend, categories=True, biascorrection=True)
         #plot(antilope, datebegin, dateend, categories=False, biascorrection=True)
@@ -1314,7 +1329,7 @@ if __name__ == "__main__":
         # Estimation with automatic stations observations and AROME
         savedir = rootdir
         #obs_auto = os.path.join(datadir, f'scores_2021110106_2022043006_alpes_obs_auto.csv')
-        obs_auto = '/home/mrns/vernaym/extraction_obs/pluvios/obs_quotidiennes_RR_MercantourTheo_2021073107_2022080106.data'
+        obs_auto = '/home/mrns/vernaym/extraction_obs/pluvios/CUMUL_RR_MercantourTheo_2021073107_2022080106.data'
         ratio_estimation(antilope, model=arome)
 #        # Estimation with automatic stations observations only
 #        savedir = os.path.join(rootdir, 'sans_arome')
