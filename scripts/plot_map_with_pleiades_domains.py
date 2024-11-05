@@ -48,7 +48,7 @@ savename = 'Relief_GrandesRousses25m_Pleiades_2018_2022.pdf'
 dem = xrp.preprocess(dem)
 # dem = dem.sel({'xx': ds.xx, 'yy': ds.yy})
 
-FondCarte = 'uncertainty'
+FondCarte = 'elevation'
 #FondCarte = 'ratio'
 if FondCarte == 'uncertainty':
     field = xr.open_dataset('/home/vernaym/workdir/ASSIMILATION/RandomSampling/XP27/Observation_error.nc')
@@ -70,6 +70,7 @@ elif FondCarte == 'ratio':
     savename = 'Ratio_GrandesRousses1km_Pleiades_2018_2022.pdf'
 elif FondCarte == 'elevation':
     field = dem
+    field = field.rename({'xx': 'lon', 'yy': 'lat'})
 
 #filename = 'Pleiades_20190513.nc'
 #io.get(vapp='Pleiades', geometry='Huez250m', xpid='CesarDB_AngeH@vernaym', date='2019051312',
@@ -81,7 +82,7 @@ elif FondCarte == 'elevation':
 
 #fig, ax = plot2D.plot_field(ds.rr_cumul, vmin=0)
 #plot2D.plot_field(dem, vmin=600, vmax=3900)
-plt.figure(figsize=(ratio * len(field.lon) / len(field.lat), 10))
+plt.figure(figsize=(ratio * len(field.lon) / len(field.lat), 11))
 #im = plt.contourf(field.xx, field.yy, field.data, cmap=plt.cm.terrain, levels=100, alpha=0.9, antialiased=False)
 #im = plot2D.plot_field(field, vmin=vmin, vmax=vmax, dem=dem)
 im = field.plot(vmin=vmin, vmax=vmax, cmap=cmap, rasterized=True)
@@ -91,6 +92,8 @@ ax = plt.gca()
 plot2D.add_iso_elevation(dem, ax=ax, levels=[1500, 2000, 2500, 3000, 3500])
 
 plot_elevation.add_landmarks(ax, transform=False)
+plot_elevation.add_postes(ax, type_poste='automatic stations')
+plot_elevation.add_postes(ax, type_poste='nivometeo stations')
 
 #plot2D.add_rectangle(ax, 'GrandesRousses', linewidth=4)
 plot2D.add_quadrilateral(ax, 'Lautaret area (Pleiades 2018)', color='darkviolet', linewidth=7, linestyle='--')
@@ -98,7 +101,7 @@ plot2D.add_quadrilateral(ax, 'Lautaret area (Pleiades 2018)', color='darkviolet'
 plot2D.add_quadrilateral(ax, 'Huez area (Pleiades 2022)', color='red', linewidth=7, linestyle='--')
 
 plt.title(None)
-plt.legend()
+plt.legend(ncol=2, loc=(0.05, 1.01))
 plt.tight_layout()
 
 #plt.savefig('Relief_GrandesRousses25m_Pleiades_2022.pdf')

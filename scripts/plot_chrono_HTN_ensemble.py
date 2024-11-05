@@ -67,7 +67,8 @@ for xpid in xpids:
         vapp = 'edelweiss'
     io.get_pro(datebegin=deb, dateend=dateend, xpid=xpid, vconf=point, geometry='SinglePoint',
             namespace='vortex.cache.fr', filename=f'PRO_{xpid}.nc', vapp=vapp)
-    ds = xr.open_dataarray(f'PRO_{xpid}.nc')
+    ds = xr.open_dataset(f'PRO_{xpid}.nc')
+    ds = ds.DSN_T_ISBA
 
     if 'sorted' in xpid or len(xpids) == 1:
         from mycolorpy import colorlist as mcp
@@ -107,7 +108,7 @@ for date in dates_pleiades:
     pleiades = xrp.preprocess(pleiades, mapping={'DSN_T_ISBA': 'HTN', 'DEP': 'HTN'})
     htn = pleiades.sel({'xx': xx, 'yy': yy}, method='nearest').HTN
     # htn = pleiades.interp({'x': xx, 'y': yy}, method='nearest').DSN_T_ISBA
-    if date in ['2018012312', '2022022612']:
+    if date in ['2018012312', '2022022612'] and assim:
         #plt.vlines(pd.to_datetime(date, format='%Y%m%d%H'), htn - 0.2, htn + 0.2, color='red', linestyle='-',
         #        linewidth=2)
         #plt.plot(pd.to_datetime(date, format='%Y%m%d%H'), htn, color='red', linestyle='', marker='_', markersize=20,
@@ -123,7 +124,6 @@ for date in dates_pleiades:
         #for partname in ('cbars', 'cmins', 'cmaxes', 'cmedians', 'cmeans'):
         for partname in ['cmedians']:
             vl[partname].set_colors('red')
-        assim = True
     else:
         # plt.vlines(pd.to_datetime(date, format='%Y%m%d%H'), 0, 1.5, color='k', linestyle=':')
         if legend:

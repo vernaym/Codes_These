@@ -90,7 +90,7 @@ def parse_command_line():
     parser.add_argument('-o', '--obs_geometry', type=str, choices=['Lautaret250m', 'Huez250m', 'GrandesRousses250m'],
                         help='Geometry of the observation (default=geometry)', default=None)
 
-    parser.add_argument('-s', '--subdomain', type=str, choices=subdomain_map.keys(),
+    parser.add_argument('-s', '--subdomain', type=str, choices=subdomain_map.keys(), default=None,
                         help='Subdomain over which the plot will be made', default='huez')
 
     parser.add_argument('-m', '--members', action='store_true',
@@ -258,15 +258,16 @@ def read_simu(xpid, members, date):
 def plot_htn(openloop, obs, assim, xpid, xpid_assim, date, subdomain, dem=None):
     savename = f'HTN_{xpid}_{xpid_assim}_{date}.pdf'
 
-    lonmin = subdomain_map[subdomain]['lonmin']
-    lonmax = subdomain_map[subdomain]['lonmax']
-    latmin = subdomain_map[subdomain]['latmin']
-    latmax = subdomain_map[subdomain]['latmax']
-    openloop = openloop.where((openloop.xx > lonmin) & (openloop.xx < lonmax) & (openloop.yy < latmax) &
-            (openloop.yy > latmin), drop=True)
-    obs      = obs.where((obs.xx > lonmin) & (obs.xx < lonmax) & (obs.yy < latmax) & (obs.yy > latmin), drop=True)
-    assim    = assim.where((assim.xx > lonmin) & (assim.xx < lonmax) & (assim.yy < latmax) & (assim.yy > latmin),
-            drop=True)
+    if subdomain is not None:
+        lonmin = subdomain_map[subdomain]['lonmin']
+        lonmax = subdomain_map[subdomain]['lonmax']
+        latmin = subdomain_map[subdomain]['latmin']
+        latmax = subdomain_map[subdomain]['latmax']
+        openloop = openloop.where((openloop.xx > lonmin) & (openloop.xx < lonmax) & (openloop.yy < latmax) &
+                (openloop.yy > latmin), drop=True)
+        obs      = obs.where((obs.xx > lonmin) & (obs.xx < lonmax) & (obs.yy < latmax) & (obs.yy > latmin), drop=True)
+        assim    = assim.where((assim.xx > lonmin) & (assim.xx < lonmax) & (assim.yy < latmax) & (assim.yy > latmin),
+                drop=True)
 
     # obshtn = var_obshtn[date]
     vmin = 0
@@ -293,22 +294,22 @@ def plot_htn(openloop, obs, assim, xpid, xpid_assim, date, subdomain, dem=None):
     print('plot openloop')
     plot2D.plot_field(opl, ax=ax[0], vmin=vmin, vmax=vmax, cmap=plt.cm.Blues, dem=dem, shade=False,
             isolevels=thresholds, slices=slices, add_colorbar=False)
-    ax[0].set_title('Openloop mean snow depth (m)')
+    ax[0].set_title('a) Openloop mean snow depth (m)')
 
     print('plot observation')
     plot2D.plot_field(obs, ax=ax[1], vmin=vmin, vmax=vmax, cmap=plt.cm.Blues, dem=dem, shade=False,
             isolevels=thresholds, slices=slices, add_colorbar=False)
     #        shade=True,)
     if date in datesassim:
-        ax[1].set_title('Assimilated snow depth (m)')
+        ax[1].set_title('b) Assimilated snow depth (m)')
     else:
-        ax[1].set_title('Observed snow depth (m)')
+        ax[1].set_title('b) Observed snow depth (m)')
 
     print('plot assimilation')
     ass = assim.DSN_T_ISBA.mean(dim='member')
     im = plot2D.plot_field(ass, ax=ax[2], cmap=plt.cm.Blues, dem=dem, shade=False, vmin=vmin, vmax=vmax,
             isolevels=thresholds, slices=slices, add_colorbar=False)
-    ax[2].set_title('Assimilation mean snow depth (m)')
+    ax[2].set_title('c) Assimilation mean snow depth (m)')
 
     for axis in ax:
         axis.set_xticks([])

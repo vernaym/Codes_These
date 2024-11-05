@@ -14,6 +14,7 @@ from scipy.spatial import cKDTree
 from scipy.sparse import csr_matrix, csc_matrix, diags
 from scipy.spatial import distance_matrix
 import shapefile
+import cartopy
 import cartopy.crs as ccrs
 from cartopy.mpl.ticker import LongitudeFormatter, LatitudeFormatter
 from pyproj import Proj, transform
@@ -212,7 +213,13 @@ def add_postes(ax, type_poste='nivometeo'):
 
     #sc = ax.scatter(scores['poste_nivo.lon_dg'], scores['poste_nivo.lat_dg'], c=scores['poste_nivo.alti'],  marker='^', s=300)
     #sc = ax.scatter(scores['poste_nivo.lon_dg'], scores['poste_nivo.lat_dg'],  marker='^', s=450, color='k')
-    sc = ax.scatter(lons, lats,  marker=marker, s=250, color=color, label=label, transform=ccrs.PlateCarree())
+    if isinstance(ax, cartopy.mpl.geoaxes.GeoAxes):
+        sc = ax.scatter(lons, lats, marker=marker, s=450, color=color, label=label, transform=ccrs.PlateCarree())
+    else:
+        sc = ax.scatter(lons, lats, marker=marker, s=450, color=color, label=label)
+
+    return sc
+
 
 def add_radar_positions(ax):
     radars = dict(
@@ -339,7 +346,7 @@ elif 'band_data' in mnt.keys():
 if domain == 'GrandesRousses':
     mnt = proj_mnt(mnt)
 
-crossection = True
+crossection = False
 if crossection:
 
     cross = extract_cross_section(mnt)
@@ -432,7 +439,7 @@ else:
         add_landmarks(ax)
         add_rectangle(ax)
         add_radar_positions(ax)
-        #add_postes(ax, type_poste='automatic stations')
+        add_postes(ax, type_poste='automatic stations')
         add_postes(ax, type_poste='nivometeo stations')
         # Add cross section line
         start = (45.14776, 5.63933)  # Radar Moucherotte
