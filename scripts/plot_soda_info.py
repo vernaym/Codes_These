@@ -103,6 +103,10 @@ def execute():
         )
 
         df  = pd.read_csv(filename, sep=',', header=None)
+        # Reorder correctly (member 1 has indeed the highest perturbation)
+        df[df == 2] = 18
+        df[df == 1] = 2
+        df  = df - 1
         ds = xr.DataArray(
             data = np.array([df[member].values.reshape(len(dem.yy), len(dem.xx))
                 for member in range(17)]),
@@ -133,6 +137,8 @@ def execute():
             ),
             attrs  = dict(description="SODA output"),
         )
+
+        out.to_netcdf(f'SODA_{shortid}_{date}.nc')
 
         for var in ['mean', 'median']:
             fig, ax  = plt.subplots()
