@@ -1,4 +1,5 @@
 *.pyc
+NO_TRANSFER
 DATA/*
 figures/*/*
 figures/*
