@@ -234,21 +234,19 @@ def execute():
     ax1.grid()
     ax2.set_xlabel('Pearson correlation coefficient')
     ax2.set_ylabel('Mean CRPS (m)')
-    ax2.set_xlim(0.3, 1)
-    ax2.set_ylim(0, 0.7)
+    ax2.set_xlim(0.4, 1)
+    ax2.set_ylim(0, 0.6)
     ax2.grid()
     ax4.legend(loc='center', frameon=False)
     ax4.axis('off')
     # plt.legend()
-    dateassim = f'{dates_pleiades[0][0:4]}-{dates_pleiades[0][4:6]}-{dates_pleiades[0][6:8]}'
-    dateeval = f'{dates_pleiades[1][0:4]}-{dates_pleiades[1][4:6]}-{dates_pleiades[1][6:8]}'
-    custom_legend(ax3, dateassim, dateeval)
+    custom_legend(ax3)
     plt.tight_layout()
     suffix = '_'.join([product_map(xpid.split('@')[0]) for xpid in xpids])
     fig.savefig(f'synthese_eval_assim_{suffix}.pdf')
 
 
-def custom_legend(axis, dateassim, dateeval):
+def custom_legend(axis):
 
     x0 = 0.1
     x1 = 0.5
@@ -271,12 +269,12 @@ def custom_legend(axis, dateassim, dateeval):
     for item in ellipse:
         axis.add_patch(item)
 
-    axis.text(x1, x1 + 0.1, f"Assimilation date ({dateassim})", horizontalalignment='center')
+    axis.text(x1, x1 + 0.1, "Assimilation date (2022-02-26)", horizontalalignment='center')
     axis.annotate("", xy=(x2, x1), xytext=(x0, x1), xycoords='axes fraction',
             arrowprops={'arrowstyle': '-|>', 'lw': 3, 'color': 'k',
                 'linestyle': '-', 'mutation_scale': 30})
 
-    axis.text(x1, x0 + 0.1, f"Evaluation date ({dateeval})", horizontalalignment='center')
+    axis.text(x1, x0 + 0.1, "Evaluation date (2022-05-01)", horizontalalignment='center')
     axis.annotate("", xy=(x2, x0), xytext=(x0, x0), xycoords='axes fraction',
             arrowprops={'arrowstyle': '-|>', 'lw': 3, 'color': 'k',
                 'linestyle': '--', 'mutation_scale': 30})

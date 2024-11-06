@@ -52,7 +52,7 @@ max_dist = ld*2
 d0 = max_dist
 
 
-def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False, qq_adjustment=False, gradient=None):
+def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False, qq_adjustment=False, gradient=None, uncertainty=None):
     """
     * field          : 2D (n*k) array containing the field to modify
     * pond           : (nk*nk) sparse ponderation matrix (each line gives the correlation between the corresponding pixel
@@ -88,34 +88,26 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
         #G.data = 1 / G.data
         pond = pond.multiply(G)
 
-    #pixel_weight = pond.diagonal()  # = "exp(-err)" ou "1/err" pour l'obs et "likelyhood" du pixel pour les membres de l'ensemble
-    pixel_weight = pond.diagonal()  # =1-err
-    #weight = pond.sum(axis=1).A1
-    nb_nonzero = (pond != 0).sum(0).A1  # Count non zero elements of each row
-    meanweight = weight / nb_nonzero
-    # pixel_weight is in ]0, 1]
-
     mean = pond.dot(X).sum(axis=1).A1  # getA1 transforms the 1*N matrix object into a 1D np.array
     mean = mean / weight
-
-    #maxweight = pond.argmax(axis=1).A1
-    #maxval    = np.array([initial_field[idx] for idx in maxweight])
 
     sd1 = get_std(X, initial_field, pond, weight=weight, super_ensemble=super_ensemble)  # 1. Dispersion of the super ensemble around the initial field --> More dispersion on high error pixels (--> spatial structures)
     sd2 = get_std(X, mean, pond, weight=weight, super_ensemble=super_ensemble)  # 2. Dispersion of the super ensemble around the mean --> Smoother fields
 
     # TODO : include sd in the field modification algorithm ?
 
+    pixel_weight = pond.diagonal()  # = "exp(-err)" ou "1/err" pour l'obs et "likelyhood" du pixel pour les membres de l'ensemble
+    #weight = pond.sum(axis=1).A1
+    nb_nonzero = (pond != 0).sum(0).A1  # Count non zero elements of each row
+    meanweight = weight / nb_nonzero
+    # pixel_weight is in ]0, 1]
     # Do not try to preserve values of pixels with low errors on average : the dynamic correction must account
     # for temporary failures as well as uncertainties due to the error estimation method
     #newfield = (initial_field * pixel_weight + mean * meanweight) / (pixel_weight + meanweight)  # Stay closer to the original value (spatial structures can still be visible)
     #newfield = (initial_field * pixel_weight + mean * meanweight/pixel_weight) / (pixel_weight + meanweight/pixel_weight)  # Smoother fields --> underestimation of extreme values
-    #newfield = (initial_field * pixel_weight + mean * weight/pixel_weight) / (pixel_weight + weight/pixel_weight)  # Smoother fields --> underestimation of extreme values
-    newfield = (initial_field * pixel_weight + mean * (1 - pixel_weight))
-    #newfield = (initial_field * pixel_weight + maxval * (1 - pixel_weight))
-    #newfield = mean
-    newfield = np.round(newfield, 1)
+    newfield = (initial_field * pixel_weight + mean * weight/pixel_weight) / (pixel_weight + weight/pixel_weight)  # Smoother fields --> underestimation of extreme values
     #newfield = (initial_field * pixel_weight + mean * meanweight/(meanweight+pixel_weight)) / (pixel_weight + meanweight/(meanweight+pixel_weight))
+    #newfield = np.round(newfield, 1)
 
 #    if gradient is not None:
 #        # TODO : apply AROME vertical gradient only for pixels with large uncertainties to avoid to introduce underestimaiton in valleys
@@ -201,13 +193,13 @@ def dynamic_correction(field, pond, weight=None, super_ensemble=None, plot=False
     #sd = sd + 1  # Add 1 to ensure that the error is >1 (mm or mm^(1/2)). --> Dispersion too large
     #sd = (sd1+sd2)/2
     #sd = sd1/2+sd2
-    #sd = sd2
+    sd = sd2
     #sd = sd2 + newfield*0.2  # Add a 20% error to ensure a minimum error
     #sd = np.sqrt(sd1*sd2)  # --> Increase spread (overdispersif in cas_test)
     #sd = sd2*sd1/sd2  # --> Increase spread (overdispersif in cas_test)
     #sd = np.sqrt(sd2*newfield)  # --> Increase spread (overdispersif in cas_test)
     #sd = sd1+sd2  # --> Increase spread and add spatial variability
-    sd = sd1  # Add spatial variability
+    #sd = sd1  # Add spatial variability
 
     #sd = sd * (1+np.abs(ratio))  # Allow to increase spread in case of underdispersion
 
@@ -403,10 +395,10 @@ def codistances(coords, domain='alp', ld=0.1, Zdist=False):  # TMP for illustrat
     tree = cKDTree(coords)
     dist = tree.sparse_distance_matrix(tree, max_distance=max_dist, p=2, output_type='coo_matrix')
     dist = csr_matrix(dist)
-    d0 = 0.1
+    d0 = 0.2
     #dist.data = d0 / (d0+dist.data)  # IDW
     #dist.data=1/(1+dist.data)  # IDW
-    #dist.data = 1 - dist.data/d0  # Pondération de Franke-Little
+    dist.data = 1 - dist.data/d0  # Pondération de Franke-Little
     #dist.data[dist.data<0] = 0
     #dist.data = (max_dist-dist.data)/(max_dist*dist.data)^2  # Modified Shepard's ponderation
     #dist.data=1/(1+dist.data)**2  # IDW
@@ -415,8 +407,7 @@ def codistances(coords, domain='alp', ld=0.1, Zdist=False):  # TMP for illustrat
     #dist.data=1/(0.5+dist.data)**2  # IDW
     #dist[dist.nonzero()] = dist[dist.nonzero()]/ld
     #np.exp(-dist.data, out=dist.data )
-    #np.exp(-(dist.data / d0), out=dist.data)
-    np.exp(-(dist.data / d0)**2, out=dist.data)
+    #np.exp(-dist.data**2/2, out=dist.data )
     #np.exp(1/(1+dist.data), out=dist.data )
 
     # 2. Elevation inter-distance
@@ -567,8 +558,7 @@ class AntilopePreprocessing(object):
             else:
                 pond = scipy.sparse.load_npz(codist)
             #pond = pond.dot(diags(np.exp(-(std-1)).flatten(), 0))  # std is in [1, inf[
-            #pond = pond.dot(diags(1/std.flatten(), 0))  # std is in [1, inf[
-            pond = pond.dot(diags((1 - std).flatten(), 0))  # std is in [0, 1[
+            pond = pond.dot(diags(1/std.flatten(), 0))  # std is in [1, inf[
             obs = antilope[var2].sel({'lat':np.intersect1d(error.lat.data, antilope.lat.data), 'lon':np.intersect1d(error.lon.data, antilope.lon.data)}).data.flatten()
 
             new, mean, sd = dynamic_correction(obs, pond)  # Update obs (new) and get observation error (sd)
@@ -579,11 +569,10 @@ class AntilopePreprocessing(object):
                 )
 
             # 4. Observation error = WMA spread + field modification + 20% of the precipitation field ?
-            #err = np.abs(antilope['obs'] - antilope[var1])
-            err = np.abs(antilope['obs'] - antilope[var0])
+            err = np.abs(antilope['obs'] - antilope[var1])
             #err = np.abs(antilope['obs'].data - antilope[var0].data)  " TODO : try error = corrected_antilope - raw_antilope
             err = error.sel(({'lat':np.intersect1d(ratio.lat.data, err.lat.data), 'lon':np.intersect1d(ratio.lon.data, err.lon.data)})).data
-            #err = uniform_filter(err, 5)  # TODO : try to remove filter
+            err = uniform_filter(err, 5)  # TODO : try to remove filter
             rr = antilope['obs'].sel(({'lat':np.intersect1d(ratio.lat.data, antilope.lat.data), 'lon':np.intersect1d(ratio.lon.data, antilope.lon.data)})).data
             #std = sd.reshape((len(ratio.lat), len(ratio.lon))) + err + 0.2 * rr
             std = sd.reshape((len(ratio.lat), len(ratio.lon))) + err
