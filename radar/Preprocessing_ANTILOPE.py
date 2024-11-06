@@ -475,7 +475,14 @@ def random_draw(distribution='gamma', members=16):
 def perturb(obs, sd, perturbation1, perturbation2, ratio=None, sd2=None, frac=0.2):
     """
     Perturb an *obs* field with a previously randomly dranw value *perturbation* and an estimated error *sd*.
+    obs:: DataArray
     """
+
+    ds = xr.open_dataset('SODA_feedback.nc')
+    shift = (ds['median'] - 9) / 8
+    shift = shift.fillna(0)
+    shift = shift.data
+    obs = obs.data
 
     # Add 2 perturbations terms:
     # - 1 gamma distributed proportionnal to the precipitation intensity
@@ -484,7 +491,7 @@ def perturb(obs, sd, perturbation1, perturbation2, ratio=None, sd2=None, frac=0.
     # WARNING : the small ensemble size (16) lead to a large variability
     # of the ensemble mean but this algorithm ensures that on average the ensemble
     # mean is centered on the corrected observation
-    ana = obs + obs * frac * perturbation1 + sd * perturbation2
+    ana = obs + obs * frac * (perturbation1 + shift) + sd * (perturbation2 + shift)
 
     if sd2 is not None:
         gamma = random_draw(distribution='gamma', members=1)[0]

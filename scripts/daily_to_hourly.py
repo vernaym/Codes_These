@@ -21,6 +21,11 @@ if len(sys.argv) == 5:
     dateend   = Date(sys.argv[2])
     xpid      = sys.argv[3]
     geometry  = sys.argv[4]
+elif len(sys.argv) == 4:
+    datebegin = Date(sys.argv[1])
+    dateend   = Date(sys.argv[2])
+    xpid      = sys.argv[3]
+    geometry  = 'GrandesRousses1km'
 else:
     print('ERROR : missing arguments')
     print('USAGE : daily_to_hourly.py datebegin dateend xpid')

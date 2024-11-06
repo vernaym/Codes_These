@@ -22,7 +22,6 @@ import xarray as xr
 #from pykrige.uk import UniversalKriging  # pykrige not install on soprano
 import glob
 import shapefile
-from shapely.geometry import Point, Polygon
 
 #import copy
 
@@ -2009,7 +2008,7 @@ class RandomSampling(Assimilation):
         draw_gauss = Preprocessing_ANTILOPE.random_draw(distribution='normal', members=len(analysis.member) - 1)
 
         for idx, member in enumerate(analysis.member.data[1:]):
-            ana = Preprocessing_ANTILOPE.perturb(obs, sd, draw_gamma[idx], draw_gauss[idx])
+            ana = Preprocessing_ANTILOPE.perturb(analysis.sel(member=0), sd, draw_gamma[idx], draw_gauss[idx])
             analysis.loc[{'member': member}] = ana
 
             self.newlocalfield[member][:, :, idd] = analysis.sel({'member': member}).data
@@ -2179,7 +2178,7 @@ class RandomSampling(Assimilation):
 
             for idx, member in enumerate(analysis.member.data[1:]):
                 # Fill other members with random draw arround the corrected observation
-                ana = Preprocessing_ANTILOPE.perturb(obs, sd, draw_gamma[idx], draw_gauss[idx])
+                ana = Preprocessing_ANTILOPE.perturb(analysis.sel(member=0), sd, draw_gamma[idx], draw_gauss[idx])
                 analysis.loc[{'member':member}] = ana
 
                 self.newlocalfield[member][idp,idd] = analysis.sel({'lat':nearest_lat, 'lon':nearest_lon, 'member':member}).data
