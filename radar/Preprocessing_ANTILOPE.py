@@ -469,10 +469,10 @@ def perturb(obs, sd, perturbation1, perturbation2, ratio=None, sd2=None, frac=0.
     obs:: DataArray
     """
 
-    ds = xr.open_dataset('SODA_feedback.nc')
-    shift = (ds['median'] - 9) / 8
-    shift = shift.fillna(0)
-    shift = shift.data
+    shift = xr.open_dataset('SODA_feedback.nc')
+    # shift = (ds['median'] - 9) / 8
+    # shift = shift.fillna(0)
+    shift = shift['shift'].data
     obs = obs.data
 
     # Add 2 perturbations terms:
