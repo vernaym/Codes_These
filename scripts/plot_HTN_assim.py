@@ -91,7 +91,7 @@ def parse_command_line():
                         help='Geometry of the observation (default=geometry)', default=None)
 
     parser.add_argument('-s', '--subdomain', type=str, choices=subdomain_map.keys(), default=None,
-                        help='Subdomain over which the plot will be made', default='huez')
+                        help='Subdomain over which the plot will be made')
 
     parser.add_argument('-m', '--members', action='store_true',
                         help="To activate ensemble simulations")

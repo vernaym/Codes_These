@@ -16,17 +16,18 @@ import snowtools.scripts.post_processing.extract_point as pp
 coords = pp.reference_points
 
 xpid_map = dict(
-    RS27_pappus              = 'RS',
-    EnKF36_pappus            = 'EnKF',
-    PF32_pappus              = 'PF',
-    RS27_sorted_pappus       = 'SRS',
-    RS27_pappus_assim        = 'RS_assim',
-    EnKF36_pappus_assim      = 'EnKF_assim',
-    PF32_pappus_assim        = 'PF_assim',
-    RS27_sorted_pappus_assim = 'SRS_assim',
-    RS27_spa_erroOBS_025     = 'SRS_err025',
-    ANTILOPE_pappus          = 'ANTILOPE',
-    SAFRAN_pappus            = 'SAFRAN',
+    RS27_pappus                = 'RS',
+    EnKF36_pappus              = 'EnKF',
+    PF32_pappus                = 'PF',
+    RS27_sorted_pappus         = 'SRS',
+    RS27_pappus_assim          = 'RS_assim',
+    EnKF36_pappus_assim        = 'EnKF_assim',
+    PF32_pappus_assim          = 'PF_assim',
+    RS27_sorted_pappus_assim   = 'SRS_assim',
+    RS27_sorted_assim_feedback = 'SRS_assim_feedback',
+    RS27_spa_erroOBS_025       = 'SRS_err025',
+    ANTILOPE_pappus            = 'ANTILOPE',
+    SAFRAN_pappus              = 'SAFRAN',
 )
 
 parser = argparse.ArgumentParser()

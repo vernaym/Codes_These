@@ -136,9 +136,10 @@ def execute():
                 deb = datebegin  # 2021080207
             kw = dict(datebegin=deb, dateend=dateend, vapp=vapp, member=member, namebuild=None,
                     filename=f'PRO_{shortid}.nc', xpid=xpid, geometry=geometry)
+            # Get openloop simulation (without assimilation)
             io.get_pro(**kw)
 
-            # Get simulation without assimilation
+            # Get simulation with assimilation
             xpid_assim = f'{shortid}_assim'
             member_assim = members_map(xpid_assim)
             io.get_pro(
@@ -151,6 +152,20 @@ def execute():
                 xpid        = xpid_assim,
                 geometry    = geometry,
             )
+
+            if shortid == 'RS27_sorted_pappus':
+                xpid_feedback = 'RS27_sorted_assim_feedback'
+                member_feedback = members_map(xpid_feedback)
+                io.get_pro(
+                    datebegin   = deb,
+                    dateend     = dateend,
+                    vapp        = vapp,
+                    member      = member_feedback,
+                    namebuild   = None,
+                    filename    = f'PRO_{xpid_feedback}.nc',
+                    xpid        = xpid_feedback,
+                    geometry    = geometry,
+                )
 
             # Read data
             openloop = read_simu(xpid, member, date)
@@ -167,46 +182,92 @@ def execute():
                 label     = None
 
             # Plot Cesar's synthetic scores
-            x0 = bias['opl'][0]
-            x1 = bias['ass'][0]
-            y0 = spread['opl'][0]
-            y1 = spread['ass'][0]
+
+            # PLot Skill-score
+            b0 = bias['opl'][0]
+            b1 = bias['ass'][0]
+            s0 = spread['opl'][0]
+            s1 = spread['ass'][0]
             # ax[0].scatter(x0, y0, s=80, facecolors='none', edgecolors=colors_map[product])
             fact = 10
             if product in colors_map.keys():
                 color = colors_map[product]
             else:
                 color = None
-            ellipse1 = Ellipse((x0, y0), width=bias['opl'][1] / fact, height=spread['opl'][1] / fact,
+            ellipse1 = Ellipse((b0, s0), width=bias['opl'][1] / fact, height=spread['opl'][1] / fact,
                               facecolor='none', edgecolor=color, linestyle=linestyle,
                               linewidth=2)
-            ellipse2 = Ellipse((x1, y1), width=bias['ass'][1] / fact, height=spread['ass'][1] / fact,
+            ellipse2 = Ellipse((b1, s1), width=bias['ass'][1] / fact, height=spread['ass'][1] / fact,
                               facecolor='none', edgecolor=color, linestyle=linestyle,
                               linewidth=2)
+
             ax1.add_patch(ellipse1)
             ax1.add_patch(ellipse2)
-            ax1.annotate("", xy=(x1, y1), xytext=(x0, y0),
+            ax1.annotate("", xy=(b1, s1), xytext=(b0, s0),
                     arrowprops={'arrowstyle': '-|>', 'lw': 3, 'color': color,
                         'linestyle': linestyle, 'mutation_scale': 30})
 
-            x0 = pearson['opl'][0]
-            x1 = pearson['ass'][0]
-            y0 = crps['opl'][0]
-            y1 = crps['ass'][0]
-            ellipse1 = Ellipse((x0, y0), width=pearson['opl'][1], height=crps['opl'][1] / fact,
+            # Plot Pearson / CRPS
+            p0 = pearson['opl'][0]
+            p1 = pearson['ass'][0]
+            c0 = crps['opl'][0]
+            c1 = crps['ass'][0]
+            ellipse1 = Ellipse((p0, c0), width=pearson['opl'][1], height=crps['opl'][1] / fact,
                               facecolor='none', edgecolor=color, linestyle=linestyle,
                               linewidth=2)
-            ellipse2 = Ellipse((x1, y1), width=pearson['ass'][1], height=crps['ass'][1] / fact,
+            ellipse2 = Ellipse((p1, c1), width=pearson['ass'][1], height=crps['ass'][1] / fact,
                               facecolor='none', edgecolor=color, linestyle=linestyle,
                               linewidth=2)
             ax2.add_patch(ellipse1)
             ax2.add_patch(ellipse2)
-            ax2.annotate("", xy=(x1, y1), xytext=(x0, y0),
+            ax2.annotate("", xy=(p1, c1), xytext=(p0, c0),
                     arrowprops={'arrowstyle': '-|>', 'lw': 3, 'color': color,
                         'linestyle': linestyle, 'mutation_scale': 30})
 
             # Add empty plot for legend
             ax4.plot([], [], linestyle=linestyle, color=color, label=label, lw=3)
+
+            if xpid_assim == 'RS27_sorted_pappus_assim' and idx > 0:
+                xpid_feedback = 'RS27_sorted_assim_feedback'
+                member_feedback = members_map(xpid_feedback)
+                io.get_pro(
+                    datebegin   = deb,
+                    dateend     = dateend,
+                    vapp        = vapp,
+                    member      = member_feedback,
+                    namebuild   = None,
+                    filename    = f'PRO_{xpid_feedback}.nc',
+                    xpid        = xpid_feedback,
+                    geometry    = geometry,
+                )
+                feedback = read_simu(xpid_feedback, member_feedback, date)
+                pearson['fbk'], crps['fbk'], bias['fbk'], spread['fbk']  = compute_scores(feedback, obs, xpid_feedback,
+                        date)
+                b2 = bias['fbk'][0]
+                s2 = spread['fbk'][0]
+                linestyle = 'dashed'
+                label     = f'{product}_feedback'
+                ellipse3 = Ellipse((b2, s2), width=bias['fbk'][1] / fact, height=spread['fbk'][1] / fact,
+                                facecolor='none', edgecolor=color, linestyle=linestyle,
+                                linewidth=2)
+                ax1.add_patch(ellipse3)
+                ax1.annotate("", xy=(b2, s2), xytext=(b1, s1),
+                        arrowprops={'arrowstyle': '-|>', 'lw': 3, 'color': color,
+                            'linestyle': linestyle, 'mutation_scale': 30})
+
+                p2 = pearson['fbk'][0]
+                c2 = crps['fbk'][0]
+                linestyle = 'dashed'
+                ellipse3 = Ellipse((p2, c2), width=pearson['fbk'][1] / fact, height=crps['fbk'][1] / fact,
+                                facecolor='none', edgecolor=color, linestyle=linestyle,
+                                linewidth=2)
+                ax2.add_patch(ellipse3)
+                ax2.annotate("", xy=(p2, c2), xytext=(p1, c1),
+                        arrowprops={'arrowstyle': '-|>', 'lw': 3, 'color': color,
+                            'linestyle': linestyle, 'mutation_scale': 30})
+
+                # Add empty plot for legend
+                ax4.plot([], [], linestyle=linestyle, color=color, label=label, lw=3)
 
             if False:
                 # Compute/plot rank histograms
