@@ -87,10 +87,16 @@ def parse_command_line():
 
 def execute():
 
-    # 1. Get all input data
+    # fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16, 12), gridspec_kw={'height_ratios': [2, 1]})
+    fig = plt.figure(constrained_layout=True)
+    gs  = fig.add_gridspec(3, 4)
+    ax1 = fig.add_subplot(gs[:1, :1])
+    ax2 = fig.add_subplot(gs[:1, 2:])
+    ax3 = fig.add_subplot(gs[2, :2])
+    ax4 = fig.add_subplot(gs[2, 3])
 
+    # 1. Get all input data
     # a) Pleiades observations
-    fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16, 12), gridspec_kw={'height_ratios': [2, 1]})
 
     for idx, date in enumerate(dates_pleiades):
         obsname = f'PLEIADES_{date}.nc'
@@ -227,7 +233,27 @@ def execute():
             # Add empty plot for legend
             ax4.plot([], [], linestyle=linestyle, color=color, label=label, lw=3)
 
-            if xpid_assim == 'RS27_sorted_pappus_assim' and idx > 0:
+            feedback = False
+            if shortid == 'RS27_sorted_pappus':
+                xpid_feedback = 'RS27_sorted_feedback'
+                member_feedback = members_map(xpid_feedback)
+                io.get_pro(
+                    datebegin   = deb,
+                    dateend     = dateend,
+                    vapp        = vapp,
+                    member      = member_feedback,
+                    namebuild   = None,
+                    filename    = f'PRO_{xpid_feedback}.nc',
+                    xpid        = xpid_feedback,
+                    geometry    = geometry,
+                )
+                feedback = True
+                b1 = b0
+                s1 = s0
+                p1 = p0
+                c1 = c0
+
+            elif xpid_assim == 'RS27_sorted_pappus_assim' and idx > 0:
                 xpid_feedback = 'RS27_sorted_assim_feedback'
                 member_feedback = members_map(xpid_feedback)
                 io.get_pro(
@@ -240,13 +266,16 @@ def execute():
                     xpid        = xpid_feedback,
                     geometry    = geometry,
                 )
+                feedback = True
+
+            if feedback:
+                linestyle = 'dashed'
+                label     = f'{product}_feedback'
                 feedback = read_simu(xpid_feedback, member_feedback, date)
                 pearson['fbk'], crps['fbk'], bias['fbk'], spread['fbk']  = compute_scores(feedback, obs, xpid_feedback,
                         date)
                 b2 = bias['fbk'][0]
                 s2 = spread['fbk'][0]
-                linestyle = 'dashed'
-                label     = f'{product}_feedback'
                 ellipse3 = Ellipse((b2, s2), width=bias['fbk'][1] / fact, height=spread['fbk'][1] / fact,
                                 facecolor='none', edgecolor=color, linestyle=linestyle,
                                 linewidth=2)
@@ -301,26 +330,27 @@ def execute():
     ax4.legend(loc='center', frameon=False)
     ax4.axis('off')
     # plt.legend()
-    custom_legend(ax3)
+    custom_legend(ax3, feedback=feedback)
     plt.tight_layout()
     suffix = '_'.join([product_map(xpid.split('@')[0]) for xpid in xpids])
     fig.savefig(f'synthese_eval_assim_{suffix}.pdf')
 
 
-def custom_legend(axis):
+def custom_legend(axis, feedback=False):
 
     x0 = 0.1
-    x1 = 0.5
+    y0 = 0.5
     x2 = 0.9
 
+    axis.text(x0, 0.8, 'No assimilation', horizontalalignment='center', transform=axis.transAxes, weight='bold')
     axis.text(x0, 0.8, 'No assimilation', horizontalalignment='center', transform=axis.transAxes, weight='bold')
     axis.text(x2, 0.8, 'Assimilation', horizontalalignment='center', transform=axis.transAxes, weight='bold')
 
     ellipse = list()
 
-    ellipse.append(Ellipse((x0, x1), width=0.16, height=0.15, transform=axis.transAxes,
+    ellipse.append(Ellipse((x0, y0), width=0.16, height=0.15, transform=axis.transAxes,
                       facecolor='none', edgecolor='k', linestyle='-', linewidth=2))
-    ellipse.append(Ellipse((x2, x1), width=0.105, height=0.1, transform=axis.transAxes,
+    ellipse.append(Ellipse((x2, y0), width=0.105, height=0.1, transform=axis.transAxes,
                       facecolor='none', edgecolor='k', linestyle='-', linewidth=2))
     ellipse.append(Ellipse((x0, x0), width=0.16, height=0.15, transform=axis.transAxes,
                       facecolor='none', edgecolor='k', linestyle='--', linewidth=2))
@@ -330,7 +360,7 @@ def custom_legend(axis):
     for item in ellipse:
         axis.add_patch(item)
 
-    axis.text(x1, x1 + 0.1, "Assimilation date (2022-02-26)", horizontalalignment='center')
+    axis.text(x0, x1 + 0.1, "Assimilation date (2022-02-26)", horizontalalignment='center')
     axis.annotate("", xy=(x2, x1), xytext=(x0, x1), xycoords='axes fraction',
             arrowprops={'arrowstyle': '-|>', 'lw': 3, 'color': 'k',
                 'linestyle': '-', 'mutation_scale': 30})
