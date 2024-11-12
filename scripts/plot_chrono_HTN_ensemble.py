@@ -24,7 +24,9 @@ xpid_map = dict(
     EnKF36_pappus_assim        = 'EnKF_assim',
     PF32_pappus_assim          = 'PF_assim',
     RS27_sorted_pappus_assim   = 'SRS_assim',
+    RS27_sorted_feedback       = 'SRS_feedback',
     RS27_sorted_assim_feedback = 'SRS_assim_feedback',
+    RS27_sorted_full_feedback  = 'SRS_full_feedback',
     RS27_spa_erroOBS_025       = 'SRS_err025',
     ANTILOPE_pappus            = 'ANTILOPE',
     SAFRAN_pappus              = 'SAFRAN',
@@ -62,7 +64,7 @@ else:
 
 fig, ax = plt.subplots(figsize=(14, 4))
 for xpid in xpids:
-    if 'assim' in xpid or xpid == 'RS27_spa_erroOBS_025':
+    if 'assim' in xpid or xpid == 'RS27_spa_erroOBS_025' or 'full' in xpid:
         vapp = 's2m'
     else:
         vapp = 'edelweiss'
