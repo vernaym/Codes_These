@@ -49,7 +49,7 @@ if len(sys.argv) == 2:
 else:
     domain = 'alp'
 
-datadir = '/home/vernaym/These/DATA'
+datadir = '/home/vernaym/These/NO_TRANSFER/DATA'
 #savedir = '/home/vernaym/workdir/ASSIMILATION/mask'
 #savedir = '/home/vernaym/workdir/ASSIMILATION/mask/illustration_methode'
 savedir = '/home/vernaym/workdir/ASSIMILATION/mask/'
@@ -310,7 +310,7 @@ def add_radar_positions(ax):
     def getImage(path):
        return OffsetImage(plt.imread(path, format="png"), zoom=0.03)
 
-    symbole_radar = '/home/vernaym/These/figures/symbole_radar_maroon.png'
+    symbole_radar = '/home/vernaym/These/NO_TRANSFER/figures/symbole_radar_maroon.png'
     for radar, infos in radars.items():
        ab = AnnotationBbox(getImage(symbole_radar), (infos['lon'], infos['lat']), frameon=False)
        ax.add_artist(ab)
@@ -655,7 +655,7 @@ def KalmanFilter(field, moving_window=40):
 
     lons, lats = np.meshgrid(field.lon.data, field.lat.data)
 
-    filename = os.path.join('/home/vernaym/These/DATA', f'codistance_{max_dist}_{c0}_alp.npz')
+    filename = os.path.join('/home/vernaym/These/NO_TRANSFER/DATA', f'codistance_{max_dist}_{c0}_alp.npz')
     if not os.path.exists(filename):
         # Compute inter-distances
         coords=[(lon,lat) for lat in field.lat.data for lon in field.lon.data]
@@ -791,7 +791,7 @@ def ratio_estimation(field, model=None, moving_window=25):
     used_scores = []
 
     if model is not None:
-        ratio_arome = model.rr_cumul / uniform_filter(model.rr_cumul.data, 10)  # ~ gradient vertical modele
+        ratio_arome = model.cumul / uniform_filter(model.cumul.data, 10)  # ~ gradient vertical modele
         #ratio_arome = model.rr_cumul / uniform_filter(model.rr_cumul.data, 5)  # ~ gradient vertical modele
         #ratio_arome = model.rr_cumul / uniform_filter(model.rr_cumul.data, int(d0*100))  # ~ gradient vertical modele
         #ratio_modele.data = uniform_filter(ratio_modele.data, 30)
@@ -828,8 +828,8 @@ def ratio_estimation(field, model=None, moving_window=25):
             #ref_elevation = mnt.Band1.data[idx[0],idy[0]]  # TODO : utiliser plutot l'altitude réelle du poste ?
             #elevation_dist = mnt.Band1.data - ref_elevation
             if model is not None:
-                model_cumul = model.rr_cumul.data[idx[0],idy[0]]  # Cumul du modele au point d'évaluation
-                ratio_modele = model.rr_cumul.data/model_cumul  # Ratio entre chaque point du modele et le point d'évaluation
+                model_cumul = model.cumul.data[idx[0],idy[0]]  # Cumul du modele au point d'évaluation
+                ratio_modele = model.cumul.data/model_cumul  # Ratio entre chaque point du modele et le point d'évaluation
                 #ratio_modele = model.rr_cumul.data / uniform_filter(model.rr_cumul.data, int(d0*100))  # ~ gradient vertical modele
             if poste == 74056416:
                 rcc = ref_cumul.copy()
@@ -1240,7 +1240,7 @@ def animation_mask(field):
 #    ax = plt.axes()
     line_ani = animation.FuncAnimation(fig, animate_func, interval=750, frames=len(scores.index))
     # Saving the Animation
-    f = os.path.join('/home/vernaym/These/figures/mask', f'animation_mask_{domain}.gif')
+    f = os.path.join('/home/vernaym/These/NO_TRANSFER/figures/mask', f'animation_mask_{domain}.gif')
     writergif = animation.PillowWriter(fps=1)
     line_ani.save(f, writer=writergif)
 
