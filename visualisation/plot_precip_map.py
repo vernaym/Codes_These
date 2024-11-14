@@ -13,7 +13,6 @@ import xarray as xr
 import geopandas as gpd  # To install
 import json
 import plotly.express as px
-from plotly.offline import plot
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.figure_factory as ff
@@ -65,20 +64,30 @@ token = open("/home/vernaym/.mapbox/token").read() # Token from mapbox account
 class PrecipitationAnalysis(object):
 
 
-    def __init__(self, date, antilope=None, safran=None, nivometeo=None, auto=None, var='obs'):
+    def __init__(self, date=None, antilope=None, safran=None, nivometeo=None, auto=None, var='obs'):
         self.antilope = antilope
-        self.rrmax = min([max([np.nanmax(antilope.rr.data.flatten()) for antilope in self.antilope.values() if antilope is not None]), 80])
-        #self.rrmax = max([np.nanmax(antilope.analysis.data.flatten()) for antilope in self.antilope.values() if antilope is not None])
+        if antilope is not None:
+            self.max = min([max([np.nanmax(antilope.rr.data.flatten()) for antilope in self.antilope.values() if antilope is not None]), 80])
+            self.min = 0
+        else:
+            self.max = None
+            self.min = None
+
+        #self.max = max([np.nanmax(antilope.analysis.data.flatten()) for antilope in self.antilope.values() if antilope is not None])
         self.var = var
         self.safran = safran
         self.nivometeo = nivometeo
         # TODO : concatener les df des obs auto
-        self.auto = pd.concat([df for df in auto.values()])
+        if auto is not None:
+            self.auto = pd.concat([df for df in auto.values()])
         self.date = date
-        self.datebegin = date.replace(hour=6)
-        self.dateend   = self.datebegin+datetime.timedelta(days=1)
+        if date is not None:
+            self.datebegin = date.replace(hour=6)
+            self.dateend   = self.datebegin+datetime.timedelta(days=1)
         #self.domain = domain
         self.massifs = None
+        self.scaletrace = None
+        self.errorsize = None
 
         self.fig = go.Figure()  # Figure initialisation
 
@@ -114,13 +123,23 @@ class PrecipitationAnalysis(object):
     def show(self):
         self.fig.show()
 
-    def save(self):
-        self.jsonfile = os.path.join(rootdir, 'figures', "as_antilope.json")
-        self.fig.write_json(self.jsonfile)
-        if self.var == 'analysis':
-            self.fig.write_html(os.path.join(rootdir, 'figures', f"precipitation_{self.date.strftime('%Y%m%d')}.html"))
+    def save(self, savename, json=True):
+        if json:
+            self.jsonfile = os.path.join(rootdir, 'figures', "as_antilope.json")
+            self.fig.write_json(self.jsonfile)
+
+        if savename is None:
+            if self.var == 'analysis':
+                basename = "precipitation"
+            else:
+                basename = f"precipitation_{self.var}"
+            if self.date is not None:
+                basename = f"{basename}_{self.date.strftime('%Y%m%d')}.html"
+            else:
+                basename = f"{basename}.html"
         else:
-            self.fig.write_html(os.path.join(rootdir, 'figures', f"precipitation_{self.var}_{self.date.strftime('%Y%m%d')}.html"))
+            basename = savename
+        self.fig.write_html(os.path.join(rootdir, 'figures', basename))
 
     def put_ftp(self):
         import pysftp
@@ -169,7 +188,7 @@ class PrecipitationAnalysis(object):
         self.df = self.df[self.df['rr']>0]
         name = 'AS-ANTILOPE'
         self.scaletrace = self.ntrace
-        self.fig.add_trace(self.add_antilope_scatter(name, showscale=True, uncertainty=True))
+        self.fig.add_trace(self.add_scatter(name, showscale=True, uncertainty=True))
 #
 #        elevation_range = [0, 500, 1000, 1500, 2000, 2500, 3000]
 #        for i,elevation in enumerate(elevation_range):
@@ -195,23 +214,61 @@ class PrecipitationAnalysis(object):
 #                # TODO : useless (same data ==> use a button !)
 #            #    self.fig = self.fig.add_trace(self.add_antilope_scatter(df, name, select[i], uncertainty=False))
 
-    def add_antilope_scatter(self, name, df=None, showscale=False, uncertainty=True, visible=True):
+    def add_scatter(self, name, df=None, showscale=True, uncertainty=False, visible=True, colorbar_title='Precipitation (mm)',
+            colorscale='dense', var='rr'):
+
+        if df is None:
+            df = self.df
+        else:
+            self.df = df
+
         # Normalisation de l'erreur entre low and high
         # Linear decrease between high and low marker size values
         low  = 10
         high = 15
         def nan_ptp(a):
             return np.ptp(a[np.isfinite(a)])
-        rr = self.df.rr.values
-        error = self.df.error.values
-        self.errorsize = high - (high-low)*error/(2*rr)
-        self.errorsize[self.errorsize<low] = low
-        #error = low + (error - np.nanmin(error))/(nan_ptp(error)/high)
-        #error = low + high/error
+        rr = df[var].values
+        if uncertainty:
+            error = df.error.values
+            self.errorsize = high - (high-low)*error/(2*rr)
+            self.errorsize[self.errorsize<low] = low
+            #error = low + (error - np.nanmin(error))/(nan_ptp(error)/high)
+            #error = low + high/error
+            size = np.nan_to_num(self.errorsize, nan=5)
+        else:
+            size = 8
 
-        if df is None:
-            df = self.df
+        listkeys = [key for key in ['alti', var, 'error'] if key in df.keys()]
 
+        label_map = dict(
+            alti        = 'Altitude (m)',
+            rr          = 'Precipitation (mm)',
+            error       = 'Incertitude (mm)',
+            Ratio       = 'Ratio',
+            Uncertainty = 'Incertitude (mm)',
+        )
+        unit = dict(
+            alti        = 'm',
+            rr          = 'mm',
+            error       = 'mm',
+            Ratio       = '',
+            Uncertainty = 'mm',
+        )
+        mycustomdata = np.stack([df[key] for key in listkeys], axis=-1)
+
+        max_map = dict(
+            Ratio       = 1.5,
+            Uncertainty = 40,
+        )
+        min_map = dict(
+            Ratio       = 0.5,
+            Uncertainty = 2,
+        )
+        if self.max is None:
+            self.max = max_map[var]
+        if self.min is None:
+            self.min = min_map[var]
 
         return go.Scattermapbox(
                     lon  = df.lon.values,
@@ -220,29 +277,29 @@ class PrecipitationAnalysis(object):
                     mode = 'markers',
                     name = name,
                     #text = antilope.rr.data.flatten(),  # obs=corrected obs, rr=raw obs
-                    text = df.rr.values,
+                    text = df[var].values,
                     visible = visible,
                     showlegend = True,
                     #selected = go.scattermapbox.Selected(marker={"size":50}),
-                    customdata = np.stack((df.alti.values, df.rr.values, df.error.values), axis=-1),
+                    customdata = mycustomdata,
                     hovertemplate =
-                        '<b>Altitude (m)</b>: %{customdata[0]:d}m<br>'+
-                        '<b>Precipitation (mm)</b>: %{customdata[1]:.2f}mm<br>'+
-                        '<b>Incertitude (mm)</b>: %{customdata[2]:.2f}mm<br>',
+                    '<b>Incertitude</b>: %{customdata[0]:.2f}<br>',
+                    #hovertemplate = ''.join([f'<b>{label_map[key]}</b>: ' + '%{customdata[i]:.f}' + f'{unit[key]}<br>' for i, key in enumerate(listkeys)]),
+                    #hovertemplate = ''.join([f'<b>{label_map[key]}</b>: %{mycustomdata[{i}]:.f}{unit[key]}<br>' for i, key in enumerate(listkeys)]),
                     marker = dict(
                         #color = antilope.rr.data.flatten(),
-                        color = df.rr.values,
-                        cmin  = 0,
+                        color = df[var].values,
                         #cmax  = np.nanmax(self.antilope.rr.data.flatten()),
-                        cmax  = self.rrmax,
-                        size  = np.nan_to_num(self.errorsize, nan=5) if uncertainty else 10,
+                        cmax  = self.max,
+                        cmin  = self.min,
+                        size  = size,
                         #opacity=0.5,
                         #colorscale = 'YlGnBu',
-                        colorscale = 'dense',
+                        colorscale = colorscale,
                         #symbol='square',  # Impossible to change if color is defined : https://stackoverflow.com/questions/59628536/option-symbol-in-scattermapbox-is-not-working
                         #cmin = 100,
                         #cmax = 1200,
-                        colorbar_title = "Precipitation(mm)",
+                        colorbar_title = colorbar_title,
                         showscale = showscale,  # Plot only one colorscale
                         colorbar = dict(
                             titleside = "right",
@@ -338,7 +395,7 @@ class PrecipitationAnalysis(object):
                 name = 'SAFRAN (1800m)',
                 zmin = 0,
                 #zmax = np.nanmax(antilope.rr.data.flatten()),
-                zmax = self.rrmax,
+                zmax = self.max,
                 visible = False,
                 uid = 4,
                 uirevision = True,
@@ -361,7 +418,7 @@ class PrecipitationAnalysis(object):
                 showscale = True,
                 cmin  = 0,
                 #cmax  = np.nanmax(self.antilope.analysis.data.flatten()),
-                cmax  = self.rrmax,
+                cmax  = self.max,
                 size  = size,
                 #symbol ='square',  # Impossible to change if color is defined : https://stackoverflow.com/questions/59628536/option-symbol-in-scattermapbox-is-not-working
                 colorbar_title = "Precipitation(mm)",
@@ -376,11 +433,15 @@ class PrecipitationAnalysis(object):
             )
         return marker
 
-    def update_figure(self):
+    def update_figure(self, title=True):
         """
         Update figure layout
         """
 
+        if self.scaletrace is None:
+            self.scaletrace = 0
+
+        updatemenus = list()
 
         # 1. Button to set colorscale
         buttons = list()
@@ -398,7 +459,7 @@ class PrecipitationAnalysis(object):
                     )
                 )
 
-        updatecolorbar = dict(
+        updatemenus.append(dict(
             buttons = buttons,
             direction="down",
             pad={"r": 10, "t": 10},
@@ -407,7 +468,7 @@ class PrecipitationAnalysis(object):
             xanchor="left",
             y=0.45,
             yanchor="top"
-        )
+        ))
 
         # 2. Button to reverse colorscale
         buttons=list([
@@ -419,7 +480,7 @@ class PrecipitationAnalysis(object):
             ),
         ])
 
-        updatecolorscaledirection = dict(
+        updatemenus.append(dict(
             type='buttons',
             buttons = buttons,
             pad={"r": 10, "t": 10},
@@ -428,49 +489,51 @@ class PrecipitationAnalysis(object):
             xanchor="left",
             y=0.4,
             yanchor="top"
-        )
+        ))
 
         # 3. Button to switch on/off error dependent marker size
-        buttons = list([
-                dict(
-                    args = [{'marker.size':20}, [self.scaletrace]],
-                    args2 = [{'marker.size':np.nan_to_num(self.errorsize, nan=5)}, [self.scaletrace]],
-                    label  = 'Uncertainty',
-                    method = 'restyle',
-                    #method = 'update',
-                    ),
-            ])
+        if self.errorsize is not None:
+            buttons = list([
+                    dict(
+                        args = [{'marker.size':20}, [self.scaletrace]],
+                        args2 = [{'marker.size':np.nan_to_num(self.errorsize, nan=5)}, [self.scaletrace]],
+                        label  = 'Uncertainty',
+                        method = 'restyle',
+                        #method = 'update',
+                        ),
+                ])
 
-        updateuncertainty = dict(
-            type='buttons',
-            buttons = buttons,
-            pad={"r": 10, "t": 10},
-            showactive=True,
-            x=1.03,
-            xanchor="left",
-            y=0.3,
-            yanchor="top"
-        )
+            updatemenus.append(dict(
+                type='buttons',
+                buttons = buttons,
+                pad={"r": 10, "t": 10},
+                showactive=True,
+                x=1.03,
+                xanchor="left",
+                y=0.3,
+                yanchor="top"
+            ))
 
         # 4. Button to filter data by elevation
-        buttons = list()
-        elevation_range = [0, 500, 1000, 1500, 2000, 2500, 3000]
-        for i,elevation in enumerate(elevation_range):
-            df = self.df[self.df["alti"]>=elevation]
-            mask = np.where(self.df["alti"]>=elevation)
-            buttons.append(
-                    dict(
-                        label  = f'>{elevation}m',
-                        #method = "restyle",  # modify data or data attributes
-                        #method = "relayout",  # modify layout attributes
-                        method = "update",  # modify data and layout attributes; combination of "restyle" and "relayout"
-                        args = [dict(selectedpoints=mask, unselected=dict(marker=dict(opacity=0))), [self.scaletrace]],
-                        #args = [dict(selectedpoints=mask, unselected=dict(marker=dict(opacity=0)))],
+        if 'alti' in self.df:
+            buttons = list()
+            elevation_range = [0, 500, 1000, 1500, 2000, 2500, 3000]
+            for i,elevation in enumerate(elevation_range):
+                df = self.df[self.df["alti"]>=elevation]
+                mask = np.where(self.df["alti"]>=elevation)
+                buttons.append(
+                        dict(
+                            label  = f'>{elevation}m',
+                            #method = "restyle",  # modify data or data attributes
+                            #method = "relayout",  # modify layout attributes
+                            method = "update",  # modify data and layout attributes; combination of "restyle" and "relayout"
+                            args = [dict(selectedpoints=mask, unselected=dict(marker=dict(opacity=0))), [self.scaletrace]],
+                            #args = [dict(selectedpoints=mask, unselected=dict(marker=dict(opacity=0)))],
+                        )
                     )
-                )
 
-        # TODO : https://stackoverflow.com/questions/61556618/plotly-how-to-display-and-filter-a-dataframe-with-multiple-dropdowns
-        elevationfilter = dict(
+            # TODO : https://stackoverflow.com/questions/61556618/plotly-how-to-display-and-filter-a-dataframe-with-multiple-dropdowns
+            updatemenus.append(dict(
                 type="buttons",
                 buttons=buttons,
                 pad={"r": 10, "t": 10},
@@ -479,11 +542,14 @@ class PrecipitationAnalysis(object):
                 xanchor="left",
                 y=0.8,
                 yanchor="top"
-            )
+            ))
+
+        if title is None:
+            title = f'24h precipitation (mm) between {self.datebegin} and {self.dateend}',
 
         self.fig.update_layout(
             #coloraxis_showscale=False,
-            title = f'24h precipitation (mm) between {self.datebegin} and {self.dateend}',
+            title = title,
             margin = dict(l=1, t=40, r=1, b=0, pad=0),
             #mapbox_bounds={"west": 2, "east": 11, "south": 42, "north": 48},
             mapbox = dict(
@@ -509,10 +575,10 @@ class PrecipitationAnalysis(object):
                 #pitch = 0,
                 zoom = 7,
             ),
-            #updatemenus = self.updatemenus,  # To activate updatemenu
-            #updatemenus = [updatecolorbar],
-            updatemenus = [elevationfilter, updatecolorbar, updateuncertainty, updatecolorscaledirection],
-            #updatemenus = [elevationfilter, updatecolorbar],
+            updatemenus = updatemenus,  # To activate updatemenu
+            # updatemenus = [updatecolorbar],
+            # updatemenus = [elevationfilter, updatecolorbar, updateuncertainty, updatecolorscaledirection],
+            # updatemenus = [elevationfilter, updatecolorbar],
         )
 
         self.fig.update_layout(
@@ -524,7 +590,6 @@ class PrecipitationAnalysis(object):
                 dict(text="Marker size :", x=1.03, xref="paper", y=0.32, yref="paper", xanchor="left",
                                      yanchor="top", align="center", showarrow=False)
             ])
-
 
 #    fig.for_each_trace(lambda t: t.update(name = newnames[t.name],
 #                                      legendgroup = newnames[t.name],
@@ -728,4 +793,3 @@ class PrecipitationAnalysis(object):
 #plot(antilope=antilope, nivometeo=nivometeo, auto=auto, safran=safran, var='analysis')
 #plot(antilope=antilope, nivometeo=nivometeo, auto=auto, safran=safran, var='obs')
 #plot(antilope=antilope, nivometeo=nivometeo, auto=auto, safran=safran, var='rr')
-
