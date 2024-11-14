@@ -1108,7 +1108,8 @@ def ratio_estimation(field, model=None, moving_window=25):
     #uncertainty = 1 + w1*observation_error/(1+w1)
     uncertainty.data[np.isnan(field.rr_cumul.data)] = np.nanmax(uncertainty.data)
     #uncertainty.data = uniform_filter(uncertainty.data, size=3)
-    uncertainty = uncertainty.rename('Uncertainty (kg/m²)')
+    #uncertainty = uncertainty.rename('Uncertainty (kg/m²)')
+    uncertainty = uncertainty.rename('Uncertainty')
     confidence = uncertainty.copy()
     confidence.data = 1/confidence.data
     confidence = confidence.rename('Confidence')
