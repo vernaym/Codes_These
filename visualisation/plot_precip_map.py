@@ -112,15 +112,15 @@ class PrecipitationAnalysis(object):
         self.update_figure()
 
     def show(self):
-        self.fig.show()
+        self.fig.show(config={'scrollZoom': True})
 
     def save(self):
         self.jsonfile = os.path.join(rootdir, 'figures', "as_antilope.json")
         self.fig.write_json(self.jsonfile)
         if self.var == 'analysis':
-            self.fig.write_html(os.path.join(rootdir, 'figures', f"precipitation_{self.date.strftime('%Y%m%d')}.html"))
+            self.fig.write_html(os.path.join(rootdir, 'figures', f"precipitation_{self.date.strftime('%Y%m%d')}.html"), config={'scrollZoom': True})
         else:
-            self.fig.write_html(os.path.join(rootdir, 'figures', f"precipitation_{self.var}_{self.date.strftime('%Y%m%d')}.html"))
+            self.fig.write_html(os.path.join(rootdir, 'figures', f"precipitation_{self.var}_{self.date.strftime('%Y%m%d')}.html"), config={'scrollZoom': True})
 
     def put_ftp(self):
         import pysftp

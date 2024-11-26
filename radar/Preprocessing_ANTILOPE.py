@@ -598,17 +598,17 @@ class AntilopePreprocessing(object):
             if 'error' in antilope.keys():
                 std2 = antilope.error.sel({'y':np.intersect1d(error.y.data, antilope.y.data), 'x':np.intersect1d(error.x.data, antilope.x.data)}).data
                 std = std + std2
-            codist = os.path.join(datadir, f'codistance_max_dist_{max_dist:.2f}_{self.domain}.npz')
-            if not os.path.exists(codist):
-                # Compute inter-distances
-                coords=[(lon,lat) for lat in error.y.data for lon in error.x.data]
-                pond = codistances(coords, self.domain)
-                scipy.sparse.save_npz(codist, pond, compressed=False)  # TODO comprendre pourquoi ca ne marche pas pour éviter de recalculer les codistances à chaque fois
-            else:
-                pond = scipy.sparse.load_npz(codist)
-            #pond = pond.dot(diags(np.exp(-(std-1)).flatten(), 0))  # std is in [1, inf[
-            #pond = pond.dot(diags(1/std.flatten(), 0))  # std is in [1, inf[
-            pond = pond.dot(diags((1 - std).flatten(), 0))  # std is in [0, 1[
+#            codist = os.path.join(datadir, f'codistance_max_dist_{max_dist:.2f}_{self.domain}.npz')
+#            if not os.path.exists(codist):
+#                # Compute inter-distances
+#                coords=[(lon,lat) for lat in error.y.data for lon in error.x.data]
+#                pond = codistances(coords, self.domain)
+#                scipy.sparse.save_npz(codist, pond, compressed=False)  # TODO comprendre pourquoi ca ne marche pas pour éviter de recalculer les codistances à chaque fois
+#            else:
+#                pond = scipy.sparse.load_npz(codist)
+#            #pond = pond.dot(diags(np.exp(-(std-1)).flatten(), 0))  # std is in [1, inf[
+#            #pond = pond.dot(diags(1/std.flatten(), 0))  # std is in [1, inf[
+#            pond = pond.dot(diags((1 - std).flatten(), 0))  # std is in [0, 1[
             obs = antilope[var2]
 
             #tmpobs = obs.sel({'lat':np.intersect1d(error.lat.data, antilope.lat.data), 'lon':np.intersect1d(error.lon.data, antilope.lon.data)})
