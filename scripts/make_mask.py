@@ -360,8 +360,8 @@ def plot(antilope, datebegin, dateend, categories=True, biascorrection=False, sc
         if biascorrection:
             fig, axes = plt.subplots(1, 2, figsize=(30,16), subplot_kw=dict(projection=ccrs.PlateCarree()))
         else:
-            fig, axes = plt.subplots(1, 1, figsize=(16,16), subplot_kw=dict(projection=ccrs.PlateCarree()))
-            axes.set_extent([lonmin, lonmax, latmin, latmax], crs=ccrs.PlateCarree())
+            fig, ax = plt.subplots(1, 1, figsize=(16,16), subplot_kw=dict(projection=ccrs.PlateCarree()))
+            axes = [ax]
         for ax in axes:
             ax.set_extent([lonmin, lonmax, latmin, latmax], crs=ccrs.PlateCarree())
         #fig, ax = plt.subplots(figsize=(14,16), subplot_kw=dict(projection=ccrs.PlateCarree()))
@@ -393,7 +393,7 @@ def plot(antilope, datebegin, dateend, categories=True, biascorrection=False, sc
         cmaplist = [cmap(i) for i in range(20, cmap.N+1)]
         cmap = matplotlib.colors.LinearSegmentedColormap.from_list('Custom cmap', cmaplist, cmap.N-20)
         # define the bins and normalize
-        bounds = np.arange(200, 1100, 50)
+        bounds = np.arange(200, 1450, 100)
         #norm = matplotlib.colors.BoundaryNorm(bounds, cmap.N)
         norm = matplotlib.colors.BoundaryNorm(bounds, len(bounds)-1)
         lons, lats = np.meshgrid(antilope.lon.data, antilope.lat.data)
@@ -404,8 +404,16 @@ def plot(antilope, datebegin, dateend, categories=True, biascorrection=False, sc
             # Remove lines
             for c in cml.collections:
                 c.set_edgecolor("face")
-            cml2 = axes[1].contourf(lons, lats, antilope.rr_cumul_debiased.data, cmap=cmap, levels=bounds, transform=ccrs.PlateCarree(), alpha=1, antialiased=True, extend='both')
-            axes[1].set_title('b) De-biased ANTILOPE', fontsize=30)
+
+            #cml2 = axes[1].contourf(lons, lats, antilope.rr_cumul_debiased.data, cmap=cmap, levels=bounds, transform=ccrs.PlateCarree(), alpha=1, antialiased=True, extend='both')
+            #axes[1].set_title('b) De-biased ANTILOPE', fontsize=30)
+
+            asantilope = xr.open_dataset('/home/vernaym/workdir/ASSIMILATION/RandomSampling/XP27/CUMUL_ASANTILOPE_alp_2021080106_2022080106.nc')
+            asantilope = asantilope.where((asantilope.lon>=lonmin) & (asantilope.lon<=lonmax) & (asantilope.lat<=latmax) & (asantilope.lat>latmin-0.01), drop=True)
+            cml2 = axes[1].contourf(lons, lats, asantilope.rr.data, cmap=cmap, levels=bounds, transform=ccrs.PlateCarree(), alpha=1, antialiased=True, extend='both')
+
+
+            axes[1].set_title('b) AS-ANTILOPE', fontsize=30)
             # Remove lines
             for c in cml2.collections:
                 c.set_edgecolor("face")
@@ -1281,7 +1289,8 @@ if __name__ == "__main__":
     if domain == 'GrandesRousses':
         filename = 'CUMUL_ANTILOPEH_GrandesRousses_2021073106_2022070106.nc'
     else:
-        filename =f'CUMUL_ANTILOPEH_{domain}_2021103000_2022060200.nc'
+        filename = 'CUMUL_ANTILOPE_alp_2021080106_2022080106.nc'
+        #filename =f'CUMUL_ANTILOPEH_{domain}_2021103000_2022060200.nc'
         #filename ='CUMUL_ANTILOPEQ_alp_2018080106_2019043006.nc'
     datebegin = filename.split('.')[0].split('_')[-2]
     dateend = filename.split('.')[0].split('_')[-1]
@@ -1297,7 +1306,7 @@ if __name__ == "__main__":
         # TODO : prendre un cumul sur la même période que ANTILOPE pour éviter de fausser la méthode avec des situations spécifiques
         model = model.where((model.lon>=lonmin) & (model.lon<=lonmax) & (model.lat<=latmax) & (model.lat>latmin-0.01), drop=True)
 
-    plot_antilope = False
+    plot_antilope = True
 
     if plot_antilope:
         #fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_{domain}_obs_auto.csv')
@@ -1305,11 +1314,11 @@ if __name__ == "__main__":
 
         #plot(antilope, datebegin, dateend, categories=True, biascorrection=True)
         #plot(antilope, datebegin, dateend, categories=False, biascorrection=True)
-        plot(antilope, datebegin, dateend, categories=True, biascorrection=True, scores=True)
+        #plot(antilope, datebegin, dateend, categories=True, biascorrection=True, scores=True)
         #plot(antilope, datebegin, dateend, categories=True)
         #plot(antilope, datebegin, dateend, categories=False)
         #plot(antilope, datebegin, dateend, categories=False, scores=True)
-        #plot(antilope, datebegin, dateend, categories=True, scores=True)
+        plot(antilope, datebegin, dateend, categories=True, scores=True)
 
     else:
 
