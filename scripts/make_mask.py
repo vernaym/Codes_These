@@ -308,7 +308,8 @@ def add_radar_positions(ax):
         ladole      = dict(lat=46.42565, lon=6.10001, alt=1677, name='La Dole'),
     )
     def getImage(path):
-       return OffsetImage(plt.imread(path, format="png"), zoom=0.03)
+       #return OffsetImage(plt.imread(path, format="png"), zoom=0.03)
+       return OffsetImage(plt.imread(path, format="png"), zoom=0.02)
 
     symbole_radar = '/home/vernaym/These/NO_TRANSFER/figures/symbole_radar_maroon.png'
     for radar, infos in radars.items():
@@ -567,7 +568,7 @@ def plot_and_save(field, name, cmap=plt.cm.Greys, vmin=None, vmax=None, scores=N
     field.to_netcdf(os.path.join(dirsave, f'{name}.nc').encode('utf-8'))
     plt.close(fig)
 
-def plot_field(fig, ax, field, cmap=None, vmin=None, vmax=None, scores=None, colorbar=True, elevation=False, coords=False):
+def plot_field(fig, ax, field, cmap=None, vmin=None, vmax=None, scores=None, colorbar=True, elevation=False, coords=False, categories=False):
 
     if vmin is None:
         vmin = np.nanmin(field)
@@ -580,7 +581,21 @@ def plot_field(fig, ax, field, cmap=None, vmin=None, vmax=None, scores=None, col
         norm = matplotlib.colors.BoundaryNorm(thresholds, cmap.N)
         cml = field.plot(ax=ax, cmap=cmap, norm=norm, add_colorbar=False)
     else:
-        cml = field.plot(ax=ax, cmap=cmap, vmin=vmin, vmax=vmax, add_colorbar=False)
+        if categories:
+            # To group by range of data
+            cmaplist = [cmap(i) for i in range(20, cmap.N+1)]
+            cmap = matplotlib.colors.LinearSegmentedColormap.from_list('Custom cmap', cmaplist, cmap.N-20)
+            # define the bins and normalize
+            bounds = np.arange(vmin, vmax, 200)
+            #norm = matplotlib.colors.BoundaryNorm(bounds, cmap.N)
+            norm = matplotlib.colors.BoundaryNorm(bounds, len(bounds)-1)
+            lons, lats = np.meshgrid(field.lon.data, field.lat.data)
+            cml = ax.contourf(lons, lats, field.data, cmap=cmap, levels=bounds, transform=ccrs.PlateCarree(), alpha=1, antialiased=True, extend='both')
+            # Remove lines
+            for c in cml.collections:
+                c.set_edgecolor("face")
+        else:
+            cml = field.plot(ax=ax, cmap=cmap, vmin=vmin, vmax=vmax, add_colorbar=False)
     cml.set_edgecolor('face')
 
     if scores is not None:
@@ -615,9 +630,9 @@ def plot_field(fig, ax, field, cmap=None, vmin=None, vmax=None, scores=None, col
         #plt.subplots_adjust(bottom=0.05, left=0, right=0.8, top=0.95)
         #plt.subplots_adjust(bottom=0.05, left=0, top=0.95, wspace=0.05)
         #cax = plt.axes((0.9, 0.07, 0.03, 0.9))
-        plt.subplots_adjust(bottom=0.05, left=0.1, right=0.88, top=0.95)
-        cax = plt.axes((0.89, 0.055, 0.03, 0.89))
-        cb = fig.colorbar(cml, cax=cax)
+        #plt.subplots_adjust(bottom=0.05, left=0.1, right=0.88, top=0.95)
+        #cax = plt.axes((0.89, 0.055, 0.03, 0.89))
+        cb = fig.colorbar(cml, ax=ax)
         #cb.set_label(field.name, fontsize=24)
         #cb.ax.tick_params(labelsize=20)
         cb.set_label(field.name, fontsize=24)

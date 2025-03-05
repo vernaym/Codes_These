@@ -3,16 +3,26 @@
 # Auteur: Matthieu Vernay
 # Date : 5/03/2025
 
+import os
 import numpy as np
 import pandas as pd
 import xarray as xr
 
 import matplotlib.pyplot as plt
+import cartopy.crs as ccrs
 
 from pykrige.uk import UniversalKriging
 
+from These.scripts import make_mask
+
+savedir = '/home/vernaym/workdir/ASSIMILATION/mask/alp'
+
 datebegin = '2021-07-31 06'
 dateend   = '2022-08-01 06'
+latmax = 46.45
+latmin = 44.1
+lonmin = 5.4
+lonmax = 7.2
 
 
 def read_obs_auto_accumulation():
@@ -57,37 +67,56 @@ def compute_reference_field(df, ds):
     UK = UniversalKriging(
         df.lon,
         df.lat,
-        df.rr * 1.5,
+        df.rr,
         drift_terms      = ['external_Z'],
         external_drift   = ds.cumul,
         external_drift_x = ds.lon,
         external_drift_y = ds.lat,
     )
-    out, ss = UK.execute("grid", ds.lon, ds.lat)
+    kg, ss = UK.execute("grid", ds.lon, ds.lat)
+    out = xr.DataArray(
+        data = kg,
+        dims = ["lat", "lon"],
+        coords = dict(
+            lon = (('lon'), ds.lon.data),
+            lat = (('lat'), ds.lat.data),
+        ),
+    )
 
     return out
 
 
-def plot_field(field, cmap=plt.cm.YlGnBu, origin='lower', label=None, vmin=None, vmax=None):
+def plot_ratio(field, cmap=plt.cm.YlGnBu, origin='lower', vmin=None, vmax=None):
 
-    im = plt.imshow(field, origin=origin, cmap=cmap, vmin=vmin, vmax=vmax)
-    plt.colorbar(im, label=label)
-    plt.show()
+    fig, ax = plt.subplots(1, 1, figsize=(14, 14), subplot_kw=dict(projection=ccrs.PlateCarree()), layout='compressed')
+    ax.set_extent([lonmin, lonmax, latmin, latmax], crs=ccrs.PlateCarree())
+    ax.set_title('')
+    make_mask.plot_field(fig, ax, field, cmap=cmap, vmin=vmin, vmax=vmax, elevation=True, coords=False,
+            colorbar=True)
+    fig.savefig(os.path.join(savedir, 'Estimated_ratio_from_kriging.pdf'), format='pdf')
 
 
-def plot_fields(arome, reference_field, antilope):
-    fig, ax = plt.subplots(1, 3, sharex=True, sharey=True)
+def plot_fields(arome, reference_field, antilope, gauges):
+    fig, ax = plt.subplots(1, 3, figsize=(14, 6), sharex=True, sharey=True,
+            subplot_kw=dict(projection=ccrs.PlateCarree()), layout='compressed')
+    for axis in ax:
+        # axis.set_extent([antilope.lon.min(), antilope.lon.max(), antilope.lat.min(), antilope.lat.max()],
+        axis.set_extent([lonmin, lonmax, latmin, latmax], crs=ccrs.PlateCarree())
     vmax = max(np.max(reference_field), antilope.cumul.max(), arome.cumul.max())
-    im = ax[0].imshow(arome.cumul, origin='lower', cmap=plt.cm.YlGnBu, vmin=200, vmax=vmax)
+    cmap = plt.cm.YlGnBu
+    make_mask.plot_field(fig, ax[0], arome.cumul, cmap=cmap, vmin=400, vmax=vmax, elevation=True, coords=False,
+            colorbar=False, categories=False)
     ax[0].set_title('AROME')
-    im = ax[1].imshow(reference_field, cmap=plt.cm.YlGnBu, vmin=200, vmax=vmax)
+    make_mask.plot_field(fig, ax[1], reference_field, cmap=cmap, vmin=400, vmax=vmax, elevation=True, coords=False,
+            colorbar=False, categories=False)
+    gauges.plot.scatter('lon', 'lat', c='rr', edgecolor='black', cmap=plt.cm.YlGnBu, vmin=400, vmax=vmax, ax=ax[1],
+            colorbar=False)
     ax[1].set_title('Reference Field')
-    im = ax[2].imshow(antilope.cumul, origin='lower', cmap=plt.cm.YlGnBu, vmin=200, vmax=vmax)
+    im = make_mask.plot_field(fig, ax[2], antilope.cumul, cmap=cmap, vmin=400, vmax=vmax, elevation=True, coords=False,
+            colorbar=False, categories=False)
     ax[2].set_title('ANTILOPE')
-    fig.subplots_adjust(right=0.9)
-    cbar_ax = fig.add_axes([0.92, 0.28, 0.02, 0.43])
-    fig.colorbar(im, cax=cbar_ax, label=f'Precipitation accumulation {datebegin} - {dateend} (kg/m²)')
-    plt.show()
+    plt.colorbar(im, ax=ax, label=f'Precipitation accumulation {datebegin}h - {dateend}h (kg/m²)')
+    fig.savefig(os.path.join(savedir, 'AROME_reference_ANTILOPE.pdf'), format='pdf')
 
 
 if __name__ == '__main__':
@@ -100,10 +129,9 @@ if __name__ == '__main__':
     antilope = antilope.where((antilope.lat == arome.lat) & (antilope.lon == arome.lon))
 
     reference_field = compute_reference_field(obs_auto, arome)
-    # plot_field(reference_field, label='Precipitation accumulation between 2021080106 and 2022080106 (kg/m²)')
 
-    plot_fields(arome, reference_field, antilope)
+    plot_fields(arome, reference_field, antilope, obs_auto)
 
     ratio = antilope.cumul / reference_field
-    # ratio = antilope.cumul / np.flipud(reference_field)
-    plot_field(ratio, label='ANTILOPE / reference ratio', origin='lower', cmap=plt.cm.RdBu_r, vmin=0.4, vmax=1.6)
+    ratio = ratio.rename('ANTILOPE / reference ratio')
+    plot_ratio(ratio, origin='lower', cmap=plt.cm.RdBu_r, vmin=0.6, vmax=1.4)
