@@ -553,8 +553,8 @@ def read_obs(args):
             xpid           = 'raw@vernaym',
             vapp           = 'antilope',
             block          = 'hourly',
-            datebegin      = Date(args.datebegin).ymd6h,
-            dateend        = Date(args.dateend).ymd6h,
+            datebegin      = '2021080106',
+            dateend        = '2022080106',
             filename       = filename,
             namespace      = 'vortex.multi.fr',
         )
@@ -1932,8 +1932,76 @@ class RandomSampling(Assimilation):
         )
 
         if self.plot:
-            text = zip(bias.lon.values, bias.lat.values, bias.values)
-            #text = zip(ratio.lon.data, ratio.lat.data, ratio.data)
+            if obs_auto is not None:
+                text = zip(bias.lon.values, bias.lat.values, bias.values)
+                npoints = len(evaluation_points)
+                if npoints <=3:
+                    nrow = 1
+                    ncol = npoints
+                elif npoints <= 8:
+                    nrow = 2
+                    ncol = math.ceil(npoints/2)
+                elif npoints <= 12:
+                    nrow = 3
+                    ncol = math.ceil(npoints/3)
+                elif npoints <= 16:
+                    nrow = 4
+                    ncol = 4
+                elif npoints <= 21:
+                    nrow = 7
+                    ncol = 3
+                elif npoints <= 24:
+                    nrow = 6
+                    ncol = 4
+                elif npoints <= 28:
+                    nrow = 7
+                    ncol = 4
+                elif npoints <= 32:
+                    nrow = 8
+                    ncol = 4
+                elif npoints <= 35:
+                    nrow = 7
+                    ncol = 5
+                else:
+                    nrow = 7
+                    ncol = 7
+                #point = np.where(Y==np.nanmax(Y))  # max observation (plot only)
+                # TODO : plot distributions for reference points and add reference
+                #point = np.where(sd==np.nanmax(sd))  # max error (plot only)
+                # plot distributions
+                fig, ax = plt.subplots(nrows=nrow, ncols=ncol, figsize=(10*ncol,10*nrow))
+                if npoints == 1:
+                    ax = np.array([[ax]])
+                elif npoints <=3:
+                    ax = np.array([ax])
+                i = 0
+                j = 0
+                ymax = list()
+                if nivometeo is not None:
+                    for poste in nivometeo.num_poste.data:
+                        ref = nivometeo.sel(num_poste=poste)
+                        lat = ref.lat.data
+                        lon = ref.lon.data
+                        reference = ref.obs.data
+                        ax[i,j].bar(reference, 1, width=0.3, label='Reference observation', color='Green', alpha=1)
+                        original_obs = parameters.sel(lat=lat, lon=lon, method='nearest').rr.data
+                        #original_obs = parameters.rr.data[point]
+                        ax[i,j].bar(original_obs, 1, width=0.3, label='Original observation', color='k', alpha=0.5)
+                        #obs = Y[point][0]
+                        new_obs = analysis.sel(lat=lat, lon=lon, member=0, method='nearest').data
+                        ax[i,j].bar(new_obs, 1, width=0.3, color='red', alpha=1, label='Corrected observation')
+                        #sd = sd[point][0]
+                        std = error.sel(lat=lat, lon=lon, method='nearest').data
+                        #ax = plot_distribution(ax, np.square(obs), np.square(sd), label=f'New observation distribution (sd={np.square(sd)})', color='red')
+                        #ax[i,j] = plot_distribution(ax[i,j], new_obs, std, label=f'New observation distribution (std={np.round(std, 2)})', color='red')  # sigma --> sigma² dans loi normale
+                        ymax.append(max(reference, original_obs, new_obs))
+                        j = j + 1
+                        if j==ncol:
+                            j = 0
+                            i = i + 1
+            else:
+                text = None
+
             self.plot_array(analysis.sel(member=0), parameters.rr, 'Corrected field', f'{self.date_str}/Corrected_field_{self.date_str}_{self.domain}.pdf', vmin=0, vmax=self.rrmax, cmap=plt.cm.YlGnBu, text1=text)
             self.plot_array(error, parameters.rr, 'Error (kg/m²)', f'{self.date_str}/ERROR_{self.domain}.pdf', vmin=0, vmax=np.max(error), cmap=plt.cm.Reds, text1=text)
             #self.plot_array(reference_field, parameters.rr, 'Precipitation (mm)', f'{self.date_str}/Reference_{self.date_str}_{self.domain}.pdf', vmin=0, vmax=self.rrmax, cmap=plt.cm.YlGnBu, bias=nivometeo.obs)
@@ -1942,72 +2010,6 @@ class RandomSampling(Assimilation):
 #                text1 = zip(obs_auto.lon.values, obs_auto.lat.values, obs_auto.rr.values)
 #                text2 = zip(df.lon.values, df.lat.values, df.rr.values)  # nivometeo observations
 #                self.plot_array(reference_field, parameters, 'Precipitation (kg/m²)', f'{self.date_str}/Reference_{self.date_str}_{self.domain}.pdf', vmin=0, vmax=self.rrmax, cmap=plt.cm.YlGnBu, text1=text1, text2=text2)
-
-            npoints = len(evaluation_points)
-            if npoints <=3:
-                nrow = 1
-                ncol = npoints
-            elif npoints <= 8:
-                nrow = 2
-                ncol = math.ceil(npoints/2)
-            elif npoints <= 12:
-                nrow = 3
-                ncol = math.ceil(npoints/3)
-            elif npoints <= 16:
-                nrow = 4
-                ncol = 4
-            elif npoints <= 21:
-                nrow = 7
-                ncol = 3
-            elif npoints <= 24:
-                nrow = 6
-                ncol = 4
-            elif npoints <= 28:
-                nrow = 7
-                ncol = 4
-            elif npoints <= 32:
-                nrow = 8
-                ncol = 4
-            elif npoints <= 35:
-                nrow = 7
-                ncol = 5
-            else:
-                nrow = 7
-                ncol = 7
-            #point = np.where(Y==np.nanmax(Y))  # max observation (plot only)
-            # TODO : plot distributions for reference points and add reference
-            #point = np.where(sd==np.nanmax(sd))  # max error (plot only)
-            # plot distributions
-            fig, ax = plt.subplots(nrows=nrow, ncols=ncol, figsize=(10*ncol,10*nrow))
-            if npoints == 1:
-                ax = np.array([[ax]])
-            elif npoints <=3:
-                ax = np.array([ax])
-            i = 0
-            j = 0
-            ymax = list()
-            if nivometeo is not None:
-                for poste in nivometeo.num_poste.data:
-                    ref = nivometeo.sel(num_poste=poste)
-                    lat = ref.lat.data
-                    lon = ref.lon.data
-                    reference = ref.obs.data
-                    ax[i,j].bar(reference, 1, width=0.3, label='Reference observation', color='Green', alpha=1)
-                    original_obs = parameters.sel(lat=lat, lon=lon, method='nearest').rr.data
-                    #original_obs = parameters.rr.data[point]
-                    ax[i,j].bar(original_obs, 1, width=0.3, label='Original observation', color='k', alpha=0.5)
-                    #obs = Y[point][0]
-                    new_obs = analysis.sel(lat=lat, lon=lon, member=0, method='nearest').data
-                    ax[i,j].bar(new_obs, 1, width=0.3, color='red', alpha=1, label='Corrected observation')
-                    #sd = sd[point][0]
-                    std = error.sel(lat=lat, lon=lon, method='nearest').data
-                    #ax = plot_distribution(ax, np.square(obs), np.square(sd), label=f'New observation distribution (sd={np.square(sd)})', color='red')
-                    #ax[i,j] = plot_distribution(ax[i,j], new_obs, std, label=f'New observation distribution (std={np.round(std, 2)})', color='red')  # sigma --> sigma² dans loi normale
-                    ymax.append(max(reference, original_obs, new_obs))
-                    j = j + 1
-                    if j==ncol:
-                        j = 0
-                        i = i + 1
 
             fig1,ax1 = plt.subplots(nrows=4, ncols=4, figsize=figsize[domain]['ensembleplot'])
             #fig2,ax2 = plt.subplots(nrows=2, ncols=8, figsize=(16,10))
@@ -2043,38 +2045,38 @@ class RandomSampling(Assimilation):
                     i = i + 1
 
         if self.plot:
-            # Plot analysis distribution
-            i = 0
-            j = 0
-            if nivometeo is not None:
-                for poste in nivometeo.num_poste.data:
-                    ref = nivometeo.sel(num_poste=poste)
-                    lat = ref.lat.data
-                    lon = ref.lon.data
-                    #ens = analysis.isel(lat=point[0], lon=point[1]).data.flatten()
-                    ens = analysis.sel(lat=ref.lat.data, lon=ref.lon.data, method='nearest').data.flatten()
-                    mu = np.mean(ens)
-                    #std = np.sqrt(np.sum((ens-mu)**2)/16)
-                    std = np.sqrt(np.mean((ens-mu)**2))
-                    ax[i,j] = plot_distribution(ax[i,j], mu, std, ensemble=ens, label='Analysis', color='blue', linewidth=1)
-                    #ax = plot_distribution(ax, mu, np.square(sd[point]), label='Analysis theoretical PDF', color='k', linewidth=1)
-                    std = error.sel(lat=ref.lat.data, lon=ref.lon.data, method='nearest').data
-                    #ax[i,j] = plot_distribution(ax[i,j], mu, std, label='Analysis theoretical PDF', color='k', linewidth=1)
-                    ax[i,j].legend()
-                    #ax[i,j].set_xlim(left=0, right=np.max(ens)*2)
-                    ax[i,j].set_xlim(left=0, right=80)
-                    #ax[i,j].set_ylim(top=norm.pdf(mu, loc=mu, scale=std)*1.2)
-                    ax[i,j].set_ylim(top=0.06)
-                    ax[i,j].set_xlabel('Precipitation (kg/m²/24h)')
-                    ymax[i+j] = max(ymax[i+j], np.max(ens))*1.1
-                    j = j + 1
-                    if j==ncol:
-                        j = 0
-                        i = i + 1
-            if not os.path.exists(f'{self.date_str}/distributions'):
-                os.makedirs(f'{self.date_str}/distributions')
-            fig.savefig(f'{self.date_str}/distributions/DISTRIBUTION_ANALYSE_{domain}.pdf')
-            plt.close(fig)
+#            # Plot analysis distribution
+#            i = 0
+#            j = 0
+#            if nivometeo is not None:
+#                for poste in nivometeo.num_poste.data:
+#                    ref = nivometeo.sel(num_poste=poste)
+#                    lat = ref.lat.data
+#                    lon = ref.lon.data
+#                    #ens = analysis.isel(lat=point[0], lon=point[1]).data.flatten()
+#                    ens = analysis.sel(lat=ref.lat.data, lon=ref.lon.data, method='nearest').data.flatten()
+#                    mu = np.mean(ens)
+#                    #std = np.sqrt(np.sum((ens-mu)**2)/16)
+#                    std = np.sqrt(np.mean((ens-mu)**2))
+#                    ax[i,j] = plot_distribution(ax[i,j], mu, std, ensemble=ens, label='Analysis', color='blue', linewidth=1)
+#                    #ax = plot_distribution(ax, mu, np.square(sd[point]), label='Analysis theoretical PDF', color='k', linewidth=1)
+#                    std = error.sel(lat=ref.lat.data, lon=ref.lon.data, method='nearest').data
+#                    #ax[i,j] = plot_distribution(ax[i,j], mu, std, label='Analysis theoretical PDF', color='k', linewidth=1)
+#                    ax[i,j].legend()
+#                    #ax[i,j].set_xlim(left=0, right=np.max(ens)*2)
+#                    ax[i,j].set_xlim(left=0, right=80)
+#                    #ax[i,j].set_ylim(top=norm.pdf(mu, loc=mu, scale=std)*1.2)
+#                    ax[i,j].set_ylim(top=0.06)
+#                    ax[i,j].set_xlabel('Precipitation (kg/m²/24h)')
+#                    ymax[i+j] = max(ymax[i+j], np.max(ens))*1.1
+#                    j = j + 1
+#                    if j==ncol:
+#                        j = 0
+#                        i = i + 1
+#            if not os.path.exists(f'{self.date_str}/distributions'):
+#                os.makedirs(f'{self.date_str}/distributions')
+#            fig.savefig(f'{self.date_str}/distributions/DISTRIBUTION_ANALYSE_{domain}.pdf')
+#            plt.close(fig)
 
             #ECM_max = np.square(np.nanmax(R))
             #ECM_max = np.nanmax(R.toarray())
@@ -2103,23 +2105,26 @@ class RandomSampling(Assimilation):
                 bias  = evaluation_points - allobs.rr.values
                 text = zip(bias.lon.data, bias.lat.data, bias.data)  # Raw observation error
                 #text = zip(ratio.lon.data, ratio.lat.data, ratio.data)  # Raw observation ratio
-                self.plot_obs(parameters, domain=domain, text1=text)
+            else:
+                text = None
 
-                if self.debiasing:
-                    # Compute error against debiased field
-                    evaluation_points = parameters.mu.sel(lat=xr.DataArray(allobs.lat.values, dims="poste"), lon=xr.DataArray(allobs.lon.values, dims="poste"), method='nearest')
-                    bias  = evaluation_points - allobs.rr.values
-                    text = zip(bias.lon.data, bias.lat.data, bias.data)
-                    #text = zip(ratio.lon.data, ratio.lat.data, ratio.data)
-                    self.plot_obs(parameters, var='mu', domain=domain, text1=text)
-                    evaluation_points = parameters.db.sel(lat=xr.DataArray(allobs.lat.values, dims="poste"), lon=xr.DataArray(allobs.lon.values, dims="poste"), method='nearest')
-                    bias  = evaluation_points - allobs.rr.values
-                    text = zip(bias.lon.data, bias.lat.data, bias.data)
-                    self.plot_obs(parameters, var='db', domain=domain, text1=text)
-                    #self.plot_obs(parameters, var='obs', domain=domain)
-                    #parameters['diff'] = parameters.obs-parameters.mu
-                    #parameters['diff'] = parameters.obs-parameters.rr  # !! TODO : TMP !!
-                    #self.plot_obs(parameters, var='diff', domain=domain)
+            self.plot_obs(parameters, domain=domain, text1=text)
+
+            if self.debiasing:
+                # Compute error against debiased field
+                evaluation_points = parameters.mu.sel(lat=xr.DataArray(allobs.lat.values, dims="poste"), lon=xr.DataArray(allobs.lon.values, dims="poste"), method='nearest')
+                bias  = evaluation_points - allobs.rr.values
+                text = zip(bias.lon.data, bias.lat.data, bias.data)
+                #text = zip(ratio.lon.data, ratio.lat.data, ratio.data)
+                self.plot_obs(parameters, var='mu', domain=domain, text1=text)
+                evaluation_points = parameters.db.sel(lat=xr.DataArray(allobs.lat.values, dims="poste"), lon=xr.DataArray(allobs.lon.values, dims="poste"), method='nearest')
+                bias  = evaluation_points - allobs.rr.values
+                text = zip(bias.lon.data, bias.lat.data, bias.data)
+                self.plot_obs(parameters, var='db', domain=domain, text1=text)
+                #self.plot_obs(parameters, var='obs', domain=domain)
+                #parameters['diff'] = parameters.obs-parameters.mu
+                #parameters['diff'] = parameters.obs-parameters.rr  # !! TODO : TMP !!
+                #self.plot_obs(parameters, var='diff', domain=domain)
 
 
 

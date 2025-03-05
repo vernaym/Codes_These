@@ -220,7 +220,7 @@ def interpolate(field, uncertainty):
     #new = field.where(uncertainty < 0.5).rio.write_nodata(np.nan).rename({'lon': 'x', 'lat': 'y'}).rio.write_crs("EPSG:4326", inplace=True).rio.interpolate_na(method='cubic')
     #new = field.where(uncertainty < 0.1).rio.write_nodata(np.nan).rename({'lon': 'x', 'lat': 'y'}).rio.write_crs("EPSG:4326", inplace=True).rio.interpolate_na(method='linear')
     #new = field.where(uncertainty < 0.05).rio.write_nodata(np.nan).rename({'lon': 'x', 'lat': 'y'}).rio.write_crs("EPSG:4326", inplace=True).rio.interpolate_na(method='linear')
-    new = field.where(uncertainty < 0.05).rio.write_nodata(np.nan).rio.write_crs("EPSG:4326", inplace=True).rio.interpolate_na(method='linear')
+    new = field.rename({'lon': 'x', 'lat': 'y'}).where(uncertainty < 0.05).rio.write_nodata(np.nan).rio.write_crs("EPSG:4326", inplace=True).rio.interpolate_na(method='linear')
     # sd = xr.apply_ufunc(np.abs, field - new)
     smooth = field.copy()
     # Replace nan values by the mean
