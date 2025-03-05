@@ -557,7 +557,7 @@ def plot_and_save(field, name, cmap=plt.cm.Greys, vmin=None, vmax=None, scores=N
 #        fig, ax = plt.subplots(figsize=(33, 10))
 #    else:
 #        fig, ax = plt.subplots()
-    fig, ax = plt.subplots(figsize=(12 * width / height, 10), subplot_kw=dict(projection=ccrs.PlateCarree()))
+    fig, ax = plt.subplots(figsize=(12 * width / height, 10), subplot_kw=dict(projection=ccrs.PlateCarree()), layout='compressed')
     ax.set_extent([lonmin, lonmax, latmin, latmax], crs=ccrs.PlateCarree())
 
     im = plot_field(fig, ax, field, cmap=cmap, vmin=vmin, vmax=vmax, scores=scores, elevation=elevation, coords=coords)
@@ -963,7 +963,8 @@ def ratio_estimation(field, model=None, moving_window=25):
     #mean_ratio = np.sum(weights*ratios, axis=0)/W
     #mean_ratio[W==0] = np.nan
     tmp = to_xarray(mean_ratio, field, varname='mean_ratio')
-    plot_and_save(tmp, "Mean_ratio", cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=0, vmax=2, scores=scores)
+    plot_and_save(tmp, "Mean_ratio", cmap=plt.cm.RdBu_r, vmin=0.4, vmax=1.6, elevation=True)
+    #plot_and_save(tmp, "Mean_ratio", cmap=palettable.colorbrewer.diverging.RdBu7_r.mpl_colormap, vmin=0.6, vmax=1.4)
     D = np.sqrt(np.sum(weights*(ratios-mean_ratio)**2, axis=0)/W)
     D[W==0] = 0
     #D = np.sum(weights*(ratios-mean_ratio)**2, axis=0)/W
@@ -1152,7 +1153,7 @@ def ratio_estimation(field, model=None, moving_window=25):
     #if domain == 'alp':
     # From https://qiita.com/tsukada_cs/items/d282f27f4024d00d7022 :
     #plot_and_save(ratio_field, rationame, vmin=0.2, vmax=1.8, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, scores=scores)  # Albane's choice !
-    plot_and_save(ratio_field, rationame, vmin=0.6, vmax=1.4, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, scores=scores, elevation=True, coords=True)  # Albane's choice !
+    plot_and_save(ratio_field, rationame, vmin=0.6, vmax=1.4, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, elevation=True)  # Albane's choice !
     #plot_and_save(ratio_field, rationame + '_free_scale', vmin=0, vmax=2, cmap=plt.cm.coolwarm, scores=scores)
     #plot_and_save(np.abs(observation_error), errorname, vmin=0, vmax=12, cmap=plt.cm.viridis, scores=scores)
     #plot_and_save(np.abs(observation_error), errorname, vmin=0, vmax=15, cmap=plt.cm.Reds, scores=scores)
@@ -1304,8 +1305,8 @@ if __name__ == "__main__":
     if domain == 'GrandesRousses':
         filename = 'CUMUL_ANTILOPEH_GrandesRousses_2021073106_2022070106.nc'
     else:
-        filename = 'CUMUL_ANTILOPE_alp_2021080106_2022080106.nc'
-        #filename =f'CUMUL_ANTILOPEH_{domain}_2021103000_2022060200.nc'
+        #filename = 'CUMUL_ANTILOPE_alp_2021080106_2022080106.nc'
+        filename =f'CUMUL_ANTILOPEH_{domain}_2021103000_2022060200.nc'
         #filename ='CUMUL_ANTILOPEQ_alp_2018080106_2019043006.nc'
     datebegin = filename.split('.')[0].split('_')[-2]
     dateend = filename.split('.')[0].split('_')[-1]
@@ -1321,7 +1322,7 @@ if __name__ == "__main__":
         # TODO : prendre un cumul sur la même période que ANTILOPE pour éviter de fausser la méthode avec des situations spécifiques
         model = model.where((model.lon>=lonmin) & (model.lon<=lonmax) & (model.lat<=latmax) & (model.lat>latmin-0.01), drop=True)
 
-    plot_antilope = True
+    plot_antilope = False
 
     if plot_antilope:
         #fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_{domain}_obs_auto.csv')
