@@ -1153,7 +1153,7 @@ def ratio_estimation(field, model=None, moving_window=25):
     #if domain == 'alp':
     # From https://qiita.com/tsukada_cs/items/d282f27f4024d00d7022 :
     #plot_and_save(ratio_field, rationame, vmin=0.2, vmax=1.8, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, scores=scores)  # Albane's choice !
-    plot_and_save(ratio_field, rationame, vmin=0.6, vmax=1.4, cmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, elevation=True)  # Albane's choice !
+    plot_and_save(ratio_field, rationame, vmin=0.6, vmax=1.4, cmap=plt.cm.RdBu_r, elevation=True)  # Albane's choice !
     #plot_and_save(ratio_field, rationame + '_free_scale', vmin=0, vmax=2, cmap=plt.cm.coolwarm, scores=scores)
     #plot_and_save(np.abs(observation_error), errorname, vmin=0, vmax=12, cmap=plt.cm.viridis, scores=scores)
     #plot_and_save(np.abs(observation_error), errorname, vmin=0, vmax=15, cmap=plt.cm.Reds, scores=scores)
