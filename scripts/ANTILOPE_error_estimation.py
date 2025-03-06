@@ -73,8 +73,13 @@ def compute_reference_field(df, ds):
         external_drift_x = ds.lon,
         external_drift_y = ds.lat,
     )
-    kg, ss = UK.execute("grid", ds.lon, ds.lat)
-    out = xr.DataArray(
+    kg, sd = UK.execute("grid", ds.lon, ds.lat)
+
+    # im = plt.imshow(np.flipud(np.sqrt(sd)/kg))
+    # plt.colorbar(im)
+    # plt.show()
+
+    kg = xr.DataArray(
         data = kg,
         dims = ["lat", "lon"],
         coords = dict(
@@ -83,7 +88,16 @@ def compute_reference_field(df, ds):
         ),
     )
 
-    return out
+    err = xr.DataArray(
+        data = np.sqrt(sd) / kg,
+        dims = ["lat", "lon"],
+        coords = dict(
+            lon = (('lon'), ds.lon.data),
+            lat = (('lat'), ds.lat.data),
+        ),
+    )
+
+    return kg, err
 
 
 def plot_ratio(field, cmap=plt.cm.YlGnBu, origin='lower', vmin=None, vmax=None):
@@ -128,10 +142,10 @@ if __name__ == '__main__':
     arome = arome.where((arome.lat == antilope.lat) & (arome.lon == antilope.lon))
     antilope = antilope.where((antilope.lat == arome.lat) & (antilope.lon == arome.lon))
 
-    reference_field = compute_reference_field(obs_auto, arome)
+    reference_field, error = compute_reference_field(obs_auto, arome)
 
-    plot_fields(arome, reference_field, antilope, obs_auto)
+    #plot_fields(arome, reference_field, antilope, obs_auto)
 
-    ratio = antilope.cumul / reference_field
+    ratio = np.where(error < 1, error, 1) * 1 + (1 - np.where(error < 1, error, 1)) * antilope.cumul / reference_field
     ratio = ratio.rename('ANTILOPE / reference ratio')
     plot_ratio(ratio, origin='lower', cmap=plt.cm.RdBu_r, vmin=0.6, vmax=1.4)
