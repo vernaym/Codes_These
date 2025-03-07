@@ -17,8 +17,10 @@ from These.scripts import make_mask
 
 savedir = '/home/vernaym/workdir/ASSIMILATION/mask/alp'
 
-datebegin = '2021-07-31 06'
+datebegin = '2021-07-31 07'
 dateend   = '2022-08-01 06'
+# datebegin = '2021-11-01'
+# dateend   = '2022-04-30'
 latmax = 46.45
 latmin = 44.1
 lonmin = 5.4
@@ -31,16 +33,19 @@ def read_obs_auto_accumulation():
     """
 
     src = '/home/vernaym/These/NO_TRANSFER/DATA/obs_horaires_RR_20210731_20230423.csv'
-    df = pd.read_csv(src, sep=';')
-    tmp = df[(df['date'] > datebegin) & (df['date'] <= dateend)]  # Same period as AROME accumulation
+    df = pd.read_csv(src, sep=';', parse_dates=['date'])
+    tmp = df[(df['date'] >= '2021-07-31 07') & (df['date'] <= '2022-08-01 06')]  # Same period as AROME accumulation
+    # tmp = tmp[tmp['date'].dt.month.isin([5, 6, 7, 8, 9])]  # Same period as AROME accumulation
     out = tmp.groupby('num_poste').agg({'rr': 'sum', 'lat': 'min', 'lon': 'min', 'alti': 'min', 'date': "count"})
-    out = out[out.date > 8700]  # Filter out stations with too many missing values
+    # out = out[out.date > 8700]  # Filter out stations with too many missing values
+    out = out[out.date > 3600]  # Filter out stations with too many missing values
 
     return out
 
 
 def read_AROME_accumulation():
     src = '/home/vernaym/These/NO_TRANSFER/DATA/CUMUL_AROME_2021073106_2022080106_alp.nc'
+    # src = '/home/vernaym/These/NO_TRANSFER/DATA/CUMUL_AROME_2021073106_2022080106_may-sep_alp.nc'
     ds = xr.open_dataset(src, engine='netcdf4')
     ds['lat'] = ds.lat.round(2)
     ds['lon'] = ds.lon.round(2)
@@ -50,6 +55,7 @@ def read_AROME_accumulation():
 
 def read_ANTILOPE_accumulation():
     src = '/home/vernaym/These/NO_TRANSFER/DATA/CUMUL_ANTILOPE_alp_2021080106_2022080106.nc'
+    # src = '/home/vernaym/These/NO_TRANSFER/DATA/CUMUL_ANTILOPE_2021073106_2022080106_may-sep_alp.nc'
     ds = xr.open_dataset(src, engine='netcdf4')
     ds['lat'] = ds.lat.round(2)
     ds['lon'] = ds.lon.round(2)
@@ -67,6 +73,7 @@ def compute_reference_field(df, ds):
     UK = UniversalKriging(
         df.lon,
         df.lat,
+        # df.rr * 1.2,
         df.rr,
         drift_terms      = ['external_Z'],
         external_drift   = ds.cumul,
@@ -75,7 +82,7 @@ def compute_reference_field(df, ds):
     )
     kg, sd = UK.execute("grid", ds.lon, ds.lat)
 
-    # im = plt.imshow(np.flipud(np.sqrt(sd)/kg))
+    # im = plt.imshow(np.flipud(np.sqrt(sd) / kg))
     # plt.colorbar(im)
     # plt.show()
 
@@ -107,7 +114,8 @@ def plot_ratio(field, cmap=plt.cm.YlGnBu, origin='lower', vmin=None, vmax=None):
     ax.set_title('')
     make_mask.plot_field(fig, ax, field, cmap=cmap, vmin=vmin, vmax=vmax, elevation=True, coords=False,
             colorbar=True)
-    fig.savefig(os.path.join(savedir, 'Estimated_ratio_from_kriging.pdf'), format='pdf')
+    fig.savefig(os.path.join(savedir, f'Estimated_ratio_from_kriging_{datebegin}_{dateend}.pdf'), format='pdf')
+    # fig.savefig(os.path.join(savedir, 'Estimated_ratio_from_kriging_may-sep.pdf'), format='pdf')
 
 
 def plot_fields(arome, reference_field, antilope, gauges):
@@ -130,7 +138,9 @@ def plot_fields(arome, reference_field, antilope, gauges):
             colorbar=False, categories=False)
     ax[2].set_title('ANTILOPE')
     plt.colorbar(im, ax=ax, label=f'Precipitation accumulation {datebegin}h - {dateend}h (kg/m²)')
-    fig.savefig(os.path.join(savedir, 'AROME_reference_ANTILOPE.pdf'), format='pdf')
+    fig.savefig(os.path.join(savedir, f'AROME_reference_ANTILOPE_{datebegin}_{dateend}.pdf'), format='pdf')
+    # plt.colorbar(im, ax=ax, label='Precipitation accumulation May - September (kg/m²)')
+    # fig.savefig(os.path.join(savedir, 'AROME_reference_ANTILOPE_may-sep.pdf'), format='pdf')
 
 
 if __name__ == '__main__':
@@ -144,8 +154,9 @@ if __name__ == '__main__':
 
     reference_field, error = compute_reference_field(obs_auto, arome)
 
-    #plot_fields(arome, reference_field, antilope, obs_auto)
+    plot_fields(arome, reference_field, antilope, obs_auto)
 
-    ratio = np.where(error < 1, error, 1) * 1 + (1 - np.where(error < 1, error, 1)) * antilope.cumul / reference_field
+    # ratio = np.where(error < 1, error, 1) * 1 + (1 - np.where(error < 1, error, 1)) * antilope.cumul / reference_field
+    ratio = antilope.cumul / reference_field
     ratio = ratio.rename('ANTILOPE / reference ratio')
-    plot_ratio(ratio, origin='lower', cmap=plt.cm.RdBu_r, vmin=0.6, vmax=1.4)
+    plot_ratio(ratio, origin='lower', cmap=plt.cm.RdBu_r, vmin=0.4, vmax=1.6)
