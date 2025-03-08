@@ -17,10 +17,10 @@ from These.scripts import make_mask
 
 savedir = '/home/vernaym/workdir/ASSIMILATION/mask/alp'
 
-datebegin = '2021-07-31 07'
-dateend   = '2022-08-01 06'
-# datebegin = '2021-11-01'
-# dateend   = '2022-04-30'
+# datebegin = '2021-07-31 07',
+# dateend   = '2022-08-01 06',
+datebegin = '2021-11-01'
+dateend   = '2022-04-30'
 latmax = 46.45
 latmin = 44.1
 lonmin = 5.4
@@ -35,7 +35,7 @@ def read_obs_auto_accumulation():
     src = '/home/vernaym/These/NO_TRANSFER/DATA/obs_horaires_RR_20210731_20230423.csv'
     df = pd.read_csv(src, sep=';', parse_dates=['date'])
     tmp = df[(df['date'] >= '2021-07-31 07') & (df['date'] <= '2022-08-01 06')]  # Same period as AROME accumulation
-    # tmp = tmp[tmp['date'].dt.month.isin([5, 6, 7, 8, 9])]  # Same period as AROME accumulation
+    tmp = tmp[tmp['date'].dt.month.isin([11, 12, 1, 2, 3, 4])]  # Same period as AROME accumulation
     out = tmp.groupby('num_poste').agg({'rr': 'sum', 'lat': 'min', 'lon': 'min', 'alti': 'min', 'date': "count"})
     # out = out[out.date > 8700]  # Filter out stations with too many missing values
     out = out[out.date > 3600]  # Filter out stations with too many missing values
@@ -44,8 +44,8 @@ def read_obs_auto_accumulation():
 
 
 def read_AROME_accumulation():
-    src = '/home/vernaym/These/NO_TRANSFER/DATA/CUMUL_AROME_2021073106_2022080106_alp.nc'
-    # src = '/home/vernaym/These/NO_TRANSFER/DATA/CUMUL_AROME_2021073106_2022080106_may-sep_alp.nc'
+    # src = '/home/vernaym/These/NO_TRANSFER/DATA/CUMUL_AROME_2021073106_2022080106_alp.nc'
+    src = '/home/vernaym/These/NO_TRANSFER/DATA/CUMUL_AROME_2021073106_2022080106_nov-apr_alp.nc'
     ds = xr.open_dataset(src, engine='netcdf4')
     ds['lat'] = ds.lat.round(2)
     ds['lon'] = ds.lon.round(2)
@@ -54,8 +54,8 @@ def read_AROME_accumulation():
 
 
 def read_ANTILOPE_accumulation():
-    src = '/home/vernaym/These/NO_TRANSFER/DATA/CUMUL_ANTILOPE_alp_2021080106_2022080106.nc'
-    # src = '/home/vernaym/These/NO_TRANSFER/DATA/CUMUL_ANTILOPE_2021073106_2022080106_may-sep_alp.nc'
+    # src = '/home/vernaym/These/NO_TRANSFER/DATA/CUMUL_ANTILOPE_alp_2021080106_2022080106.nc'
+    src = '/home/vernaym/These/NO_TRANSFER/DATA/CUMUL_ANTILOPE_2021073106_2022080106_nov-apr_alp.nc'
     ds = xr.open_dataset(src, engine='netcdf4')
     ds['lat'] = ds.lat.round(2)
     ds['lon'] = ds.lon.round(2)
@@ -158,5 +158,7 @@ if __name__ == '__main__':
 
     # ratio = np.where(error < 1, error, 1) * 1 + (1 - np.where(error < 1, error, 1)) * antilope.cumul / reference_field
     ratio = antilope.cumul / reference_field
+    ratio = ratio.rename('ratio')
+    ratio.to_netcdf(os.path.join(savedir, f'Estimated_ratio_from_kriging_{datebegin}_{dateend}.nc'))
     ratio = ratio.rename('ANTILOPE / reference ratio')
-    plot_ratio(ratio, origin='lower', cmap=plt.cm.RdBu_r, vmin=0.4, vmax=1.6)
+    plot_ratio(ratio, origin='lower', cmap=plt.cm.RdBu_r, vmin=0.3, vmax=1.7)
