@@ -548,8 +548,10 @@ def read_obs(args):
             xpid           = 'raw@vernaym',
             vapp           = 'antilope',
             block          = 'hourly',
-            datebegin      = Date(args.datebegin).ymd6h,
-            dateend        = Date(args.dateend).ymd6h,
+            #datebegin      = Date(args.datebegin).ymd6h,
+            #dateend        = Date(args.dateend).ymd6h,
+            datebegin      = '2021080106',
+            dateend        = '2022080106',
             filename       = filename,
             namespace      = 'vortex.multi.fr',
         )
@@ -837,8 +839,11 @@ class Assimilation(object):
                 ratio = mask.ratio
         else:
             ratio = 1  # No debiasing
-        parameters['mu'] = parameters['rr'] / ratio  # TODO : check if the ensemble after assimilation is not biased
+
+        # In case of missed precipitation, replace value by the moving average
+        #parameters['mu'] = (parameters['rr'] + mask * smooth) / ratio  # TODO : check if the ensemble after assimilation is not biased
         self.ratio = ratio
+        parameters['ratio'] = ratio
 
         # Observation error
         # Import multiplicative mask to increase observation error where necessary
@@ -890,7 +895,8 @@ class Assimilation(object):
 #                self.mask = None
 #                parameters['sigma'] = (0.261 + 0.263 * parameters['mu'])  # No mask
         else:
-            parameters['sigma'] = (0.261 + 0.263 * parameters['mu'])  # According to the linear regression of ANTILOPE RMSE vs ANTILOPE RR
+            #parameters['sigma'] = (0.261 + 0.263 * parameters['mu'])  # According to the linear regression of ANTILOPE RMSE vs ANTILOPE RR
+            parameters['sigma'] = (0.261 + 0.263 * parameters['rr'])  # According to the linear regression of ANTILOPE RMSE vs ANTILOPE RR
 
         ####################################################################################################################################################################
         # USELESS with gaussian distribution
@@ -1729,6 +1735,18 @@ class RandomSampling(Assimilation):
 
             parameters = actual_parameters.sel({'time':date}).compute()
 
+            # Try to detect "missed" precipitation
+            smooth = uniform_filter(parameters['rr'].data, 10)
+            smooth = np.where(smooth>0, np.round(smooth, 1), 0)
+            # Missed precip = pixel with no precip but precipitation around
+            mask = np.where((parameters['rr'].data == 0) & (smooth > 0), 1, 0)
+
+            # In case of missed precipitation, replace value by the moving average
+            parameters['mu'] = (parameters['rr'] + mask * smooth) / parameters['ratio'].data
+
+            # Define error for perturbations
+            parameters['error'] = abs(parameters.mu - parameters.rr) / np.where(smooth > 1, smooth, 1)
+
             var = 'mu'
             if self.obs_auto is not None:
                 obs_auto = self.obs_auto[self.obs_auto.date==date]  # Select date
@@ -1850,16 +1868,18 @@ class RandomSampling(Assimilation):
                 np.nanmax(parameters.mu.data),
                 ))
 
-        R, Rstat, Rdyn, updated_obs = self.observation_ECM_new(parameters, date)
-        Y = updated_obs.data  # Observation vector. WARNING : Use mu to take debiasing into account !
+        #R, Rstat, Rdyn, updated_obs = self.observation_ECM_new(parameters, date)
+        #Y = updated_obs.data  # Observation vector. WARNING : Use mu to take debiasing into account !
 
         analysis = xr.DataArray(
             name   = 'rr',
             dims   = ["member", "lat", "lon"],
             coords = dict(lon=parameters.lon, lat=parameters.lat, member=range(0, nmembers+1)),
         )
-        obs = Y.reshape((len(parameters.lat), len(parameters.lon)))  # Get observation field
+        #obs = Y.reshape((len(parameters.lat), len(parameters.lon)))  # Get observation field
+        obs = parameters.mu.data  # De-biasing only
         obs = np.round(obs, 1)  # Round precipitation <0.1 at 0 (different distribution used in this case) TODO : convertir dans l'espace r^1/2
+        error = parameters['error'].data
 
         # Fill first member with corrected observation
         analysis.loc[{'member':0}] = obs
@@ -1867,6 +1887,7 @@ class RandomSampling(Assimilation):
         self.newlocalfield[0][:, :, idd] = analysis.sel({'member': 0}).data
 
         # Extract reference points and corresponding values
+        nivometeo = None
         if obs_auto is not None:
             obs_auto.drop(columns=['date', 'reseau_poste'], inplace=True)
             if date in self.nivometeo.date:
@@ -1875,7 +1896,6 @@ class RandomSampling(Assimilation):
                 allobs = pd.concat([obs_auto, df])
             else:
                 allobs = obs_auto.copy()
-                nivometeo = None
             allobs = allobs[~np.isnan(allobs.rr)]
 
             # Get data over evaluation points and compute errors
@@ -1899,31 +1919,34 @@ class RandomSampling(Assimilation):
 #                coords = dict(lon=parameters.lon, lat=parameters.lat),
 #            )
 
-        sd1 = Rstat.diagonal().reshape((len(parameters.lat), len(parameters.lon)))  # Get standard deviation field
-        #sd1 = uniform_filter(sd1, 3)
-        sd2 = Rdyn.diagonal().reshape((len(parameters.lat), len(parameters.lon)))
-        #sd2 = uniform_filter(sd2, 3)
-        sd = R.diagonal().reshape((len(parameters.lat), len(parameters.lon)))  # Get standard deviation field
-        #sd = sd1 + sd2
-        # If no precipitation have been introduced by the WMA we are confident that there is actually no precipitation
-        # Avoid small dispersion around 0mm and flatten the rank histogram
-        sd[obs==0] = 0
-        sd1[obs==0] = 0
-        sd2[obs==0] = 0
-
-        error = xr.DataArray(
-            name   = 'error',
-            #data   = np.square(sd),
-            data   = sd,
-            dims   = ["lat", "lon"],
-            coords = dict(lon=parameters.lon, lat=parameters.lat),
-        )
+#        sd1 = Rstat.diagonal().reshape((len(parameters.lat), len(parameters.lon)))  # Get standard deviation field
+#        #sd1 = uniform_filter(sd1, 3)
+#        sd2 = Rdyn.diagonal().reshape((len(parameters.lat), len(parameters.lon)))
+#        #sd2 = uniform_filter(sd2, 3)
+#        sd = R.diagonal().reshape((len(parameters.lat), len(parameters.lon)))  # Get standard deviation field
+#        #sd = sd1 + sd2
+#        # If no precipitation have been introduced by the WMA we are confident that there is actually no precipitation
+#        # Avoid small dispersion around 0mm and flatten the rank histogram
+#        sd[obs==0] = 0
+#        sd1[obs==0] = 0
+#        sd2[obs==0] = 0
+#
+#        error = xr.DataArray(
+#            name   = 'error',
+#            #data   = np.square(sd),
+#            data   = sd,
+#            dims   = ["lat", "lon"],
+#            coords = dict(lon=parameters.lon, lat=parameters.lat),
+#        )
 
         if self.plot:
-            text = zip(bias.lon.values, bias.lat.values, bias.values)
+            if obs_auto is not None:
+                text = zip(bias.lon.values, bias.lat.values, bias.values)
+            else:
+                text = None
             #text = zip(ratio.lon.data, ratio.lat.data, ratio.data)
             self.plot_array(analysis.sel(member=0), parameters.rr, 'Corrected field', f'{self.date_str}/Corrected_field_{self.date_str}_{self.domain}.pdf', vmin=0, vmax=self.rrmax, cmap=plt.cm.YlGnBu, text1=text)
-            self.plot_array(error, parameters.rr, 'Error (kg/m²)', f'{self.date_str}/ERROR_{self.domain}.pdf', vmin=0, vmax=np.max(error), cmap=plt.cm.Reds, text1=text)
+            self.plot_array(error, parameters.rr, 'Error (kg/m²)', f'{self.date_str}/ERROR_{self.domain}.pdf', vmin=0, vmax=np.nanmax(error), cmap=plt.cm.Reds, text1=text)
             #self.plot_array(reference_field, parameters.rr, 'Precipitation (mm)', f'{self.date_str}/Reference_{self.date_str}_{self.domain}.pdf', vmin=0, vmax=self.rrmax, cmap=plt.cm.YlGnBu, bias=nivometeo.obs)
 #            if kriging:
 #                #obs_auto = obs_auto[(obs_auto.lon<=np.max(parameters.lon.data)) & (obs_auto.lon>=np.min(parameters.lon.data)) & (obs_auto.lat<=np.max(parameters.lat.data)) & (obs_auto.lat>=np.min(parameters.lat.data))]
@@ -1931,71 +1954,72 @@ class RandomSampling(Assimilation):
 #                text2 = zip(df.lon.values, df.lat.values, df.rr.values)  # nivometeo observations
 #                self.plot_array(reference_field, parameters, 'Precipitation (kg/m²)', f'{self.date_str}/Reference_{self.date_str}_{self.domain}.pdf', vmin=0, vmax=self.rrmax, cmap=plt.cm.YlGnBu, text1=text1, text2=text2)
 
-            npoints = len(evaluation_points)
-            if npoints <=3:
-                nrow = 1
-                ncol = npoints
-            elif npoints <= 8:
-                nrow = 2
-                ncol = math.ceil(npoints/2)
-            elif npoints <= 12:
-                nrow = 3
-                ncol = math.ceil(npoints/3)
-            elif npoints <= 16:
-                nrow = 4
-                ncol = 4
-            elif npoints <= 21:
-                nrow = 7
-                ncol = 3
-            elif npoints <= 24:
-                nrow = 6
-                ncol = 4
-            elif npoints <= 28:
-                nrow = 7
-                ncol = 4
-            elif npoints <= 32:
-                nrow = 8
-                ncol = 4
-            elif npoints <= 35:
-                nrow = 7
-                ncol = 5
-            else:
-                nrow = 7
-                ncol = 7
-            #point = np.where(Y==np.nanmax(Y))  # max observation (plot only)
-            # TODO : plot distributions for reference points and add reference
-            #point = np.where(sd==np.nanmax(sd))  # max error (plot only)
-            # plot distributions
-            fig, ax = plt.subplots(nrows=nrow, ncols=ncol, figsize=(10*ncol,10*nrow))
-            if npoints == 1:
-                ax = np.array([[ax]])
-            elif npoints <=3:
-                ax = np.array([ax])
-            i = 0
-            j = 0
-            ymax = list()
-            if nivometeo is not None:
-                for poste in nivometeo.num_poste.data:
-                    ref = nivometeo.sel(num_poste=poste)
-                    lat = ref.lat.data
-                    lon = ref.lon.data
-                    reference = ref.obs.data
-                    ax[i,j].bar(reference, 1, width=0.3, label='Reference observation', color='Green', alpha=1)
-                    original_obs = parameters.sel(lat=lat, lon=lon, method='nearest').rr.data
-                    #original_obs = parameters.rr.data[point]
-                    ax[i,j].bar(original_obs, 1, width=0.3, label='Original observation', color='k', alpha=0.5)
-                    #obs = Y[point][0]
-                    new_obs = analysis.sel(lat=lat, lon=lon, member=0, method='nearest').data
-                    ax[i,j].bar(new_obs, 1, width=0.3, color='red', alpha=1, label='Corrected observation')
-                    #sd = sd[point][0]
-                    std = error.sel(lat=lat, lon=lon, method='nearest').data
-                    #ax = plot_distribution(ax, np.square(obs), np.square(sd), label=f'New observation distribution (sd={np.square(sd)})', color='red')
-                    #ax[i,j] = plot_distribution(ax[i,j], new_obs, std, label=f'New observation distribution (std={np.round(std, 2)})', color='red')  # sigma --> sigma² dans loi normale
-                    ymax.append(max(reference, original_obs, new_obs))
-                    j = j + 1
-                    if j==ncol:
-                        j = 0
-                        i = i + 1
+            if obs_auto is not None:
+                npoints = len(evaluation_points)
+                if npoints <=3:
+                    nrow = 1
+                    ncol = npoints
+                elif npoints <= 8:
+                    nrow = 2
+                    ncol = math.ceil(npoints/2)
+                elif npoints <= 12:
+                    nrow = 3
+                    ncol = math.ceil(npoints/3)
+                elif npoints <= 16:
+                    nrow = 4
+                    ncol = 4
+                elif npoints <= 21:
+                    nrow = 7
+                    ncol = 3
+                elif npoints <= 24:
+                    nrow = 6
+                    ncol = 4
+                elif npoints <= 28:
+                    nrow = 7
+                    ncol = 4
+                elif npoints <= 32:
+                    nrow = 8
+                    ncol = 4
+                elif npoints <= 35:
+                    nrow = 7
+                    ncol = 5
+                else:
+                    nrow = 7
+                    ncol = 7
+                #point = np.where(Y==np.nanmax(Y))  # max observation (plot only)
+                # TODO : plot distributions for reference points and add reference
+                #point = np.where(sd==np.nanmax(sd))  # max error (plot only)
+                # plot distributions
+                fig, ax = plt.subplots(nrows=nrow, ncols=ncol, figsize=(10*ncol,10*nrow))
+                if npoints == 1:
+                    ax = np.array([[ax]])
+                elif npoints <=3:
+                    ax = np.array([ax])
+                i = 0
+                j = 0
+                ymax = list()
+                if nivometeo is not None:
+                    for poste in nivometeo.num_poste.data:
+                        ref = nivometeo.sel(num_poste=poste)
+                        lat = ref.lat.data
+                        lon = ref.lon.data
+                        reference = ref.obs.data
+                        ax[i,j].bar(reference, 1, width=0.3, label='Reference observation', color='Green', alpha=1)
+                        original_obs = parameters.sel(lat=lat, lon=lon, method='nearest').rr.data
+                        #original_obs = parameters.rr.data[point]
+                        ax[i,j].bar(original_obs, 1, width=0.3, label='Original observation', color='k', alpha=0.5)
+                        #obs = Y[point][0]
+                        new_obs = analysis.sel(lat=lat, lon=lon, member=0, method='nearest').data
+                        ax[i,j].bar(new_obs, 1, width=0.3, color='red', alpha=1, label='Corrected observation')
+                        #sd = sd[point][0]
+                        std = error.sel(lat=lat, lon=lon, method='nearest').data
+                        #ax = plot_distribution(ax, np.square(obs), np.square(sd), label=f'New observation distribution (sd={np.square(sd)})', color='red')
+                        #ax[i,j] = plot_distribution(ax[i,j], new_obs, std, label=f'New observation distribution (std={np.round(std, 2)})', color='red')  # sigma --> sigma² dans loi normale
+                        ymax.append(max(reference, original_obs, new_obs))
+                        j = j + 1
+                        if j==ncol:
+                            j = 0
+                            i = i + 1
 
             fig1,ax1 = plt.subplots(nrows=4, ncols=4, figsize=figsize[domain]['ensembleplot'])
             #fig2,ax2 = plt.subplots(nrows=2, ncols=8, figsize=(16,10))
@@ -2009,7 +2033,7 @@ class RandomSampling(Assimilation):
         draw_gauss = Preprocessing_ANTILOPE.random_draw(distribution='normal', members=len(analysis.member) - 1)
 
         for idx, member in enumerate(analysis.member.data[1:]):
-            ana = Preprocessing_ANTILOPE.perturb(obs, sd, draw_gamma[idx], draw_gauss[idx])
+            ana = Preprocessing_ANTILOPE.perturb(obs, error.data, draw_gamma[idx], draw_gauss[idx])
             analysis.loc[{'member': member}] = ana
 
             self.newlocalfield[member][:, :, idd] = analysis.sel({'member': member}).data
@@ -2058,17 +2082,18 @@ class RandomSampling(Assimilation):
                     if j==ncol:
                         j = 0
                         i = i + 1
-            if not os.path.exists(f'{self.date_str}/distributions'):
-                os.makedirs(f'{self.date_str}/distributions')
-            fig.savefig(f'{self.date_str}/distributions/DISTRIBUTION_ANALYSE_{domain}.pdf')
-            plt.close(fig)
+            if obs_auto is not None:
+                if not os.path.exists(f'{self.date_str}/distributions'):
+                    os.makedirs(f'{self.date_str}/distributions')
+                fig.savefig(f'{self.date_str}/distributions/DISTRIBUTION_ANALYSE_{domain}.pdf')
+                plt.close(fig)
 
             #ECM_max = np.square(np.nanmax(R))
             #ECM_max = np.nanmax(R.toarray())
-            ECM_max = max(np.nanmax(Rdyn.toarray()), np.nanmax(Rstat.toarray()))
-            self.plot_matrix(R, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_ECM_{domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.Reds)
-            self.plot_matrix(Rdyn, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_dyn_ECM_{domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.Reds)
-            self.plot_matrix(Rstat, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_stat_ECM_{domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.Reds)
+#            ECM_max = max(np.nanmax(Rdyn.toarray()), np.nanmax(Rstat.toarray()))
+#            self.plot_matrix(R, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_ECM_{domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.Reds)
+#            self.plot_matrix(Rdyn, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_dyn_ECM_{domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.Reds)
+#            self.plot_matrix(Rstat, parameters.rr, 'Observation_ECM', f'{self.date_str}/Observation_stat_ECM_{domain}.pdf', vmin=0, vmax=ECM_max, cmap=plt.cm.Reds)
 
             #parameters.mu.data = np.square(parameters.mu.data)
             #parameters.rr.data = np.square(parameters.rr.data)
