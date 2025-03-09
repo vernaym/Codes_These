@@ -441,7 +441,7 @@ def codistances(coords, domain='alp', ld=0.1, Zdist=False):  # TMP for illustrat
     return dist
 
 
-def random_draw(distribution='gamma', members=16):
+def random_draw(distribution='gamma', members=16, sort=True):
     """
     Return a sorted array (size=*members*) of randomly draw values from *distribution*
     """
@@ -460,7 +460,10 @@ def random_draw(distribution='gamma', members=16):
         print('Error : unknown distribution')
         return None
 
-    return np.sort(draw)
+    if sort:
+        return np.sort(draw)
+    else:
+        return draw
 
 
 def perturb(obs, sd, perturbation1, perturbation2, ratio=None, sd2=None, frac=0.3):
@@ -475,7 +478,8 @@ def perturb(obs, sd, perturbation1, perturbation2, ratio=None, sd2=None, frac=0.
     # WARNING : the small ensemble size (16) lead to a large variability
     # of the ensemble mean but this algorithm ensures that on average the ensemble
     # mean is centered on the corrected observation
-    ana = obs + obs * frac * perturbation1 + sd * perturbation2
+    smooth = uniform_filter(obs, 20)
+    ana = obs + smooth * frac * perturbation1 + sd * perturbation2
 
     if sd2 is not None:
         gamma = random_draw(distribution='gamma', members=1)[0]

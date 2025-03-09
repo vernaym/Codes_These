@@ -1734,18 +1734,42 @@ class RandomSampling(Assimilation):
                     os.makedirs(self.date_str)
 
             parameters = actual_parameters.sel({'time':date}).compute()
+            parameters['rr'].data = np.round(parameters['rr'].data, 1)
+
+            #tmp = parameters['rr'].sel(lon=slice(6.8, 6.9), lat=slice(45.8, 45.9))
 
             # Try to detect "missed" precipitation
             smooth = uniform_filter(parameters['rr'].data, 10)
-            smooth = np.where(smooth>0, np.round(smooth, 1), 0)
+            smooth = np.where(smooth > 0, np.round(smooth, 1), 0)
             # Missed precip = pixel with no precip but precipitation around
-            mask = np.where((parameters['rr'].data == 0) & (smooth > 0), 1, 0)
+            mask = np.where((parameters['rr'].data == 0 ) & (smooth > 0), 1, 0)
+            #mask = np.where(smooth > 5 * parameters['rr'].data, smooth, parameters['rr'].data)
 
             # In case of missed precipitation, replace value by the moving average
             parameters['mu'] = (parameters['rr'] + mask * smooth) / parameters['ratio'].data
+            # If the under-estimation is huge, replace value by the moving average
+            #parameters['mu'] = xr.where(abs(parameters['rr'] - smooth) > parameters['rr'].data / parameters['ratio'].data, smooth, parameters['rr'] / parameters['ratio'].data)
+            #parameters['mu'] = xr.where(smooth > 2 * parameters['rr'].data, smooth, parameters['rr']) / parameters['ratio'].data
+            #parameters['mu'] = xr.where((parameters['rr'].data < 1) & (smooth > 0), smooth, parameters['rr']) / parameters['ratio'].data
+
+            # If the under-estimation is huge, replace value by the moving average
+            musmooth = uniform_filter(parameters['mu'].data, 10)
+            parameters['mu'].data = np.where(abs(parameters['mu'] - musmooth) > parameters['mu'], musmooth, parameters['mu'].data)
+            #im = plt.imshow(abs(parameters['mu'] - musmooth), cmap=plt.cm.YlGnBu, origin='lower')
+            #plt.colorbar(im)
+            #plt.savefig(os.path.join(self.date_str, 'tmp.pdf'))
+            #plt.close('all')
+
 
             # Define error for perturbations
-            parameters['error'] = abs(parameters.mu - parameters.rr) / np.where(smooth > 1, smooth, 1)
+            # parameters['error'] = abs(parameters.mu - parameters.rr)
+            # * mu-rr to translate the estimated climatological ratio into a daily error
+            # * mu-musmooth to mitigate the introduced vertical gradient of precipitation
+            # parameters['error'] = abs(parameters.mu - parameters.rr) * (0.1 + abs(parameters['ratio'].data - 1))
+            #parameters['error'] = abs(parameters.mu - parameters.rr) * abs(parameters['ratio'].data - 1)
+            parameters['error'] = abs(parameters.mu - parameters.rr) * 0.1
+            #parameters['error'] = abs(parameters.mu - parameters.rr) * 0.2 + abs(parameters.mu - musmooth) * abs(parameters['ratio'].data - 1)
+            #parameters['error'] = abs(parameters.mu - parameters.rr) / musmooth
 
             var = 'mu'
             if self.obs_auto is not None:
@@ -2030,6 +2054,7 @@ class RandomSampling(Assimilation):
         #pond = self.pond.dot(diags(1/std.flatten(), 0))
 
         draw_gamma = Preprocessing_ANTILOPE.random_draw(distribution='gamma', members=len(analysis.member) - 1)
+        # draw_gamma = Preprocessing_ANTILOPE.random_draw(distribution='gamma', members=len(analysis.member) - 1, sort=False)
         draw_gauss = Preprocessing_ANTILOPE.random_draw(distribution='normal', members=len(analysis.member) - 1)
 
         for idx, member in enumerate(analysis.member.data[1:]):
@@ -2132,8 +2157,8 @@ class RandomSampling(Assimilation):
                     #parameters['diff'] = parameters.obs-parameters.mu
                     #parameters['diff'] = parameters.obs-parameters.rr  # !! TODO : TMP !!
                     #self.plot_obs(parameters, var='diff', domain=domain)
-
-
+            else:
+                self.plot_obs(parameters, domain=domain, text1=None)
 
             finalize_fig(fig1, im1, label='24-hour precipitation (kg/m²)', outname=f'{self.date_str}/ANALYSIS_{self.date_str}_{self.domain}.pdf')
 

@@ -73,10 +73,10 @@ def compute_reference_field(df, ds):
     UK = UniversalKriging(
         df.lon,
         df.lat,
-        # df.rr * 1.2,
-        df.rr,
+        df.rr * 1.2,
+        # df.rr,
         drift_terms      = ['external_Z'],
-        external_drift   = ds.cumul,
+        external_drift   = ds,
         external_drift_x = ds.lon,
         external_drift_y = ds.lat,
     )
@@ -124,9 +124,9 @@ def plot_fields(arome, reference_field, antilope, gauges):
     for axis in ax:
         # axis.set_extent([antilope.lon.min(), antilope.lon.max(), antilope.lat.min(), antilope.lat.max()],
         axis.set_extent([lonmin, lonmax, latmin, latmax], crs=ccrs.PlateCarree())
-    vmax = max(np.max(reference_field), antilope.cumul.max(), arome.cumul.max())
+    vmax = max(np.nanmax(reference_field), antilope.max(), arome.max())
     cmap = plt.cm.YlGnBu
-    make_mask.plot_field(fig, ax[0], arome.cumul, cmap=cmap, vmin=400, vmax=vmax, elevation=True, coords=False,
+    make_mask.plot_field(fig, ax[0], arome, cmap=cmap, vmin=400, vmax=vmax, elevation=True, coords=False,
             colorbar=False, categories=False)
     ax[0].set_title('AROME')
     make_mask.plot_field(fig, ax[1], reference_field, cmap=cmap, vmin=400, vmax=vmax, elevation=True, coords=False,
@@ -134,7 +134,7 @@ def plot_fields(arome, reference_field, antilope, gauges):
     gauges.plot.scatter('lon', 'lat', c='rr', edgecolor='black', cmap=plt.cm.YlGnBu, vmin=400, vmax=vmax, ax=ax[1],
             colorbar=False)
     ax[1].set_title('Reference Field')
-    im = make_mask.plot_field(fig, ax[2], antilope.cumul, cmap=cmap, vmin=400, vmax=vmax, elevation=True, coords=False,
+    im = make_mask.plot_field(fig, ax[2], antilope, cmap=cmap, vmin=400, vmax=vmax, elevation=True, coords=False,
             colorbar=False, categories=False)
     ax[2].set_title('ANTILOPE')
     plt.colorbar(im, ax=ax, label=f'Precipitation accumulation {datebegin}h - {dateend}h (kg/m²)')
@@ -150,14 +150,16 @@ if __name__ == '__main__':
     antilope = read_ANTILOPE_accumulation()
 
     arome = arome.where((arome.lat == antilope.lat) & (arome.lon == antilope.lon))
+    arome = xr.where(arome.cumul == 0., np.nan, arome.cumul)
     antilope = antilope.where((antilope.lat == arome.lat) & (antilope.lon == arome.lon))
+    antilope = xr.where(antilope.cumul == 0., np.nan, antilope.cumul)
 
     reference_field, error = compute_reference_field(obs_auto, arome)
 
     plot_fields(arome, reference_field, antilope, obs_auto)
 
     # ratio = np.where(error < 1, error, 1) * 1 + (1 - np.where(error < 1, error, 1)) * antilope.cumul / reference_field
-    ratio = antilope.cumul / reference_field
+    ratio = antilope / reference_field
     ratio = ratio.rename('ratio')
     ratio.to_netcdf(os.path.join(savedir, f'Estimated_ratio_from_kriging_{datebegin}_{dateend}.nc'))
     ratio = ratio.rename('ANTILOPE / reference ratio')
