@@ -466,7 +466,7 @@ def random_draw(distribution='gamma', members=16, sort=True):
         return draw
 
 
-def perturb(obs, sd, perturbation1, perturbation2, ratio=None, sd2=None, frac=0.3):
+def perturb(obs, sd, perturbation1, perturbation2, ratio=None, sd2=None, frac=0.4):
     """
     Perturb an *obs* field with a previously randomly dranw value *perturbation* and an estimated error *sd*.
     """

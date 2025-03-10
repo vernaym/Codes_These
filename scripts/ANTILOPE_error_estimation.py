@@ -73,8 +73,8 @@ def compute_reference_field(df, ds):
     UK = UniversalKriging(
         df.lon,
         df.lat,
-        df.rr * 1.2,
-        # df.rr,
+        #df.rr * 1.2,
+        df.rr,
         drift_terms      = ['external_Z'],
         external_drift   = ds,
         external_drift_x = ds.lon,

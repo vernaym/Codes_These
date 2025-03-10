@@ -1745,8 +1745,22 @@ class RandomSampling(Assimilation):
             mask = np.where((parameters['rr'].data == 0 ) & (smooth > 0), 1, 0)
             #mask = np.where(smooth > 5 * parameters['rr'].data, smooth, parameters['rr'].data)
 
+            # TODO : check parameters['rr'] / smooth ratio and compare it to parameters['ratio'] to increase / decrease the de-biasing
+            dyn_ratio = np.where((parameters['rr'].data > 1) & (smooth > 1), parameters['rr'].data / smooth, parameters['ratio'].data)
+            actual_ratio = (parameters['ratio'].data * (2 - abs(parameters['ratio'].data - dyn_ratio)) + dyn_ratio * abs(parameters['ratio'].data - dyn_ratio)) / 2
+            if self.plot:
+                plt.close('all')
+                im = plt.imshow(dyn_ratio, cmap=plt.cm.RdBu_r, origin='lower', vmin=0.3, vmax=1.7)
+                plt.colorbar(im)
+                plt.savefig(os.path.join(self.date_str, 'dyn_ratio.pdf'), format='pdf')
+                plt.close('all')
+                im = plt.imshow(actual_ratio, cmap=plt.cm.RdBu_r, origin='lower', vmin=0.3, vmax=1.7)
+                plt.colorbar(im)
+                plt.savefig(os.path.join(self.date_str, 'actual_ratio.pdf'), format='pdf')
+                plt.close('all')
+
             # In case of missed precipitation, replace value by the moving average
-            parameters['mu'] = (parameters['rr'] + mask * smooth) / parameters['ratio'].data
+            parameters['mu'] = (parameters['rr'] + mask * smooth) / actual_ratio
             # If the under-estimation is huge, replace value by the moving average
             #parameters['mu'] = xr.where(abs(parameters['rr'] - smooth) > parameters['rr'].data / parameters['ratio'].data, smooth, parameters['rr'] / parameters['ratio'].data)
             #parameters['mu'] = xr.where(smooth > 2 * parameters['rr'].data, smooth, parameters['rr']) / parameters['ratio'].data
@@ -1767,7 +1781,7 @@ class RandomSampling(Assimilation):
             # * mu-musmooth to mitigate the introduced vertical gradient of precipitation
             # parameters['error'] = abs(parameters.mu - parameters.rr) * (0.1 + abs(parameters['ratio'].data - 1))
             #parameters['error'] = abs(parameters.mu - parameters.rr) * abs(parameters['ratio'].data - 1)
-            parameters['error'] = abs(parameters.mu - parameters.rr) * 0.1
+            parameters['error'] = abs(parameters.mu - parameters.rr) * 0.5
             #parameters['error'] = abs(parameters.mu - parameters.rr) * 0.2 + abs(parameters.mu - musmooth) * abs(parameters['ratio'].data - 1)
             #parameters['error'] = abs(parameters.mu - parameters.rr) / musmooth
 
