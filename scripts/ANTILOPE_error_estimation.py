@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
 
 from pykrige.uk import UniversalKriging
+from scipy.ndimage import uniform_filter
 
 from These.scripts import make_mask
 
@@ -74,7 +75,7 @@ def compute_reference_field(df, ds):
         df.lon,
         df.lat,
         df.rr * 1.1,
-        #df.rr,
+        # df.rr,
         drift_terms      = ['external_Z'],
         external_drift   = ds,
         external_drift_x = ds.lon,
@@ -107,14 +108,14 @@ def compute_reference_field(df, ds):
     return kg, err
 
 
-def plot_ratio(field, cmap=plt.cm.YlGnBu, origin='lower', vmin=None, vmax=None):
+def plot_ratio(field, filename, cmap=plt.cm.YlGnBu, origin='lower', vmin=None, vmax=None):
 
     fig, ax = plt.subplots(1, 1, figsize=(14, 14), subplot_kw=dict(projection=ccrs.PlateCarree()), layout='compressed')
     ax.set_extent([lonmin, lonmax, latmin, latmax], crs=ccrs.PlateCarree())
     ax.set_title('')
     make_mask.plot_field(fig, ax, field, cmap=cmap, vmin=vmin, vmax=vmax, elevation=True, coords=False,
             colorbar=True)
-    fig.savefig(os.path.join(savedir, f'Estimated_ratio_from_kriging_{datebegin}_{dateend}.pdf'), format='pdf')
+    fig.savefig(os.path.join(savedir, filename), format='pdf')
     # fig.savefig(os.path.join(savedir, 'Estimated_ratio_from_kriging_may-sep.pdf'), format='pdf')
 
 
@@ -158,9 +159,15 @@ if __name__ == '__main__':
 
     plot_fields(arome, reference_field, antilope, obs_auto)
 
+    smooth = uniform_filter(reference_field, 10)
+    gradient = reference_field / smooth
+    gradient.rename('gradient')
+    gradient.to_netcdf(os.path.join(savedir, f'Estimated_gradient_from_kriging_{datebegin}_{dateend}.nc'))
+    plot_ratio(gradient, f'Estimated_gradient_from_kriging_{datebegin}_{dateend}.pdf', origin='lower', cmap=plt.cm.RdBu_r, vmin=0.7, vmax=1.3)
+
     # ratio = np.where(error < 1, error, 1) * 1 + (1 - np.where(error < 1, error, 1)) * antilope.cumul / reference_field
     ratio = antilope / reference_field
     ratio = ratio.rename('ratio')
     ratio.to_netcdf(os.path.join(savedir, f'Estimated_ratio_from_kriging_{datebegin}_{dateend}.nc'))
     ratio = ratio.rename('ANTILOPE / reference ratio')
-    plot_ratio(ratio, origin='lower', cmap=plt.cm.RdBu_r, vmin=0.3, vmax=1.7)
+    plot_ratio(ratio, f'Estimated_ratio_from_kriging_{datebegin}_{dateend}.pdf', origin='lower', cmap=plt.cm.RdBu_r, vmin=0.3, vmax=1.7)
