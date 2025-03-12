@@ -91,8 +91,8 @@ if not dailyfiles:
     print('Resampling hourly ANTILOPE data over !')
     tmp = tmp.transpose('lat', 'lon', 'time')  # reorder data
     tmp = tmp.reindex_like(antilope).ffill('time')  # Fill hourly time steps with daily precipitation (https://stackoverflow.com/questions/54452336/xarray-resample-time-series-data-from-daily-to-hourly)
-    chronology = antilope.rr / (tmp.rr + 0.00001)  # Avoid division by 0 Warnings
-    chronology.where(tmp.rr==0, 1/24.)  # Avoid to remove precipitation when/where the analysis transformed null precipitation into >0 ones.
+    # Avoid to remove precipitation when/where the analysis transformed null precipitation into >0 ones.
+    chronology = xr.where(tmp.rr.data == 0, 1 / 24, antilope.rr / tmp.rr.data)
     chronology = chronology.transpose('time', 'lat', 'lon')
 
     analysis['time'] = analysis.time-np.timedelta64(6, 'h')-np.timedelta64(1, 'D')

@@ -1737,25 +1737,33 @@ class RandomSampling(Assimilation):
             parameters['rr'].data = np.round(parameters['rr'].data, 1)
             clim_ratio = parameters['ratio'].data
 
-            #tmp = parameters['rr'].sel(lon=slice(6.8, 6.9), lat=slice(45.8, 45.9))
+            #tmp = parameters['rr'].sel(lon=slice(6.8, 6.9), lat=slice(45.8, 45.9))  # Mont-Blanc
+            #tmp = parameters['rr'].sel(lon=slice(6.1, 6.15), lat=slice(45.1, 45.15))  # Grandes-Rousses
 
             # Try to detect "missed" precipitation
-            smooth = uniform_filter(parameters['rr'].data, 10)
+            smooth = uniform_filter(parameters['rr'].data, 20)
             smooth = np.where(smooth > 0, np.round(smooth, 1), 0)
-            smooth = xr.DataArray(
-                data   = smooth,
-                coords = {'lon': parameters.lon.data, 'lat': parameters.lat.data},
-                dims   = ['lat', 'lon']
-            )
+#            smooth = xr.DataArray(data=smooth, coords={'lon':parameters.lon.data, 'lat':parameters.lat.data}, dims=['lat', 'lon'])
+            dyn_gradient = xr.where((parameters['rr'].data > 0) & (smooth > 0), parameters['rr'] / smooth, clim_ratio)
+            clim_gradient = xr.open_dataarray('Estimated_gradient.nc')
+            dyn_ratio = dyn_gradient / clim_gradient
+#            actual_gradient = (clim_gradient * (clim_gradient - abs(clim_gradient - dyn_gradient)) +
+#                    dyn_gradient * np.minimum(abs(clim_gradient - dyn_gradient), clim_gradient)) / clim_gradient
+#            actual_gradient = dyn_gradient / clim_gradient
+#            parameters['mu'] = smooth / actual_gradient
 
-            # If the under-estimation is huge, replace value by the moving average
-            rr = xr.where(parameters['rr'] < smooth / clim_ratio, smooth, parameters['rr'])
-
-            # check parameters['rr'] / smooth ratio and compare it to parameters['ratio'] to increase / decrease the de-biasing
-            # dyn_ratio = np.where((parameters['rr'].data > 1) & (smooth > 1), parameters['rr'].data / smooth, parameters['ratio'].data)
-            dyn_ratio = np.where((rr.data > 0) & (smooth > 0), rr.data / smooth, clim_ratio)
-            actual_ratio = (clim_ratio * (clim_ratio - abs(clim_ratio - dyn_ratio)) +
-                    dyn_ratio * np.minimum(abs(clim_ratio - dyn_ratio), clim_ratio)) / clim_ratio
+#
+#            # If the under-estimation is huge, replace value by the moving average
+#            rr = xr.where(parameters['rr'] < smooth / clim_ratio, smooth, parameters['rr'])
+#
+#            # check parameters['rr'] / smooth ratio and compare it to parameters['ratio'] to increase / decrease the de-biasing
+#            # dyn_ratio = np.where((parameters['rr'].data > 1) & (smooth > 1), parameters['rr'].data / smooth, parameters['ratio'].data)
+#            dyn_ratio = np.where((rr.data > 0) & (smooth > 0), rr.data / smooth, clim_ratio)
+#            actual_ratio = (clim_ratio + dyn_ratio) / 2
+#            actual_ratio = (clim_ratio * (clim_gradient - abs(clim_gradient - dyn_gradient)) +
+#                    dyn_ratio * np.minimum(abs(clim_gradient - dyn_gradient), clim_ratio)) / clim_ratio
+            actual_ratio = (clim_ratio * np.maximum(0.5 - abs(clim_gradient - dyn_gradient), 0) +
+                    dyn_ratio * np.minimum(abs(clim_gradient - dyn_gradient), 0.5)) / 0.5
 
             if self.plot:
                 plt.close('all')
@@ -1767,39 +1775,44 @@ class RandomSampling(Assimilation):
                 plt.colorbar(im)
                 plt.savefig(os.path.join(self.date_str, f'actual_ratio_{self.domain}.pdf'), format='pdf')
                 plt.close('all')
-                im = plt.imshow(abs(parameters['ratio'] - dyn_ratio), cmap=plt.cm.Purples, origin='lower', vmin=0, vmax=1)
-                plt.colorbar(im)
-                plt.savefig(os.path.join(self.date_str, f'diff_ratio_dyn_ratio_{self.domain}.pdf'), format='pdf')
-                plt.close('all')
-
-            # If the under-estimation is huge, replace value by the moving average
-            #parameters['rr'].data = np.where(smooth > 2 * parameters['rr'], smooth, parameters['rr'].data)
-            # Missed precip = pixel with no precip but precipitation around (redundant with previous security ?)
-            #mask = np.where((parameters['rr'].data == 0) & (smooth > 0), 1, 0)
-            #rr = parameters['rr']
-            #mask = np.where(smooth > 5 * parameters['rr'].data, smooth, parameters['rr'].data)
-
-            # Extract the Grande Rousses mountain ridge
-            # parameters['rr'].sel({'lon': slice(6.1, 6.15), 'lat': slice(45.10, 45.15)})
-            # smooth=xr.DataArray(data=smooth, coords={'lon':parameters.lon.data, 'lat':parameters.lat.data}, dims=['lat', 'lon'])
-            # ...
-
-            # In case of missed precipitation, replace value by the moving average
-            #parameters['mu'] = (parameters['rr'] + mask * smooth) / actual_ratio
-            parameters['mu'] = rr / actual_ratio
-            # If the under-estimation is huge, replace value by the moving average
-            #parameters['mu'] = xr.where(abs(parameters['rr'] - smooth) > parameters['rr'].data / parameters['ratio'].data, smooth, parameters['rr'] / parameters['ratio'].data)
-            #parameters['mu'] = xr.where(smooth > 2 * parameters['rr'].data, smooth, parameters['rr']) / parameters['ratio'].data
-            #parameters['mu'] = xr.where((parameters['rr'].data < 1) & (smooth > 0), smooth, parameters['rr']) / parameters['ratio'].data
-
-            # If the under-estimation is huge, replace value by the moving average
-            # musmooth = uniform_filter(parameters['mu'].data, 10)
-            # parameters['mu'].data = np.where(abs(parameters['mu'] - musmooth) > parameters['mu'], musmooth, parameters['mu'].data)
-            #im = plt.imshow(abs(parameters['mu'] - musmooth), cmap=plt.cm.YlGnBu, origin='lower')
-            #plt.colorbar(im)
-            #plt.savefig(os.path.join(self.date_str, 'tmp.pdf'))
-            #plt.close('all')
-
+#                im = plt.imshow(abs(parameters['ratio'] - dyn_ratio), cmap=plt.cm.Purples, origin='lower', vmin=0, vmax=1)
+#                plt.colorbar(im)
+#                plt.savefig(os.path.join(self.date_str, f'diff_ratio_dyn_ratio_{self.domain}.pdf'), format='pdf')
+#                plt.close('all')
+#
+#            # If the under-estimation is huge, replace value by the moving average
+#            #parameters['rr'].data = np.where(smooth > 2 * parameters['rr'], smooth, parameters['rr'].data)
+#            # Missed precip = pixel with no precip but precipitation around (redundant with previous security ?)
+#            #mask = np.where((parameters['rr'].data == 0) & (smooth > 0), 1, 0)
+#            #rr = parameters['rr']
+#            #mask = np.where(smooth > 5 * parameters['rr'].data, smooth, parameters['rr'].data)
+#
+#            # Extract the Grande Rousses mountain ridge
+#            # parameters['rr'].sel({'lon': slice(6.1, 6.15), 'lat': slice(45.10, 45.15)})
+#            # smooth=xr.DataArray(data=smooth, coords={'lon':parameters.lon.data, 'lat':parameters.lat.data}, dims=['lat', 'lon'])
+#            # ...
+#
+#            # In case of missed precipitation, replace value by the moving average
+#            #parameters['mu'] = (parameters['rr'] + mask * smooth) / actual_ratio
+#            parameters['mu'] = rr / actual_ratio
+            parameters['mu'] = parameters['rr'] / actual_ratio
+#            # If the under-estimation is huge, replace value by the moving average
+#            #parameters['mu'] = xr.where(abs(parameters['rr'] - smooth) > parameters['rr'].data / parameters['ratio'].data, smooth, parameters['rr'] / parameters['ratio'].data)
+#            #parameters['mu'] = xr.where(smooth > 2 * parameters['rr'].data, smooth, parameters['rr']) / parameters['ratio'].data
+#            #parameters['mu'] = xr.where((parameters['rr'].data < 1) & (smooth > 0), smooth, parameters['rr']) / parameters['ratio'].data
+#
+#            # If the under-estimation is huge, replace value by the moving average
+#            musmooth = uniform_filter(parameters['mu'].data, 10)
+#            # parameters['mu'].data = np.where(abs(parameters['mu'] - musmooth) > parameters['mu'], musmooth, parameters['mu'].data)
+#            #im = plt.imshow(abs(parameters['mu'] - musmooth), cmap=plt.cm.YlGnBu, origin='lower')
+#            #plt.colorbar(im)
+#            #plt.savefig(os.path.join(self.date_str, 'tmp.pdf'))
+#            #plt.close('all')
+#            dyn_gradient = musmooth / parameters['mu']
+#            clim_gradient = xr.open_dataset('Estimated_gradient.nc')
+#            actual_gradient = (clim_gradient * (clim_gradient - abs(clim_gradient - dyn_gradient)) +
+#                    dyn_gradient * np.minimum(abs(clim_gradient - dyn_gradient), clim_gradient)) / clim_gradient
+#            parameters['mu'].data = musmooth / actual_gradient
 
             # Define error for perturbations
             # parameters['error'] = abs(parameters.mu - parameters.rr)

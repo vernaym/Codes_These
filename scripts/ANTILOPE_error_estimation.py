@@ -159,7 +159,7 @@ if __name__ == '__main__':
 
     plot_fields(arome, reference_field, antilope, obs_auto)
 
-    smooth = uniform_filter(reference_field, 10)
+    smooth = uniform_filter(reference_field, 20)
     gradient = reference_field / smooth
     gradient.rename('gradient')
     gradient.to_netcdf(os.path.join(savedir, f'Estimated_gradient_from_kriging_{datebegin}_{dateend}.nc'))
