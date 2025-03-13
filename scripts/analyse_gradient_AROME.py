@@ -28,10 +28,12 @@ geometry = 'GrandesRousses250m'
 io.get_const('uenv:dem.2@vernaym', 'relief', geometry, filename='TARGET_RELIEF.nc',
             gvar='RELIEF_GRANDESROUSSES250M_4326')
 # Get Domain's DEM in case ZS not in simulation file
-mnt = xr.open_dataset('TARGET_RELIEF.nc')  # Target domain's Digital Elevation Model
-mnt = xrp.preprocess(mnt, decode_time=False)
-mnt = mnt['elevation']
-mnt = mnt.sel({'xx': slice(6.05, 6.2), 'yy': slice(45.05, 45.25)})
+fullmnt = xr.open_dataset('TARGET_RELIEF.nc')  # Target domain's Digital Elevation Model
+fullmnt = xrp.preprocess(fullmnt, decode_time=False)
+fullmnt = fullmnt['elevation']
+#mnt = mnt.sel({'xx': slice(6.05, 6.2), 'yy': slice(45.05, 45.25)})
+#mnt = fullmnt.sel({'yy': slice(45.10, 45.15), 'xx': slice(6.0, 6.15)})
+mnt = fullmnt.sel({'yy': slice(45.0, 45.20), 'xx': slice(6.0, 6.2)})
 
 if product == 'AROME':
     arome = xr.open_dataset('AROME_hours_grandesrousses_eurw1s40_2021080106_2022080106.nc')
@@ -41,8 +43,9 @@ elif product.startswith('RS'):
     rootdir = f'/cnrm/cen/users/NO_SAVE/vernaym/cache/vortex/edelweiss/grandesrousses250m/{product}@vernaym/mb0000/meteo'
     filename = 'FORCING_2021080206_2022080106.nc'
     rs = xr.open_dataset(os.path.join(rootdir, filename))
-    ds = rs['Rainf'] + rs['Snowf']
-    ds = ds.sel({'x': slice(939625., 951125.), 'y': slice(6443609, 6466270)})
+    ds = (rs['Rainf'] + rs['Snowf']) * 3600
+    #ds = ds.sel({'x': slice(939625., 951125.), 'y': slice(6443609, 6466270)})
+    ds = ds.sel({'x': ds.x[np.where(np.isin(mnt.xx.data, fullmnt.xx.data))], 'y': ds.y[np.where(np.isin(mnt.yy.data, fullmnt.yy.data))]})
 
 #hourly_gradient = xr.apply_ufunc(vertical_gradient, arome.tp, mnt, input_core_dims=[["time"], []])
 gp = ds.groupby('time', restore_coord_dims=True)
