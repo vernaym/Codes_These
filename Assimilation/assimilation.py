@@ -1820,7 +1820,7 @@ class RandomSampling(Assimilation):
             # * mu-musmooth to mitigate the introduced vertical gradient of precipitation
             # parameters['error'] = abs(parameters.mu - parameters.rr) * (0.1 + abs(parameters['ratio'].data - 1))
             #parameters['error'] = abs(parameters.mu - parameters.rr) * abs(parameters['ratio'].data - 1)
-            parameters['error'] = abs(parameters.mu - parameters.rr) * 1
+            parameters['error'] = abs(parameters.mu - parameters.rr) * 0.5
             #parameters['error'] = abs(parameters.mu - parameters.rr) * 0.2 + abs(parameters.mu - musmooth) * abs(parameters['ratio'].data - 1)
             #parameters['error'] = abs(parameters.mu - parameters.rr) / musmooth
 
