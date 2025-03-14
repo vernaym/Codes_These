@@ -9,8 +9,20 @@ from snowtools.scripts.extract.vortex import vortexIO as io
 import snowtools.tools.xarray_preprocess as xrp
 
 import matplotlib.pyplot as plt
+import matplotlib.animation as animation
 
 winter = False
+
+
+def plot_time_serie(dataset):
+
+    fig, ax = plt.subplots()
+
+    def animate(time):
+        ax.scatter(dataset.isel(time=time).data.flatten(), mnt.data.flatten())
+
+    ani = animation.FuncAnimation(fig, animate, 24, interval=400, blit=False)
+    ani.save('animation.gif')
 
 
 def vertical_gradient(precipitation, axis=None, ZS=None):
@@ -25,6 +37,13 @@ def vertical_gradient(precipitation, axis=None, ZS=None):
     return out
 
 
+def plot_date(dataset, datebegin, dateend, xpid):
+    dataset = dataset.sel({'time': slice(datebegin, dateend)}).sum('time')
+    fig, ax = plt.subplots(figsize=(12, 6))
+    dataset.plot(ax=ax, cmap=plt.cm.YlGnBu, vmin=0)
+    fig.savefig(f'precipitation_{xpid}_{datebegin}_{dateend}.pdf')
+
+
 geometry = 'GrandesRousses250m'
 io.get_const('uenv:dem.2@vernaym', 'relief', geometry, filename='TARGET_RELIEF.nc',
             gvar='RELIEF_GRANDESROUSSES250M_4326')
@@ -32,7 +51,7 @@ io.get_const('uenv:dem.2@vernaym', 'relief', geometry, filename='TARGET_RELIEF.n
 fullmnt = xr.open_dataset('TARGET_RELIEF.nc')  # Target domain's Digital Elevation Model
 fullmnt = xrp.preprocess(fullmnt, decode_time=False)
 fullmnt = fullmnt['elevation']
-# mnt = mnt.sel({'xx': slice(6.05, 6.2), 'yy': slice(45.05, 45.25)})  # Domaine intermédiaire
+# mnt = fullmnt.sel({'xx': slice(6.05, 6.2), 'yy': slice(45.05, 45.25)})  # Domaine intermédiaire
 # mnt = fullmnt.sel({'yy': slice(45.10, 45.15), 'xx': slice(6.0, 6.15)})  # petit domaine
 # mnt = fullmnt.sel({'yy': slice(45.0, 45.20), 'xx': slice(6.0, 6.2)})  # Sud Ouest
 mnt = fullmnt.sel({'yy': slice(45.139, 45.141), 'xx': slice(6.036, 6.13)})  # transect
@@ -50,8 +69,11 @@ for product in products:
         filename = 'FORCING_2021080206_2022080106.nc'
         rs = xr.open_dataset(os.path.join(rootdir, filename))
         ds = (rs['Rainf'] + rs['Snowf']) * 3600
-        ds = ds.sel({'x': ds.x[np.where(np.isin(mnt.xx.data, fullmnt.xx.data))],
-            'y': ds.y[np.where(np.isin(mnt.yy.data, fullmnt.yy.data))]})
+        # plot_date(ds, '2021-12-28-07', '2021-12-29-06', product)
+        ds = ds.sel({'x': ds.x[np.where(np.isin(fullmnt.xx.data, mnt.xx.data))],
+            'y': ds.y[np.where(np.isin(fullmnt.yy.data, mnt.yy.data))]})
+
+    # plot_time_serie(ds.sel({'time': slice('2021-12-28-07', '2021-12-29-06')}))
 
     gp = ds.groupby('time', restore_coord_dims=True)
     hourly_gradient = gp.reduce(vertical_gradient, ZS=mnt)
