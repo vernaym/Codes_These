@@ -1740,10 +1740,10 @@ class RandomSampling(Assimilation):
             #tmp = parameters['rr'].sel(lon=slice(6.8, 6.9), lat=slice(45.8, 45.9))  # Mont-Blanc
             #tmp = parameters['rr'].sel(lon=slice(6.1, 6.15), lat=slice(45.1, 45.15))  # Grandes-Rousses
 
-            # TODO : try to detect "missed" precipitation
             smooth = uniform_filter(parameters['rr'].data, 20)
             smooth = np.where(smooth > 0, np.round(smooth, 1), 0)
-#            smooth = xr.DataArray(data=smooth, coords={'lon':parameters.lon.data, 'lat':parameters.lat.data}, dims=['lat', 'lon'])
+            # Try to detect "missed" precipitation
+            parameters['rr'] = xr.where((parameters['rr'] == 0) & (smooth > 0), 0.1, parameters['rr'])
             dyn_gradient = xr.where((parameters['rr'].data > 0) & (smooth > 0), parameters['rr'] / smooth, clim_ratio)
             clim_gradient = xr.open_dataarray('Estimated_gradient.nc')
             dyn_ratio = dyn_gradient / clim_gradient

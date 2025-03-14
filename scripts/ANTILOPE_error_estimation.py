@@ -18,14 +18,16 @@ from These.scripts import make_mask
 
 savedir = '/home/vernaym/workdir/ASSIMILATION/mask/alp'
 
-# datebegin = '2021-07-31 07',
-# dateend   = '2022-08-01 06',
-datebegin = '2021-11-01'
-dateend   = '2022-04-30'
+datebegin = '2021-07-31'
+dateend   = '2022-08-01'
+# datebegin = '2021-12-01'
+# dateend   = '2022-03-31'
 latmax = 46.45
 latmin = 44.1
 lonmin = 5.4
 lonmax = 7.2
+
+gauge_tolerance = 0.1  # *100% of difference from ANTILOPE
 
 
 def read_obs_auto_accumulation():
@@ -36,17 +38,20 @@ def read_obs_auto_accumulation():
     src = '/home/vernaym/These/NO_TRANSFER/DATA/obs_horaires_RR_20210731_20230423.csv'
     df = pd.read_csv(src, sep=';', parse_dates=['date'])
     tmp = df[(df['date'] >= '2021-07-31 07') & (df['date'] <= '2022-08-01 06')]  # Same period as AROME accumulation
-    tmp = tmp[tmp['date'].dt.month.isin([11, 12, 1, 2, 3, 4])]  # Same period as AROME accumulation
+    # tmp = tmp[tmp['date'].dt.month.isin([11, 12, 1, 2, 3, 4])]  # Same period as AROME accumulation
+    # tmp = tmp[tmp['date'].dt.month.isin([12, 1, 2, 3])]  # Same period as AROME accumulation
     out = tmp.groupby('num_poste').agg({'rr': 'sum', 'lat': 'min', 'lon': 'min', 'alti': 'min', 'date': "count"})
     # out = out[out.date > 8700]  # Filter out stations with too many missing values
-    out = out[out.date > 3600]  # Filter out stations with too many missing values
+    out[out.date > out.date.max() * 0.95]  # Filter out stations with too many missing values
 
     return out
 
 
 def read_AROME_accumulation():
-    # src = '/home/vernaym/These/NO_TRANSFER/DATA/CUMUL_AROME_2021073106_2022080106_alp.nc'
-    src = '/home/vernaym/These/NO_TRANSFER/DATA/CUMUL_AROME_2021073106_2022080106_nov-apr_alp.nc'
+    src = '/home/vernaym/These/NO_TRANSFER/DATA/CUMUL_AROME_2021073106_2022080106_alp.nc'
+    # src = '/home/vernaym/These/NO_TRANSFER/DATA/CUMUL_AROME_2021073106_2022080106_nov-apr_alp.nc'
+    # src = '/home/vernaym/These/NO_TRANSFER/DATA/CUMUL_AROME_20211201_20220415_alp.nc'
+    # src = '/home/vernaym/These/NO_TRANSFER/DATA/CUMUL_AROME_20211201_20220331_alp.nc'
     ds = xr.open_dataset(src, engine='netcdf4')
     ds['lat'] = ds.lat.round(2)
     ds['lon'] = ds.lon.round(2)
@@ -55,12 +60,13 @@ def read_AROME_accumulation():
 
 
 def read_ANTILOPE_accumulation():
-    # src = '/home/vernaym/These/NO_TRANSFER/DATA/CUMUL_ANTILOPE_alp_2021080106_2022080106.nc'
-    src = '/home/vernaym/These/NO_TRANSFER/DATA/CUMUL_ANTILOPE_2021073106_2022080106_nov-apr_alp.nc'
+    src = '/home/vernaym/These/NO_TRANSFER/DATA/CUMUL_ANTILOPE_alp_2021080106_2022080106.nc'
+    # src = '/home/vernaym/These/NO_TRANSFER/DATA/CUMUL_ANTILOPE_2021073106_2022080106_nov-apr_alp.nc'
+    # src = '/home/vernaym/These/NO_TRANSFER/DATA/CUMUL_ANTILOPE_20211201_20220331_alp.nc'
     ds = xr.open_dataset(src, engine='netcdf4')
     ds['lat'] = ds.lat.round(2)
     ds['lon'] = ds.lon.round(2)
-    ds = ds.isel(lat=slice(None, None, -1))  # Flip upside down
+    # ds = ds.isel(lat=slice(None, None, -1))  # Flip upside down
 
     return ds
 
@@ -160,9 +166,17 @@ if __name__ == '__main__':
     # Compare gauge accumulation to ANTILOPE to filter out gauges
     tmp = antilope.sel(lat=xr.DataArray(obs_auto.lat, dims='num_poste'),
             lon=xr.DataArray(obs_auto.lon, dims='num_poste'), method='nearest').to_dataframe()
-    obs_auto = obs_auto[(tmp.cumul / obs_auto.rr < 1.1) & (tmp.cumul / obs_auto.rr > 0.9)]
+    obs_auto = obs_auto[(tmp.cumul / obs_auto.rr < (1 + gauge_tolerance)) &
+            (tmp.cumul / obs_auto.rr > (1 - gauge_tolerance))]
 
     reference_field, error = compute_reference_field(obs_auto, arome)
+
+    # plot reference field over the Grandes Rousses
+    tmp = reference_field.sel(lon=slice(6.0, 6.5), lat=slice(45.0, 45.24))
+    fig, ax = plt.subplots(figsize=(12, 6))
+    tmp.plot(ax=ax, cmap=plt.cm.YlGnBu)
+    fig.savefig(os.path.join(savedir, 'reference_field_GrandesRousses.pdf'))
+    plt.close(fig)
 
     plot_fields(arome, reference_field, antilope, obs_auto)
 
