@@ -1740,7 +1740,7 @@ class RandomSampling(Assimilation):
             #tmp = parameters['rr'].sel(lon=slice(6.8, 6.9), lat=slice(45.8, 45.9))  # Mont-Blanc
             #tmp = parameters['rr'].sel(lon=slice(6.1, 6.15), lat=slice(45.1, 45.15))  # Grandes-Rousses
 
-            # Try to detect "missed" precipitation
+            # TODO : try to detect "missed" precipitation
             smooth = uniform_filter(parameters['rr'].data, 20)
             smooth = np.where(smooth > 0, np.round(smooth, 1), 0)
 #            smooth = xr.DataArray(data=smooth, coords={'lon':parameters.lon.data, 'lat':parameters.lat.data}, dims=['lat', 'lon'])
@@ -1820,7 +1820,7 @@ class RandomSampling(Assimilation):
             # * mu-musmooth to mitigate the introduced vertical gradient of precipitation
             # parameters['error'] = abs(parameters.mu - parameters.rr) * (0.1 + abs(parameters['ratio'].data - 1))
             #parameters['error'] = abs(parameters.mu - parameters.rr) * abs(parameters['ratio'].data - 1)
-            parameters['error'] = abs(parameters.mu - parameters.rr) * 0.5
+            parameters['error'] = abs(parameters.mu - parameters.rr) * 0.4
             #parameters['error'] = abs(parameters.mu - parameters.rr) * 0.2 + abs(parameters.mu - musmooth) * abs(parameters['ratio'].data - 1)
             #parameters['error'] = abs(parameters.mu - parameters.rr) / musmooth
 
