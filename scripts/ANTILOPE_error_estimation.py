@@ -74,8 +74,8 @@ def compute_reference_field(df, ds):
     UK = UniversalKriging(
         df.lon,
         df.lat,
-        df.rr * 1.1,
-        # df.rr,
+        # df.rr * 1.1,
+        df.rr,
         drift_terms      = ['external_Z'],
         external_drift   = ds,
         external_drift_x = ds.lon,
@@ -155,6 +155,11 @@ if __name__ == '__main__':
     antilope = antilope.where((antilope.lat == arome.lat) & (antilope.lon == arome.lon))
     antilope = xr.where(antilope.cumul == 0., np.nan, antilope.cumul)
 
+    # Compare gauge accumulation to ANTILOPE to filter out gauges
+    tmp = antilope.sel(lat=xr.DataArray(obs_auto.lat, dims='num_poste'),
+            lon=xr.DataArray(obs_auto.lon, dims='num_poste'), method='nearest').to_dataframe()
+    obs_auto = obs_auto[(tmp.cumul / obs_auto.rr < 1.1) & (tmp.cumul / obs_auto.rr > 0.9)]
+
     reference_field, error = compute_reference_field(obs_auto, arome)
 
     plot_fields(arome, reference_field, antilope, obs_auto)
@@ -163,11 +168,13 @@ if __name__ == '__main__':
     gradient = reference_field / smooth
     gradient.rename('gradient')
     gradient.to_netcdf(os.path.join(savedir, f'Estimated_gradient_from_kriging_{datebegin}_{dateend}.nc'))
-    plot_ratio(gradient, f'Estimated_gradient_from_kriging_{datebegin}_{dateend}.pdf', origin='lower', cmap=plt.cm.RdBu_r, vmin=0.7, vmax=1.3)
+    plot_ratio(gradient, f'Estimated_gradient_from_kriging_{datebegin}_{dateend}.pdf', origin='lower',
+            cmap=plt.cm.RdBu_r, vmin=0.7, vmax=1.3)
 
     # ratio = np.where(error < 1, error, 1) * 1 + (1 - np.where(error < 1, error, 1)) * antilope.cumul / reference_field
     ratio = antilope / reference_field
     ratio = ratio.rename('ratio')
     ratio.to_netcdf(os.path.join(savedir, f'Estimated_ratio_from_kriging_{datebegin}_{dateend}.nc'))
     ratio = ratio.rename('ANTILOPE / reference ratio')
-    plot_ratio(ratio, f'Estimated_ratio_from_kriging_{datebegin}_{dateend}.pdf', origin='lower', cmap=plt.cm.RdBu_r, vmin=0.3, vmax=1.7)
+    plot_ratio(ratio, f'Estimated_ratio_from_kriging_{datebegin}_{dateend}.pdf', origin='lower',
+            cmap=plt.cm.RdBu_r, vmin=0.3, vmax=1.7)
