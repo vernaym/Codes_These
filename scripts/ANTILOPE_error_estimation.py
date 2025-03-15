@@ -18,10 +18,12 @@ from These.scripts import make_mask
 
 savedir = '/home/vernaym/workdir/ASSIMILATION/mask/alp'
 
-datebegin = '2021-07-31'
-dateend   = '2022-08-01'
+# datebegin = '2021-07-31'
+# dateend   = '2022-08-01'
 # datebegin = '2021-12-01'
 # dateend   = '2022-03-31'
+datebegin = '2021-12-15'
+dateend   = '2022-03-31'
 latmax = 46.45
 latmin = 44.1
 lonmin = 5.4
@@ -37,21 +39,41 @@ def read_obs_auto_accumulation():
 
     src = '/home/vernaym/These/NO_TRANSFER/DATA/obs_horaires_RR_20210731_20230423.csv'
     df = pd.read_csv(src, sep=';', parse_dates=['date'])
-    tmp = df[(df['date'] >= '2021-07-31 07') & (df['date'] <= '2022-08-01 06')]  # Same period as AROME accumulation
+    tmp = df[(df['date'] >= datebegin) & (df['date'] <= dateend)]  # Same period as AROME accumulation
     # tmp = tmp[tmp['date'].dt.month.isin([11, 12, 1, 2, 3, 4])]  # Same period as AROME accumulation
     # tmp = tmp[tmp['date'].dt.month.isin([12, 1, 2, 3])]  # Same period as AROME accumulation
     out = tmp.groupby('num_poste').agg({'rr': 'sum', 'lat': 'min', 'lon': 'min', 'alti': 'min', 'date': "count"})
     # out = out[out.date > 8700]  # Filter out stations with too many missing values
-    out[out.date > out.date.max() * 0.95]  # Filter out stations with too many missing values
+    out = out[out.date > out.date.max() * 0.95]  # Filter out stations with too many missing values
+
+    return out
+
+
+def read_obs_nivometeo_accumulation():
+    """
+    TODO : Add check for missing values
+    """
+
+    src = '/home/vernaym/These/NO_TRANSFER/DATA/obs_nivometeo_daily_RR_20210801_20220801.csv'
+    df = pd.read_csv(src, sep=';', parse_dates=['Q.dat'])
+    df = df.rename(columns={'Q.dat': 'date', 'poste_nivo.alti': 'alti', 'poste_nivo.lat_dg': 'lat',
+        'poste_nivo.lon_dg': 'lon', 'Q.rr': 'rr', 'Q.num_poste': 'num_poste'})
+    tmp = df[(df['date'] >= datebegin) & (df['date'] <= dateend)]  # Same period as AROME accumulation
+    # tmp = tmp[tmp['date'].dt.month.isin([11, 12, 1, 2, 3, 4])]  # Same period as AROME accumulation
+    # tmp = tmp[tmp['date'].dt.month.isin([12, 1, 2, 3])]  # Same period as AROME accumulation
+    out = tmp.groupby('num_poste').agg({'rr': 'sum', 'lat': 'min', 'lon': 'min', 'alti': 'min', 'date': "count"})
+    # out = out[out.date > 8700]  # Filter out stations with too many missing values
+    out = out[out.date > out.date.max() * 0.95]  # Filter out stations with too many missing values
 
     return out
 
 
 def read_AROME_accumulation():
-    src = '/home/vernaym/These/NO_TRANSFER/DATA/CUMUL_AROME_2021073106_2022080106_alp.nc'
+    # src = '/home/vernaym/These/NO_TRANSFER/DATA/CUMUL_AROME_2021073106_2022080106_alp.nc'
     # src = '/home/vernaym/These/NO_TRANSFER/DATA/CUMUL_AROME_2021073106_2022080106_nov-apr_alp.nc'
     # src = '/home/vernaym/These/NO_TRANSFER/DATA/CUMUL_AROME_20211201_20220415_alp.nc'
     # src = '/home/vernaym/These/NO_TRANSFER/DATA/CUMUL_AROME_20211201_20220331_alp.nc'
+    src = f'/home/vernaym/These/NO_TRANSFER/DATA/CUMUL_AROME_{datebegin}_{dateend}_alp.nc'
     ds = xr.open_dataset(src, engine='netcdf4')
     ds['lat'] = ds.lat.round(2)
     ds['lon'] = ds.lon.round(2)
@@ -60,9 +82,10 @@ def read_AROME_accumulation():
 
 
 def read_ANTILOPE_accumulation():
-    src = '/home/vernaym/These/NO_TRANSFER/DATA/CUMUL_ANTILOPE_alp_2021080106_2022080106.nc'
+    # src = '/home/vernaym/These/NO_TRANSFER/DATA/CUMUL_ANTILOPE_alp_2021080106_2022080106.nc'
     # src = '/home/vernaym/These/NO_TRANSFER/DATA/CUMUL_ANTILOPE_2021073106_2022080106_nov-apr_alp.nc'
     # src = '/home/vernaym/These/NO_TRANSFER/DATA/CUMUL_ANTILOPE_20211201_20220331_alp.nc'
+    src = f'/home/vernaym/These/NO_TRANSFER/DATA/CUMUL_ANTILOPE_{datebegin}_{dateend}_alp.nc'
     ds = xr.open_dataset(src, engine='netcdf4')
     ds['lat'] = ds.lat.round(2)
     ds['lon'] = ds.lon.round(2)
@@ -135,15 +158,15 @@ def plot_fields(arome, reference_field, antilope, gauges):
         axis.set_extent([lonmin, lonmax, latmin, latmax], crs=ccrs.PlateCarree())
     vmax = max(np.nanmax(reference_field), antilope.max(), arome.max())
     cmap = plt.cm.YlGnBu
-    make_mask.plot_field(fig, ax[0], arome, cmap=cmap, vmin=400, vmax=vmax, elevation=True, coords=False,
+    make_mask.plot_field(fig, ax[0], arome, cmap=cmap, vmin=0, vmax=vmax, elevation=True, coords=False,
             colorbar=False, categories=False)
     ax[0].set_title('AROME')
-    make_mask.plot_field(fig, ax[1], reference_field, cmap=cmap, vmin=400, vmax=vmax, elevation=True, coords=False,
+    make_mask.plot_field(fig, ax[1], reference_field, cmap=cmap, vmin=0, vmax=vmax, elevation=True, coords=False,
             colorbar=False, categories=False)
-    gauges.plot.scatter('lon', 'lat', c='rr', edgecolor='black', cmap=plt.cm.YlGnBu, vmin=400, vmax=vmax, ax=ax[1],
+    gauges.plot.scatter('lon', 'lat', c='rr', edgecolor='black', cmap=plt.cm.YlGnBu, vmin=0, vmax=vmax, ax=ax[1],
             colorbar=False)
     ax[1].set_title('Reference Field')
-    im = make_mask.plot_field(fig, ax[2], antilope, cmap=cmap, vmin=400, vmax=vmax, elevation=True, coords=False,
+    im = make_mask.plot_field(fig, ax[2], antilope, cmap=cmap, vmin=0, vmax=vmax, elevation=True, coords=False,
             colorbar=False, categories=False)
     ax[2].set_title('ANTILOPE')
     plt.colorbar(im, ax=ax, label=f'Precipitation accumulation {datebegin}h - {dateend}h (kg/m²)')
@@ -154,6 +177,7 @@ def plot_fields(arome, reference_field, antilope, gauges):
 
 if __name__ == '__main__':
 
+    nivometeo = read_obs_nivometeo_accumulation()
     obs_auto = read_obs_auto_accumulation()
     arome = read_AROME_accumulation()
     antilope = read_ANTILOPE_accumulation()
@@ -169,7 +193,13 @@ if __name__ == '__main__':
     obs_auto = obs_auto[(tmp.cumul / obs_auto.rr < (1 + gauge_tolerance)) &
             (tmp.cumul / obs_auto.rr > (1 - gauge_tolerance))]
 
-    reference_field, error = compute_reference_field(obs_auto, arome)
+    # Filter nivometeo station outside of the target domain
+    nivometeo = nivometeo[(nivometeo.lon >= lonmin) & (nivometeo.lon <= lonmax) &
+            (nivometeo.lat >= latmin) & (nivometeo.lat <= latmax)]
+
+    obs = pd.concat([obs_auto, nivometeo])
+
+    reference_field, error = compute_reference_field(obs, arome)
 
     # plot reference field over the Grandes Rousses
     tmp = reference_field.sel(lon=slice(6.0, 6.5), lat=slice(45.0, 45.24))
@@ -178,7 +208,7 @@ if __name__ == '__main__':
     fig.savefig(os.path.join(savedir, 'reference_field_GrandesRousses.pdf'))
     plt.close(fig)
 
-    plot_fields(arome, reference_field, antilope, obs_auto)
+    plot_fields(arome, reference_field, antilope, obs)
 
     smooth = uniform_filter(reference_field, 20)
     gradient = reference_field / smooth
