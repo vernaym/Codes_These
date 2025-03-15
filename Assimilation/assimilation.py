@@ -58,7 +58,7 @@ from vortex.layout.dataflow import SectionFatalError
 # TODO : Save number of selected members for each pixel
 ##############################################################################################
 
-datadir = '/home/vernaym/These/DATA'
+datadir = '/home/vernaym/These/NO_TRANSFER/DATA'
 
 domain_coords = dict(
         GrandesRousses = dict(latmax=45.240, latmin=44.990, lonmin=6.010, lonmax = 6.490),
@@ -1820,7 +1820,7 @@ class RandomSampling(Assimilation):
             # * mu-musmooth to mitigate the introduced vertical gradient of precipitation
             # parameters['error'] = abs(parameters.mu - parameters.rr) * (0.1 + abs(parameters['ratio'].data - 1))
             #parameters['error'] = abs(parameters.mu - parameters.rr) * abs(parameters['ratio'].data - 1)
-            parameters['error'] = abs(parameters.mu - parameters.rr) * 0.4
+            parameters['error'] = abs(parameters.mu - parameters.rr) * 0.3
             #parameters['error'] = abs(parameters.mu - parameters.rr) * 0.2 + abs(parameters.mu - musmooth) * abs(parameters['ratio'].data - 1)
             #parameters['error'] = abs(parameters.mu - parameters.rr) / musmooth
 
@@ -1955,7 +1955,7 @@ class RandomSampling(Assimilation):
         )
         #obs = Y.reshape((len(parameters.lat), len(parameters.lon)))  # Get observation field
         obs = parameters.mu.data  # De-biasing only
-        obs = np.round(obs, 1)  # Round precipitation <0.1 at 0 (different distribution used in this case) TODO : convertir dans l'espace r^1/2
+        #obs = np.round(obs, 1)  # Round precipitation <0.1 at 0 (different distribution used in this case) TODO : convertir dans l'espace r^1/2
         error = parameters['error'].data
 
         # Fill first member with corrected observation
@@ -2106,12 +2106,13 @@ class RandomSampling(Assimilation):
         #std = np.abs(parameters.sigma.data)
         #pond = self.pond.dot(diags(1/std.flatten(), 0))
 
-        draw_gamma = Preprocessing_ANTILOPE.random_draw(distribution='gamma', members=len(analysis.member) - 1)
+        #draw_gamma = Preprocessing_ANTILOPE.random_draw(distribution='gamma', members=len(analysis.member) - 1)
         # draw_gamma = Preprocessing_ANTILOPE.random_draw(distribution='gamma', members=len(analysis.member) - 1, sort=False)
         draw_gauss = Preprocessing_ANTILOPE.random_draw(distribution='normal', members=len(analysis.member) - 1)
+        draw_gauss2 = Preprocessing_ANTILOPE.random_draw(distribution='normal', members=len(analysis.member) - 1)
 
         for idx, member in enumerate(analysis.member.data[1:]):
-            ana = Preprocessing_ANTILOPE.perturb(obs, error.data, draw_gamma[idx], draw_gauss[idx])
+            ana = Preprocessing_ANTILOPE.perturb(obs, error.data, draw_gauss[idx], draw_gauss2[idx])
             analysis.loc[{'member': member}] = ana
 
             self.newlocalfield[member][:, :, idd] = analysis.sel({'member': member}).data
@@ -2237,13 +2238,16 @@ class RandomSampling(Assimilation):
             #if int(num_poste) == 38191400:
             #if int(num_poste) == 5133400:
             #if int(num_poste) == 38253400:
-            if int(num_poste) == 73176400:
-                R, Rstat, Rdyn, updated_obs = self.observation_ECM_new(parameters_loc, date, plot=dict(lat=nearest_lat, lon=nearest_lon, date=date, num_poste=num_poste))
-            else:
-                R, Rstat, Rdyn, updated_obs = self.observation_ECM_new(parameters_loc, date)
-            Y = updated_obs.data  # Observation vector
-            obs = Y.reshape((len(parameters_loc.lat), len(parameters_loc.lon)))  # Get observation field
-            obs = np.round(obs, 1)  # Round precipitation <0.1 at 0 (different distribution used in this case)
+            #if int(num_poste) == 73176400:
+            #    R, Rstat, Rdyn, updated_obs = self.observation_ECM_new(parameters_loc, date, plot=dict(lat=nearest_lat, lon=nearest_lon, date=date, num_poste=num_poste))
+            #else:
+            #    R, Rstat, Rdyn, updated_obs = self.observation_ECM_new(parameters_loc, date)
+            #Y = updated_obs.data  # Observation vector
+            #obs = Y.reshape((len(parameters_loc.lat), len(parameters_loc.lon)))  # Get observation field
+            #obs = np.round(obs, 1)  # Round precipitation <0.1 at 0 (different distribution used in this case)
+            obs = parameters_loc.mu.data  # De-biasing only
+            #obs = np.round(obs, 1)  # Round precipitation <0.1 at 0 (different distribution used in this case) TODO : convertir dans l'espace r^1/2
+            error = parameters_loc['error']
 
             # Initialisation of ensemble output field
             analysis = xr.DataArray(
@@ -2256,33 +2260,34 @@ class RandomSampling(Assimilation):
             analysis.loc[{'member':0}] = obs
             self.newlocalfield[0][idp,idd] = analysis.sel({'lat':nearest_lat, 'lon':nearest_lon, 'member':0}).data
 
-            sd1 = Rstat.diagonal().reshape((len(parameters_loc.lat), len(parameters_loc.lon)))  # Get standard deviation field
-            #sd1 = uniform_filter(sd1, 3)
-            sd2 = Rdyn.diagonal().reshape((len(parameters_loc.lat), len(parameters_loc.lon)))
-            #sd2 = uniform_filter(sd2, 3)
-            sd = R.diagonal().reshape((len(parameters_loc.lat), len(parameters_loc.lon)))  # Get standard deviation field
-            #sd = sd1 + sd2
-            # If no precipitation have been introduced by the WMA we are confident that there is actually no precipitation
-            # Avoid small dispersion around 0mm and flatten the rank histogram
-            sd[obs==0] = 0
-            sd1[obs==0] = 0
-            sd2[obs==0] = 0
-
-            error = xr.DataArray(
-                name   = 'error',
-                #data   = np.square(sd),
-                data   = sd,
-                dims   = ["lat", "lon"],
-                coords = dict(lon=parameters_loc.lon, lat=parameters_loc.lat),
-            )
+#            sd1 = Rstat.diagonal().reshape((len(parameters_loc.lat), len(parameters_loc.lon)))  # Get standard deviation field
+#            #sd1 = uniform_filter(sd1, 3)
+#            sd2 = Rdyn.diagonal().reshape((len(parameters_loc.lat), len(parameters_loc.lon)))
+#            #sd2 = uniform_filter(sd2, 3)
+#            sd = R.diagonal().reshape((len(parameters_loc.lat), len(parameters_loc.lon)))  # Get standard deviation field
+#            #sd = sd1 + sd2
+#            # If no precipitation have been introduced by the WMA we are confident that there is actually no precipitation
+#            # Avoid small dispersion around 0mm and flatten the rank histogram
+#            sd[obs==0] = 0
+#            sd1[obs==0] = 0
+#            sd2[obs==0] = 0
+#
+#            error = xr.DataArray(
+#                name   = 'error',
+#                #data   = np.square(sd),
+#                data   = sd,
+#                dims   = ["lat", "lon"],
+#                coords = dict(lon=parameters_loc.lon, lat=parameters_loc.lat),
+#            )
             self.error[idp, idd] = error.sel({'lat':nearest_lat, 'lon':nearest_lon})
 
-            draw_gamma = Preprocessing_ANTILOPE.random_draw(distribution='gamma', members=len(analysis.member) - 1)
-            draw_gauss = Preprocessing_ANTILOPE.random_draw(distribution='normal', members=len(analysis.member) - 1)
+            #draw_gamma = Preprocessing_ANTILOPE.random_draw(distribution='gamma', members=len(analysis.member) - 1)
+            draw_gauss1 = Preprocessing_ANTILOPE.random_draw(distribution='normal', members=len(analysis.member) - 1)
+            draw_gauss2 = Preprocessing_ANTILOPE.random_draw(distribution='normal', members=len(analysis.member) - 1)
 
             for idx, member in enumerate(analysis.member.data[1:]):
                 # Fill other members with random draw arround the corrected observation
-                ana = Preprocessing_ANTILOPE.perturb(obs, sd, draw_gamma[idx], draw_gauss[idx])
+                ana = Preprocessing_ANTILOPE.perturb(obs, error.data, draw_gauss1[idx], draw_gauss2[idx])
                 analysis.loc[{'member':member}] = ana
 
                 self.newlocalfield[member][idp,idd] = analysis.sel({'lat':nearest_lat, 'lon':nearest_lon, 'member':member}).data

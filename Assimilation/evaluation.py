@@ -65,7 +65,7 @@ indep = [74286400, 74063405, 74191406, 74014402, 731223402, 73132400, 73054401, 
         73307400, 73322401, 38191400, 38020400, 38527400, 38375400, 38186400, 5079400, 5085403, 5101400,
         5110400, 5061400, 5098402, 4073400, 4006400, 6073405]
 
-datadir = '/home/vernaym/These/DATA'
+datadir = '/home/vernaym/These/NO_TRANSFER/DATA'
 workdir = '/home/vernaym/workdir/ASSIMILATION/'
 
 latmax = 45.240
@@ -282,9 +282,10 @@ algo = dict(
         ################################################################################################
         # Paper1 :
         RS27          = 'RandomSampling/XP27/Random_Sampling_2021120106_2022043006_daily_alp.nc',
-        PF32          = 'XP32/Assimilation_locale_2021120106_2022050106_daily_alp_mask9_debiasing3.nc',
-        KD36          = 'EnsembleKalmanFilter/XP36/EnKF_2021120106_2022050106_daily_alp.nc',
+        #PF32          = 'XP32/Assimilation_locale_2021120106_2022050106_daily_alp_mask9_debiasing3.nc',
+        #KD36          = 'EnsembleKalmanFilter/XP36/EnKF_2021120106_2022050106_daily_alp.nc',
         ################################################################################################
+        RS49          = 'RandomSampling/XP49/Random_Sampling_2021120106_2022043006_daily_alp.nc',
     )
 
 
@@ -303,7 +304,7 @@ experiments_map = dict(
 )
 experiments = experiments_map[xpid]
 
-savedir = os.path.join(f"/home/vernaym/These/figures/evaluation/{domain}", xpid)
+savedir = os.path.join(f"/home/vernaym/These/NO_TRANSFER/figures/evaluation/{domain}", xpid)
 if not os.path.exists(savedir):
     os.makedirs(savedir)
 
@@ -430,6 +431,7 @@ xpid_label = dict(
         RS27          = 'RS',  # paper1
         PF32          = 'PF',  # paper1
         KD36          = 'EnKF',  # paper1
+        RS49          = 'RS_new',
     )
 
 colors = dict(
@@ -449,6 +451,7 @@ colors = dict(
     #KD35      = 'blue',
     KD35      = 'red',
     KD36      = 'red',
+    RS49      = 'green',
 )
 
 def nearest(array, value):
@@ -966,7 +969,8 @@ class Evaluation(object):
         self.data = self.data.loc[{'date':dates}]
 
 #        data = dict(antilope=list(), wma=list(), antiloped=list(), antilopec=list())
-        data = dict(antilope=list(), raw=list(), antilopec=list())
+        data = dict(antilope=list(), raw=list())
+        #data = dict(antilope=list(), raw=list(), antilopec=list())
 #        data = dict(antilopec=list(), raw=list())
 #        data = dict(antilope=list(), antiloped=list(), antiloper=list())
         #data = dict(antilope=list(), raw=list(), antilopec=list())
@@ -1197,14 +1201,18 @@ class Evaluation(object):
             if 'member' in self.data[product].dims or 'pseudo_member' in self.data[product].dims:
                 simu = self.data[product].stack(points=["num_poste", "date"]).data.transpose()
                 freq_error = scores.error_frequency(simu, obse)
-                ax.axhline(freq_error, color=next(ax._get_lines.prop_cycler)['color'], label=xpid_label[product])
+                #ax.axhline(freq_error, color=next(ax._get_lines.prop_cycler)['color'], label=xpid_label[product])
+                # Matplotlib v > 3.9 (https://stackoverflow.com/questions/13831549/get-matplotlib-color-cycle-state)
+                ax.axhline(freq_error, color=ax._get_lines.get_next_color(), label=xpid_label[product])
                 #ax.axhline(freq_error, label=xpid_label[product])
             else:
                 simu = self.data[product].data.flatten()
                 freq_error = list()
                 for threshold in thresholds:
                     freq_error.append(scores.error_frequency(simu, obse, threshold=threshold))
-                ax.plot(thresholds*100, np.array(freq_error), label=xpid_label[product], color=next(ax._get_lines.prop_cycler)['color'])
+                #ax.plot(thresholds*100, np.array(freq_error), label=xpid_label[product], color=next(ax._get_lines.prop_cycler)['color'])
+                # Matplotlib v > 3.9 (https://stackoverflow.com/questions/13831549/get-matplotlib-color-cycle-state)
+                ax.plot(thresholds*100, np.array(freq_error), label=xpid_label[product], color=ax._get_lines.get_next_color())
         ax.set_xlabel('Error threshold (%)')
         ax.set_ylabel('Frequency of error above threshold (%)\nFrequency of observation outside the ensemble (%)')
         ax.set_ylim(bottom=0)
@@ -1239,7 +1247,8 @@ class Evaluation(object):
                 i = 1
                 j = 1
                 title= 'd'
-            sc = tools.plot_scatter(axes[i,j], error, spread, 'Absolute error of the ensemble mean (kg/m²)', 'Ensemble spread (kg/m²)', f"spread_skill_{product}.pdf", savedir, color=rr)
+            sc = tools.plot_scatter(axes[i,j], error, spread, color=rr)
+            #sc = tools.plot_scatter(axes[i,j], error, spread, 'Absolute error of the ensemble mean (kg/m²)', 'Ensemble spread (kg/m²)', f"spread_skill_{product}.pdf", savedir, color=rr)
                     #savedir, color=rr, xaxis=xaxis, yaxis=yaxis)
             axes[i,j].set_title(f'{title}) {xpid_label[product]}', fontsize=16)
             j = j + 1
