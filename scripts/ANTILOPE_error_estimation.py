@@ -39,12 +39,19 @@ def read_obs_auto_accumulation():
 
     src = '/home/vernaym/These/NO_TRANSFER/DATA/obs_horaires_RR_20210731_20230423.csv'
     df = pd.read_csv(src, sep=';', parse_dates=['date'])
-    tmp = df[(df['date'] >= datebegin) & (df['date'] <= dateend)]  # Same period as AROME accumulation
-    # tmp = tmp[tmp['date'].dt.month.isin([11, 12, 1, 2, 3, 4])]  # Same period as AROME accumulation
-    # tmp = tmp[tmp['date'].dt.month.isin([12, 1, 2, 3])]  # Same period as AROME accumulation
-    out = tmp.groupby('num_poste').agg({'rr': 'sum', 'lat': 'min', 'lon': 'min', 'alti': 'min', 'date': "count"})
-    # out = out[out.date > 8700]  # Filter out stations with too many missing values
-    out = out[out.date > out.date.max() * 0.95]  # Filter out stations with too many missing values
+    # Filter out stations outside of the target domain
+    df = df[(df.lon >= lonmin) & (df.lon <= lonmax) & (df.lat >= latmin) & (df.lat <= latmax)]
+    df = df[(df['date'] >= '2021-07-31') & (df['date'] <= '2022-08-01')]  # Same period as AROME/ANTILOPE accumulations
+    year = df.groupby('num_poste').agg({'rr': 'sum', 'lat': 'min', 'lon': 'min', 'alti': 'min', 'date': "count"})
+    # Filter out stations with too many missing values
+    year = year[year.date > year.date.max() * 0.95]
+    df = df[df['num_poste'].isin(year.index.values)]
+
+    winter = df[(df['date'] >= datebegin) & (df['date'] <= dateend)]
+    winter = winter.groupby('num_poste').agg({'rr': 'sum', 'lat': 'min', 'lon': 'min', 'alti': 'min', 'date': "count"})
+
+    out = winter.rename(columns={'rr': 'winter_cumul'}).drop(columns='date')
+    out['summer_cumul'] = year['rr'] - out['winter_cumul']
 
     return out
 
@@ -58,61 +65,84 @@ def read_obs_nivometeo_accumulation():
     df = pd.read_csv(src, sep=';', parse_dates=['Q.dat'])
     df = df.rename(columns={'Q.dat': 'date', 'poste_nivo.alti': 'alti', 'poste_nivo.lat_dg': 'lat',
         'poste_nivo.lon_dg': 'lon', 'Q.rr': 'rr', 'Q.num_poste': 'num_poste'})
+    # Filter out stations outside of the target domain
+    df = df[(df.lon >= lonmin) & (df.lon <= lonmax) & (df.lat >= latmin) & (df.lat <= latmax)]
     tmp = df[(df['date'] >= datebegin) & (df['date'] <= dateend)]  # Same period as AROME accumulation
     # tmp = tmp[tmp['date'].dt.month.isin([11, 12, 1, 2, 3, 4])]  # Same period as AROME accumulation
     # tmp = tmp[tmp['date'].dt.month.isin([12, 1, 2, 3])]  # Same period as AROME accumulation
     out = tmp.groupby('num_poste').agg({'rr': 'sum', 'lat': 'min', 'lon': 'min', 'alti': 'min', 'date': "count"})
     # out = out[out.date > 8700]  # Filter out stations with too many missing values
     out = out[out.date > out.date.max() * 0.95]  # Filter out stations with too many missing values
+    out = out.rename(columns={'rr': 'winter_cumul'}).drop(columns='date')
 
     return out
 
 
 def read_AROME_accumulation():
-    # src = '/home/vernaym/These/NO_TRANSFER/DATA/CUMUL_AROME_2021073106_2022080106_alp.nc'
+    src = '/home/vernaym/These/NO_TRANSFER/DATA/CUMUL_AROME_2021073106_2022080106_alp.nc'
     # src = '/home/vernaym/These/NO_TRANSFER/DATA/CUMUL_AROME_2021073106_2022080106_nov-apr_alp.nc'
     # src = '/home/vernaym/These/NO_TRANSFER/DATA/CUMUL_AROME_20211201_20220415_alp.nc'
     # src = '/home/vernaym/These/NO_TRANSFER/DATA/CUMUL_AROME_20211201_20220331_alp.nc'
-    src = f'/home/vernaym/These/NO_TRANSFER/DATA/CUMUL_AROME_{datebegin}_{dateend}_alp.nc'
-    ds = xr.open_dataset(src, engine='netcdf4')
-    ds['lat'] = ds.lat.round(2)
-    ds['lon'] = ds.lon.round(2)
+    ds_year = xr.open_dataset(src, engine='netcdf4')
+    ds_year['lat'] = ds_year.lat.round(2)
+    ds_year['lon'] = ds_year.lon.round(2)
+    ds_year = xr.where(ds_year.cumul == 0., np.nan, ds_year)
 
-    return ds
+    src = f'/home/vernaym/These/NO_TRANSFER/DATA/CUMUL_AROME_{datebegin}_{dateend}_alp.nc'
+    ds_winter = xr.open_dataset(src, engine='netcdf4')
+    ds_winter['lat'] = ds_winter.lat.round(2)
+    ds_winter['lon'] = ds_winter.lon.round(2)
+    ds_winter = xr.where(ds_winter.cumul == 0., np.nan, ds_winter)
+
+    out = ds_winter.rename({'cumul': 'winter_cumul'})
+    out['summer_cumul'] = ds_year.cumul - ds_winter.cumul
+
+    return out
 
 
 def read_ANTILOPE_accumulation():
-    # src = '/home/vernaym/These/NO_TRANSFER/DATA/CUMUL_ANTILOPE_alp_2021080106_2022080106.nc'
+    src = '/home/vernaym/These/NO_TRANSFER/DATA/CUMUL_ANTILOPE_alp_2021080106_2022080106.nc'
+    ds_year = xr.open_dataset(src, engine='netcdf4')
+    ds_year['lat'] = ds_year.lat.round(2)
+    ds_year['lon'] = ds_year.lon.round(2)
+    ds_year = xr.where(ds_year.cumul == 0., np.nan, ds_year)
+
     # src = '/home/vernaym/These/NO_TRANSFER/DATA/CUMUL_ANTILOPE_2021073106_2022080106_nov-apr_alp.nc'
     # src = '/home/vernaym/These/NO_TRANSFER/DATA/CUMUL_ANTILOPE_20211201_20220331_alp.nc'
     src = f'/home/vernaym/These/NO_TRANSFER/DATA/CUMUL_ANTILOPE_{datebegin}_{dateend}_alp.nc'
-    ds = xr.open_dataset(src, engine='netcdf4')
-    ds['lat'] = ds.lat.round(2)
-    ds['lon'] = ds.lon.round(2)
+    ds_winter = xr.open_dataset(src, engine='netcdf4')
+    ds_winter['lat'] = ds_winter.lat.round(2)
+    ds_winter['lon'] = ds_winter.lon.round(2)
+    ds_winter = xr.where(ds_winter.cumul == 0., np.nan, ds_winter)
+
     # ds = ds.isel(lat=slice(None, None, -1))  # Flip upside down
 
-    return ds
+    out = ds_winter.rename({'cumul': 'winter_cumul'})
+    out['summer_cumul'] = ds_year.cumul - ds_winter.cumul
+
+    return out
 
 
-def compute_reference_field(df, ds):
+def compute_reference_field(df, da):
     """
     refs :
     https://github.com/GeoStat-Framework/PyKrige/issues/155
     https://geostat-framework.readthedocs.io/projects/pykrige/en/stable/generated/pykrige.uk.UniversalKriging.html
     """
+
     UK = UniversalKriging(
         df.lon,
         df.lat,
-        # df.rr * 1.1,
-        # df.rr * 0.9,
-        df.rr,
+        # df.cumul * 1.1,
+        # df.cumul * 0.9,
+        df.cumul,
         variogram_model  = 'spherical',
         drift_terms      = ['external_Z'],
-        external_drift   = ds,
-        external_drift_x = ds.lon,
-        external_drift_y = ds.lat,
+        external_drift   = da,
+        external_drift_x = da.lon,
+        external_drift_y = da.lat,
     )
-    kg, sd = UK.execute("grid", ds.lon, ds.lat)
+    kg, sd = UK.execute("grid", da.lon, da.lat)
 
     # im = plt.imshow(np.flipud(np.sqrt(sd) / kg))
     # plt.colorbar(im)
@@ -122,8 +152,8 @@ def compute_reference_field(df, ds):
         data = kg,
         dims = ["lat", "lon"],
         coords = dict(
-            lon = (('lon'), ds.lon.data),
-            lat = (('lat'), ds.lat.data),
+            lon = (('lon'), da.lon.data),
+            lat = (('lat'), da.lat.data),
         ),
     )
 
@@ -131,8 +161,8 @@ def compute_reference_field(df, ds):
         data = np.sqrt(sd) / kg,
         dims = ["lat", "lon"],
         coords = dict(
-            lon = (('lon'), ds.lon.data),
-            lat = (('lat'), ds.lat.data),
+            lon = (('lon'), da.lon.data),
+            lat = (('lat'), da.lat.data),
         ),
     )
 
@@ -150,7 +180,7 @@ def plot_ratio(field, filename, cmap=plt.cm.YlGnBu, origin='lower', vmin=None, v
     # fig.savefig(os.path.join(savedir, 'Estimated_ratio_from_kriging_may-sep.pdf'), format='pdf')
 
 
-def plot_fields(arome, reference_field, antilope, gauges):
+def plot_fields(arome, reference_field, antilope, gauges, season):
     fig, ax = plt.subplots(1, 3, figsize=(14, 6), sharex=True, sharey=True,
             subplot_kw=dict(projection=ccrs.PlateCarree()), layout='compressed')
     for axis in ax:
@@ -163,14 +193,14 @@ def plot_fields(arome, reference_field, antilope, gauges):
     ax[0].set_title('AROME')
     make_mask.plot_field(fig, ax[1], reference_field, cmap=cmap, vmin=0, vmax=vmax, elevation=True, coords=False,
             colorbar=False, categories=False)
-    gauges.plot.scatter('lon', 'lat', c='rr', edgecolor='black', cmap=plt.cm.YlGnBu, vmin=0, vmax=vmax, ax=ax[1],
+    gauges.plot.scatter('lon', 'lat', c='cumul', edgecolor='black', cmap=plt.cm.YlGnBu, vmin=0, vmax=vmax, ax=ax[1],
             colorbar=False)
     ax[1].set_title('Reference Field')
     im = make_mask.plot_field(fig, ax[2], antilope, cmap=cmap, vmin=0, vmax=vmax, elevation=True, coords=False,
             colorbar=False, categories=False)
     ax[2].set_title('ANTILOPE')
     plt.colorbar(im, ax=ax, label=f'Precipitation accumulation {datebegin}h - {dateend}h (kg/m²)')
-    fig.savefig(os.path.join(savedir, f'AROME_reference_ANTILOPE_{datebegin}_{dateend}.pdf'), format='pdf')
+    fig.savefig(os.path.join(savedir, f'AROME_reference_ANTILOPE_{datebegin}_{dateend}_{season}.pdf'), format='pdf')
     # plt.colorbar(im, ax=ax, label='Precipitation accumulation May - September (kg/m²)')
     # fig.savefig(os.path.join(savedir, 'AROME_reference_ANTILOPE_may-sep.pdf'), format='pdf')
 
@@ -183,44 +213,49 @@ if __name__ == '__main__':
     antilope = read_ANTILOPE_accumulation()
 
     arome = arome.where((arome.lat == antilope.lat) & (arome.lon == antilope.lon))
-    arome = xr.where(arome.cumul == 0., np.nan, arome.cumul)
     antilope = antilope.where((antilope.lat == arome.lat) & (antilope.lon == arome.lon))
-    antilope = xr.where(antilope.cumul == 0., np.nan, antilope.cumul)
 
     # Compare gauge accumulation to ANTILOPE to filter out gauges
     tmp = antilope.sel(lat=xr.DataArray(obs_auto.lat, dims='num_poste'),
             lon=xr.DataArray(obs_auto.lon, dims='num_poste'), method='nearest').to_dataframe()
-    obs_auto = obs_auto[(tmp.cumul / obs_auto.rr < (1 + gauge_tolerance)) &
-            (tmp.cumul / obs_auto.rr > (1 - gauge_tolerance))]
-
-    # Filter nivometeo station outside of the target domain
-    nivometeo = nivometeo[(nivometeo.lon >= lonmin) & (nivometeo.lon <= lonmax) &
-            (nivometeo.lat >= latmin) & (nivometeo.lat <= latmax)]
+    obs_auto['winter_cumul'] = obs_auto['winter_cumul'].where(
+        (tmp.winter_cumul / obs_auto.winter_cumul < (1 + gauge_tolerance)) &
+        (tmp.winter_cumul / obs_auto.winter_cumul > (1 - gauge_tolerance)),
+    )
+    obs_auto['summer_cumul'] = obs_auto['summer_cumul'].where(
+        (tmp.summer_cumul / obs_auto.summer_cumul < (1 + gauge_tolerance)) &
+        (tmp.summer_cumul / obs_auto.summer_cumul > (1 - gauge_tolerance)),
+    )
 
     obs = pd.concat([obs_auto, nivometeo])
 
-    reference_field, error = compute_reference_field(obs, arome)
+    for season in ['summer', 'winter']:
 
-    # plot reference field over the Grandes Rousses
-    tmp = reference_field.sel(lon=slice(6.0, 6.5), lat=slice(45.0, 45.24))
-    fig, ax = plt.subplots(figsize=(12, 6))
-    tmp.plot(ax=ax, cmap=plt.cm.YlGnBu)
-    fig.savefig(os.path.join(savedir, 'reference_field_GrandesRousses.pdf'))
-    plt.close(fig)
+        obs_season = obs[[f'{season}_cumul', 'lat', 'lon']].rename(columns={f'{season}_cumul': 'cumul'}).dropna()
+        arome_season = arome[f'{season}_cumul']
+        antilope_season = antilope[f'{season}_cumul']
 
-    plot_fields(arome, reference_field, antilope, obs)
+        reference_field, error = compute_reference_field(obs_season, arome_season)
 
-    smooth = uniform_filter(reference_field, 20)
-    gradient = reference_field / smooth
-    gradient.rename('gradient')
-    gradient.to_netcdf(os.path.join(savedir, f'Estimated_gradient_from_kriging_{datebegin}_{dateend}.nc'))
-    plot_ratio(gradient, f'Estimated_gradient_from_kriging_{datebegin}_{dateend}.pdf', origin='lower',
-            cmap=plt.cm.RdBu_r, vmin=0.7, vmax=1.3)
+        # plot reference field over the Grandes Rousses
+        tmp = reference_field.sel(lon=slice(6.0, 6.5), lat=slice(45.0, 45.24))
+        fig, ax = plt.subplots(figsize=(12, 6))
+        tmp.plot(ax=ax, cmap=plt.cm.YlGnBu)
+        fig.savefig(os.path.join(savedir, f'reference_field_{season}_GrandesRousses.pdf'))
+        plt.close(fig)
 
-    # ratio = np.where(error < 1, error, 1) * 1 + (1 - np.where(error < 1, error, 1)) * antilope.cumul / reference_field
-    ratio = antilope / reference_field
-    ratio = ratio.rename('ratio')
-    ratio.to_netcdf(os.path.join(savedir, f'Estimated_ratio_from_kriging_{datebegin}_{dateend}.nc'))
-    ratio = ratio.rename('ANTILOPE / reference ratio')
-    plot_ratio(ratio, f'Estimated_ratio_from_kriging_{datebegin}_{dateend}.pdf', origin='lower',
-            cmap=plt.cm.RdBu_r, vmin=0.3, vmax=1.7)
+        plot_fields(arome_season, reference_field, antilope_season, obs_season, season)
+
+        smooth = uniform_filter(reference_field, 20)
+        gradient = reference_field / smooth
+        gradient.rename('gradient')
+        gradient.to_netcdf(os.path.join(savedir, f'Estimated_{season}_gradient_from_kriging_{datebegin}_{dateend}.nc'))
+        plot_ratio(gradient, f'Estimated_{season}_gradient_from_kriging_{datebegin}_{dateend}.pdf', origin='lower',
+                cmap=plt.cm.RdBu_r, vmin=0.7, vmax=1.3)
+
+        ratio = antilope_season / reference_field
+        ratio = ratio.rename('ratio')
+        ratio.to_netcdf(os.path.join(savedir, f'Estimated_{season}_ratio_from_kriging_{datebegin}_{dateend}.nc'))
+        ratio = ratio.rename('ANTILOPE / reference ratio')
+        plot_ratio(ratio, f'Estimated_{season}_ratio_from_kriging_{datebegin}_{dateend}.pdf', origin='lower',
+                cmap=plt.cm.RdBu_r, vmin=0.3, vmax=1.7)

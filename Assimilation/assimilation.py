@@ -845,6 +845,9 @@ class Assimilation(object):
         self.ratio = ratio
         parameters['ratio'] = ratio
 
+        parameters['ratio_winter'] = xr.open_dataarray("Estimated_ratio_winter.nc")
+        parameters['ratio_summer'] = xr.open_dataarray("Estimated_ratio_summer.nc")
+
         # Observation error
         # Import multiplicative mask to increase observation error where necessary
         if self.mask is not None:
@@ -1735,7 +1738,14 @@ class RandomSampling(Assimilation):
 
             parameters = actual_parameters.sel({'time':date}).compute()
             parameters['rr'].data = np.round(parameters['rr'].data, 1)
-            clim_ratio = parameters['ratio'].data
+
+            # TODO : avoid to read data at each iteration
+            if date.month in [12, 1, 2, 3]:
+                clim_ratio = parameters['winter_clim_ratio']
+                clim_gradient = parameters['winter_clim_gradient']
+            else:
+                clim_ratio = parameters['summer_clim_ratio']
+                clim_gradient = parameters['summer_clim_gradient']
 
             #tmp = parameters['rr'].sel(lon=slice(6.8, 6.9), lat=slice(45.8, 45.9))  # Mont-Blanc
             #tmp = parameters['rr'].sel(lon=slice(6.1, 6.15), lat=slice(45.1, 45.15))  # Grandes-Rousses
@@ -1745,7 +1755,6 @@ class RandomSampling(Assimilation):
             # Try to detect "missed" precipitation
             parameters['rr'] = xr.where((parameters['rr'] == 0) & (smooth > 0), 0.1, parameters['rr'])
             dyn_gradient = xr.where((parameters['rr'].data > 0) & (smooth > 0), parameters['rr'] / smooth, clim_ratio)
-            clim_gradient = xr.open_dataarray('Estimated_gradient.nc')
             dyn_ratio = dyn_gradient / clim_gradient
 #            actual_gradient = (clim_gradient * (clim_gradient - abs(clim_gradient - dyn_gradient)) +
 #                    dyn_gradient * np.minimum(abs(clim_gradient - dyn_gradient), clim_gradient)) / clim_gradient
@@ -3436,7 +3445,12 @@ if __name__ == "__main__":
     elif args.assimilation == 'RS':  # Random Sampling
 
         rs = RandomSampling(extract_period, antilope, nivometeo, args.plot, args.frequency, args.gridded, args.localisation, args.mask, args.debiasing, args.domain, args.likelyhood)
-        mask = rs.pdf_parameters()
+        # mask = rs.pdf_parameters()
+        rs.parameters = rs.radar.copy()
+        rs.parameters['winter_clim_ratio'] = xr.open_dataarray('Estimated_winter_ratio.nc')
+        rs.parameters['winter_clim_gradient'] = xr.open_dataarray('Estimated_winter_gradient.nc')
+        rs.parameters['summer_clim_ratio'] = xr.open_dataarray('Estimated_summer_ratio.nc')
+        rs.parameters['summer_clim_gradient'] = xr.open_dataarray('Estimated_summer_gradient.nc')
         rs.run()
         #if not args.gridded:
         #    rs.save_corrected_field(extract_period, nivometeo.num_poste.data)
