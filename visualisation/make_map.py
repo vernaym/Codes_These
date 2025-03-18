@@ -76,12 +76,12 @@ def get_antilope(domain, obs_auto=None):
     return antilope
 
 def get_nivometeo():
-    fic_score = os.path.join(datadir, f'obs_nivometeo_daily_RR_{datebegin.ymd}_{datebegin.ymd}.csv')
+    fic_score = os.path.join(datadir, f'obs_nivometeo_daily_RR_{datebegin.ymd}_{dateend.ymd}.csv')
     if os.path.exists(fic_score):
         nivometeo = pd.read_csv(fic_score, sep=';', parse_dates=['date'],
                 dtype={'num_poste':int, 'nom':str, 'alti':int, 'lat':float, 'lon':float, 'massif':int, 'rr': float, 'reseau_poste': int}, na_values=['--'])
         #nivometeo = nivometeo.loc[nivometeo["date"]==np.datetime64(date)+np.timedelta64(1,'D')]  # Useless in real time
-        nivometeo = nivometeo.loc[nivometeo["date"]==np.datetime64(date)]  # Useless in real time
+        nivometeo = nivometeo.loc[(nivometeo["date"] >= datebegin) & (nivometeo["date"] <= dateend)]  # Useless in real time
         if len(nivometeo)>0:
             return nivometeo
         else:
@@ -134,7 +134,7 @@ def get_safran(domain):
         safran = xr.open_dataset(filename)
         #safran = safran.where(safran.ZS==1500., drop=True)
         safran['rr'] = (safran['Rainf']+safran['Snowf'])*3600.
-        dates = pd.date_range(datebegin+Period(hours=1), dateend, freq='1H')
+        dates = pd.date_range(datebegin+Period(hours=1), dateend, freq='1h')
         safran = safran.loc[{'time':dates}]
         #safran['rr'] = safran.where((safran.time>np.datetime64(datebegin)) & (safran.time<=np.datetime64(dateend)), drop=True)  # This adds time dimension to ZS variable
         safran['rr'] = safran['rr'].sum('time')
@@ -148,7 +148,8 @@ nivometeo = get_nivometeo()
 antilope = dict()
 safran = dict()
 auto = dict()
-for domain in ['alp', 'pyr']:
+#for domain in ['alp', 'pyr']:
+for domain in ['alp']:
 
     # 2. Read automatic observations
     auto[domain] = get_obs_auto(domain)
@@ -164,12 +165,12 @@ for domain in ['alp', 'pyr']:
 
 myplot = PrecipitationAnalysis(date, antilope=antilope, nivometeo=nivometeo, auto=auto, safran=safran, var='analysis')  # Plot corrected field
 myplot.plot()
-myplot.save()
+myplot.save(savename=f"precipitation_{date.strftime('%Y%m%d')}.html")
 try:
     myplot.put_ftp()
 except:
     print('WARNING : Failed to put the json file on the server')
 myplot = PrecipitationAnalysis(date, antilope=antilope, nivometeo=nivometeo, auto=auto, safran=safran, var='rr')  # Plot raw ANTILOPE field
 myplot.plot()
-myplot.save()
+myplot.save(savename=f"precipitation_rr_{date.strftime('%Y%m%d')}.html")
 

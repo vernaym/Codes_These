@@ -89,6 +89,7 @@ class PrecipitationAnalysis(object):
         self.scaletrace = None
         self.errorsize = None
 
+        self.config = {'scrollZoom': True}
         self.fig = go.Figure()  # Figure initialisation
 
     def plot(self):
@@ -121,7 +122,7 @@ class PrecipitationAnalysis(object):
         self.update_figure()
 
     def show(self):
-        self.fig.show()
+        self.fig.show(config=self.config)
 
     def save(self, savename, json=True):
         if json:
@@ -139,7 +140,7 @@ class PrecipitationAnalysis(object):
                 basename = f"{basename}.html"
         else:
             basename = savename
-        self.fig.write_html(os.path.join(rootdir, 'figures', basename))
+        self.fig.write_html(os.path.join(rootdir, 'figures', basename), config=self.config)
 
     def put_ftp(self):
         import pysftp
@@ -283,9 +284,12 @@ class PrecipitationAnalysis(object):
                     #selected = go.scattermapbox.Selected(marker={"size":50}),
                     customdata = mycustomdata,
                     hovertemplate =
-                    '<b>Incertitude</b>: %{customdata[0]:.2f}<br>',
-                    #hovertemplate = ''.join([f'<b>{label_map[key]}</b>: ' + '%{customdata[i]:.f}' + f'{unit[key]}<br>' for i, key in enumerate(listkeys)]),
-                    #hovertemplate = ''.join([f'<b>{label_map[key]}</b>: %{mycustomdata[{i}]:.f}{unit[key]}<br>' for i, key in enumerate(listkeys)]),
+                        '<b>Altitude (m)</b>: %{customdata[0]:d} m<br>' +
+                        '<b>Precipitation (mm)</b>: %{customdata[1]:.2f} mm<br>' +
+                        '<b>Incertitude (mm)</b>: %{customdata[2]:.2f} mm<br>',
+                    # hovertemplate = '<b>Incertitude</b>: %{customdata[0]:.2f}<br>',
+                    # hovertemplate = '<br>'.join([f'<b>{label_map[key]}</b>: ' + '%{key}' + f'{unit[key]}' for key in listkeys]),
+                    # hovertemplate = ''.join([f'<b>{label_map[key]}</b>: %{customdata[i]:.f}{unit[key]}<br>' for i, key in enumerate(listkeys)]),
                     marker = dict(
                         #color = antilope.rr.data.flatten(),
                         color = df[var].values,
@@ -325,26 +329,31 @@ class PrecipitationAnalysis(object):
                         #data,
                         lon  = data.lon.values,
                         lat  = data.lat.values,
-                        text = data.rr.round(1).astype('string'),  # WARNING : working only with token mapbox :  https://plotly.com/python/mapbox-layers/
+                        text = data.rr.round(1).astype('string').to_list(),  # WARNING : working only with token mapbox :  https://plotly.com/python/mapbox-layers/
                         #text = data.rr.values.round(1),  # WARNING : working only with token mapbox :  https://plotly.com/python/mapbox-layers/
-                        mode = 'text',
+                        mode = 'markers+text',
+                        marker = dict(
+                            color = color,
+                            size  = 7,
+                        ),
                         name = name,
                         textfont = dict(size=16, family='Arial', color=color),
                         textposition = 'middle center',
                         hoverinfo = 'text',
                         #hover_data=[data.num_poste, data.nom],
                         #hovertext = [data.num_poste, data.nom],
-                        customdata = np.stack((data.num_poste, data.nom, data.alti, data.reseau_poste), axis=-1),
+                        customdata = np.stack((data.rr, data.num_poste, data.nom, data.alti, data.reseau_poste), axis=-1),
                         #customdata = [data.num_poste, data.nom],
                         #hovertemplate="<br>".join([
                         #    f"Num poste: : %{customdata[0]}",
                         #    f"Nom : %{customdata[1]}",
                         #]),
                         hovertemplate =
-                            '<b>Num poste</b>: %{customdata[0]:d}<br>'+
-                            '<b>Nom</b>: %{customdata[1]}<br>'+
-                            '<b>Altitude</b>: %{customdata[2]}m<br>'+
-                            '<b>Réseau</b>: %{customdata[3]}<br>',
+                            '<b>Observation</b>: %{customdata[0]:f} mm<br>' +
+                            '<b>Num poste</b>: %{customdata[1]:d}<br>' +
+                            '<b>Nom</b>: %{customdata[2]}<br>' +
+                            '<b>Altitude</b>: %{customdata[3]} m<br>' +
+                            '<b>Réseau</b>: %{customdata[4]}<br>',
                         #hovertext=data.num_poste,
                         #hovertext=[data.num_poste, data.nom],
                         # TODO : formater le texte flottant : "Nom (num_poste)"
@@ -396,7 +405,7 @@ class PrecipitationAnalysis(object):
                 zmin = 0,
                 #zmax = np.nanmax(antilope.rr.data.flatten()),
                 zmax = self.max,
-                visible = False,
+                visible = 'legendonly',
                 uid = 4,
                 uirevision = True,
                 showscale = False,  # Same scale as ANTILOPE data (à vérifier !)

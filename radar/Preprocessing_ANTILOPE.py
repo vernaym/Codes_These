@@ -506,11 +506,11 @@ class AntilopePreprocessing(object):
         antilope = xr.open_dataset(self.filename)
         # TODO : gérer le changement d'heure !
 
-        if 'analysis' in antilope.variables.keys():
+        if 'analysis' in antilope.variables.keys():  # File already pre-processed
             antilope = antilope.rename({'analysis':'analysis_save'})  # !!!!! TODO : TMP !!!!!!!
             #antilope = antilope.rename({'rr':'analysis'})
 
-        if 'analysis' not in antilope.variables.keys():  # File already pre-processed
+        else:
             if 'time' in antilope.coords:
                 antilope = antilope.where((antilope.time>np.datetime64(self.datebegin)) & (antilope.time<=np.datetime64(self.dateend)), drop=True).sum('time')  # Security ?
 
@@ -518,87 +518,32 @@ class AntilopePreprocessing(object):
             # TODO : commencer par la correction dynamique puis appliquer le débiaisage (facteur à modifier pour prendre en compte le biais moyen après correction ?)
 
             # 1. Static de-biasing :
-            #antilope = self.debiasing(antilope)
-            ratio = xr.open_dataset(os.path.join(workdir, f"Estimated_ratio_{self.domain}.nc"))
-
-            antilope["ratio"] = ratio.Ratio  # Fill missing point with NaNs
-            var0 = 'rr'
-            antilope["rr_debiaise"] = (antilope.rr/antilope.ratio).fillna(antilope.rr)  # Fill NaN values with the original ANTILOPE value
-            var1 = "rr_debiaise"
-
-            # 2. Dynamic error / de-biasing
-            if obs_auto is not None:
-                delta = 0.1
-                if self.domain == 'alp':
-                    arome_clim = xr.open_dataset(os.path.join(workdir, 'CUMUL_AROME.nc'))
-                    arome_clim = arome_clim.sel(lat=ratio.lat, lon=ratio.lon)
-                else:
-                    arome_clim = None
-                obs_auto = filter_gauges(obs_auto, antilope[var1], delta=delta)
-                dyn_ratio, dyn_error = dynamic_error_estimation(antilope[var1], obs_auto, arome_clim=None, delta=delta)
-                antilope['ratio'] = dyn_ratio
-                antilope['error'] = dyn_error
-                antilope['db'] = (antilope[var1]+delta) / antilope['ratio'] - delta  # Add delta to introduce precipitation in "missed precipitation" pixels
-                mask = antilope[var1].data > 0
-                antilope['db'].data[mask] = antilope[var1].data[mask] / antilope['ratio'].data[mask]
-                var2 = 'db'
+            if self.date.month in [12, 1, 2, 3]:
+                clim_ratio = xr.open_dataarray(os.path.join(workdir, f"Estimated_winter_ratio_{self.domain}.nc"))
+                clim_gradient = xr.open_dataarray(os.path.join(workdir, f"Estimated_winter_gradient_{self.domain}.nc"))
             else:
-                var2 = var1
+                clim_ratio = xr.open_dataarray(os.path.join(workdir, f"Estimated_summer_ratio_{self.domain}.nc"))
+                clim_gradient = xr.open_dataarray(os.path.join(workdir, f"Estimated_summer_gradient_{self.domain}.nc"))
 
-            # 3. WMA correction (localisation)
-            #antilope['error'] = xr.open_dataset(os.path.join(datadir, 'Observation_error.nc'))
-            error = xr.open_dataarray(os.path.join(workdir, f'Observation_error_{self.domain}.nc'))
-            #error = xr.open_dataarray(os.path.join("/home/vernaym/workdir/ASSIMILATION/mask/alp", 'Observation_error.nc'))
-            std = error.data
-            if 'error' in antilope.keys():
-                std2 = antilope.error.sel({'lat':np.intersect1d(error.lat.data, antilope.lat.data), 'lon':np.intersect1d(error.lon.data, antilope.lon.data)}).data
-                std = std + std2
-            codist = os.path.join(datadir, f'codistance_max_dist_{max_dist:.2f}_{self.domain}.npz')
-            if not os.path.exists(codist):
-                # Compute inter-distances
-                coords=[(lon,lat) for lat in error.lat.data for lon in error.lon.data]
-                pond = codistances(coords, self.domain)
-                scipy.sparse.save_npz(codist, pond, compressed=False)  # TODO comprendre pourquoi ca ne marche pas pour éviter de recalculer les codistances à chaque fois
-            else:
-                pond = scipy.sparse.load_npz(codist)
-            #pond = pond.dot(diags(np.exp(-(std-1)).flatten(), 0))  # std is in [1, inf[
-            pond = pond.dot(diags(1/std.flatten(), 0))  # std is in [1, inf[
-            obs = antilope[var2].sel({'lat':np.intersect1d(error.lat.data, antilope.lat.data), 'lon':np.intersect1d(error.lon.data, antilope.lon.data)}).data.flatten()
+            tmp = antilope.sel({'lon': clim_ratio.lon.data, 'lat': clim_ratio.lat.data})
 
-            new, mean, sd = dynamic_correction(obs, pond)  # Update obs (new) and get observation error (sd)
-            antilope['obs'] = xr.DataArray(
-                    data   = new.reshape((len(ratio.lat), len(ratio.lon))),
-                    dims   = ["lat", "lon"],
-                    coords = dict(lon=ratio.lon, lat=ratio.lat)
-                )
+            smooth = uniform_filter(tmp.rr.data, 20)
+            smooth = np.where(smooth > 0, np.round(smooth, 1), 0)
+            # Try to detect "missed" precipitation
+            rr = xr.where((tmp.rr == 0) & (smooth > 0), 0.1, tmp.rr)
+            dyn_gradient = xr.where((rr.data > 0) & (smooth > 0), rr / smooth, clim_ratio)
+            dyn_ratio = dyn_gradient / clim_gradient
 
-            # 4. Observation error = WMA spread + field modification + 20% of the precipitation field ?
-            err = np.abs(antilope['obs'] - antilope[var1])
-            #err = np.abs(antilope['obs'].data - antilope[var0].data)  " TODO : try error = corrected_antilope - raw_antilope
-            err = error.sel(({'lat':np.intersect1d(ratio.lat.data, err.lat.data), 'lon':np.intersect1d(ratio.lon.data, err.lon.data)})).data
-            err = uniform_filter(err, 5)  # TODO : try to remove filter
-            rr = antilope['obs'].sel(({'lat':np.intersect1d(ratio.lat.data, antilope.lat.data), 'lon':np.intersect1d(ratio.lon.data, antilope.lon.data)})).data
-            #std = sd.reshape((len(ratio.lat), len(ratio.lon))) + err + 0.2 * rr
-            std = sd.reshape((len(ratio.lat), len(ratio.lon))) + err
-            antilope['error'] = xr.DataArray(
-                    data   = std.reshape((len(ratio.lat), len(ratio.lon))),
-                    #data   = sd.reshape((len(ratio.lat), len(ratio.lon))) + 0.3 * new.reshape((len(ratio.lat), len(ratio.lon))),
-                    dims   = ["lat", "lon"],
-                    coords = dict(lon=ratio.lon, lat=ratio.lat)
-                )
-            #antilope['error'] = sd.reshape((len(ratio.lat), len(ratio.lon))) + 0.3 * antilope['obs']
+            actual_ratio = (clim_ratio * np.maximum(0.5 - abs(clim_gradient - dyn_gradient), 0) +
+                    dyn_ratio * np.minimum(abs(clim_gradient - dyn_gradient), 0.5)) / 0.5
 
-            # Fill potential missing data with nan
-            #antilope['obs'] = antilope['obs'].fillna(antilope.rr)
-            #antilope['error'] = antilope['error'].fillna(antilope.rr)
+            antilope['analysis'] = rr / actual_ratio
+            antilope['error'] = abs(antilope['analysis'] - antilope['rr']) * 0.3 + antilope['analysis'] * 0.5
 
-#            antilope = antilope.rename({'rr_debiaise':'analysis'})
-            antilope = antilope.rename({'obs':'analysis'})
+            # 2. Nivometeo Assimilation
+            # antilope = self.nivometeo_assimilation(antilope, pond)
 
-            # 5. Nivometeo Assimilation
-            #antilope = self.nivometeo_assimilation(antilope, pond)
-
-            #antilope.to_netcdf(self.filename)  # WARNING : overwrite the initial file !!  TMP !
+            # antilope.to_netcdf(self.filename)  # WARNING : overwrite the initial file !!  TMP !
 
         return antilope
 
@@ -606,9 +551,10 @@ class AntilopePreprocessing(object):
         fic_score = os.path.join(datadir, f'obs_nivometeo_daily_RR_{self.datebegin.ymd}_{self.dateend.ymd}.csv')
         if os.path.exists(fic_score):
             nivometeo = pd.read_csv(fic_score, sep=';', parse_dates=['date'],
-                    dtype={'num_poste':int, 'nom':str, 'alti':int, 'lat':float, 'lon':float, 'massif':int, 'rr': float, 'reseau_poste': int}, na_values=['--'])
-            if len(nivometeo)>0:
-                nivometeo = nivometeo.loc[nivometeo['date']==np.datetime64(date)]
+                    dtype={'num_poste': int, 'nom': str, 'alti': int, 'lat': float, 'lon': float, 'massif': int,
+                        'rr': float, 'reseau_poste': int}, na_values=['--'])
+            if len(nivometeo) > 0:
+                nivometeo = nivometeo.loc[nivometeo['date'] == np.datetime64(self.date)]
                 return nivometeo
             else:
                 return None
