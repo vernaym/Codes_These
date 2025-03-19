@@ -64,14 +64,15 @@ token = open("/home/vernaym/.mapbox/token").read() # Token from mapbox account
 class PrecipitationAnalysis(object):
 
 
-    def __init__(self, date=None, antilope=None, safran=None, nivometeo=None, auto=None, var='obs'):
+    def __init__(self, date=None, antilope=None, safran=None, nivometeo=None, auto=None, var='obs', vmax=None):
         self.antilope = antilope
-        if antilope is not None:
-            self.max = min([max([np.nanmax(antilope.rr.data.flatten()) for antilope in self.antilope.values() if antilope is not None]), 80])
-            self.min = 0
+        self.vmin = 0
+        if (vmax is None) and (antilope is not None):
+             self.vmax = min([max([np.nanmax(antilope.data.flatten()) for antilope in self.antilope.values() if antilope is not None]), 80])
         else:
-            self.max = None
-            self.min = None
+            self.vmax = vmax
+
+
 
         #self.max = max([np.nanmax(antilope.analysis.data.flatten()) for antilope in self.antilope.values() if antilope is not None])
         self.var = var
@@ -266,10 +267,10 @@ class PrecipitationAnalysis(object):
             Ratio       = 0.5,
             Uncertainty = 2,
         )
-        if self.max is None:
-            self.max = max_map[var]
-        if self.min is None:
-            self.min = min_map[var]
+        if self.vmax is None:
+            self.vmax = max_map[var]
+        if self.vmin is None:
+            self.vmin = min_map[var]
 
         return go.Scattermapbox(
                     lon  = df.lon.values,
@@ -294,8 +295,8 @@ class PrecipitationAnalysis(object):
                         #color = antilope.rr.data.flatten(),
                         color = df[var].values,
                         #cmax  = np.nanmax(self.antilope.rr.data.flatten()),
-                        cmax  = self.max,
-                        cmin  = self.min,
+                        cmax  = self.vmax,
+                        cmin  = self.vmin,
                         size  = size,
                         #opacity=0.5,
                         #colorscale = 'YlGnBu',
@@ -402,9 +403,9 @@ class PrecipitationAnalysis(object):
                 #colorscale = 'YlGnBu',
                 colorscale = 'dense',
                 name = 'SAFRAN (1800m)',
-                zmin = 0,
+                zmin = self.vmin,
                 #zmax = np.nanmax(antilope.rr.data.flatten()),
-                zmax = self.max,
+                zmax = self.vmax,
                 visible = 'legendonly',
                 uid = 4,
                 uirevision = True,
@@ -427,7 +428,7 @@ class PrecipitationAnalysis(object):
                 showscale = True,
                 cmin  = 0,
                 #cmax  = np.nanmax(self.antilope.analysis.data.flatten()),
-                cmax  = self.max,
+                cmax  = self.vmax,
                 size  = size,
                 #symbol ='square',  # Impossible to change if color is defined : https://stackoverflow.com/questions/59628536/option-symbol-in-scattermapbox-is-not-working
                 colorbar_title = "Precipitation(mm)",

@@ -383,7 +383,7 @@ def get_std(data, mean, pond, weight=None, super_ensemble=None):
 
     return sd
 
-def codistances(coords, domain='alp', ld=0.1, Zdist=False):  # TMP for illustration. TODO : test different correlation distances
+def codistances(coords, domain='alp', ld=0.2, Zdist=False):  # TMP for illustration. TODO : test different correlation distances
     """
     Solution pour le calcul des inter-distances trouvée sur : https://stackoverflow.com/questions/35296935/python-calculate-lots-of-distances-quickly
     """
@@ -392,51 +392,55 @@ def codistances(coords, domain='alp', ld=0.1, Zdist=False):  # TMP for illustrat
     #max_dist = ld*3  # exp(-2)=0.14, exp(-3)=0.05 ==> facteur 3 pour ignorer les pixels avec un poid < 5%
     #max_dist = ld*2  # exp(-2^2)=0.018 ==> facteur 2 pour ignorer les pixels avec un poid < 2%
     #max_dist = ld
-    tree = cKDTree(coords)
-    dist = tree.sparse_distance_matrix(tree, max_distance=max_dist, p=2, output_type='coo_matrix')
-    dist = csr_matrix(dist)
-    d0 = 0.2
-    #dist.data = d0 / (d0+dist.data)  # IDW
-    #dist.data=1/(1+dist.data)  # IDW
-    dist.data = 1 - dist.data/d0  # Pondération de Franke-Little
-    #dist.data[dist.data<0] = 0
-    #dist.data = (max_dist-dist.data)/(max_dist*dist.data)^2  # Modified Shepard's ponderation
-    #dist.data=1/(1+dist.data)**2  # IDW
-    #dist.data=1/(0.01+dist.data)**2  # IDW
-    #dist.data=1/(0.1+dist.data)**2  # IDW
-    #dist.data=1/(0.5+dist.data)**2  # IDW
-    #dist[dist.nonzero()] = dist[dist.nonzero()]/ld
-    #np.exp(-dist.data, out=dist.data )
-    #np.exp(-dist.data**2/2, out=dist.data )
-    #np.exp(1/(1+dist.data), out=dist.data )
+    filename = f'codistance_max_dist_{ld}_{domain}.npz'
+    if os.path.exists(filename):
+        dist = scipy.sparse.load_npz(filename)
+    else:
+        tree = cKDTree(coords)
+        dist = tree.sparse_distance_matrix(tree, max_distance=max_dist, p=2, output_type='coo_matrix')
+        dist = csr_matrix(dist)
+        #dist.data = d0 / (d0+dist.data)  # IDW
+        #dist.data = 1 / (1 + dist.data)  # IDW
+        dist.data = 1 - dist.data / ld  # Pondération de Franke-Little
+        dist.data[dist.data<0] = 0
+        #dist.data = (max_dist-dist.data)/(max_dist*dist.data)^2  # Modified Shepard's ponderation
+        #dist.data=1/(1+dist.data)**2  # IDW
+        #dist.data=1/(0.01+dist.data)**2  # IDW
+        #dist.data=1/(0.1+dist.data)**2  # IDW
+        #dist.data=1/(0.5+dist.data)**2  # IDW
+        #dist[dist.nonzero()] = dist[dist.nonzero()]/ld
+        #np.exp(-dist.data, out=dist.data )
+        #np.exp(-dist.data**2/2, out=dist.data )
+        #np.exp(1/(1+dist.data), out=dist.data )
 
-    # 2. Elevation inter-distance
-    if Zdist:
-        #mnt1km = xr.open_dataset('/home/vernaym/These/DATA/DEM_ALPESFR_WGS84_1km.nc')  # Open 1km DEM
-        #mnt250m = xr.open_dataset('/home/vernaym/QGIS/MNT/DEM_FRANCE_L93_250m_bilinear.nc')  # Open 1km DEM
-        #mnt1km = xr.open_dataset(f'/home/vernaym/These/DATA/DEM_{domain.upper()}_WGS84_1km.nc')  # Open 1km DEM
-        try:
-            mnt1km = xr.open_dataset(os.path.join(datadir, f'DEM_{domain.upper()}_WGS84_1km.nc'))  # Open 1km DEM
-        except:
-            mnt1km = xr.open_dataset(os.path.join(datadir, f'DEM_ALP_WGS84_1km.nc'))  # Default
-        lons = np.unique([coord[0] for coord in coords])
-        lats = np.unique([coord[1] for coord in coords])
-        mnt1km = mnt1km.sel({'lat':np.intersect1d(lats, mnt1km.lat), 'lon':np.intersect1d(lons, mnt1km.lon)})
-        Z = mnt1km.elevation.data.flatten()
-        # WARNING : dZ=0 not taken into account ==> ponderation at central point = 0 !!!!
-        # Solution : avoid to have exactly 0 at central point ==> Add 1m difference
-        Z1 = diags(Z, 0)
-        Z2 = diags(Z+1, 0)
-        tmppond = dist.copy()
-        tmppond[tmppond.nonzero()] = 1
-        dZ = tmppond.dot(Z2) - Z1.dot(tmppond)  # Compute elevation inter-distance
-        dZ = np.abs(dZ)
-        #dZ.data=1/(1000+dZ.data)**2
-        #np.exp(-dZ.data/1000, out=dZ.data)
-        dZ.data = 1/(1+dZ.data/500)
+        # 2. Elevation inter-distance
+        if Zdist:
+            #mnt1km = xr.open_dataset('/home/vernaym/These/DATA/DEM_ALPESFR_WGS84_1km.nc')  # Open 1km DEM
+            #mnt250m = xr.open_dataset('/home/vernaym/QGIS/MNT/DEM_FRANCE_L93_250m_bilinear.nc')  # Open 1km DEM
+            #mnt1km = xr.open_dataset(f'/home/vernaym/These/DATA/DEM_{domain.upper()}_WGS84_1km.nc')  # Open 1km DEM
+            try:
+                mnt1km = xr.open_dataset(os.path.join(datadir, f'DEM_{domain.upper()}_WGS84_1km.nc'))  # Open 1km DEM
+            except:
+                mnt1km = xr.open_dataset(os.path.join(datadir, f'DEM_ALP_WGS84_1km.nc'))  # Default
+            lons = np.unique([coord[0] for coord in coords])
+            lats = np.unique([coord[1] for coord in coords])
+            mnt1km = mnt1km.sel({'lat':np.intersect1d(lats, mnt1km.lat), 'lon':np.intersect1d(lons, mnt1km.lon)})
+            Z = mnt1km.elevation.data.flatten()
+            # WARNING : dZ=0 not taken into account ==> ponderation at central point = 0 !!!!
+            # Solution : avoid to have exactly 0 at central point ==> Add 1m difference
+            Z1 = diags(Z, 0)
+            Z2 = diags(Z+1, 0)
+            tmppond = dist.copy()
+            tmppond[tmppond.nonzero()] = 1
+            dZ = tmppond.dot(Z2) - Z1.dot(tmppond)  # Compute elevation inter-distance
+            dZ = np.abs(dZ)
+            #dZ.data=1/(1000+dZ.data)**2
+            #np.exp(-dZ.data/1000, out=dZ.data)
+            dZ.data = 1/(1+dZ.data/500)
 
-        dist = dist.multiply(dZ)
-        #dist=dZ
+            dist = dist.multiply(dZ)
+            #dist=dZ
+        scipy.sparse.save_npz(filename, dist, compressed=False)
 
     return dist
 
@@ -500,7 +504,7 @@ class AntilopePreprocessing(object):
         self.domain = domain
         self.filename = filename
 
-    def run(self, obs_auto=None):
+    def run(self, obs_auto=None, nivometeo=None):
         #filename = os.path.join(datadir, f'ANTILOPEH_{self.datebegin.strftime("%Y%m%d%H")}_{self.dateend.strftime("%Y%m%d%H")}_{self.domain}.nc')  # TODO : extract only up to 6h
         #if os.path.exists(filename):
         antilope = xr.open_dataset(self.filename)
@@ -537,11 +541,24 @@ class AntilopePreprocessing(object):
             actual_ratio = (clim_ratio * np.maximum(0.5 - abs(clim_gradient - dyn_gradient), 0) +
                     dyn_ratio * np.minimum(abs(clim_gradient - dyn_gradient), 0.5)) / 0.5
 
-            antilope['analysis'] = rr / actual_ratio
-            antilope['error'] = abs(antilope['analysis'] - antilope['rr']) * 0.3 + antilope['analysis'] * 0.5
+            # antilope['analysis'] = rr / actual_ratio
+            # antilope['error'] = abs(antilope['analysis'] - antilope['rr']) * 0.3 + antilope['analysis'] * 0.5
+            antilope['debiasing'] = rr / actual_ratio
+            smooth = antilope['debiasing'].where(antilope['debiasing'].notnull(), drop=True)
+            smooth.data = uniform_filter(smooth, 20)
+            smooth = xr.align(smooth, antilope, join='outer')[0]
+            error = abs(antilope['debiasing'] - antilope['rr']) * 0.3 + smooth * 0.5
+            #antilope['error'] = abs(antilope['debiasing'] - antilope['rr']) * 0.3 + smooth * 0.5
 
             # 2. Nivometeo Assimilation
-            # antilope = self.nivometeo_assimilation(antilope, pond)
+            # Use a relative error in case of missed precipitation
+            relative_error = xr.where(antilope['debiasing'] > error, error / antilope['debiasing'], 1)
+            antilope['analysis'] = self.nivometeo_assimilation(antilope['debiasing'], relative_error, nivometeo)
+
+            smooth = antilope['analysis'].where(antilope['analysis'].notnull(), drop=True)
+            smooth.data = uniform_filter(smooth, 20)
+            smooth = xr.align(smooth, antilope, join='outer')[0]
+            antilope['error'] = abs(antilope['analysis'] - antilope['rr']) * 0.3 + smooth * 0.5
 
             # antilope.to_netcdf(self.filename)  # WARNING : overwrite the initial file !!  TMP !
 
@@ -561,57 +578,54 @@ class AntilopePreprocessing(object):
         else:
             return None
 
-    def nivometeo_assimilation(self, antilope, pond):
+    def nivometeo_assimilation(self, background, error, obs, obs_error=0.2):
         """
         Use Kalman Filter : a = x + BH'(HBH'+R)⁻¹(y-Hx)
         x = ANTILOPE (Background)
-        B = Backroud ECM (static ANTILOPE error)
+        B = Backroud ECM (ANTILOPE error)
         y = obs nivométéo
         R = Observation error (TODO : à définir (erreur fixe incluant erreur de représentativité et incertitude sur la mesure ?)
         H = Observation operator
         """
 
-        # Read ANTILOPE error (=Background error !)
-        error = xr.open_dataset(os.path.join(workdir, 'Observation_error.nc'))
-
-        # Background
-        # WARNING : on ne peut appliquer l'analyse que sur le domaine où l'erreur d'ANTILOPE a été estimée !!!
-        x = antilope.obs.sel({'lat':error.lat, 'lon':error.lon}).data.flatten()
-
-        #Read nivometeo observations
-        nivometeo = self.get_nivometeo()
-        if nivometeo is None:
-            antilope = antilope.rename({'obs':'analysis'})
+        if obs is None:
+            print('No nivometeo observation')
+            out = background
         else:
-            y = nivometeo.rr.to_numpy()
+            x = background.data.flatten()
+            y = obs.rr.to_numpy()
             # Construction of the observation operator
-            # - Put nivometeo observations on the ANTILOPE grid
-            nivometeo.lat = nivometeo.lat.round(2)
-            nivometeo.lon = nivometeo.lon.round(2)
-            Hx = antilope.obs.sel(lat=nivometeo.lat.to_xarray(), lon=nivometeo.lon.to_xarray(), method = 'nearest').data
+            # - Put observations on the ANTILOPE grid
+            obs.lat = obs.lat.round(2)
+            obs.lon = obs.lon.round(2)
+            Hx = background.sel(lat=obs.lat.to_xarray(), lon=obs.lon.to_xarray(), method = 'nearest').data
 
             X,Y = np.meshgrid(error.lon.data, error.lat.data)
             X = X.flatten()
             Y = Y.flatten()
             #coords = [elem for elem in zip(X,Y)]
-            #points = [elem for elem in zip(nivometeo.lon, nivometeo.lat)]
+            #points = [elem for elem in zip(obs.lon, obs.lat)]
             H = np.zeros((len(y), len(x)))  # n*k matrix
             # Update H matrix with 1 where an observation is present
-            for i,idx in enumerate(nivometeo.index):
-                lon = nivometeo.loc[idx, 'lon']
-                lat = nivometeo.loc[idx, 'lat']
+            for i,idx in enumerate(obs.index):
+                lon = obs.loc[idx, 'lon']
+                lat = obs.loc[idx, 'lat']
                 H[i, np.where((X==lon) & (Y==lat))[0]] = 1  # update H matrix
             Ht = np.transpose(H)
             H  = csr_matrix(H)
             Ht = csr_matrix(Ht)
 
             # Background (ANTILOPE) ECM
-            std = diags(error.ratio.data.flatten(), 0)
+            std = diags(error.data.flatten(), 0)
+            coords = [(lon,lat) for lat in background.lat for lon in background.lon]
+            pond = codistances(coords)
             B = std.dot(pond.dot(std))
             B = csr_matrix(B)
 
             # Observation ECM
-            R = diags(0.1+y/100)  # Uniform and uncorrelated 1% + 0.1 mm error for nivometeo observations
+            #R = diags(obs_error * (y + 1))  # Uniform and uncorrelated 50%
+            # Use a relative error in case of missed precipitation
+            R = diags(obs_error * (y + 0.1) / (y + 0.1))  # Uniform and uncorrelated 50%
 
             # Analysis
             HB = H.dot(B)
@@ -629,17 +643,17 @@ class AntilopePreprocessing(object):
 #   2. compute anlaysis as A=X+BZ
 #    A = X+HB.dot(Z)
 
-            antilope['analysis'] = xr.DataArray(
-                    data   = A.reshape((len(error.lat), len(error.lon))),
+            out = xr.DataArray(
+                    data   = A.reshape((len(background.lat), len(background.lon))),
                     dims   = ["lat", "lon"],
-                    coords = dict(lon=error.lon, lat=error.lat)
+                    coords = dict(lon=background.lon, lat=background.lat)
                 )
 
-            antilope['analysis'] = antilope.analysis.fillna(antilope.rr)  # Fill Nan values with previous ones
-
+            out = out.fillna(background)  # Fill Nan values with previous ones
 
             #TODO : Update Error covariance matrix
-        return antilope
+
+        return out
 
 #pp = AntilopePreprocessing(date, domain)
 #antilope = pp.run()

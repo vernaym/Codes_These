@@ -45,9 +45,8 @@ datadir = '/home/vernaym/extraction_obs'  # On sxcen
 
 #domain = 'alp'
 
-def get_antilope(domain, obs_auto=None):
+def get_antilope(domain, filename='ANTILOPE.nc', obs_auto=None):
 
-    filename = f'ANTILOPE_{domain}_{date.ymd}.nc'
     if not os.path.exists(filename):
         toolbox.input(
             #role           = 'Observations',
@@ -67,11 +66,6 @@ def get_antilope(domain, obs_auto=None):
             #cutoff         = 'assimilation',
             #now            = True,
         )
-
-    pp = AntilopePreprocessing(date, domain, filename)
-    antilope = pp.run(obs_auto=obs_auto)
-
-    antilope.to_netcdf(f'ANTILOPEH_{datebegin.replace(hour=7).ymdh}_{dateend.ymdh}_{domain}.nc')
 
     return antilope
 
@@ -148,29 +142,36 @@ nivometeo = get_nivometeo()
 antilope = dict()
 safran = dict()
 auto = dict()
-#for domain in ['alp', 'pyr']:
-for domain in ['alp']:
+#domains = ['alp', 'pyr']
+domains = ['alp']
+for domain in domains:
 
     # 2. Read automatic observations
     auto[domain] = get_obs_auto(domain)
 
     # 3. Récupération de ANTILOPE depuis sotrtm35-sidev
     #antilope[domain] = get_antilope(domain, obs_auto=auto[domain])  # WARNING : explosions numériques possibles !!
-    antilope[domain] = get_antilope(domain)
+    filename = f'ANTILOPE_{domain}_{date.ymd}.nc'
+    tmp_antilope = get_antilope(domain, filename=filename)
+
+    pp = AntilopePreprocessing(date, domain, filename)
+    antilope[domain] = pp.run(obs_auto=auto[domain], nivometeo=nivometeo.copy())
+    #antilope[domain].to_netcdf(f'ANTILOPEH_{datebegin.replace(hour=7).ymdh}_{dateend.ymdh}_{domain}.nc')
 
     # 4. Récupération de l'analyse SAFRAN oper de 9h
     safran[domain] = get_safran(domain)
     #safran = None
 
+vmax = min(max([antilope[domain][['rr', 'analysis']].max() for domain in domains]), 80)
 
-myplot = PrecipitationAnalysis(date, antilope=antilope, nivometeo=nivometeo, auto=auto, safran=safran, var='analysis')  # Plot corrected field
+myplot = PrecipitationAnalysis(date, antilope=antilope, nivometeo=nivometeo, auto=auto, safran=safran, var='analysis', vmax=vmax)  # Plot corrected field
 myplot.plot()
 myplot.save(savename=f"precipitation_{date.strftime('%Y%m%d')}.html")
 try:
     myplot.put_ftp()
 except:
     print('WARNING : Failed to put the json file on the server')
-myplot = PrecipitationAnalysis(date, antilope=antilope, nivometeo=nivometeo, auto=auto, safran=safran, var='rr')  # Plot raw ANTILOPE field
+myplot = PrecipitationAnalysis(date, antilope=antilope, nivometeo=nivometeo, auto=auto, safran=safran, var='rr', vmax=vmax)  # Plot raw ANTILOPE field
 myplot.plot()
 myplot.save(savename=f"precipitation_rr_{date.strftime('%Y%m%d')}.html")
 
