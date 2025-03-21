@@ -48,11 +48,12 @@ else:
     domain = 'alp'
 
 datadir = '/home/vernaym/QGIS/MNT'
-savedir = '/home/vernaym/These/figures'
+savedir = '/home/vernaym/These/NO_TRANSFER/figures'
 
 # Domaine des Grandes Rousses
 domain_coords = dict(
         GrandesRousses = dict(latmax=45.240, latmin=44.990, lonmin=6.010, lonmax = 6.490),
+        GrandesRousses_extended = dict(latmax=45.440, latmin=44.790, lonmin=5.6, lonmax = 6.690),
         NorthernAlps   = dict(lonmin=6.0, lonmax=6.9, latmin=45.6, latmax=46.35),
         CentralAlps    = dict(lonmin=5.6, lonmax=7.0, latmin=45.0, latmax=45.6),
         SouthernAlps   = dict(lonmin=5.7, lonmax=7.0, latmin=44.2, latmax=45.0),
@@ -74,6 +75,7 @@ lonmax = domain_coords[domain]['lonmax'] + delta / 2
 figsize = dict(
         alp            = (15.1,16),
         GrandesRousses = (15,7),
+        GrandesRousses_extended = (14,8),
         HauteSavoie    = (12,12),
         HautesAlpes    = (16,10),
         MontBlanc      = (15,10),
@@ -146,7 +148,8 @@ def add_rectangle(ax):
         if domain =='MontBlanc':
             rect = patches.Rectangle((x0, y0), dx, dy, linewidth=4, edgecolor='k', facecolor='none', label='Mont-Blanc')  #  https://matplotlib.org/stable/api/_as_gen/matplotlib.patches.Rectangle.html
         elif domain == 'GrandesRousses':
-            rect = patches.Rectangle((x0, y0), dx, dy, linewidth=4, edgecolor='r', facecolor='none', label='Grandes Rousses')  #  https://matplotlib.org/stable/api/_as_gen/matplotlib.patches.Rectangle.html
+            #rect = patches.Rectangle((x0, y0), dx, dy, linewidth=4, edgecolor='r', facecolor='none', label='Grandes Rousses')  #  https://matplotlib.org/stable/api/_as_gen/matplotlib.patches.Rectangle.html
+            rect = patches.Rectangle((x0, y0), dx, dy, linewidth=4, edgecolor='r', facecolor='none', label='Domaine de simulation')  #  https://matplotlib.org/stable/api/_as_gen/matplotlib.patches.Rectangle.html
 
         # Add the patch to the Axes
         ax.add_patch(rect)
@@ -189,7 +192,7 @@ def add_scores(ax):
 #            txt = ax.text(info['lons'].data[idx], info['lats'].data[idx], label)
 
 def add_postes(ax, type_poste='nivometeo'):
-    postdir = '/home/vernaym/These/DATA'
+    postdir = '/home/vernaym/These/NO_TRANSFER/DATA'
     if type_poste.startswith('nivometeo'):
         #fic_postes = os.path.join(postdir, f'scores_2021110106_2022043006_alp.csv')
         fic_postes = os.path.join(postdir, f'postes_nivometeo.csv')
@@ -230,12 +233,12 @@ def add_radar_positions(ax):
     def getImage(path):
         return OffsetImage(plt.imread(path, format="png"), zoom=.05)
 
-    symbole_radar = '/home/vernaym/These/figures/symbole_radar_violet.png'
+    symbole_radar = '/home/vernaym/These/NO_TRANSFER/figures/symbole_radar_violet.png'
     for radar, infos in radars.items():
         ab = AnnotationBbox(getImage(symbole_radar), (infos['lon'], infos['lat']), frameon=False, label='radar')
         ax.add_artist(ab)
-        ab = ax.annotate(f'{infos["name"]}\n{infos["alt"]}m', (infos['lon']-0.05, infos['lat']-0.22), weight='bold', color='darkviolet', fontsize=24, transform=ccrs.PlateCarree())
-        ab.set_bbox(dict(facecolor='white', alpha=0.3, edgecolor='white'))
+        #ab = ax.annotate(f'{infos["name"]}\n{infos["alt"]}m', (infos['lon']-0.05, infos['lat']-0.05), weight='bold', color='darkviolet', fontsize=24, transform=ccrs.PlateCarree())
+        #ab.set_bbox(dict(facecolor='white', alpha=0.3, edgecolor='white'))
 
 def codistances(coords):
     """
@@ -250,7 +253,7 @@ def codistances(coords):
     return dist
 
 def plot_correlation(ax, mnt):
-    filename = os.path.join('/home/vernaym/These/DATA', f'codistance_alp_{d0}.npz')
+    filename = os.path.join('/home/vernaym/These/NO_TRANSFER/DATA', f'codistance_alp_{d0}.npz')
     if not os.path.exists(filename):
         # Compute inter-distances
         coords=[(lon,lat) for lat in mnt.lat.data for lon in mnt.lon.data]
@@ -369,7 +372,7 @@ if crossection:
 #    import pdb
 #    pdb.set_trace()
 
-    cumul = xr.open_dataset('/home/vernaym/These/DATA/CUMUL_ANTILOPEH_alp_2021073106_2022080106.nc')
+    cumul = xr.open_dataset('/home/vernaym/These/NO_TRANSFER/DATA/CUMUL_ANTILOPEH_alp_2021073106_2022080106.nc')
     cross = extract_cross_section(cumul, varname='rr_cumul')
     plt.imshow(np.atleast_2d(cross), cmap=plt.get_cmap('YlGnBu'), extent=(0, 72, 0, 1), vmin=500, vmax=1300)
     plt.tight_layout()
@@ -436,11 +439,12 @@ else:
     if fullfeatures:
         # Add optional features
         add_boundaries(ax)
-        add_landmarks(ax)
+        #add_landmarks(ax)
         add_rectangle(ax)
         add_radar_positions(ax)
-        add_postes(ax, type_poste='automatic stations')
+        #add_postes(ax, type_poste='automatic stations')
         add_postes(ax, type_poste='nivometeo stations')
+        plot2D.add_quadrilateral(ax, 'Domaine Pleiades', color='k', linewidth=5, linestyle='--')
         # Add cross section line
         start = (45.14776, 5.63933)  # Radar Moucherotte
         end   = (45.11872, 6.27540)  # Passe par le Pic Blanc : 50 km
@@ -472,13 +476,15 @@ else:
 #        ax.set_ylabel('latitude', fontsize=22)
 
     # Add colorbar
-    #ax.legend(fontsize=20, loc=2)  # loc=2 --> upper-left
-    ax.legend(fontsize=20, loc=(0.0, 0.85))  # loc=2 --> upper-left
+    ax.legend(fontsize=20, loc=2)  # loc=2 --> upper-left
+    #ax.legend(fontsize=20, loc=(0.0, 0.85))  # loc=2 --> upper-left
     #plot_correlation(ax, mnt)  # To add correlation area
     # Force colorbar size
     cb = fig.colorbar(im, fraction=0.058, pad=0.04)  # From https://stackoverflow.com/questions/18195758/set-matplotlib-colorbar-size-to-match-graph
     cb.ax.tick_params(labelsize=20)
     cb.set_label('Elevation (m)', size=24)
+
+    fig.tight_layout()
 
     fig.savefig(filename, format='pdf')
 
