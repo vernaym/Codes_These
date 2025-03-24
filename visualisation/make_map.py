@@ -70,13 +70,13 @@ def get_antilope(domain, filename='ANTILOPE.nc', obs_auto=None):
     return antilope
 
 def get_nivometeo():
-    fic_score = os.path.join(datadir, f'obs_nivometeo_daily_RR_{datebegin.ymd}_{dateend.ymd}.csv')
-    if os.path.exists(fic_score):
-        nivometeo = pd.read_csv(fic_score, sep=';', parse_dates=['date'],
+    filename = os.path.join(datadir, f'obs_nivometeo_daily_RR_{datebegin.ymd}_{dateend.ymd}.csv')
+    if os.path.exists(filename):
+        nivometeo = pd.read_csv(filename, sep=';', parse_dates=['date'],
                 dtype={'num_poste':int, 'nom':str, 'alti':int, 'lat':float, 'lon':float, 'massif':int, 'rr': float, 'reseau_poste': int}, na_values=['--'])
         #nivometeo = nivometeo.loc[nivometeo["date"]==np.datetime64(date)+np.timedelta64(1,'D')]  # Useless in real time
         nivometeo = nivometeo.loc[(nivometeo["date"] >= datebegin) & (nivometeo["date"] <= dateend)]  # Useless in real time
-        if len(nivometeo)>0:
+        if len(nivometeo) > 0:
             return nivometeo
         else:
             return None
@@ -84,9 +84,9 @@ def get_nivometeo():
         return None
 
 def get_obs_auto(domain):
-    #fic_score = os.path.join(datadir, f'auto.data')
-    fic_score = os.path.join(datadir, f'obs_horaires_RR_{datebegin.ymd}_{dateend.ymd}_{domain}.csv')  # obs_horaires_RR.data
-    auto = pd.read_csv(fic_score, sep=';', parse_dates=['date'],
+    #filename = os.path.join(datadir, f'auto.data')
+    filename = os.path.join(datadir, f'obs_horaires_RR_{datebegin.ymd}_{dateend.ymd}_{domain}.csv')  # obs_horaires_RR.data
+    auto = pd.read_csv(filename, sep=';', parse_dates=['date'],
             dtype={'num_poste':int, 'nom':str, 'lat':float, 'lon':float, 'alti':int, 'rr': float, 'reseau_poste': int}, na_values=['--'])
     auto=auto.loc[(auto["date"]>np.datetime64(datebegin)) & (auto["date"]<=dateend)]
     auto = auto[~np.isnan(auto['rr'])]
@@ -155,7 +155,7 @@ for domain in domains:
     tmp_antilope = get_antilope(domain, filename=filename)
 
     pp = AntilopePreprocessing(date, domain, filename)
-    antilope[domain] = pp.run(obs_auto=auto[domain], nivometeo=nivometeo.copy())
+    antilope[domain] = pp.run(obs_auto=auto[domain], nivometeo=nivometeo)
     #antilope[domain].to_netcdf(f'ANTILOPEH_{datebegin.replace(hour=7).ymdh}_{dateend.ymdh}_{domain}.nc')
 
     # 4. Récupération de l'analyse SAFRAN oper de 9h

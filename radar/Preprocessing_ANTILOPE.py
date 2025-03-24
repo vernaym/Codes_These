@@ -552,8 +552,11 @@ class AntilopePreprocessing(object):
 
             # 2. Nivometeo Assimilation
             # Use a relative error in case of missed precipitation
-            relative_error = xr.where(antilope['debiasing'] > error, error / antilope['debiasing'], 1)
-            antilope['analysis'] = self.nivometeo_assimilation(antilope['debiasing'], relative_error, nivometeo)
+            if nivometeo is not None:
+                relative_error = xr.where(antilope['debiasing'] > error, error / antilope['debiasing'], 1)
+                antilope['analysis'] = self.nivometeo_assimilation(antilope['debiasing'], relative_error, nivometeo.copy())
+            else:
+                antilope['analysis'] = antilope['debiasing']
 
             smooth = antilope['analysis'].where(antilope['analysis'].notnull(), drop=True)
             smooth.data = uniform_filter(smooth, 20)
