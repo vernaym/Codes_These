@@ -104,21 +104,23 @@ function remplissageSelectDate(){
 
   //On fixe la date
   var today=new Date();
+  var yesterday=new Date();
 
   today.setDate(today.getDate());
+  yesterday.setDate(today.getDate()-1);
   //On parcourt les 365 jours précédents
   for (var i=0;i<365;i++){
     def=false;
     if(i==0){
 	def=true;
 	}
-    var year=(today.getFullYear()).toString();
-    var month=addZero(today.getMonth()+1,2);
-    var day=addZero(today.getDate(),2);
+    var year=(yesterday.getFullYear()).toString();
+    var month=addZero(yesterday.getMonth()+1,2);
+    var day=addZero(yesterday.getDate(),2);
     var value=year+month+day
     var desc=day+"/"+month+"/"+year;
     tabDate.push({"value":value,"desc":desc,"def":def});
-    today.setDate(today.getDate()-1);
+    yesterday.setDate(yesterday.getDate()-1);
   }  
 
   //On remplit le select de date
