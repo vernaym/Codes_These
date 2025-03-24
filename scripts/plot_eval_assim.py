@@ -78,6 +78,9 @@ def parse_command_line():
     parser.add_argument('-o', '--obs_geometry', type=str, choices=['Lautaret250m', 'Huez250m', 'GrandesRousses250m'],
                         required=True, help='Geometry of the observation')
 
+    parser.add_argument('-l', '--elevation_band', type=str, nargs=2,
+                        required=False, help='Consider only data within an elevation band defined as (zmin, zmax)')
+
     parser.add_argument('-m', '--members', action='store_true',
                         help="To activate ensemble simulations")
 
@@ -85,12 +88,21 @@ def parse_command_line():
     return args
 
 
-def execute():
-
-    # 1. Get all input data
+def execute(elevation_band=None):
+    """
+    elevation_band = (zmin, zmax)
+    TODO : deal with all elevation bands at once
+    --> requires to open and construct several figures in parallel
+    """
 
     # a) Pleiades observations
     fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16, 12), gridspec_kw={'height_ratios': [2, 1]})
+
+    if elevation_band is not None:
+        zmin, zmax = elevation_band
+        zmin = float(zmin)
+        zmax = float(zmax)
+        mnt = read_mnt()
 
     for idx, date in enumerate(dates_pleiades):
         obsname = f'PLEIADES_{date}.nc'
@@ -106,6 +118,8 @@ def execute():
 
         # Sort yy coordinate to avoid problems in the histogram computation
         obs = obs.reindex(yy=list(np.sort(obs.yy)))
+        if elevation_band is not None:
+            obs = xr.where((mnt >= zmin) & (mnt <= zmax), obs, np.nan)
 
         # c) Simulations
         for xpid in xpids:
@@ -155,6 +169,9 @@ def execute():
             # Read data
             openloop = read_simu(xpid, member, date)
             assim = read_simu(xpid_assim, member_assim, date)
+            if elevation_band is not None:
+                openloop = xr.where((mnt >= zmin) & (mnt <= zmax), openloop, np.nan)
+                assim    = xr.where((mnt >= zmin) & (mnt <= zmax), assim, np.nan)
 
             pearson['opl'], crps['opl'], bias['opl'], spread['opl'] = compute_scores(openloop, obs, shortid, date)
             pearson['ass'], crps['ass'], bias['ass'], spread['ass']  = compute_scores(assim, obs, xpid_assim, date)
@@ -229,13 +246,13 @@ def execute():
 
     ax1.set_xlabel('Mean absolute error of the ensemble mean (m)')
     ax1.set_ylabel('Mean ensemble spread (m)')
-    ax1.set_xlim(0, 1)
-    ax1.set_ylim(0, 1)
+    ax1.set_xlim(0, 1.2)
+    ax1.set_ylim(0, 1.2)
     ax1.grid()
     ax2.set_xlabel('Pearson correlation coefficient')
     ax2.set_ylabel('Mean CRPS (m)')
-    ax2.set_xlim(0.3, 1)
-    ax2.set_ylim(0, 0.7)
+    ax2.set_xlim(0, 1)
+    ax2.set_ylim(0, 1)
     ax2.grid()
     ax4.legend(loc='center', frameon=False)
     ax4.axis('off')
@@ -245,7 +262,21 @@ def execute():
     custom_legend(ax3, dateassim, dateeval)
     plt.tight_layout()
     suffix = '_'.join([product_map(xpid.split('@')[0]) for xpid in xpids])
+    if elevation_band is not None:
+        suffix = f'{suffix}_{zmin}_{zmax}'
     fig.savefig(f'synthese_eval_assim_{suffix}.pdf')
+
+
+def read_mnt():
+    io.get_const('uenv:dem.2@vernaym', 'relief', geometry, filename='TARGET_RELIEF.nc',
+            gvar='RELIEF_GRANDESROUSSES250M_L93')
+
+    # Get Domain's DEM in case ZS not in simulation file
+    mnt = xr.open_dataset('TARGET_RELIEF.nc')  # Target domain's Digital Elevation Model
+    mnt = xrp.preprocess(mnt, decode_time=False)
+    mnt = mnt['ZS']
+
+    return mnt
 
 
 def custom_legend(axis, dateassim, dateeval):
@@ -414,6 +445,7 @@ if __name__ == '__main__':
     uenv            = args.uenv
     obs_geometry    = args.obs_geometry
     members         = args.members
+    elevation_band  = args.elevation_band
 
 #    if ':' in args.members:
 #        first_mb, last_mb = args.members.split(':')
@@ -425,5 +457,5 @@ if __name__ == '__main__':
         os.makedirs(workdir)
     os.chdir(workdir)
 
-    execute()
+    execute(elevation_band=elevation_band)
     execution_info(workdir)
