@@ -23,13 +23,13 @@ from pyproj import Proj, transform
 # precipitation fields
 
 print('USAGE : plot_radar_cumuls.py inputfile')
-datadir = '/home/vernaym/These/DATA'
-savedir = '/home/vernaym/These/figures'
+datadir = '/home/vernaym/These/NO_TRANSFER/DATA'
+savedir = '/home/vernaym/These/NO_TRANSFER/figures'
 
 #filename = sys.argv[1]
 #filename = 'CUMUL_ANTILOPEH_alp_2021103000_2022060200.nc'
-#filename = 'CUMUL_ANTILOPEQ_2021110106_2022043006_alp.nc'
-filename = 'CUMUL_ANTILOPEQ_GrandesRousses_2021080106_2022070106.nc'
+filename = 'CUMUL_ANTILOPE_alp_2021080106_2022080106.nc'
+#filename = 'CUMUL_ANTILOPEQ_GrandesRousses_2021080106_2022070106.nc'
 
 datebegin = filename.split('.')[0].split('_')[-2]
 dateend   = filename.split('.')[0].split('_')[-1]
@@ -46,8 +46,8 @@ extract_dom = dict(
     lonmax = 6.490,
 )
 # Mont Blanc
-#domain = 'MontBlanc'
-#extract_dom = dict(lonmin=6.7, lonmax=6.95, latmin=45.75, latmax=46.0)
+domain = 'MontBlanc'
+extract_dom = dict(lonmin=6.7, lonmax=6.95, latmin=45.75, latmax=46.0)
 
 outProj = Proj(init='epsg:4326')
 inProj = Proj(init='epsg:2154')
@@ -55,15 +55,15 @@ inProj = Proj(init='epsg:2154')
 #norm = plt.Normalize(vmin=300, vmax=1200)
 #norm = plt.Normalize(vmin=300, vmax=1300)
 #norm = plt.Normalize(vmin=150, vmax=1000)
-norm = plt.Normalize(vmin=500, vmax=1300)
+norm = plt.Normalize(vmin=200, vmax=1400)
 #norm = plt.Normalize()
 
 landmarks = {
         #"Alpe d'Huez" : dict(lon=6.070, lat=45.092, alt=1800, marker='o'),
         #"Les 2 Alpes" : dict(lon=6.127, lat=45.013, alt=1800, marker='o'),
         #"Lautaret"    : dict(lon=6.408, lat=45.038, alt=2058, marker='X'),
-        "La Meije"    : dict(lon=6.311, lat=45.008, alt=3600, marker='^'),  # real alt = 3984
-        "Pic Blanc"   : dict(lon=6.131, lat=45.128, alt=3750, marker='^'),  # real alt = 3333
+        #"La Meije"    : dict(lon=6.311, lat=45.008, alt=3600, marker='^'),  # real alt = 3984
+        #"Pic Blanc"   : dict(lon=6.131, lat=45.128, alt=3750, marker='^'),  # real alt = 3333
         #"Mont-Blanc"  : dict(lon=6.87, lat=45.84, alt=4807, marker='^'),
     }
 
@@ -98,8 +98,12 @@ def add_north_arrow(ax):
 
     #py = 0.8 * ax.figure.bbox.height
     #px = 0.05 * ax.figure.bbox.width
-    py = 45.25
-    px = 6.05
+    #py = 45.25
+    #px = 6.05
+    #py = 46
+    #px = 7
+    py = 46
+    px = 6.75
     pz = 0
 
    # Draw an arrow with a text "N" above it using annotation
@@ -220,7 +224,8 @@ else:
     lonmax = extract_dom['lonmax']
 
     # On selectionne le sous domaine d'intéret avant de plotter...
-    tmp = tmp.where((tmp.lon>=lonmin) & (tmp.lon<=lonmax) & (tmp.lat>=latmin) & (tmp.lat<=latmax), drop=True)
+    #tmp = tmp.where((tmp.lon>=lonmin) & (tmp.lon<=lonmax) & (tmp.lat>=latmin) & (tmp.lat<=latmax), drop=True)
+    tmp = tmp.sel({'lon': slice(lonmin, lonmax), 'lat': slice(latmin, latmax)}, drop=True)
     X = tmp['lon'].values
     Y = tmp['lat'].values
     X, Y = np.meshgrid(X, Y)
@@ -228,13 +233,15 @@ else:
 
     # define pixel colors
     #radar = ds.where((ds.longitude>=lonmin) & (ds.longitude<=lonmax) & (ds.latitude>=latmin) & (ds.latitude<=latmax), drop=True).rr_cumul
-    radar = ds.where((ds.lon>=lonmin) & (ds.lon<=lonmax) & (ds.lat>=latmin) & (ds.lat<=latmax), drop=True).rr_cumul
+    #radar = ds.where((ds.lon>=lonmin) & (ds.lon<=lonmax) & (ds.lat>=latmin) & (ds.lat<=latmax), drop=True).rr_cumul
+    #radar = ds.where((ds.lon>=lonmin) & (ds.lon<=lonmax) & (ds.lat>=latmin) & (ds.lat<=latmax), drop=True).cumul
+    radar = ds.sel({'lon': slice(lonmin, lonmax), 'lat': slice(latmin, latmax)}, drop=True).cumul
     #colors = plt.cm.coolwarm(norm(np.nan_to_num(radar.values)))
     colors = plt.cm.YlGnBu(norm(np.nan_to_num(radar.values)))
 
 fig, ax = plt.subplots(figsize=(8,6), subplot_kw={"projection": "3d"})
-ax.view_init(elev=50., azim=135)  # POV NW
-#ax.view_init(elev=50., azim=245)
+#ax.view_init(elev=40., azim=180)  # POV NW
+ax.view_init(elev=50., azim=245)
 surf = ax.plot_surface(X=X, Y=Y, Z=Z, linewidth=0, antialiased=False, facecolors=colors)
 ax.xaxis.pane.fill = False
 ax.xaxis.pane.set_edgecolor('white')
@@ -264,7 +271,8 @@ add_landmarks(ax)
 plt.savefig(f'{savedir}/CUMUL3D_{product}_{datebegin}_{dateend}_{domain}.pdf', format='pdf')
 
 # For an animation
-#rot_animation = animation.FuncAnimation(fig, rotate, frames=np.arange(0,361,5),interval=100)
-#rot_animation.save(f'{savedir}/CUMUL3D_{product}_{datebegin}_{dateend}.gif', dpi=100, writer='imagemagick')
+# Repeat=False does not work --> use ezgif.com for manual configuration
+rot_animation = animation.FuncAnimation(fig, rotate, frames=np.arange(-110, 246, 10), interval=200, repeat=False)
+rot_animation.save(f'{savedir}/CUMUL3D_{product}_{datebegin}_{dateend}.gif', dpi=100, writer='imagemagick')
 
 
