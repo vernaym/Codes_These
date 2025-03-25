@@ -103,6 +103,9 @@ def execute(elevation_band=None):
         zmin = float(zmin)
         zmax = float(zmax)
         mnt = read_mnt()
+    else:
+        zmin = None
+        zmax = None
 
     for idx, date in enumerate(dates_pleiades):
         obsname = f'PLEIADES_{date}.nc'
@@ -173,8 +176,8 @@ def execute(elevation_band=None):
                 openloop = xr.where((mnt >= zmin) & (mnt <= zmax), openloop, np.nan)
                 assim    = xr.where((mnt >= zmin) & (mnt <= zmax), assim, np.nan)
 
-            pearson['opl'], crps['opl'], bias['opl'], spread['opl'] = compute_scores(openloop, obs, shortid, date)
-            pearson['ass'], crps['ass'], bias['ass'], spread['ass']  = compute_scores(assim, obs, xpid_assim, date)
+            pearson['opl'], crps['opl'], bias['opl'], spread['opl'] = compute_scores(openloop, obs, shortid, date, zmin=zmin, zmax=zmax)
+            pearson['ass'], crps['ass'], bias['ass'], spread['ass']  = compute_scores(assim, obs, xpid_assim, date, zmin=zmin, zmax=zmax)
 
             if idx == 0:
                 linestyle = '-'
@@ -371,7 +374,7 @@ def read_simu(xpid, members, date):
     return simu
 
 
-def compute_scores(simu, obs, xpid, date):
+def compute_scores(simu, obs, xpid, date, zmin=None, zmax=None):
 
     # Select common domains
     obs  = obs.sel({'xx': np.intersect1d(obs.xx, simu.xx), 'yy': np.intersect1d(obs.yy, simu.yy)})
@@ -394,12 +397,15 @@ def compute_scores(simu, obs, xpid, date):
         x = x[~np.isnan(z)]
         y = y[~np.isnan(z)]
         z = z[~np.isnan(z)]
-        sc = tools.plot_scatter(axSK, x, y, lims=[0, 3], color=z)
+        sc = tools.plot_scatter(axSK, x, y, lims=[0, 3], color=z, cmap=plt.cm.Blues)
         axSK.set_xlabel('Absolute error of the ensemble mean (m)')
         axSK.set_ylabel('Ensemble spread (m)')
         cb = figSK.colorbar(sc)
         cb.set_label(label='Snow depth (m)', size=18)
-        figSK.savefig(f'SpreadSkill_{xpid}_{date}.pdf')
+        if elevation_band is None:
+            figSK.savefig(f'SpreadSkill_{xpid}_{date}.pdf')
+        else:
+            figSK.savefig(f'SpreadSkill_{xpid}_{date}_{zmin}_{zmax}.pdf')
 
     bs = [bias.mean().data, bias.std().data]
     sd = [spread.mean().data, spread.std().data]

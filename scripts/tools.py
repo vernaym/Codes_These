@@ -39,7 +39,7 @@ def to_xarray(array, field, varname='rr'):
     )
     return output
 
-def plot_scatter(ax, reference, model, color=None, addtext=None, xaxis=True, yaxis=True, legend=False, lims=[0, 45]):
+def plot_scatter(ax, reference, model, color=None, addtext=None, xaxis=True, yaxis=True, legend=False, lims=[0, 45], cmap='YlGnBu'):
     from sklearn.linear_model import LinearRegression
     ref = reference.flatten()
     mod = model.flatten()
@@ -59,7 +59,7 @@ def plot_scatter(ax, reference, model, color=None, addtext=None, xaxis=True, yax
     if color is None:
         ax.scatter(ref, mod, marker='+')  # scatterplot ref vs estimation
     else:
-        sc = ax.scatter(ref, mod, c=color, cmap='YlGnBu', marker='+', s=80)
+        sc = ax.scatter(ref, mod, c=color, cmap=cmap, marker='+', s=80)
         #sc = ax.scatter(x, y, c=color, cmap='YlGnBu', marker='+')
         #cb = fig.colorbar(sc, label='Precipitation (mm)', size=16)
 
