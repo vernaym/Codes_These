@@ -64,9 +64,12 @@ token = open("/home/vernaym/.mapbox/token").read() # Token from mapbox account
 class PrecipitationAnalysis(object):
 
 
-    def __init__(self, date=None, antilope=None, safran=None, nivometeo=None, auto=None, var='obs', vmax=None):
+    def __init__(self, date=None, antilope=None, safran=None, nivometeo=None, auto=None, var='obs', vmin=None, vmax=None):
         self.antilope = antilope
-        self.vmin = 0
+        if vmin is None:
+            self.vmin = 0
+        else:
+            self.vmin = vmin
         if (vmax is None) and (antilope is not None):
              self.vmax = min([max([np.nanmax(antilope.data.flatten()) for antilope in self.antilope.values() if antilope is not None]), 80])
         else:
@@ -242,29 +245,30 @@ class PrecipitationAnalysis(object):
             size = 8
 
         listkeys = [key for key in ['alti', var, 'error'] if key in df.keys()]
+        #listkeys = ['ratio']
 
         label_map = dict(
             alti        = 'Altitude (m)',
             rr          = 'Precipitation (mm)',
             error       = 'Incertitude (mm)',
-            Ratio       = 'Ratio',
+            ratio       = 'Ratio',
             Uncertainty = 'Incertitude (mm)',
         )
         unit = dict(
             alti        = 'm',
             rr          = 'mm',
             error       = 'mm',
-            Ratio       = '',
+            ratio       = '',
             Uncertainty = 'mm',
         )
         mycustomdata = np.stack([df[key] for key in listkeys], axis=-1)
 
         max_map = dict(
-            Ratio       = 1.5,
+            ratio       = 1.5,
             Uncertainty = 40,
         )
         min_map = dict(
-            Ratio       = 0.5,
+            ratio       = 0.5,
             Uncertainty = 2,
         )
         if self.vmax is None:
@@ -288,6 +292,7 @@ class PrecipitationAnalysis(object):
                         '<b>Altitude (m)</b>: %{customdata[0]:d} m<br>' +
                         '<b>Precipitation (mm)</b>: %{customdata[1]:.2f} mm<br>' +
                         '<b>Incertitude (mm)</b>: %{customdata[2]:.2f} mm<br>',
+                        #'<b>Ratio :</b>: %{customdata[0]:.2f} m<br>',
                     # hovertemplate = '<b>Incertitude</b>: %{customdata[0]:.2f}<br>',
                     # hovertemplate = '<br>'.join([f'<b>{label_map[key]}</b>: ' + '%{key}' + f'{unit[key]}' for key in listkeys]),
                     # hovertemplate = ''.join([f'<b>{label_map[key]}</b>: %{customdata[i]:.f}{unit[key]}<br>' for i, key in enumerate(listkeys)]),
