@@ -90,6 +90,20 @@ function remplissageSelectSimple(idSelect,tabData){
 
 } //Fin remplissageSelectSimple
 
+//Permet de remplir le menu des produits
+function remplissageSelectProduit(){
+
+  //On la table qui remplira le select
+  tabProduit=['AS-ANTILOPE', 'ANTILOPE brut', 'Ratio estimé'];
+  tabProduit=[];
+  tabProduit.push({"value":'',"desc":'AS-ANTILOPE',"def":true})
+  tabProduit.push({"value":'rr_',"desc":'ANTILOPE',"def":false})
+  tabProduit.push({"value":'ratio',"desc":'Ratio estimé',"def":false})
+
+  //On remplit le select de date
+  remplissageSelectSimple("selectProduit",tabProduit);
+}
+
 //Permet de remplir le menu des dates
 function remplissageSelectDate(){
 
@@ -125,7 +139,17 @@ function remplissageSelectDate(){
 
   //On remplit le select de date
   remplissageSelectSimple("selectDate",tabDate);
+}
 
+//Permet de remplir le menu des saisons
+function remplissageSelectSaison(){
+
+  //On la table qui remplira le select
+  tabSaison=[];
+  tabSaison.push({"value":'winter',"desc":'Hiver',"def":false})
+  tabSaison.push({"value":'summer',"desc":'Eté',"def":false})
+  //On remplit le select de date
+  remplissageSelectSimple("selectSaison",tabSaison);
 }
 
 //Permet de remplir le menu du choix de la date analysée
@@ -175,12 +199,21 @@ function remplissageSelect(){
 
   //remplissageSelectSimple("selectDomaine",tabDomaine); 
   //Remplissage des dates d'analyse
+  remplissageSelectProduit();
   remplissageSelectDate();
+  remplissageSelectSaison();
 }
 
 //Fonction permettant de construire le nom de l'image et de la charger
 function chargeImage(){
 
+  var produit=document.getElementById("selectProduit").value;
+
+  if (produit=='ratio'){
+  var saison=document.getElementById("selectSaison").value;
+  var nomMap=lien+fileSep+'Ratio_'+saison+".html";
+  }
+  else{
   //On commence par récupérer les valeurs de tous les select
   //var domaine=document.getElementById("selectDomaine").value;
   var date=document.getElementById("selectDate").value;
@@ -194,9 +227,10 @@ function chargeImage(){
 
   //On ajoute les extensions au nom du graphique
   //var nomMap=lien+fileSep+tabDomaines[domaine]+fileSep+'precipitation_'+date+".html";
-  var nomMap=lien+fileSep+'figures'+fileSep+'precipitation_'+date+".html";
+  var nomMap=lien+fileSep+'figures'+fileSep+'precipitation_'+produit+date+".html";
   //var nomTable=lien+fileSep+xpid+fileSep+tabDomaines[domaine]+fileSep+daterun+reseau+fileSep+nomTableCourt+".png";
   //var nomMap="/cnrm/mrns/users/NO_SAVE/vernaym/ANTILOPE/test.html";
+  }
 
   //On fixe l'image
   var map=document.getElementById("map");

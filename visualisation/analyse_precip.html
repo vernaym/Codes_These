@@ -28,13 +28,14 @@
 <div id="divSelection">
 
  <!-- Table contenant les sélections -->
- <table>
-    <!-- Sous tableau contenant le choix de l'expérience et des domaines/altitudes/massifs-->
+    <!-- Sous tableau contenant le choix de la date-->
     <tr>
-    <td><table border="1">
+    <td>
+    <table border="1">
     <tr>  <!-- Entêtes -->
-      <th>Analyse de précipitations en 24h</th>
+      <th>Produit :<select id="selectProduit"></select></th>
       <th>Journée analysée : <select id="selectDate"></select></th>
+      <th>Saison :<select id="selectSaison"></select></th>
     <!-- Bouton de validation --> <!-- Changement de réseau -->
     <td rowspan="1" style="text-align:left;">
       <input name="valid" type="button" value="Voir carte"/>
@@ -42,7 +43,6 @@
     </tr>
     </table>
     </td></tr>
- </table>
 
 </div>
 
