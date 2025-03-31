@@ -281,11 +281,12 @@ algo = dict(
         #RS26          = 'RandomSampling/XP26/Random_Sampling_2021120106_2022043006_daily_alp.nc',
         ################################################################################################
         # Paper1 :
-        RS27          = 'RandomSampling/XP27/Random_Sampling_2021120106_2022043006_daily_alp.nc',
+        #RS27          = 'RandomSampling/XP27/Random_Sampling_2021120106_2022043006_daily_alp.nc',
         #PF32          = 'XP32/Assimilation_locale_2021120106_2022050106_daily_alp_mask9_debiasing3.nc',
         #KD36          = 'EnsembleKalmanFilter/XP36/EnKF_2021120106_2022050106_daily_alp.nc',
         ################################################################################################
-        RS49          = 'RandomSampling/XP49/Random_Sampling_2021120106_2022043006_daily_alp.nc',
+        #RS42          = 'RandomSampling/XP42/Random_Sampling_2021120106_2022043006_daily_alp.nc',
+        RS51          = 'RandomSampling/XP51/Random_Sampling_2021120106_2022043006_daily_alp.nc',
     )
 
 
@@ -431,7 +432,8 @@ xpid_label = dict(
         RS27          = 'RS',  # paper1
         PF32          = 'PF',  # paper1
         KD36          = 'EnKF',  # paper1
-        RS49          = 'RS_new',
+        RS42          = 'RS42',
+        RS51          = 'RS51',
     )
 
 colors = dict(
@@ -451,7 +453,8 @@ colors = dict(
     #KD35      = 'blue',
     KD35      = 'red',
     KD36      = 'red',
-    RS49      = 'green',
+    RS42      = 'red',
+    RS51      = 'green',
 )
 
 def nearest(array, value):
@@ -969,7 +972,7 @@ class Evaluation(object):
         self.data = self.data.loc[{'date':dates}]
 
 #        data = dict(antilope=list(), wma=list(), antiloped=list(), antilopec=list())
-        data = dict(antilope=list(), raw=list())
+        data = dict(antilope=list())
         #data = dict(antilope=list(), raw=list(), antilopec=list())
 #        data = dict(antilopec=list(), raw=list())
 #        data = dict(antilope=list(), antiloped=list(), antiloper=list())
@@ -1024,12 +1027,12 @@ class Evaluation(object):
                 antilopec = tmp.loc[{'member':0}]
                 antilopec = antilopec.loc[{'time':dates}]
                 antc = True
-            tmp = tmp.loc[{'member':range(1,17)}]
+            tmp = tmp.loc[{'member':range(0,17)}]
             simus[xpid] = tmp
 
         if 'raw' in data.keys():
             raw = self.read_raw_ensemble(dates)
-            self.data['member'] = np.arange(1,17)
+            self.data['member'] = np.arange(0,17)
             self.data['pseudo_member'] = np.arange(1,4)
 
         if 'antilopec' in data.keys() and not antc:
@@ -1230,7 +1233,7 @@ class Evaluation(object):
         j = 0
         title = ''
         for product in products:  # Only for ensemble simulations
-            spread, error, rr = self.spread_skill(self.data[product].data.reshape(-1, 16), self.data.obs.data.flatten())
+            spread, error, rr = self.spread_skill(self.data[product].data.reshape(-1, 17), self.data.obs.data.flatten())
             if product == 'raw':
                 i = 0
                 j = 0
