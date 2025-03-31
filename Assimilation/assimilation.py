@@ -1727,7 +1727,8 @@ class RandomSampling(Assimilation):
 #                self.pond = scipy.sparse.load_npz(codistances)
         coords=[(lon,lat) for lat in actual_parameters.lat.data for lon in actual_parameters.lon.data]
         #self.pond = self.codistances(coords)
-        self.pond = Preprocessing_ANTILOPE.codistances(coords, self.domain)
+        #self.pond = Preprocessing_ANTILOPE.codistances(coords, self.domain)
+        self.pond = None
 
         for idd, date in enumerate(self.period):
             print(date)
@@ -1750,7 +1751,14 @@ class RandomSampling(Assimilation):
             #tmp = parameters['rr'].sel(lon=slice(6.8, 6.9), lat=slice(45.8, 45.9))  # Mont-Blanc
             #tmp = parameters['rr'].sel(lon=slice(6.1, 6.15), lat=slice(45.1, 45.15))  # Grandes-Rousses
 
-            smooth = uniform_filter(parameters['rr'].data, 20)
+            # WARNING : uniform filter issues near the border of the domain
+            # --> need for normalized convolution
+            # source : https://docs.scipy.org/doc/scipy/reference/generated/scipy.ndimage.uniform_filter.html
+            #smooth = uniform_filter(parameters['rr'].data, 20)
+            mask    = np.where(np.isfinite(parameters['rr'].data), np.ones(parameters['rr'].data.shape), 0)
+            weights = uniform_filter(mask, size=20, mode='constant')
+            smooth  = uniform_filter(np.where(np.isfinite(parameters['rr'].data), parameters['rr'].data, 0), 20, mode='constant')
+            smooth  = np.where(mask == 1, smooth / weights, np.nan)
             smooth = np.where(smooth > 0, np.round(smooth, 1), 0)
             # Try to detect "missed" precipitation
             parameters['rr'] = xr.where((parameters['rr'] == 0) & (smooth > 0), 0.1, parameters['rr'])
@@ -2241,7 +2249,8 @@ class RandomSampling(Assimilation):
 
             parameters_loc = parameters.sel({'lat':np.intersect1d(sel_lat, parameters.lat), 'lon':np.intersect1d(sel_lon, parameters.lon)})
             coords=[(lon,lat) for lat in parameters_loc.lat for lon in parameters_loc.lon]
-            self.pond = Preprocessing_ANTILOPE.codistances(coords, self.domain)  # TODO : ameliorer les perf
+            #self.pond = Preprocessing_ANTILOPE.codistances(coords, self.domain)  # TODO : ameliorer les perf
+            self.pond = None
 
             #if int(num_poste) == 74033400:
             #if int(num_poste) == 38191400:
@@ -3459,7 +3468,8 @@ if __name__ == "__main__":
 
     if os.path.exists(outname):
         os.remove(outname)
-    out.to_netcdf(f"{outname}".encode('utf-8'))
+    out.to_netcdf(outname)
+    #out.to_netcdf(f"{outname}".encode('utf-8'))
 
     xpid = os.getcwd().split('/')[-1]  # TODO : ajouter une sécurité pour éviter d'écraser une XP existante
     if not xpid.startswith(args.assimilation):

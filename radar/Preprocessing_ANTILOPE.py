@@ -482,7 +482,15 @@ def perturb(obs, sd, perturbation1, perturbation2, ratio=None, sd2=None, frac=0.
     # WARNING : the small ensemble size (16) lead to a large variability
     # of the ensemble mean but this algorithm ensures that on average the ensemble
     # mean is centered on the corrected observation
-    smooth = uniform_filter(obs, 20)
+
+    # WARNING : uniform filter issues near the border of the domain
+    # --> need for normalized convolution
+    # source : https://docs.scipy.org/doc/scipy/reference/generated/scipy.ndimage.uniform_filter.html
+    mask    = np.where(np.isfinite(obs), np.ones(obs.shape), 0)
+    weights = uniform_filter(mask, size=20, mode='constant')
+    smooth  = uniform_filter(np.where(np.isfinite(obs), obs, 0), 20, mode='constant')
+    smooth  = np.where(mask == 1, smooth / weights, np.nan)
+
     ana = obs + smooth * frac * perturbation1 + sd * perturbation2
 
     if sd2 is not None:
