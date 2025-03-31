@@ -281,11 +281,11 @@ algo = dict(
         #RS26          = 'RandomSampling/XP26/Random_Sampling_2021120106_2022043006_daily_alp.nc',
         ################################################################################################
         # Paper1 :
-        #RS27          = 'RandomSampling/XP27/Random_Sampling_2021120106_2022043006_daily_alp.nc',
+        RS27          = 'RandomSampling/XP27/Random_Sampling_2021120106_2022043006_daily_alp.nc',
         #PF32          = 'XP32/Assimilation_locale_2021120106_2022050106_daily_alp_mask9_debiasing3.nc',
         #KD36          = 'EnsembleKalmanFilter/XP36/EnKF_2021120106_2022050106_daily_alp.nc',
         ################################################################################################
-        #RS42          = 'RandomSampling/XP42/Random_Sampling_2021120106_2022043006_daily_alp.nc',
+        RS42          = 'RandomSampling/XP42/Random_Sampling_2021080206_2022080106_daily_alp.nc',
         RS51          = 'RandomSampling/XP51/Random_Sampling_2021120106_2022043006_daily_alp.nc',
     )
 
@@ -1027,7 +1027,9 @@ class Evaluation(object):
                 antilopec = tmp.loc[{'member':0}]
                 antilopec = antilopec.loc[{'time':dates}]
                 antc = True
-            tmp = tmp.loc[{'member':range(0,17)}]
+            #tmp = tmp.loc[{'member':range(0,17)}]
+            tmp = tmp.sel(member=0)
+            nmembers = 1
             simus[xpid] = tmp
 
         if 'raw' in data.keys():
@@ -1190,7 +1192,8 @@ class Evaluation(object):
         if 'raw' in data.keys():
             self.data['raw'] = (('num_poste', 'date', 'member'), data['raw'])
         for xpid in experiments.keys():
-            self.data[xpid] = (('num_poste', 'date', 'member'), data[xpid])
+            #self.data[xpid] = (('num_poste', 'date', 'member'), data[xpid])  # ensemble products
+            self.data[xpid] = (('num_poste', 'date'), data[xpid])  # deterministic products
         t8 = time.time()
         #print(f'Filling self.data took {(t8-t7)*1000.}ms')
 
@@ -1233,7 +1236,7 @@ class Evaluation(object):
         j = 0
         title = ''
         for product in products:  # Only for ensemble simulations
-            spread, error, rr = self.spread_skill(self.data[product].data.reshape(-1, 17), self.data.obs.data.flatten())
+            spread, error, rr = self.spread_skill(self.data[product].data.reshape(-1, nmembers), self.data.obs.data.flatten())
             if product == 'raw':
                 i = 0
                 j = 0
