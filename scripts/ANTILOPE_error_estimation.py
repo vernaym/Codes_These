@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
 
 from pykrige.uk import UniversalKriging
-from scipy.ndimage import uniform_filter
+from These.scripts.tools import uniform_filter
 
 from These.scripts import make_mask
 
@@ -52,6 +52,7 @@ def read_obs_auto_accumulation():
 
     out = winter.rename(columns={'rr': 'winter_cumul'}).drop(columns='date')
     out['summer_cumul'] = year['rr'] - out['winter_cumul']
+    out['annual_cumul'] = year['rr']
 
     return out
 
@@ -96,6 +97,7 @@ def read_AROME_accumulation():
 
     out = ds_winter.rename({'cumul': 'winter_cumul'})
     out['summer_cumul'] = ds_year.cumul - ds_winter.cumul
+    out['annual_cumul'] = ds_year.cumul
 
     return out
 
@@ -116,9 +118,9 @@ def read_ANTILOPE_accumulation():
     ds_winter = xr.where(ds_winter.cumul == 0., np.nan, ds_winter)
 
     # ds = ds.isel(lat=slice(None, None, -1))  # Flip upside down
-
     out = ds_winter.rename({'cumul': 'winter_cumul'})
     out['summer_cumul'] = ds_year.cumul - ds_winter.cumul
+    out['annual_cumul'] = ds_year.cumul
 
     return out
 
@@ -190,11 +192,13 @@ def plot_fields(arome, reference_field, antilope, gauges, season):
     cmap = plt.cm.YlGnBu
     make_mask.plot_field(fig, ax[0], arome, cmap=cmap, vmin=0, vmax=vmax, elevation=True, coords=False,
             colorbar=False, categories=False)
+    gauges.plot.scatter('lon', 'lat', c='cumul', edgecolor='black', cmap=plt.cm.YlGnBu, vmin=0, vmax=vmax, ax=ax[0],
+            colorbar=False)
     ax[0].set_title('AROME')
     make_mask.plot_field(fig, ax[1], reference_field, cmap=cmap, vmin=0, vmax=vmax, elevation=True, coords=False,
             colorbar=False, categories=False)
-    gauges.plot.scatter('lon', 'lat', c='cumul', edgecolor='black', cmap=plt.cm.YlGnBu, vmin=0, vmax=vmax, ax=ax[1],
-            colorbar=False)
+    # gauges.plot.scatter('lon', 'lat', c='cumul', edgecolor='black', cmap=plt.cm.YlGnBu, vmin=0, vmax=vmax, ax=ax[1],
+    #         colorbar=False)
     ax[1].set_title('Reference Field')
     im = make_mask.plot_field(fig, ax[2], antilope, cmap=cmap, vmin=0, vmax=vmax, elevation=True, coords=False,
             colorbar=False, categories=False)
@@ -229,7 +233,8 @@ if __name__ == '__main__':
 
     obs = pd.concat([obs_auto, nivometeo])
 
-    for season in ['summer', 'winter']:
+    #for season in ['summer', 'winter', 'annual']:
+    for season in ['annual']:
 
         obs_season = obs[[f'{season}_cumul', 'lat', 'lon']].rename(columns={f'{season}_cumul': 'cumul'}).dropna()
         arome_season = arome[f'{season}_cumul']
