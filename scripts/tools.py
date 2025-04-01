@@ -14,6 +14,8 @@ import matplotlib as mpl
 #matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
+from scipy.ndimage import uniform_filter
+
 def hourly_to_daily(data):
     """
     Convert hourly precipitation into 24h precipitation between 6h J-1 and 6h J
@@ -119,3 +121,12 @@ def plot_scatter(ax, reference, model, color=None, addtext=None, xaxis=True, yax
     #plt.close(fig)
 
     return sc
+
+
+def unifrom_filter(field, size=20):
+
+    mask    = np.where(np.isfinite(field), np.ones(field.shape), 0)
+    weights = uniform_filter(mask, size=size, mode='constant')
+    smooth  = uniform_filter(np.where(np.isfinite(field), field, 0), size, mode='constant')
+    smooth  = np.where(mask == 1, smooth / weights, np.nan)
+    return smooth
