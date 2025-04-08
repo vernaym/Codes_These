@@ -379,13 +379,13 @@ def plot(antilope, datebegin, dateend, categories=True, biascorrection=False, sc
     else:
         fig, ax = plt.subplots(subplot_kw=dict(projection=ccrs.PlateCarree()))
 
-    if biascorrection:
-        #filename = os.path.join('/home/vernaym/These/DATA/mask', 'Estimated_ratio.nc')
-        filename = os.path.join('/home/vernaym/workdir/ASSIMILATION/mask/alp', 'Estimated_ratio.nc')  # Mask test
-        ratio = xr.open_dataset(filename)
-        #ratio.lat.data = ratio.lat.data+0.005  # TODO : comprendre et resoudre le probleme de decallage des coordonnees
-        ratio = ratio.where((ratio.lon>=lonmin) & (ratio.lon<=lonmax) & (ratio.lat<=latmax) & (ratio.lat>latmin-0.01), drop=True)  # # >=44.1 ne fonctionne pas pour ANTILOPEQ (np.where(antilope.lat==44.1) renvoie une liste vide...)
-        antilope["rr_cumul_debiased"] = antilope.rr_cumul / ratio.Ratio
+#    if biascorrection:
+#        #filename = os.path.join('/home/vernaym/These/DATA/mask', 'Estimated_ratio.nc')
+#        filename = os.path.join('/home/vernaym/workdir/ASSIMILATION/mask/alp', 'Estimated_ratio.nc')  # Mask test
+#        ratio = xr.open_dataset(filename)
+#        #ratio.lat.data = ratio.lat.data+0.005  # TODO : comprendre et resoudre le probleme de decallage des coordonnees
+#        ratio = ratio.where((ratio.lon>=lonmin) & (ratio.lon<=lonmax) & (ratio.lat<=latmax) & (ratio.lat>latmin-0.01), drop=True)  # # >=44.1 ne fonctionne pas pour ANTILOPEQ (np.where(antilope.lat==44.1) renvoie une liste vide...)
+#        antilope["rr_cumul_debiased"] = antilope.rr_cumul / ratio.Ratio
 
     cmap = plt.cm.YlGnBu
 
@@ -403,26 +403,30 @@ def plot(antilope, datebegin, dateend, categories=True, biascorrection=False, sc
             cml = axes[0].contourf(lons, lats, antilope.rr_cumul.data, cmap=cmap, levels=bounds, transform=ccrs.PlateCarree(), alpha=1, antialiased=True, extend='both')
             axes[0].set_title('a) Raw ANTILOPE', fontsize=30)
             # Remove lines
-            for c in cml.collections:
-                c.set_edgecolor("face")
+            #cml.remove()
+            #for c in cml.collections:
+            #for c in cml.get_paths():
+            #    c.set_edgecolor("face")
 
             #cml2 = axes[1].contourf(lons, lats, antilope.rr_cumul_debiased.data, cmap=cmap, levels=bounds, transform=ccrs.PlateCarree(), alpha=1, antialiased=True, extend='both')
             #axes[1].set_title('b) De-biased ANTILOPE', fontsize=30)
 
-            asantilope = xr.open_dataset('/home/vernaym/workdir/ASSIMILATION/RandomSampling/XP27/CUMUL_ASANTILOPE_alp_2021080106_2022080106.nc')
+            asantilope = xr.open_dataset('/home/vernaym/workdir/EDELWEISS/precipitation_analysis/RandomSampling/RS51/CUMUL_ASANTILOPE_alp_2021080106_2022080106.nc')
             asantilope = asantilope.where((asantilope.lon>=lonmin) & (asantilope.lon<=lonmax) & (asantilope.lat<=latmax) & (asantilope.lat>latmin-0.01), drop=True)
             cml2 = axes[1].contourf(lons, lats, asantilope.rr.data, cmap=cmap, levels=bounds, transform=ccrs.PlateCarree(), alpha=1, antialiased=True, extend='both')
 
 
             axes[1].set_title('b) AS-ANTILOPE', fontsize=30)
             # Remove lines
-            for c in cml2.collections:
-                c.set_edgecolor("face")
+            #cml2.remove()
+            #for c in cml2.collections:
+            #    c.set_edgecolor("face")
         else:
             cml = ax.contourf(lons, lats, antilope.rr_cumul.data, cmap=cmap, levels=bounds, transform=ccrs.PlateCarree(), alpha=1, antialiased=True, extend='both')
             # Remove lines
-            for c in cml.collections:
-                c.set_edgecolor("face")
+            #cml.remove()
+            #for c in cml.collections:
+            #    c.set_edgecolor("face")
 #        cml = antilope.rr_cumul.plot.pcolormesh(ax=ax, cmap=cmap, norm=norm, add_colorbar=False, transform=ccrs.PlateCarree())
         #cml = antilope.rr_cumul.plot(ax=ax, cmap=cmap, norm=norm, add_colorbar=False, transform=ccrs.PlateCarree())
         #antilope.rr_cumul.plot(ax=ax, cbar_kwargs={"label":'Total precipitation between 2021080106 and 2022070106 (mm)'}, cmap=plt.cm.coolwarm)
@@ -460,7 +464,8 @@ def plot(antilope, datebegin, dateend, categories=True, biascorrection=False, sc
         #sc = add_scores(scores, ax, mycmap=palettable.colorbrewer.diverging.RdBu_7_r.mpl_colormap, vmin=0, vmax=2)
         sc = add_scores(scores, axes[0])
         if biascorrection:
-            scores2 = pd.read_csv(os.path.join(datadir, f'scores_2021110106_2022043006_alpes_obs_nivometeo_antilope_debiaise.csv'), sep=';')
+            #scores2 = pd.read_csv(os.path.join(datadir, f'scores_2021110106_2022043006_alpes_obs_nivometeo_antilope_debiaise.csv'), sep=';')
+            scores2 = pd.read_csv('/home/vernaym/workdir/EDELWEISS/precipitation_analysis/RandomSampling/RS51/scores_2021110106_2022043006_nivometeo_alpes.csv', sep=';')
             scores2=scores2[scores2.num_poste.isin(scores.num_poste.values)]
             sc = add_scores(scores2, axes[1])
             plt.subplots_adjust(bottom=0.02, left=0.05, right=0.82, top=0.99, wspace=0.05)
@@ -1322,7 +1327,7 @@ if __name__ == "__main__":
         # TODO : prendre un cumul sur la même période que ANTILOPE pour éviter de fausser la méthode avec des situations spécifiques
         model = model.where((model.lon>=lonmin) & (model.lon<=lonmax) & (model.lat<=latmax) & (model.lat>latmin-0.01), drop=True)
 
-    plot_antilope = False
+    plot_antilope = True
 
     if plot_antilope:
         #fic_score = os.path.join(datadir, f'scores_2021110106_2022043006_{domain}_obs_auto.csv')
@@ -1330,11 +1335,11 @@ if __name__ == "__main__":
 
         #plot(antilope, datebegin, dateend, categories=True, biascorrection=True)
         #plot(antilope, datebegin, dateend, categories=False, biascorrection=True)
-        #plot(antilope, datebegin, dateend, categories=True, biascorrection=True, scores=True)
+        plot(antilope, datebegin, dateend, categories=True, biascorrection=True, scores=True)
         #plot(antilope, datebegin, dateend, categories=True)
         #plot(antilope, datebegin, dateend, categories=False)
         #plot(antilope, datebegin, dateend, categories=False, scores=True)
-        plot(antilope, datebegin, dateend, categories=True, scores=True)
+        #plot(antilope, datebegin, dateend, categories=True, scores=True)
 
     else:
 
