@@ -71,11 +71,10 @@ class PrecipitationAnalysis(object):
         else:
             self.vmin = vmin
         if (vmax is None) and (antilope is not None):
-             self.vmax = min([max([np.nanmax(antilope.data.flatten()) for antilope in self.antilope.values() if antilope is not None]), 80])
+            self.vmax = float(min(max([tmp[var].max().data for var in ['analysis'] for tmp in antilope.values()]), 120))
+            # self.vmax = min([max([np.nanmax(antilope.data.flatten()) for antilope in self.antilope.values() if antilope is not None]), 80])
         else:
             self.vmax = vmax
-
-
 
         #self.max = max([np.nanmax(antilope.analysis.data.flatten()) for antilope in self.antilope.values() if antilope is not None])
         self.var = var
@@ -462,7 +461,7 @@ class PrecipitationAnalysis(object):
         buttons = list()
         # See https://plotly.com/python/reference/scattermapbox/ for possible colorscales
         #for colorscale in ['Dense', 'Rainbow', 'dense', 'viridis', 'Viridis', 'HSV', px.colors.sequential.dense]:
-        for colorscale in ['Blackbody','Bluered','Blues','Cividis','Earth','Electric','Greens','Greys','Hot','Jet','Picnic','Portland','Rainbow','RdBu','Reds','Viridis','YlGnBu','YlOrRd']:
+        for colorscale in ['Blackbody','Bluered','Blues','Cividis','Dense','Earth','Electric','Greens','Greys','Hot','Jet','Picnic','Portland','Rainbow','RdBu','Reds','Viridis','YlGnBu','YlOrRd']:
             buttons.append(
                     dict(
                         # See https://stackoverflow.com/questions/73435977/change-colorscale-of-marker-with-update-menu-without-repeating-data

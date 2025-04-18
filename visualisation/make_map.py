@@ -162,7 +162,7 @@ for domain in domains:
     safran[domain] = get_safran(domain)
     #safran = None
 
-vmax = min(max([antilope[domain][['rr', 'analysis']].max() for domain in domains]), 80)
+vmax = float(min(max([antilope[domain][var].max().data for var in ['analysis'] for domain in domains]), 120))
 
 myplot = PrecipitationAnalysis(date, antilope=antilope, nivometeo=nivometeo, auto=auto, safran=safran, var='analysis', vmax=vmax)  # Plot corrected field
 myplot.plot()
