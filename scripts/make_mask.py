@@ -400,7 +400,7 @@ def plot(antilope, datebegin, dateend, categories=True, biascorrection=False, sc
         lons, lats = np.meshgrid(antilope.lon.data, antilope.lat.data)
         #cml = ax.contourf(lons, lats, antilope.rr_cumul.data, cmap=cmap, levels=50, transform=ccrs.PlateCarree(), alpha=1, antialiased=True)
         if biascorrection:
-            cml = axes[0].contourf(lons, lats, antilope.rr_cumul.data, cmap=cmap, levels=bounds, transform=ccrs.PlateCarree(), alpha=1, antialiased=True, extend='both')
+            cml = axes[0].contourf(lons, lats, antilope.cumul.data, cmap=cmap, levels=bounds, transform=ccrs.PlateCarree(), alpha=1, antialiased=True, extend='both')
             axes[0].set_title('a) Raw ANTILOPE', fontsize=30)
             # Remove lines
             #cml.remove()
@@ -1310,8 +1310,8 @@ if __name__ == "__main__":
     if domain == 'GrandesRousses':
         filename = 'CUMUL_ANTILOPEH_GrandesRousses_2021073106_2022070106.nc'
     else:
-        #filename = 'CUMUL_ANTILOPE_alp_2021080106_2022080106.nc'
-        filename =f'CUMUL_ANTILOPEH_{domain}_2021103000_2022060200.nc'
+        filename = 'CUMUL_ANTILOPE_alp_2021080106_2022080106.nc'
+        #filename =f'CUMUL_ANTILOPEH_{domain}_2021103000_2022060200.nc'
         #filename ='CUMUL_ANTILOPEQ_alp_2018080106_2019043006.nc'
     datebegin = filename.split('.')[0].split('_')[-2]
     dateend = filename.split('.')[0].split('_')[-1]
