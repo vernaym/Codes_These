@@ -26,7 +26,10 @@ from scipy.spatial import cKDTree
 from scipy.sparse.linalg import inv, spsolve
 
 import vortex
+from vortex import toolbox
 from bronx.stdtypes.date import Date, Period
+
+from snowtools.tools.xarray_backend import CENBackendEntrypoint
 
 from These.scripts import tools
 
@@ -43,7 +46,7 @@ from These.scripts import tools
 
 #datadir = '/home/vernaym/workdir/visualisation'
 datadir = '/home/vernaym/extraction_obs'  # On sxcen
-workdir = '.'  # On sxcen
+workdir = '/cnrm/cen/users/NO_SAVE/vernaym/ANTILOPE/workdir'  # On sxcen
 datadir = '/home/vernaym/These/DATA'
 
 domain = 'alp'
@@ -504,18 +507,25 @@ def perturb(obs, sd, perturbation1, perturbation2, ratio=None, sd2=None, frac=0.
 
 class AntilopePreprocessing(object):
 
-    def __init__(self, date, domain, filename):
-        self.date = date
-        self.datebegin = date.replace(hour=7)
-        self.dateend   = self.datebegin+Period(hours=23)
-        #self.dateend   = self.datebegin+datetime.timedelta(days=1)  # TODO : extract only up to 6h
+    def __init__(self, domain, filename, datebegin=None, dateend=None, date=None):
+        if datebegin is not None:
+            self.datebegin = datebegin
+        else:
+            if date is not None:
+                self.datebegin = date.replace(hour=7)
+            else:
+                print('ERROR : either "date" or "datebegin" / "dateend"  must be provided')
+        if dateend is not None:
+            self.dateend = dateend
+        else:
+            self.dateend = self.datebegin + Period(hours=23)
         self.domain = domain
         self.filename = filename
 
     def run(self, obs_auto=None, nivometeo=None):
         #filename = os.path.join(datadir, f'ANTILOPEH_{self.datebegin.strftime("%Y%m%d%H")}_{self.dateend.strftime("%Y%m%d%H")}_{self.domain}.nc')  # TODO : extract only up to 6h
         #if os.path.exists(filename):
-        antilope = xr.open_dataset(self.filename)
+        antilope = xr.open_dataset(self.filename, engine='cen')
         # TODO : gérer le changement d'heure !
 
         if 'analysis' in antilope.variables.keys():  # File already pre-processed
@@ -530,19 +540,43 @@ class AntilopePreprocessing(object):
             # TODO : commencer par la correction dynamique puis appliquer le débiaisage (facteur à modifier pour prendre en compte le biais moyen après correction ?)
 
             # 1. Static de-biasing :
-            if self.date.month in [12, 1, 2, 3]:
-                clim_ratio = xr.open_dataarray(os.path.join(workdir, f"Estimated_winter_ratio_{self.domain}.nc"))
-                clim_gradient = xr.open_dataarray(os.path.join(workdir, f"Estimated_winter_gradient_{self.domain}.nc"))
+            if self.datebegin.month in [12, 1, 2, 3]:
+                toolbox.input(
+                    genv    = 'uenv:edelweiss.3@vernaym',
+                    gvar    = f'WINTER_GRADIENT_{self.domain.upper()}',
+                    local   = f'Estimated_winter_gradient_{self.domain}.nc',
+                    unknown = True,
+                )
+                toolbox.input(
+                    genv    = 'uenv:edelweiss.3@vernaym',
+                    gvar    = f'WINTER_RATIO_{self.domain.upper()}',
+                    local   = f'Estimated_winter_ratio_{self.domain}.nc',
+                    unknown = True,
+                )
+                clim_ratio = xr.open_dataarray(f"Estimated_winter_ratio_{self.domain}.nc", engine='cen')
+                clim_gradient = xr.open_dataarray(f"Estimated_winter_gradient_{self.domain}.nc", engine='cen')
             else:
-                clim_ratio = xr.open_dataarray(os.path.join(workdir, f"Estimated_summer_ratio_{self.domain}.nc"))
-                clim_gradient = xr.open_dataarray(os.path.join(workdir, f"Estimated_summer_gradient_{self.domain}.nc"))
+                toolbox.input(
+                    genv    = 'uenv:edelweiss.3@vernaym',
+                    gvar    = f'SUMMER_GRADIENT_{self.domain.upper()}',
+                    local   = f'Estimated_summer_gradient_{self.domain}.nc',
+                    unknown = True,
+                )
+                toolbox.input(
+                    genv    = 'uenv:edelweiss.3@vernaym',
+                    gvar    = f'SUMMER_RATIO_{self.domain.upper()}',
+                    local   = f'Estimated_summer_ratio_{self.domain}.nc',
+                    unknown = True,
+                )
+                clim_ratio = xr.open_dataarray(f"Estimated_summer_ratio_{self.domain}.nc", engine='cen')
+                clim_gradient = xr.open_dataarray(f"Estimated_summer_gradient_{self.domain}.nc", engine='cen')
 
-            tmp = antilope.sel({'lon': clim_ratio.lon.data, 'lat': clim_ratio.lat.data})
+            tmp = antilope.sel({'xx': clim_ratio.xx.data, 'yy': clim_ratio.yy.data}, method='nearest')
 
-            smooth = uniform_filter(tmp.rr.data, 20)
+            smooth = uniform_filter(tmp.Precipitation.data, 20)
             smooth = np.where(smooth > 0, np.round(smooth, 1), 0)
             # Try to detect "missed" precipitation
-            rr = xr.where((tmp.rr == 0) & (smooth > 0), 0.1, tmp.rr)
+            rr = xr.where((tmp.Precipitation == 0) & (smooth > 0), 0.1, tmp.Precipitation)
             dyn_gradient = xr.where((rr.data > 0) & (smooth > 0), rr / smooth, clim_ratio)
             dyn_ratio = dyn_gradient / clim_gradient
 
@@ -555,8 +589,8 @@ class AntilopePreprocessing(object):
             smooth = antilope['debiasing'].where(antilope['debiasing'].notnull(), drop=True)
             smooth.data = uniform_filter(smooth, 20)
             smooth = xr.align(smooth, antilope, join='outer')[0]
-            error = abs(antilope['debiasing'] - antilope['rr']) * 0.3 + smooth * 0.5
-            #antilope['error'] = abs(antilope['debiasing'] - antilope['rr']) * 0.3 + smooth * 0.5
+            error = abs(antilope['debiasing'] - antilope['Precipitation']) * 0.3 + smooth * 0.5
+            #antilope['error'] = abs(antilope['debiasing'] - antilope['Precipitation']) * 0.3 + smooth * 0.5
 
             # 2. Nivometeo Assimilation
             # Use a relative error in case of missed precipitation
@@ -569,7 +603,7 @@ class AntilopePreprocessing(object):
             smooth = antilope['analysis'].where(antilope['analysis'].notnull(), drop=True)
             smooth.data = uniform_filter(smooth, 20)
             smooth = xr.align(smooth, antilope, join='outer')[0]
-            antilope['error'] = abs(antilope['analysis'] - antilope['rr']) * 0.3 + smooth * 0.5
+            antilope['error'] = abs(antilope['analysis'] - antilope['Precipitation']) * 0.3 + smooth * 0.5
 
             # antilope.to_netcdf(self.filename)  # WARNING : overwrite the initial file !!  TMP !
 
@@ -582,7 +616,7 @@ class AntilopePreprocessing(object):
                     dtype={'num_poste': int, 'nom': str, 'alti': int, 'lat': float, 'lon': float, 'massif': int,
                         'rr': float, 'reseau_poste': int}, na_values=['--'])
             if len(nivometeo) > 0:
-                nivometeo = nivometeo.loc[nivometeo['date'] == np.datetime64(self.date)]
+                nivometeo = nivometeo.loc[nivometeo['date'] == np.datetime64(self.datebegin)]
                 return nivometeo
             else:
                 return None

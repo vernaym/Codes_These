@@ -154,7 +154,7 @@ for domain in domains:
     filename = f'ANTILOPE_{domain}_{date.ymd}.nc'
     tmp_antilope = get_antilope(domain, filename=filename)
 
-    pp = AntilopePreprocessing(date, domain, filename)
+    pp = AntilopePreprocessing(domain, filename, date=date)
     antilope[domain] = pp.run(obs_auto=auto[domain], nivometeo=nivometeo)
     #antilope[domain].to_netcdf(f'ANTILOPEH_{datebegin.replace(hour=7).ymdh}_{dateend.ymdh}_{domain}.nc')
 
