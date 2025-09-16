@@ -253,10 +253,10 @@ if __name__ == '__main__':
 
         smooth = uniform_filter(reference_field, 20)
         gradient = reference_field / smooth
-        gradient.rename('gradient')
+        gradient.rename('Precipitation ratio between the reference and its local mean')
         gradient.to_netcdf(os.path.join(savedir, f'Estimated_{season}_gradient_from_kriging_{datebegin}_{dateend}.nc'))
         plot_ratio(gradient, f'Estimated_{season}_gradient_from_kriging_{datebegin}_{dateend}.pdf', origin='lower',
-                cmap=plt.cm.RdBu_r, vmin=0.7, vmax=1.3)
+                cmap=plt.cm.PuOr, vmin=0.7, vmax=1.3)
 
         ratio = antilope_season / reference_field
         ratio = ratio.rename('ratio')
