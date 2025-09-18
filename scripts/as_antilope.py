@@ -31,6 +31,8 @@ def parse_command_line():
     parser.add_argument('-m', '--members', type=int, default=1,
                         help="Number of ensemble members (default = deterministic")
 
+    args = parser.parse_args()
+
     args.datebegin = Date(args.datebegin)
     args.dateend = Date(args.dateend)
 

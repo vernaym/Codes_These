@@ -29,7 +29,7 @@ import vortex
 from vortex import toolbox
 from bronx.stdtypes.date import Date, Period
 
-from snowtools.tools.xarray_backend import CENBackendEntrypoint
+from snowtools.utils import xarray_snowtools
 
 from These.scripts import tools
 
@@ -525,7 +525,7 @@ class AntilopePreprocessing(object):
     def run(self, obs_auto=None, nivometeo=None):
         #filename = os.path.join(datadir, f'ANTILOPEH_{self.datebegin.strftime("%Y%m%d%H")}_{self.dateend.strftime("%Y%m%d%H")}_{self.domain}.nc')  # TODO : extract only up to 6h
         #if os.path.exists(filename):
-        antilope = xr.open_dataset(self.filename, engine='cen')
+        antilope = xr.open_dataset(self.filename, engine='snowtools')
         # TODO : gérer le changement d'heure !
 
         if 'analysis' in antilope.variables.keys():  # File already pre-processed
@@ -542,34 +542,34 @@ class AntilopePreprocessing(object):
             # 1. Static de-biasing :
             if self.datebegin.month in [12, 1, 2, 3]:
                 toolbox.input(
-                    genv    = 'uenv:edelweiss.3@vernaym',
+                    genv    = 'uenv:edelweiss.4@vernaym',
                     gvar    = f'WINTER_GRADIENT_{self.domain.upper()}',
                     local   = f'Estimated_winter_gradient_{self.domain}.nc',
                     unknown = True,
                 )
                 toolbox.input(
-                    genv    = 'uenv:edelweiss.3@vernaym',
+                    genv    = 'uenv:edelweiss.4@vernaym',
                     gvar    = f'WINTER_RATIO_{self.domain.upper()}',
                     local   = f'Estimated_winter_ratio_{self.domain}.nc',
                     unknown = True,
                 )
-                clim_ratio = xr.open_dataarray(f"Estimated_winter_ratio_{self.domain}.nc", engine='cen')
-                clim_gradient = xr.open_dataarray(f"Estimated_winter_gradient_{self.domain}.nc", engine='cen')
+                clim_ratio = xr.open_dataarray(f"Estimated_winter_ratio_{self.domain}.nc")
+                clim_gradient = xr.open_dataarray(f"Estimated_winter_gradient_{self.domain}.nc")
             else:
                 toolbox.input(
-                    genv    = 'uenv:edelweiss.3@vernaym',
+                    genv    = 'uenv:edelweiss.4@vernaym',
                     gvar    = f'SUMMER_GRADIENT_{self.domain.upper()}',
                     local   = f'Estimated_summer_gradient_{self.domain}.nc',
                     unknown = True,
                 )
                 toolbox.input(
-                    genv    = 'uenv:edelweiss.3@vernaym',
+                    genv    = 'uenv:edelweiss.4@vernaym',
                     gvar    = f'SUMMER_RATIO_{self.domain.upper()}',
                     local   = f'Estimated_summer_ratio_{self.domain}.nc',
                     unknown = True,
                 )
-                clim_ratio = xr.open_dataarray(f"Estimated_summer_ratio_{self.domain}.nc", engine='cen')
-                clim_gradient = xr.open_dataarray(f"Estimated_summer_gradient_{self.domain}.nc", engine='cen')
+                clim_ratio = xr.open_dataarray(f"Estimated_summer_ratio_{self.domain}.nc")
+                clim_gradient = xr.open_dataarray(f"Estimated_summer_gradient_{self.domain}.nc")
 
             tmp = antilope.sel({'xx': clim_ratio.xx.data, 'yy': clim_ratio.yy.data}, method='nearest')
 
