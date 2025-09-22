@@ -3472,8 +3472,8 @@ if __name__ == "__main__":
     #out.to_netcdf(f"{outname}".encode('utf-8'))
 
     xpid = os.getcwd().split('/')[-1]  # TODO : ajouter une sécurité pour éviter d'écraser une XP existante
-    if not xpid.startswith(args.assimilation):
-        xpid = f'{args.assimilation}{xpid[-2:]}'
+    #if not xpid.startswith(args.assimilation):
+    #    xpid = f'{args.assimilation}{xpid[-2:]}'
 
     if not args.plot:
 

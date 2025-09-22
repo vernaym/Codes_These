@@ -27,7 +27,7 @@ from matplotlib.patches import Ellipse
 import xskillscore  # Requires an installation : pip install xskillscore
 # https://xskillscore.readthedocs.io/en/stable/api/xskillscore.crps_ensemble.html
 
-import snowtools.tools.xarray_preprocess as xrp
+from snowtools.utils import xarray_snowtools
 from snowtools.scripts.extract.vortex import vortexIO as io
 
 from snowtools.scripts.post_processing import common_dict
@@ -113,10 +113,10 @@ def execute(elevation_band=None):
         # Open observation file as DataArray
         try:
             obs = xr.open_dataarray(obsname)
-            obs = xrp.preprocess(obs, decode_time=False)
+            obs = xarray_snowtools.preprocess(obs, decode_time=False)
         except ValueError:
             obs = xr.open_dataset(obsname)
-            obs = xrp.preprocess(obs, decode_time=False, mapping={'Band1': 'HTN', 'DEP': 'HTN', 'DSN_T_ISBA': 'HTN'})
+            obs = xarray_snowtools.preprocess(obs, decode_time=False, mapping={'Band1': 'HTN', 'DEP': 'HTN', 'DSN_T_ISBA': 'HTN'})
             obs = obs['HTN']
 
         # Sort yy coordinate to avoid problems in the histogram computation
@@ -147,7 +147,7 @@ def execute(elevation_band=None):
                     member = [members_map(shortid)[0]]
 
             # VERRUE pour gérer le décallage d'un jour en attendant de combler les données
-            if (shortid.split('_')[0] in ['SAFRAN', 'ANTILOPE', 'KRIGING']) and datebegin == '2021080207':
+            if (shortid.split('_')[0] in ['SAFRAN', 'ANTILOPE', 'KRIGING']) and datebegin in ['2021080206', '2021080207']:
                 deb = '2021080106'
             else:
                 deb = datebegin  # 2021080207
@@ -249,13 +249,13 @@ def execute(elevation_band=None):
 
     ax1.set_xlabel('Mean absolute error of the ensemble mean (m)')
     ax1.set_ylabel('Mean ensemble spread (m)')
-    ax1.set_xlim(0, 1.2)
-    ax1.set_ylim(0, 1.2)
+    ax1.set_xlim(0, 1)
+    ax1.set_ylim(0, 1)
     ax1.grid()
     ax2.set_xlabel('Pearson correlation coefficient')
     ax2.set_ylabel('Mean CRPS (m)')
-    ax2.set_xlim(0, 1)
-    ax2.set_ylim(0, 1)
+    ax2.set_xlim(0.4, 1)
+    ax2.set_ylim(0, 0.6)
     ax2.grid()
     ax4.legend(loc='center', frameon=False)
     ax4.axis('off')
@@ -267,7 +267,8 @@ def execute(elevation_band=None):
     suffix = '_'.join([product_map(xpid.split('@')[0]) for xpid in xpids])
     if elevation_band is not None:
         suffix = f'{suffix}_{zmin}_{zmax}'
-    fig.savefig(f'synthese_eval_assim_{suffix}.pdf')
+    dates = '_'.join(dates_pleiades)
+    fig.savefig(f'synthese_eval_assim_{suffix}_{dates}.pdf')
 
 
 def read_mnt():
@@ -276,7 +277,7 @@ def read_mnt():
 
     # Get Domain's DEM in case ZS not in simulation file
     mnt = xr.open_dataset('TARGET_RELIEF.nc')  # Target domain's Digital Elevation Model
-    mnt = xrp.preprocess(mnt, decode_time=False)
+    mnt = xarray_snowtools.preprocess(mnt, decode_time=False)
     mnt = mnt['ZS']
 
     return mnt
@@ -333,7 +334,7 @@ def read_simu(xpid, members, date):
 
     # Open all simulation PRO files at once
     simu = xr.open_mfdataset(listfiles, concat_dim='member', combine='nested').compute()
-    simu = xrp.preprocess(simu, decode_time=False)
+    simu = xarray_snowtools.preprocess(simu, decode_time=False)
     # <xarray.Dataset>
     # Dimensions:     (time: 3, xx: 143, yy: 101, member: 16)
     # Coordinates:
