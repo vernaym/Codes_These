@@ -1748,6 +1748,9 @@ class RandomSampling(Assimilation):
                 clim_ratio = parameters['summer_clim_ratio']
                 clim_gradient = parameters['summer_clim_gradient']
 
+            clim_ratio = clim_ratio.sel(xx=parameters['rr'].lon, yy=parameters['rr'].lat)
+            clim_gradient = clim_gradient.sel(xx=parameters['rr'].lon, yy=parameters['rr'].lat)
+
             #tmp = parameters['rr'].sel(lon=slice(6.8, 6.9), lat=slice(45.8, 45.9))  # Mont-Blanc
             #tmp = parameters['rr'].sel(lon=slice(6.1, 6.15), lat=slice(45.1, 45.15))  # Grandes-Rousses
 
