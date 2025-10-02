@@ -60,7 +60,7 @@ def read_obs_auto_accumulation():
     df = df[df['num_poste'].isin(year.index.values)]
 
     # winter = df[(df['date'] >= datebegin) & (df['date'] <= dateend)]
-    winter = df[df['date'].dt.month.isin([11, 12, 1, 2, 3, 4])]
+    winter = df[df['date'].dt.month.isin([12, 1, 2, 3])]
     winter = winter.groupby('num_poste').agg({'rr': 'sum', 'lat': 'min', 'lon': 'min', 'alti': 'min', 'date': "count"})
 
     out = winter.rename(columns={'rr': 'winter_cumul'}).drop(columns='date')
@@ -84,10 +84,10 @@ def read_obs_nivometeo_accumulation():
     df = df[(df.lon >= lonmin) & (df.lon <= lonmax) & (df.lat >= latmin) & (df.lat <= latmax)]
     tmp = df[(df['date'] >= datebegin) & (df['date'] <= dateend)]  # Same period as AROME accumulation
     # tmp = tmp[tmp['date'].dt.month.isin([11, 12, 1, 2, 3, 4])]  # Same period as AROME accumulation
-    # tmp = tmp[tmp['date'].dt.month.isin([12, 1, 2, 3])]  # Same period as AROME accumulation
+    tmp = tmp[tmp['date'].dt.month.isin([12, 1, 2, 3])]  # Same period as AROME accumulation
     out = tmp.groupby('num_poste').agg({'rr': 'sum', 'lat': 'min', 'lon': 'min', 'alti': 'min', 'date': "count"})
     # out = out[out.date > 8700]  # Filter out stations with too many missing values
-    out = out[out.date > out.date.max() * 0.95]  # Filter out stations with too many missing values
+    out = out[out.date > out.date.max() * 0.75]  # Filter out stations with too many missing values
     out = out.rename(columns={'rr': 'winter_cumul'}).drop(columns='date')
 
     return out
@@ -218,7 +218,7 @@ def plot_fields(arome, reference_field, antilope, gauges, season):
     # gauges.plot.scatter('lon', 'lat', c='cumul', edgecolor='black', cmap=plt.cm.YlGnBu, vmin=0, vmax=vmax, ax=ax[1],
     #         colorbar=False)
     ax[1].set_title('Reference Field')
-    im, ax[2] = plot2D.plot_field(antilope, ax=ax[2], cmap=cmap, vmin=0, vmax=vmax, add_colorbar=False, **plot_domain)
+    im = plot2D.plot_field(antilope, ax=ax[2], cmap=cmap, vmin=0, vmax=vmax, add_colorbar=False, **plot_domain)
     ax[2].set_title('ANTILOPE')
 
     # Add colorbar
