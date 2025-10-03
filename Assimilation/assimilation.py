@@ -845,8 +845,8 @@ class Assimilation(object):
         self.ratio = ratio
         parameters['ratio'] = ratio
 
-        parameters['ratio_winter'] = xr.open_dataarray("Estimated_ratio_winter.nc")
-        parameters['ratio_summer'] = xr.open_dataarray("Estimated_ratio_summer.nc")
+        #parameters['ratio_winter'] = xr.open_dataarray("Estimated_ratio_winter.nc")
+        #parameters['ratio_summer'] = xr.open_dataarray("Estimated_ratio_summer.nc")
 
         # Observation error
         # Import multiplicative mask to increase observation error where necessary
@@ -1741,12 +1741,14 @@ class RandomSampling(Assimilation):
             parameters['rr'].data = np.round(parameters['rr'].data, 1)
 
             # TODO : avoid to read data at each iteration
-            if date.month in [12, 1, 2, 3]:
-                clim_ratio = parameters['winter_clim_ratio']
-                clim_gradient = parameters['winter_clim_gradient']
-            else:
-                clim_ratio = parameters['summer_clim_ratio']
-                clim_gradient = parameters['summer_clim_gradient']
+#            if date.month in [12, 1, 2, 3]:
+#                clim_ratio = parameters['winter_clim_ratio']
+#                clim_gradient = parameters['winter_clim_gradient']
+#            else:
+#                clim_ratio = parameters['summer_clim_ratio']
+#                clim_gradient = parameters['summer_clim_gradient']
+            clim_ratio = parameters['clim_ratio']
+            clim_gradient = parameters['clim_gradient']
 
             clim_ratio = clim_ratio.sel(xx=parameters['rr'].lon, yy=parameters['rr'].lat)
             clim_gradient = clim_gradient.sel(xx=parameters['rr'].lon, yy=parameters['rr'].lat)
@@ -3459,10 +3461,12 @@ if __name__ == "__main__":
         rs = RandomSampling(extract_period, antilope, nivometeo, args.plot, args.frequency, args.gridded, args.localisation, args.mask, args.debiasing, args.domain, args.likelyhood)
         # mask = rs.pdf_parameters()
         rs.parameters = rs.radar.copy()
-        rs.parameters['winter_clim_ratio'] = xr.open_dataarray('Estimated_winter_ratio.nc')
-        rs.parameters['winter_clim_gradient'] = xr.open_dataarray('Estimated_winter_gradient.nc')
-        rs.parameters['summer_clim_ratio'] = xr.open_dataarray('Estimated_summer_ratio.nc')
-        rs.parameters['summer_clim_gradient'] = xr.open_dataarray('Estimated_summer_gradient.nc')
+        rs.parameters['clim_ratio'] = xr.open_dataarray('Estimated_ratio.nc')
+        rs.parameters['clim_gradient'] = xr.open_dataarray('Estimated_gradient.nc')
+#        rs.parameters['winter_clim_ratio'] = xr.open_dataarray('Estimated_winter_ratio.nc')
+#        rs.parameters['winter_clim_gradient'] = xr.open_dataarray('Estimated_winter_gradient.nc')
+#        rs.parameters['summer_clim_ratio'] = xr.open_dataarray('Estimated_summer_ratio.nc')
+#        rs.parameters['summer_clim_gradient'] = xr.open_dataarray('Estimated_summer_gradient.nc')
         rs.run()
         #if not args.gridded:
         #    rs.save_corrected_field(extract_period, nivometeo.num_poste.data)
