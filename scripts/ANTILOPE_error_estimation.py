@@ -19,7 +19,7 @@ from snowtools.plots.maps import plot2D
 
 # savedir = '/home/vernaym/workdir/ASSIMILATION/mask/alp'
 datadir = '/cnrm/cen/users/NO_SAVE/vernaym/workdir/EDELWEISS/DATA'
-savedir = '/cnrm/cen/users/NO_SAVE/vernaym/workdir/EDELWEISS/DATA'
+savedir = '.'
 
 # datebegin = '2021-07-31'
 # dateend   = '2022-08-01'
@@ -38,7 +38,7 @@ latmin = 43
 lonmin = 4.5
 lonmax = 8
 
-gauge_tolerance = 0.1  # *100% of difference from ANTILOPE
+gauge_tolerance = 0.2  # *100% of difference from ANTILOPE
 
 
 def read_obs_auto_accumulation():
@@ -56,7 +56,7 @@ def read_obs_auto_accumulation():
     df = df[(df['date'] >= datebegin) & (df['date'] <= dateend)]  # Same period as AROME/ANTILOPE accumulations
     year = df.groupby('num_poste').agg({'rr': 'sum', 'lat': 'min', 'lon': 'min', 'alti': 'min', 'date': "count"})
     # Filter out stations with too many missing values
-    year = year[year.date > year.date.max() * 0.95]
+    year = year[year.date > year.date.max() * 0.80]
     df = df[df['num_poste'].isin(year.index.values)]
 
     # winter = df[(df['date'] >= datebegin) & (df['date'] <= dateend)]
@@ -74,6 +74,8 @@ def read_obs_nivometeo_accumulation():
     """
     TODO : Add check for missing values
     """
+
+    # WARNING : No nivometeo observations in 2019/2020 and 2020/2021
 
     # src = '/home/vernaym/These/NO_TRANSFER/DATA/obs_nivometeo_daily_RR_20210801_20220801.csv'
     src = os.path.join(datadir, f'obs_nivometeo_daily_RR_{datebegin}_{dateend}.csv')
@@ -242,6 +244,10 @@ if __name__ == '__main__':
     # Compare gauge accumulation to ANTILOPE to filter out gauges
     tmp = antilope.sel(yy=xr.DataArray(obs_auto.lat, dims='num_poste'),
             xx=xr.DataArray(obs_auto.lon, dims='num_poste'), method='nearest').to_dataframe()
+    obs_auto['annual_cumul'] = obs_auto['annual_cumul'].where(
+        (tmp.annual_cumul / obs_auto.annual_cumul < (1 + gauge_tolerance)) &
+        (tmp.annual_cumul / obs_auto.annual_cumul > (1 - gauge_tolerance)),
+    )
     obs_auto['winter_cumul'] = obs_auto['winter_cumul'].where(
         (tmp.winter_cumul / obs_auto.winter_cumul < (1 + gauge_tolerance)) &
         (tmp.winter_cumul / obs_auto.winter_cumul > (1 - gauge_tolerance)),
@@ -251,7 +257,8 @@ if __name__ == '__main__':
         (tmp.summer_cumul / obs_auto.summer_cumul > (1 - gauge_tolerance)),
     )
 
-    obs = pd.concat([obs_auto, nivometeo])
+    # obs = pd.concat([obs_auto, nivometeo])
+    obs = obs_auto
 
     # for season in ['annual']:
     for season in ['summer', 'winter', 'annual']:
