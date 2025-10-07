@@ -147,7 +147,7 @@ def execute(elevation_band=None):
                     member = [members_map(shortid)[0]]
 
             # VERRUE pour gérer le décallage d'un jour en attendant de combler les données
-            if (shortid.split('_')[0] in ['SAFRAN', 'ANTILOPE', 'KRIGING']) and datebegin in ['2021080206', '2021080207']:
+            if (shortid.split('_')[0] in ['ANTILOPE', 'KRIGING']) and datebegin in ['2021080206', '2021080207']:
                 deb = '2021080106'
             else:
                 deb = datebegin  # 2021080207
