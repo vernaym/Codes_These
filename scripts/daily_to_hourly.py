@@ -28,7 +28,7 @@ else:
 
 local_tz = pytz.timezone("Europe/Paris")
 
-if xpid.startswith('RS') or xpid == 'ALPAGA':
+if xpid.startswith('RS') or xpid.startswith('ALPAGA'):
     block = 'RandomSampling'
     source_conf = 'RandomSampling'
 elif xpid.startswith('EnKF'):
