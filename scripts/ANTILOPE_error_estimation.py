@@ -121,9 +121,9 @@ def read_AROME_accumulation():
     return out
 
 
-def read_ANTILOPE_accumulation():
+def read_ANTILOPE_accumulation(version):
     # src = '/home/vernaym/These/NO_TRANSFER/DATA/CUMUL_ANTILOPE_alp_2021080106_2022080106.nc'
-    src = os.path.join(datadir, 'CUMUL_ANTILOPE_alp_2018080106_2021080106.nc')
+    src = os.path.join(datadir, f'CUMUL_ANTILOPE{version}_alp_2018080106_2021080106.nc')
     ds_year = xr.open_dataset(src, engine='snowtools')
     ds_year['yy'] = ds_year.yy.round(2)
     ds_year['xx'] = ds_year.xx.round(2)
@@ -132,7 +132,7 @@ def read_ANTILOPE_accumulation():
     # src = '/home/vernaym/These/NO_TRANSFER/DATA/CUMUL_ANTILOPE_2021073106_2022080106_nov-apr_alp.nc'
     # src = '/home/vernaym/These/NO_TRANSFER/DATA/CUMUL_ANTILOPE_20211201_20220331_alp.nc'
     # src = f'/home/vernaym/These/NO_TRANSFER/DATA/CUMUL_ANTILOPE_{datebegin}_{dateend}_alp.nc'
-    src = os.path.join(datadir, 'CUMUL_ANTILOPE_WINTER_alp_2018_2021.nc')
+    src = os.path.join(datadir, f'CUMUL_ANTILOPE{version}_WINTER_alp_2018_2021.nc')
     ds_winter = xr.open_dataset(src, engine='snowtools')
     ds_winter['yy'] = ds_winter.yy.round(2)
     ds_winter['xx'] = ds_winter.xx.round(2)
@@ -235,14 +235,15 @@ if __name__ == '__main__':
     nivometeo = read_obs_nivometeo_accumulation()
     obs_auto = read_obs_auto_accumulation()
     arome = read_AROME_accumulation()
-    antilope = read_ANTILOPE_accumulation()
+    antilope = read_ANTILOPE_accumulation('H')
+    antilopejp1 = read_ANTILOPE_accumulation('JP1H')
 
     # arome = arome.where((arome.yy == antilope.yy) & (arome.xx == antilope.xx))
     # antilope = antilope.where((antilope.yy == arome.yy) & (antilope.xx == arome.xx))
     arome = arome.interp(yy=antilope.yy, xx=antilope.xx, method='linear')
 
     # Compare gauge accumulation to ANTILOPE to filter out gauges
-    tmp = antilope.sel(yy=xr.DataArray(obs_auto.lat, dims='num_poste'),
+    tmp = antilopejp1.sel(yy=xr.DataArray(obs_auto.lat, dims='num_poste'),
             xx=xr.DataArray(obs_auto.lon, dims='num_poste'), method='nearest').to_dataframe()
     obs_auto['annual_cumul'] = obs_auto['annual_cumul'].where(
         (tmp.annual_cumul / obs_auto.annual_cumul < (1 + gauge_tolerance)) &
