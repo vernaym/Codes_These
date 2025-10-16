@@ -1743,14 +1743,14 @@ class RandomSampling(Assimilation):
             parameters['rr'].data = np.round(parameters['rr'].data, 1)
 
             # TODO : avoid to read data at each iteration
-            if date.month in [12, 1, 2, 3]:
-                clim_ratio = parameters['winter_clim_ratio']
-                clim_gradient = parameters['winter_clim_gradient']
-            else:
-                clim_ratio = parameters['summer_clim_ratio']
-                clim_gradient = parameters['summer_clim_gradient']
-            #clim_ratio = parameters['clim_ratio']
-            #clim_gradient = parameters['clim_gradient']
+            #if date.month in [12, 1, 2, 3]:
+            #    clim_ratio = parameters['winter_clim_ratio']
+            #    clim_gradient = parameters['winter_clim_gradient']
+            #else:
+            #    clim_ratio = parameters['summer_clim_ratio']
+            #    clim_gradient = parameters['summer_clim_gradient']
+            clim_ratio = parameters['clim_ratio']
+            clim_gradient = parameters['clim_gradient']
 
             clim_ratio = clim_ratio.sel(xx=parameters['rr'].lon, yy=parameters['rr'].lat)
             clim_gradient = clim_gradient.sel(xx=parameters['rr'].lon, yy=parameters['rr'].lat)
@@ -1783,11 +1783,11 @@ class RandomSampling(Assimilation):
 #            # check parameters['rr'] / smooth ratio and compare it to parameters['ratio'] to increase / decrease the de-biasing
 #            # dyn_ratio = np.where((parameters['rr'].data > 1) & (smooth > 1), parameters['rr'].data / smooth, parameters['ratio'].data)
 #            dyn_ratio = np.where((rr.data > 0) & (smooth > 0), rr.data / smooth, clim_ratio)
-#            actual_ratio = (clim_ratio + dyn_ratio) / 2
+            actual_ratio = (clim_ratio + dyn_ratio) / 2
 #            actual_ratio = (clim_ratio * (clim_gradient - abs(clim_gradient - dyn_gradient)) +
 #                    dyn_ratio * np.minimum(abs(clim_gradient - dyn_gradient), clim_ratio)) / clim_ratio
-            actual_ratio = (clim_ratio * np.maximum(0.5 - abs(clim_gradient - dyn_gradient), 0) +
-                    dyn_ratio * np.minimum(abs(clim_gradient - dyn_gradient), 0.5)) / 0.5
+#            actual_ratio = (clim_ratio * np.maximum(0.5 - abs(clim_gradient - dyn_gradient), 0) +
+#                    dyn_ratio * np.minimum(abs(clim_gradient - dyn_gradient), 0.5)) / 0.5
 
             if self.plot:
                 plt.close('all')
@@ -2133,10 +2133,10 @@ class RandomSampling(Assimilation):
         #draw_gamma = Preprocessing_ANTILOPE.random_draw(distribution='gamma', members=len(analysis.member) - 1)
         # draw_gamma = Preprocessing_ANTILOPE.random_draw(distribution='gamma', members=len(analysis.member) - 1, sort=False)
         draw_gauss = Preprocessing_ANTILOPE.random_draw(distribution='normal', members=len(analysis.member) - 1)
-        draw_gauss2 = Preprocessing_ANTILOPE.random_draw(distribution='normal', members=len(analysis.member) - 1)
+#        draw_gauss2 = Preprocessing_ANTILOPE.random_draw(distribution='normal', members=len(analysis.member) - 1)
 
         for idx, member in enumerate(analysis.member.data[1:]):
-            ana = Preprocessing_ANTILOPE.perturb(obs, error.data, draw_gauss[idx], draw_gauss2[idx])
+            ana = Preprocessing_ANTILOPE.perturb(obs, error.data, draw_gauss[idx], draw_gauss[idx])
             analysis.loc[{'member': member}] = ana
 
             self.newlocalfield[member][:, :, idd] = analysis.sel({'member': member}).data
@@ -3463,12 +3463,12 @@ if __name__ == "__main__":
         rs = RandomSampling(extract_period, antilope, nivometeo, args.plot, args.frequency, args.gridded, args.localisation, args.mask, args.debiasing, args.domain, args.likelyhood)
         # mask = rs.pdf_parameters()
         rs.parameters = rs.radar.copy()
-#        rs.parameters['clim_ratio'] = xr.open_dataarray('Estimated_ratio.nc', engine='snowtools')
-#        rs.parameters['clim_gradient'] = xr.open_dataarray('Estimated_gradient.nc', engine='snowtools')
-        rs.parameters['winter_clim_ratio'] = xr.open_dataarray('Estimated_winter_ratio.nc', engine='snowtools')
-        rs.parameters['winter_clim_gradient'] = xr.open_dataarray('Estimated_winter_gradient.nc', engine='snowtools')
-        rs.parameters['summer_clim_ratio'] = xr.open_dataarray('Estimated_summer_ratio.nc', engine='snowtools')
-        rs.parameters['summer_clim_gradient'] = xr.open_dataarray('Estimated_summer_gradient.nc',engine='snowtools')
+        rs.parameters['clim_ratio'] = xr.open_dataarray('Estimated_ratio.nc', engine='snowtools')
+        rs.parameters['clim_gradient'] = xr.open_dataarray('Estimated_gradient.nc', engine='snowtools')
+#        rs.parameters['winter_clim_ratio'] = xr.open_dataarray('Estimated_winter_ratio.nc', engine='snowtools')
+#        rs.parameters['winter_clim_gradient'] = xr.open_dataarray('Estimated_winter_gradient.nc', engine='snowtools')
+#        rs.parameters['summer_clim_ratio'] = xr.open_dataarray('Estimated_summer_ratio.nc', engine='snowtools')
+#        rs.parameters['summer_clim_gradient'] = xr.open_dataarray('Estimated_summer_gradient.nc',engine='snowtools')
         rs.run()
         #if not args.gridded:
         #    rs.save_corrected_field(extract_period, nivometeo.num_poste.data)
