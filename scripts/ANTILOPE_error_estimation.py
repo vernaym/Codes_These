@@ -38,7 +38,7 @@ latmin = 43
 lonmin = 4.5
 lonmax = 8
 
-gauge_tolerance = 0.2  # *100% of difference from ANTILOPE
+gauge_tolerance = 0.1  # *100% of difference from ANTILOPE
 
 
 def read_obs_auto_accumulation():
@@ -279,7 +279,15 @@ if __name__ == '__main__':
 
         plot_fields(arome_season, reference_field, antilope_season, obs_season, season)
 
-        smooth = uniform_filter(reference_field, 20)
+        # WARNING : uniform filter issues near the border of the domain
+        # --> need for normalized convolution
+        # source : https://docs.scipy.org/doc/scipy/reference/generated/scipy.ndimage.uniform_filter.html
+        mask    = np.where(np.isfinite(reference_field.data), np.ones(reference_field.data.shape), 0)
+        weights = uniform_filter(mask, size=20, mode='constant')
+        smooth  = uniform_filter(np.where(np.isfinite(reference_field.data), reference_field.data, 0), 20,
+                mode='constant')
+        smooth  = np.where(mask == 1, smooth / weights, np.nan)
+
         gradient = reference_field / smooth
         gradient.rename('Precipitation ratio between the reference and its local mean')
         gradient.to_netcdf(os.path.join(savedir, f'Estimated_{season}_gradient_from_kriging_{datebegin}_{dateend}.nc'))
